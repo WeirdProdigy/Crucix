@@ -41,4 +41,4 @@ A RIPEstat első összevont próbája átmeneti hibás állapotot adott, régi a
 - PWA/offline: alapértelmezetten nincs snapshot, opt-in tárolás, monotón mentés, offline flat/globe/események, API cache tiltása, törlés és blocked storage sikeres. Az új 9 forrás mentett, mesterségesen lejárt snapshotjának valódi offline újratöltésekor mind a 9 kártya lejárt, 0 élő rekord és 0 régi érték jelenik meg.
 - Képek és az új QA-script a gép Temp `crucix-fresh-source-qa` könyvtárában; éles szolgáltatói adatoknak nem álcázott fixture bizonyíték. Az alkalmazás éles szerverét nem indítottuk újra.
 
-GitHub kiadás: [v2.7.0](https://github.com/mp3pintyo/Crucix/releases/tag/v2.7.0). A hozzá tartozó CI eredménye a közzététel után kerül ebbe a jelentésbe.
+GitHub kiadás: [v2.7.0](https://github.com/mp3pintyo/Crucix/releases/tag/v2.7.0). A [kiadási CI](https://github.com/mp3pintyo/Crucix/actions/runs/36930776804) **sikeres**, a pontos `1c7b6c999a84107b2c9d77af92057c5ec16d42db` commitra: Windows/Linux × Node 22/24, audit, asset-hash és non-root container write ellenőrzés; a Linux amd64/arm64 Docker-képek GHCR-publikálása sikeres.

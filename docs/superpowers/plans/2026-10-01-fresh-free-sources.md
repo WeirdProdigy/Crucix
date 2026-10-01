@@ -26,4 +26,6 @@
 - [x] Visible live data panel, event details/history/export and geographic alerts; provider time and forecast validity visible; no stale data rendered as live.
 - [x] PWA snapshot allowlist and browser freshness timer; deterministic UI QA including delayed/stale and malicious payloads.
 - [x] Live adapter probe without operator configuration, full tests/check/audit and browser regressions.
-- [ ] Publish v2.7.0 with HU/EN changelog, confirm GitHub CI, record evidence.
+- [x] Publish v2.7.0 with HU/EN changelog, confirm GitHub CI, record evidence.
+
+Release commit: `1c7b6c9`. [GitHub CI](https://github.com/mp3pintyo/Crucix/actions/runs/36930776804): all four quality jobs and Docker build/publish passed.
