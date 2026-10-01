@@ -8,7 +8,7 @@ function check(dir) {
     if (['node_modules', '.git', 'runs', 'output'].includes(entry.name)) continue;
     const path = join(dir, entry.name);
     if (entry.isDirectory()) check(path);
-    else if (entry.name.endsWith('.mjs')) {
+    else if (entry.name.endsWith('.mjs') || entry.name.endsWith('.js')) {
       const result = spawnSync(process.execPath, ['--check', path], { encoding: 'utf8' });
       if (result.status) throw new Error(result.stderr);
       count++;

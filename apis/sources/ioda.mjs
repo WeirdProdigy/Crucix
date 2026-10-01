@@ -73,6 +73,7 @@ function normalizeEvent(item, nowEpoch) {
   const duration = item.duration || 0;
   const end = start + duration;
   return {
+    id: item.id || `${item.location || ''}:${item.start || 0}:${item.datasource || 'overall'}:${item.method || 'unknown'}`,
     countryCode: countryCode || null,
     country: item.location_name || countryCode || 'Unknown',
     start,

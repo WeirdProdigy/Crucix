@@ -278,14 +278,17 @@ export async function briefing() {
     .sort((a, b) => (parseInt(b.fatalities, 10) || 0) - (parseInt(a.fatalities, 10) || 0))
     .slice(0, 15)
     .map(e => ({
+      id: e.event_id_cnty || e.event_id_no_cnty || null,
       date:       e.event_date,
       type:       e.event_type,
       subType:    e.sub_event_type,
       country:    e.country,
       location:   e.location,
       fatalities: parseInt(e.fatalities, 10) || 0,
-      lat:        parseFloat(e.latitude) || null,
-      lon:        parseFloat(e.longitude) || null,
+      lat:        Number.isFinite(parseFloat(e.latitude)) ? parseFloat(e.latitude) : null,
+      lon:        Number.isFinite(parseFloat(e.longitude)) ? parseFloat(e.longitude) : null,
+      locationMethod: 'provider',
+      locationPrecision: String(e.geo_precision) === '1' ? 'exact' : e.geo_precision ? 'approximate' : 'unknown',
       notes:      e.notes?.slice(0, 200),
     }));
 

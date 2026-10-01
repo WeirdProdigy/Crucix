@@ -10,6 +10,7 @@ import { openBrowser } from './lib/open-browser.mjs';
 import { inlineJson } from './lib/html.mjs';
 import { installHttpSecurity } from './lib/http-security.mjs';
 import { saveSnapshot } from './lib/snapshots.mjs';
+import { buildEvents } from './lib/intelligence/events.mjs';
 import config from './crucix.config.mjs';
 import { getLocale, currentLanguage, getSupportedLocales } from './lib/i18n.mjs';
 import { fullBriefing } from './apis/briefing.mjs';
@@ -269,6 +270,13 @@ app.get('/api/data', (req, res) => {
   res.json(currentData);
 });
 
+app.get('/api/events/:id', (req, res) => {
+  if (!/^event-[a-f0-9]{32}$/.test(req.params.id)) return res.status(400).json({ error: 'Invalid event ID' });
+  const event = currentData?.events?.find(item => item.id === req.params.id);
+  if (!event) return res.status(404).json({ error: 'Event not found' });
+  res.json(event);
+});
+
 // API: health check
 app.get('/api/health', (req, res) => {
   res.json({
@@ -380,6 +388,7 @@ async function runSweepCycle() {
     // Prune old alerted signals
     memory.pruneAlertedSignals();
 
+    synthesized.events = buildEvents(synthesized);
     currentData = synthesized;
 
     // 6. Push to all connected browsers

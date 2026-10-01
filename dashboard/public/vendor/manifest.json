@@ -1,0 +1,187 @@
+{
+  "schema": 1,
+  "assets": [
+    {
+      "path": "/vendor/gsap-3.12.5.min.js",
+      "source": "https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js",
+      "licence": "GSAP 3.12.5",
+      "bytes": 72214,
+      "sha256": "28033e449a31ebcc396e5be8b13b63152bf03094288fb5867034321927bce087"
+    },
+    {
+      "path": "/vendor/d3-7.9.0.min.js",
+      "source": "https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js",
+      "licence": "ISC",
+      "bytes": 279706,
+      "sha256": "f2094bbf6141b359722c4fe454eb6c4b0f0e42cc10cc7af921fc158fceb86539"
+    },
+    {
+      "path": "/vendor/topojson-client-3.1.0.min.js",
+      "source": "https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js",
+      "licence": "ISC",
+      "bytes": 7169,
+      "sha256": "25cd02ae486cc5063e0215a4e4cfb15de83700c87ac48bac4d57dc6aaf3ebb89"
+    },
+    {
+      "path": "/vendor/globe.gl-2.33.0.min.js",
+      "source": "https://cdn.jsdelivr.net/npm/globe.gl@2.33.0/dist/globe.gl.min.js",
+      "licence": "MIT and bundled dependency notices",
+      "bytes": 1065278,
+      "sha256": "7a536d98bf42b76b3153e5344f250dd4eedb1d66148c46c65ec9ffa091706a86"
+    },
+    {
+      "path": "/vendor/countries-110m-2.0.2.json",
+      "source": "https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json",
+      "licence": "ISC / Natural Earth public domain data",
+      "bytes": 107761,
+      "sha256": "2516c915867c7baf18ddec727aec46c315541a07cfb3d79a6559b05d5e94eee8"
+    },
+    {
+      "path": "/vendor/earth-night-2.33.0.jpg",
+      "source": "https://cdn.jsdelivr.net/npm/three-globe@2.33.0/example/img/earth-night.jpg",
+      "licence": "three-globe MIT example asset",
+      "bytes": 715000,
+      "sha256": "355ab23dd1323315b393d7b91dd2d7ee223a1cbaaba2b48dc72ba90d371ced24"
+    },
+    {
+      "path": "/vendor/earth-topology-2.33.0.png",
+      "source": "https://cdn.jsdelivr.net/npm/three-globe@2.33.0/example/img/earth-topology.png",
+      "licence": "three-globe MIT example asset",
+      "bytes": 378243,
+      "sha256": "839b12da2e4dd346b256cebae72e10c479a102c8980a22084c41275e4b9a0e12"
+    },
+    {
+      "path": "/vendor/licenses/gsap-3.12.5-reference.md",
+      "source": "https://cdn.jsdelivr.net/npm/gsap@3.12.5/README.md",
+      "licence": "GSAP 3.12.5 licence reference; retained banner in distribution",
+      "bytes": 7255,
+      "sha256": "aac9caec70ceaf7fa340a64f4ebf454237b094352bd6d1206b819729826020e7"
+    },
+    {
+      "path": "/vendor/licenses/d3.txt",
+      "source": "https://cdn.jsdelivr.net/npm/d3@7.9.0/LICENSE",
+      "licence": "ISC",
+      "bytes": 731,
+      "sha256": "3e6849627f74ff73c257a3ae1efb574015d94fc1035c05ec3c15805165efcbc4"
+    },
+    {
+      "path": "/vendor/licenses/topojson-client.txt",
+      "source": "https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/LICENSE",
+      "licence": "ISC",
+      "bytes": 734,
+      "sha256": "4c4d15b635e04e691825a76db7d33f7f2033b55669a7430011694f31e6c65999"
+    },
+    {
+      "path": "/vendor/licenses/globe.gl.txt",
+      "source": "https://cdn.jsdelivr.net/npm/globe.gl@2.33.0/LICENSE",
+      "licence": "MIT",
+      "bytes": 1072,
+      "sha256": "c633a0da18abe4208665d9faf574f38084bbe38ce5bf743e9ecc06e50b941b59"
+    },
+    {
+      "path": "/vendor/licenses/world-atlas.txt",
+      "source": "https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/LICENSE",
+      "licence": "ISC",
+      "bytes": 734,
+      "sha256": "8048290dfdb6e83fbed17e8985c8cfc4ce9da9b842642f3d3e497280790cfa31"
+    },
+    {
+      "path": "/vendor/licenses/three-globe.txt",
+      "source": "https://cdn.jsdelivr.net/npm/three-globe@2.33.0/LICENSE",
+      "licence": "MIT",
+      "bytes": 1072,
+      "sha256": "c633a0da18abe4208665d9faf574f38084bbe38ce5bf743e9ecc06e50b941b59"
+    },
+    {
+      "path": "/vendor/licenses/ibm-plex-mono.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/OFL.txt",
+      "licence": "SIL OFL 1.1",
+      "bytes": 4456,
+      "sha256": "7e6b2818edbd8f6a01ae80641cc8f16a51080d08fb4e532be3a0b6f74adb07da"
+    },
+    {
+      "path": "/vendor/licenses/space-grotesk.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/spacegrotesk/OFL.txt",
+      "licence": "SIL OFL 1.1",
+      "bytes": 4495,
+      "sha256": "564ce565c371c5e5bbf286006565a7c9aa55a9f56e7ca58d56e05d649dd61a72"
+    },
+    {
+      "path": "/vendor/fonts/daa80217e8c386f876d7.ttf",
+      "source": "https://fonts.gstatic.com/s/ibmplexmono/v20/-F6qfjptAgt5VM-kVkqdyU8n3oQI8lc.ttf",
+      "licence": "SIL OFL 1.1; see font licences",
+      "bytes": 128456,
+      "sha256": "1d1488e07efe5c4619f40bb260d3e286e67c8c369c800fcd33f4eb83a6a63fdd"
+    },
+    {
+      "path": "/vendor/fonts/b0c618f6d8ea996806c2.ttf",
+      "source": "https://fonts.gstatic.com/s/ibmplexmono/v20/-F63fjptAgt5VM-kVkqdyU8n5ig.ttf",
+      "licence": "SIL OFL 1.1; see font licences",
+      "bytes": 128812,
+      "sha256": "a7fdc993f9f0387caedba4e42521136fa97e4c0837ae6239bf0413ccf8af00c2"
+    },
+    {
+      "path": "/vendor/fonts/1a6844598cfc2dfd164d.ttf",
+      "source": "https://fonts.gstatic.com/s/ibmplexmono/v20/-F6qfjptAgt5VM-kVkqdyU8n3twJ8lc.ttf",
+      "licence": "SIL OFL 1.1; see font licences",
+      "bytes": 129916,
+      "sha256": "4fc14a73ca53ba9d32fd759ae1ca1a3133326035d0dd337862b3ee1633cc156e"
+    },
+    {
+      "path": "/vendor/fonts/feead6344d56160370c1.ttf",
+      "source": "https://fonts.gstatic.com/s/ibmplexmono/v20/-F6qfjptAgt5VM-kVkqdyU8n3vAO8lc.ttf",
+      "licence": "SIL OFL 1.1; see font licences",
+      "bytes": 133444,
+      "sha256": "754dfc9d50cf7aabfb6b108d2c2f7d20a3f1f2cc6f6c01640c6728091272cec0"
+    },
+    {
+      "path": "/vendor/fonts/aff9ea090b10d89880e4.ttf",
+      "source": "https://fonts.gstatic.com/s/ibmplexmono/v20/-F6qfjptAgt5VM-kVkqdyU8n3pQP8lc.ttf",
+      "licence": "SIL OFL 1.1; see font licences",
+      "bytes": 131040,
+      "sha256": "5b2232ff598dd39860f606526399f64be06f0c286a638bad8a83e98c44c41ff6"
+    },
+    {
+      "path": "/vendor/fonts/aab63435a01a8dd21eeb.ttf",
+      "source": "https://fonts.gstatic.com/s/spacegrotesk/v22/V8mQoQDjQSkFtoMM3T6r8E7mF71Q-gOoraIAEj62UUsj.ttf",
+      "licence": "SIL OFL 1.1; see font licences",
+      "bytes": 69400,
+      "sha256": "2f29b31d803a928d21f96dbe7a5f8bfa5c5c98917736c2d195bc7c737bc906ba"
+    },
+    {
+      "path": "/vendor/fonts/0dfc29fde7d95ca65fe2.ttf",
+      "source": "https://fonts.gstatic.com/s/spacegrotesk/v22/V8mQoQDjQSkFtoMM3T6r8E7mF71Q-gOoraIAEj7oUUsj.ttf",
+      "licence": "SIL OFL 1.1; see font licences",
+      "bytes": 69360,
+      "sha256": "ec926d5065eaca49a48f96e312bbae0bbc5733c24215cf5dfabbdccee926fef7"
+    },
+    {
+      "path": "/vendor/fonts/56632cca6632f379925b.ttf",
+      "source": "https://fonts.gstatic.com/s/spacegrotesk/v22/V8mQoQDjQSkFtoMM3T6r8E7mF71Q-gOoraIAEj7aUUsj.ttf",
+      "licence": "SIL OFL 1.1; see font licences",
+      "bytes": 69416,
+      "sha256": "3e699ead1876244fa392243054ddefe7cf631b488438828a8a100731a22ab995"
+    },
+    {
+      "path": "/vendor/fonts/d03f1389be8c7cea7e4f.ttf",
+      "source": "https://fonts.gstatic.com/s/spacegrotesk/v22/V8mQoQDjQSkFtoMM3T6r8E7mF71Q-gOoraIAEj42Vksj.ttf",
+      "licence": "SIL OFL 1.1; see font licences",
+      "bytes": 69356,
+      "sha256": "6c0346b8d297ebdc225832833e03e884a26ad99d265ecd3924d46e1ba285ea87"
+    },
+    {
+      "path": "/vendor/fonts/aaf352f017a5007bcd68.ttf",
+      "source": "https://fonts.gstatic.com/s/spacegrotesk/v22/V8mQoQDjQSkFtoMM3T6r8E7mF71Q-gOoraIAEj4PVksj.ttf",
+      "licence": "SIL OFL 1.1; see font licences",
+      "bytes": 69308,
+      "sha256": "3e756954468ff1cb302dae0414262e72f76a67d87bef3fa1f3226cd0fb9b2d85"
+    },
+    {
+      "path": "/vendor/fonts.css",
+      "source": "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap",
+      "licence": "SIL OFL 1.1; see font licences",
+      "bytes": 1820,
+      "sha256": "6ec40479353f3b2b797af0da98e6df35047e681959f2cfd6b87956dcf968fd26"
+    }
+  ]
+}

@@ -10,6 +10,8 @@
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script src="https://d3js.org/topojson.v3.min.js"></script>
 <script src="https://unpkg.com/globe.gl@2.33.0"></script>
+<link rel="stylesheet" href="/intelligence.css">
+<script src="/intelligence.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -532,7 +534,7 @@ function setMapLayer(id,visible){
 }
 function normalizeSnapshot(data){
   const out={...data,meta:{...(data?.meta||{})}};
-  for(const key of ['air','thermal','chokepoints','nuke','who','supplementalHealth','news','newsFeed','tSignals','fred','bls','ideas','health','earthquakes'])out[key]=Array.isArray(data?.[key])?data[key]:[];
+  for(const key of ['air','thermal','chokepoints','nuke','who','supplementalHealth','news','newsFeed','tSignals','fred','bls','ideas','health','earthquakes','events'])out[key]=Array.isArray(data?.[key])?data[key]:[];
   out.tg={posts:0,urgent:[],topPosts:[],...(data?.tg||{})};
   for(const key of ['urgent','topPosts'])if(!Array.isArray(out.tg[key]))out.tg[key]=[];
   out.sdr={total:0,online:0,zones:[],...(data?.sdr||{})};if(!Array.isArray(out.sdr.zones))out.sdr.zones=[];
@@ -911,6 +913,7 @@ function renderTopbar(){
       <span class="meta-pill">${t('dashboard.sources','SOURCES')} <span class="v">${D.meta.sourcesOk}/${D.meta.sourcesQueried}</span></span>
       ${D.delta?.summary ? `<span class="meta-pill">${t('dashboard.delta','DELTA')} <span class="v">${D.delta.summary.direction==='risk-off'?'&#x25B2; '+t('dashboard.riskOff','RISK-OFF'):D.delta.summary.direction==='risk-on'?'&#x25BC; '+t('dashboard.riskOn','RISK-ON'):'&#x25C6; '+t('dashboard.mixed','MIXED')}</span></span>` : ''}
       <button class="guide-btn" id="settingsTrigger" onclick="openSettings()" aria-haspopup="dialog">${t('dashboard.settings','Settings')}</button>
+      <button class="guide-btn" id="eventsTrigger" onclick="CrucixIntelligence.openEvents()" aria-haspopup="dialog">${t('intelligence.events','Events')}</button>
       <button class="guide-btn" onclick="openGlossary()">${t('dashboard.guideBtn','What Signals Mean')}</button>
       <span class="alert-badge">${D.delta?.summary?.criticalChanges>0?t('dashboard.highAlert','HIGH ALERT'):t('dashboard.monitoring','MONITORING')}</span>
     </div>
@@ -1030,7 +1033,8 @@ function buildNewsTickerPanel(){
     const sc = srcClass(n.source);
     const age = n.timestamp ? getAge(n.timestamp) : '';
     const urlAttr = n.url ? ` data-url="${String(n.url).replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"` : '';
-    return `<div class="tk-card ${n.urgent?'urgent':''} ${n.url?'clickable':''}"${urlAttr}><span class="tk-src ${sc}">${esc((n.source||'NEWS').substring(0,12))}</span><span class="tk-time">${age}</span><div class="tk-head">${cleanText(n.headline||'')}</div>${n.url?'<span class="tk-link">&#8599;</span>':''}</div>`;
+    const event=findEvent(n);const eventAttr=event?` data-event-id="${event.id}" role="button" tabindex="0"`:'';
+    return `<div class="tk-card ${n.urgent?'urgent':''} ${n.url||event?'clickable':''}"${urlAttr}${eventAttr}><span class="tk-src ${sc}">${esc((n.source||'NEWS').substring(0,12))}</span><span class="tk-time">${age}</span><div class="tk-head">${cleanText(n.headline||'')}</div>${event?'<span class="tk-link">&#9432;</span>':n.url?'<span class="tk-link">&#8599;</span>':''}</div>`;
   }).join('');
   const tickerDuration = Math.max(20, feed.length * 2.5);
   return `<div class="g-panel lp-ticker" style="display:flex;flex-direction:column">
@@ -1631,6 +1635,10 @@ function plotMarkers(){
   onGlobeZoom();
 }
 
+function findEvent(item){
+  const url=safeExternalUrl(item?.url);const title=String(item?.title||item?.headline||item?.text||'');
+  return D.events.find(e=>(url&&e.source.url===url)||(title&&e.title===title));
+}
 function showPopup(event,head,text,meta,lat,lng,alt){
   const popup=document.getElementById('mapPopup');
   const container=document.getElementById('mapContainer');
@@ -1656,6 +1664,11 @@ function showPopup(event,head,text,meta,lat,lng,alt){
   popup.querySelector('.pp-head').textContent=head||'';
   popup.querySelector('.pp-text').textContent=String(text??'').replace(/<br\s*\/?\s*>/gi,'\n').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&');
   popup.querySelector('.pp-meta').textContent=meta||'';
+  popup.querySelector('.pp-detail')?.remove();
+  const match=D.events.find(e=>e.title===String(head||'')||e.title===String(text||'')||
+    (Number.isFinite(lat)&&Number.isFinite(lng)&&e.location.lat===lat&&e.location.lon===lng&&
+      [head,text,meta].some(value=>String(value||'').includes(e.source.name))));
+  if(match){const button=document.createElement('button');button.className='guide-btn pp-detail';button.textContent=t('intelligence.details','Event details');button.onclick=()=>CrucixIntelligence.openEvent(match);popup.append(button);}
   popup.classList.add('show');
 }
 function closePopup(){document.getElementById('mapPopup').classList.remove('show')}
@@ -1836,7 +1849,7 @@ function plotFlatMarkers(){
     g.append('circle').attr('r',r*0.4).attr('fill','rgba(255,120,80,0.3)');
   });
   flatMarkerType='earthquake';
-  D.earthquakes.forEach(q=>addPt(q.lat,q.lon,3+Math.min(Number(q.magnitude)||0,8)*0.5,'rgba(255,112,67,0.85)','rgba(255,112,67,0.4)',ev=>showPopup(ev,'M '+(q.magnitude??'?')+' · '+(q.place||t('map.earthquake','Earthquake')),earthquakeDescription(q),t('earthquakes.scope','USGS significant · last 24h')+' · '+getAge(q.time)),1));
+  D.earthquakes.forEach(q=>addPt(q.lat,q.lon,3+Math.min(Number(q.magnitude)||0,8)*0.5,'rgba(255,112,67,0.85)','rgba(255,112,67,0.4)',ev=>showPopup(ev,'M '+(q.magnitude??'?')+' · '+(q.place||t('map.earthquake','Earthquake')),earthquakeDescription(q),t('earthquakes.scope','USGS significant · last 24h')+' · '+getAge(q.time),q.lat,q.lon),1));
   // Flight corridors
   if(flightsVisible){
     const airCoordsFlight=[{lat:30,lon:44},{lat:24,lon:120},{lat:49,lon:32},{lat:57,lon:24},{lat:14,lon:114},{lat:37,lon:127},{lat:25,lon:-80},{lat:4,lon:2},{lat:-34,lon:18},{lat:10,lon:51}];
@@ -2213,6 +2226,7 @@ function syncResponsiveLayout(force=false){
 
 // === REINIT (for live updates without boot sequence) ===
 function reinit(){
+  window.CrucixIntelligence?.update(D);
   rerenderDashboard(true);
   plotMarkers();
   if(document.getElementById('settingsOverlay')?.classList.contains('show')) renderSettingsBoard();
@@ -2281,13 +2295,19 @@ function init(){
   if(!uiEventsBound){
     uiEventsBound=true;
     document.getElementById('mapContainer').addEventListener('click',event=>{if(!event.target.closest('.map-popup'))closePopup();});
-    document.addEventListener('click',event=>{const card=event.target.closest('.tk-card[data-url]');if(card){const url=safeExternalUrl(card.dataset.url);if(url)window.open(url,'_blank','noopener');}});
+    const openCard=card=>{if(card?.dataset.eventId)CrucixIntelligence.openEvent(card.dataset.eventId);else{const url=safeExternalUrl(card?.dataset.url);if(url)window.open(url,'_blank','noopener');}};
+    document.addEventListener('click',event=>openCard(event.target.closest('.tk-card[data-event-id],.tk-card[data-url]')));
+    document.addEventListener('keydown',event=>{const card=event.target.closest('.tk-card[data-event-id]');if(card&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openCard(card);}});
     document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!document.getElementById('settingsOverlay').classList.contains('show'))closeGlossary();});
   }
   syncResponsiveLayout(true);
 }
 document.addEventListener('DOMContentLoaded',()=>{
   document.documentElement.lang=L.meta?.code||'en';document.title=t('dashboard.title',document.title);
+  window.CrucixIntelligence?.init({getSnapshot:()=>D,getLayout:()=>dashboardLayout,
+    applyLayout:value=>{dashboardLayout=normalizeDashboardLayout(value);saveDashboardLayout();reinit();},
+    getLayers:()=>mapLayers,applyLayers:value=>{for(const layer of mapLayerRegistry)if(typeof value?.[layer.id]==='boolean')setMapLayer(layer.id,value[layer.id]);},
+    getRegion:()=>currentRegion,applyRegion:setRegion,t,escapeText:esc,historyEnabled:false,profilesEnabled:false});
   init();
   if(location.protocol!=='file:'){
     connectSSE();pollSnapshot();

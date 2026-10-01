@@ -15,6 +15,7 @@ import { safeFetch } from '../apis/utils/fetch.mjs';
 import config from '../crucix.config.mjs';
 import { createLLMProvider } from '../lib/llm/index.mjs';
 import { generateRuleBasedIdeas, resolveIdeas } from '../lib/llm/rule-ideas.mjs';
+import { buildEvents } from '../lib/intelligence/events.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -220,7 +221,7 @@ const whoRegionCentroids = {
 
 function geoTagWhoAlert(alert = {}) {
   if (alert.whoRegionCode && whoRegionCentroids[alert.whoRegionCode]) {
-    return whoRegionCentroids[alert.whoRegionCode];
+    return { ...whoRegionCentroids[alert.whoRegionCode], method: 'who-region-centroid' };
   }
 
   const text = [alert.title, alert.summary, alert.overview, alert.assessment]
@@ -228,10 +229,11 @@ function geoTagWhoAlert(alert = {}) {
     .join(' ');
 
   for (const [keyword, [lat, lon]] of Object.entries(whoGeoKeywords)) {
-    if (text.includes(keyword)) return { lat, lon, region: keyword };
+    if (text.includes(keyword)) return { lat, lon, region: keyword, method: 'text-keyword' };
   }
 
-  return geoTagText(text);
+  const geo = geoTagText(text);
+  return geo ? { ...geo, method: 'text-keyword' } : null;
 }
 
 function getWhoMarkerSize(alert) {
@@ -407,11 +409,11 @@ export async function fetchAllNews(customFeeds) {
     seen.add(key);
     const geo = geoTagText(item.title);
       geoNews.push({
-        title: item.title.substring(0, 100),
+        title: item.title.substring(0, 2000),
         source: item.source,
         date: item.date,
         url: item.url,
-        ...(geo ? { lat: geo.lat, lon: geo.lon, region: geo.region, locationMethod: 'headline-keyword' }
+        ...(geo ? { lat: geo.lat, lon: geo.lon, region: geo.region, locationMethod: 'headline-keyword', locationPrecision: 'approximate' }
           : { region: 'Global', locationMethod: 'unknown' }),
       });
   }
@@ -485,6 +487,7 @@ export async function synthesize(data, options = {}) {
     activeEvents: iodaData.outages?.activeEvents || 0,
     countries: iodaCountries,
     recentEvents: (iodaData.outages?.recentEvents || []).slice(0, 12).map(event => ({
+      id: event.id,
       country: event.country,
       countryCode: event.countryCode,
       start: event.startIso || null,
@@ -494,6 +497,9 @@ export async function synthesize(data, options = {}) {
       method: event.method || 'unknown',
       score: event.score || 0,
       durationSeconds: event.durationSeconds || 0,
+      lat: iodaCountryGeo[event.countryCode]?.[0] ?? null,
+      lon: iodaCountryGeo[event.countryCode]?.[1] ?? null,
+      locationMethod: 'country-centroid', locationPrecision: 'approximate',
     })),
     signals: (iodaData.signals || []).map(signal => signal.signal || signal).filter(Boolean),
   };
@@ -517,16 +523,16 @@ export async function synthesize(data, options = {}) {
   }));
   const tgData = data.sources.Telegram || {};
   const tgUrgent = (tgData.urgentPosts || []).filter(p => isEnglish(p.text)).map(p => ({
-    channel: p.channel, text: p.text?.substring(0, 200), views: p.views, date: p.date, url: sanitizeExternalUrl(p.url), urgentFlags: p.urgentFlags || []
+    id: p.postId, channel: p.channel, text: p.text?.substring(0, 2000), views: p.views, date: p.date, url: sanitizeExternalUrl(p.url), urgentFlags: p.urgentFlags || []
   }));
   const tgTop = (tgData.topPosts || []).filter(p => isEnglish(p.text)).map(p => ({
-    channel: p.channel, text: p.text?.substring(0, 200), views: p.views, date: p.date, url: sanitizeExternalUrl(p.url), urgentFlags: []
+    id: p.postId, channel: p.channel, text: p.text?.substring(0, 2000), views: p.views, date: p.date, url: sanitizeExternalUrl(p.url), urgentFlags: []
   }));
   const who = (data.sources.WHO?.diseaseOutbreakNews || [])
     .map(w => {
       const geo = geoTagWhoAlert(w);
       return {
-        title: w.title?.substring(0, 120),
+        title: w.title?.substring(0, 2000),
         date: w.date,
         lastModified: w.lastModified,
         summary: w.summary?.substring(0, 150),
@@ -538,6 +544,7 @@ export async function synthesize(data, options = {}) {
         score: w.severityScore || 0,
         lat: geo?.lat ?? null,
         lon: geo?.lon ?? null,
+        locationMethod: geo?.method || 'unknown', locationPrecision: geo ? 'approximate' : 'unknown',
         region: geo?.region || w.whoRegion || 'Global',
         whoRegion: w.whoRegion || null,
         whoRegionCode: w.whoRegionCode || null,
@@ -560,7 +567,7 @@ export async function synthesize(data, options = {}) {
       const geo = primaryGeo || fallbackGeo;
       const ranked = rankSupplementalHealthAlert(item);
       return {
-        title: item.title?.substring(0, 130),
+        title: item.title?.substring(0, 2000),
         date: item.date,
         source: Array.isArray(item.source) ? item.source.join(', ') : item.source,
         countries: item.countries || [],
@@ -570,6 +577,8 @@ export async function synthesize(data, options = {}) {
         score: ranked.score,
         lat: geo?.lat ?? null,
         lon: geo?.lon ?? null,
+        locationMethod: primaryGeo ? 'country-centroid' : fallbackGeo ? 'headline-keyword' : 'unknown',
+        locationPrecision: geo ? 'approximate' : 'unknown',
         region: geo?.region || item.countries?.[0] || 'Global',
         markerSize: getSupplementalMarkerSize(ranked),
       };
@@ -604,8 +613,9 @@ export async function synthesize(data, options = {}) {
   const noaa = {
     totalAlerts: data.sources.NOAA?.totalSevereAlerts || 0,
     alerts: (data.sources.NOAA?.topAlerts || []).filter(a => a.lat != null && a.lon != null).slice(0, 10).map(a => ({
-      event: a.event, severity: a.severity, headline: a.headline?.substring(0, 120),
-      lat: a.lat, lon: a.lon
+      id: a.id, url: sanitizeExternalUrl(a.url), sent: a.sent, onset: a.onset, expires: a.expires,
+      areas: a.areas, event: a.event, severity: a.severity, headline: a.headline?.substring(0, 2000),
+      lat: a.lat, lon: a.lon, locationMethod: a.locationMethod || 'unknown', locationPrecision: a.locationPrecision || 'unknown'
     }))
   };
 
@@ -665,7 +675,8 @@ export async function synthesize(data, options = {}) {
     byRegion: acledData.byRegion || {},
     byType: acledData.byType || {},
     deadliestEvents: (acledData.deadliestEvents || []).slice(0, 15).map(e => ({
-      date: e.date, type: e.type, country: e.country, location: e.location,
+      id: e.id, url: sanitizeExternalUrl(e.url), notes: e.notes, date: e.date, type: e.type, country: e.country, location: e.location,
+      locationMethod: e.locationMethod || 'provider', locationPrecision: e.locationPrecision || 'unknown',
       fatalities: e.fatalities || 0, lat: e.lat ?? null, lon: e.lon ?? null
     }))
   };
@@ -767,6 +778,7 @@ export async function synthesize(data, options = {}) {
   };
 
   V2.ideas = generateIdeas(V2);
+  V2.events = buildEvents(V2);
   return V2;
 }
 
@@ -792,7 +804,8 @@ export function buildNewsFeed(rssNews, gdeltData, tgUrgent, tgTop) {
   for (const n of rssNews) {
     feed.push({
       headline: n.title, source: n.source, type: 'rss',
-      timestamp: sourceTimestamp(n.date), region: n.region, urgent: false, url: n.url
+      timestamp: sourceTimestamp(n.date), publishedAt: sourceTimestamp(n.date), region: n.region, urgent: false, url: sanitizeExternalUrl(n.url),
+      lat: n.lat, lon: n.lon, locationMethod: n.locationMethod || 'unknown', locationPrecision: n.locationPrecision || 'unknown'
     });
   }
 
@@ -801,8 +814,10 @@ export function buildNewsFeed(rssNews, gdeltData, tgUrgent, tgTop) {
     if (a.title) {
       const geo = geoTagText(a.title);
       feed.push({
-        headline: a.title.substring(0, 100), source: 'GDELT', type: 'gdelt',
-        timestamp: sourceTimestamp(a.seendate || a.date), region: geo?.region || 'Global', urgent: false, url: sanitizeExternalUrl(a.url)
+        headline: a.title.substring(0, 2000), source: 'GDELT', type: 'gdelt',
+        timestamp: sourceTimestamp(a.seendate || a.date), observedAt: sourceTimestamp(a.seendate), publishedAt: sourceTimestamp(a.date),
+        region: geo?.region || 'Global', urgent: false, url: sanitizeExternalUrl(a.url),
+        lat: geo?.lat, lon: geo?.lon, locationMethod: geo ? 'headline-keyword' : 'unknown', locationPrecision: geo ? 'approximate' : 'unknown'
       });
     }
   }
@@ -811,7 +826,7 @@ export function buildNewsFeed(rssNews, gdeltData, tgUrgent, tgTop) {
   for (const p of tgUrgent.slice(0, 10)) {
     const text = (p.text || '').replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '').trim();
     feed.push({
-      headline: text.substring(0, 100), source: p.channel?.toUpperCase() || 'TELEGRAM',
+      id: p.id, headline: text.substring(0, 2000), source: p.channel?.toUpperCase() || 'TELEGRAM', publishedAt: sourceTimestamp(p.date),
       type: 'telegram', timestamp: sourceTimestamp(p.date), region: 'OSINT', urgent: true, url: sanitizeExternalUrl(p.url)
     });
   }
@@ -820,7 +835,7 @@ export function buildNewsFeed(rssNews, gdeltData, tgUrgent, tgTop) {
   for (const p of tgTop.slice(0, 5)) {
     const text = (p.text || '').replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '').trim();
     feed.push({
-      headline: text.substring(0, 100), source: p.channel?.toUpperCase() || 'TELEGRAM',
+      id: p.id, headline: text.substring(0, 2000), source: p.channel?.toUpperCase() || 'TELEGRAM', publishedAt: sourceTimestamp(p.date),
       type: 'telegram', timestamp: sourceTimestamp(p.date), region: 'OSINT', urgent: false, url: sanitizeExternalUrl(p.url)
     });
   }

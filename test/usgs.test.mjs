@@ -36,6 +36,7 @@ test('USGS normalizes coordinates, timestamps, magnitude, links, and optional ze
     id: 'usgs-fixture', magnitude: 5.2, place: 'Fixture region', title: 'M 5.2 - Fixture region',
     time: '2026-10-01T12:00:00.000Z', lat: 37.8, lon: -122.4,
     coordinates: [-122.4, 37.8, 12.5], depth: 12.5, tsunamiFlag: false,
+    locationMethod: 'provider', locationPrecision: 'exact',
     url: 'https://earthquake.usgs.gov/earthquakes/eventpage/usgs-fixture', felt: 0, cdi: 0,
   });
 });

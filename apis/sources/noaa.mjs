@@ -81,6 +81,9 @@ export async function briefing() {
         [lon, lat] = geo.coordinates;
       }
       return {
+        id: f.id || f.properties?.id || null,
+        url: f.id || f.properties?.id || null,
+        sent: f.properties?.sent || null,
         event: f.properties?.event,
         severity: f.properties?.severity,
         urgency: f.properties?.urgency,
@@ -90,6 +93,8 @@ export async function briefing() {
         expires: f.properties?.expires,
         lat: lat != null ? +lat.toFixed(3) : null,
         lon: lon != null ? +lon.toFixed(3) : null,
+        locationMethod: geo?.type === 'Point' ? 'provider' : geo ? 'polygon-centroid' : 'unknown',
+        locationPrecision: geo?.type === 'Point' ? 'exact' : geo ? 'approximate' : 'unknown',
       };
     }),
   };

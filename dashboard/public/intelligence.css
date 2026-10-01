@@ -1,0 +1,58 @@
+/* Scoped dialog styles keep the existing Jarvis dashboard layout untouched. */
+.ci-overlay{position:fixed;inset:0;z-index:3000;background:rgba(4,10,15,.84);display:flex;align-items:center;justify-content:center;padding:24px;overscroll-behavior:contain;color:var(--text,#d9e9e5);font-family:var(--sans,Arial,sans-serif)}
+.ci-dialog{width:min(920px,100%);max-height:calc(100dvh - 48px);display:flex;flex-direction:column;border:1px solid var(--border,#354c49);border-radius:10px;background:var(--bg,#091417);box-shadow:0 24px 100px #0009;overflow:hidden;font-size:14px;line-height:1.6;text-align:left}
+.ci-header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;padding:20px 24px;border-bottom:1px solid var(--border,#354c49);flex:none;background:var(--panel,#111f23)}
+.ci-title{font-size:21px;line-height:1.4;margin:0;overflow-wrap:anywhere;font-weight:600}
+.ci-body{padding:24px;overflow:auto;overscroll-behavior:contain;min-height:0;scrollbar-gutter:stable}
+.ci-dialog h3{font-size:15px;line-height:1.5;margin:0 0 10px;color:var(--text,#d9e9e5)}
+.ci-dialog p{margin:0 0 12px;overflow-wrap:anywhere;white-space:pre-wrap}
+.ci-button{font:inherit;line-height:1.3;min-height:42px;padding:10px 15px;border:1px solid var(--border,#456560);border-radius:5px;background:var(--panel,#14272b);color:var(--text,#d9e9e5);cursor:pointer;text-align:center;white-space:normal}
+.ci-button:hover{background:#223e42;border-color:var(--accent2,#81d4fa)}
+.ci-button:disabled{opacity:.45;cursor:default}
+.ci-close{flex:none;min-width:76px}
+.ci-back{margin-bottom:16px}
+.ci-dialog :focus-visible{outline:2px solid var(--accent2,#81d4fa);outline-offset:3px}
+.ci-source-link{display:inline-block;color:var(--accent2,#81d4fa);font-size:14px;text-underline-offset:3px;overflow-wrap:anywhere;padding:5px 0;max-width:100%}
+.ci-summary{font-size:16px;line-height:1.7}
+.ci-event-meta,.ci-help{color:var(--dim,#a0b6b1);font-size:13px;line-height:1.65}
+.ci-metadata{display:grid;grid-template-columns:minmax(160px,1fr) minmax(0,2fr);gap:0;margin:20px 0 0;border-top:1px solid var(--border,#354c49)}
+.ci-metadata dt,.ci-metadata dd{padding:10px 0;border-bottom:1px solid var(--border,#354c49);overflow-wrap:anywhere;margin:0}
+.ci-metadata dt{color:var(--dim,#a0b6b1);padding-right:20px}
+.ci-section{border-top:1px solid var(--border,#354c49);padding-top:20px;margin-top:24px}
+.ci-quality-label{color:var(--accent,#a7f3d0);font-weight:600}
+.ci-checks{list-style:none;margin:0;padding:0}
+.ci-checks li{display:flex;justify-content:space-between;gap:24px;padding:8px 0;border-bottom:1px solid var(--border,#354c49)}
+.ci-checks li span:last-child{flex:none;font-size:12px}
+.ci-check-present span:last-child{color:var(--accent,#a7f3d0)}
+.ci-check-missing span:last-child{color:var(--dim,#a0b6b1)}
+.ci-related-card,.ci-event-card{padding:16px 0;border-bottom:1px solid var(--border,#354c49)}
+.ci-related-card .ci-source-link{font-size:12px;margin-top:4px}
+.ci-result-title{display:block;max-width:100%;padding:0;background:none;border:0;color:var(--accent2,#81d4fa);font:inherit;font-weight:600;line-height:1.6;text-align:left;cursor:pointer;overflow-wrap:anywhere;white-space:pre-wrap}
+.ci-result-title:hover{text-decoration:underline;text-underline-offset:3px}
+.ci-event-card .ci-event-meta{margin:8px 0}
+.ci-result-summary{font-size:14px;color:var(--text,#d9e9e5)}
+.ci-history-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:end}
+.ci-history-filters .ci-field:first-child{grid-column:span 2}
+.ci-field{display:flex;flex-direction:column;gap:6px;min-width:0;color:var(--dim,#a0b6b1);font-size:13px;line-height:1.5}
+.ci-input{box-sizing:border-box;width:100%;min-height:44px;background:#071216;border:1px solid var(--border,#456560);border-radius:5px;color:var(--text,#d9e9e5);font:inherit;font-size:14px;padding:10px 12px;color-scheme:dark;min-width:0}
+.ci-actions{display:flex;gap:8px;flex-wrap:wrap}
+.ci-export h3{margin-bottom:8px}
+.ci-export .ci-actions{margin:12px 0}
+.ci-status{border-left:3px solid var(--accent2,#81d4fa);padding:10px 12px;background:#81d4fa0a;font-size:14px}
+.ci-error{border-color:#ff8a80;color:#ffb8b2;background:#ff8a8009}
+.ci-history-status{margin-top:20px}
+.ci-empty{padding:24px 0;color:var(--dim,#a0b6b1)}
+.ci-day-list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.ci-day-list li{display:flex;justify-content:space-between;gap:12px;padding:8px 10px;background:var(--panel,#111f23);border:1px solid var(--border,#354c49);border-radius:3px;font-size:12px}
+.ci-day-list strong{color:var(--accent,#a7f3d0)}
+.ci-pagination{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-top:24px;font-size:13px}
+.ci-profile-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:20px 0}
+.ci-profile-card{min-width:0;border:1px solid var(--border,#354c49);border-radius:5px;padding:16px;background:var(--panel,#111f23)}
+.ci-profile-card h3{overflow-wrap:anywhere;white-space:pre-wrap}
+.ci-profile-card .ci-actions{margin-top:16px}
+.ci-profile-card .ci-button{font-size:12px;padding:9px 12px}
+.ci-profile-form{display:flex;align-items:end;gap:12px;margin:24px 0 12px;flex-wrap:wrap}
+.ci-profile-form .ci-field{flex:1;min-width:180px}
+@media(max-width:700px){.ci-overlay{padding:12px}.ci-dialog{max-height:calc(100dvh - 24px)}.ci-header{padding:16px;gap:12px}.ci-body{padding:16px}.ci-title{font-size:18px}.ci-history-filters{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.ci-history-filters .ci-field:first-child{grid-column:span 2}.ci-profile-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ci-day-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:440px){.ci-overlay{padding:0;align-items:stretch}.ci-dialog{width:100%;max-height:100dvh;border-radius:0;border:0}.ci-header{gap:10px}.ci-close{min-width:64px;padding:10px}.ci-metadata{grid-template-columns:1fr;gap:0}.ci-metadata dt{border-bottom:0;padding:12px 0 0;font-size:12px}.ci-metadata dd{padding:2px 0 10px}.ci-profile-grid{grid-template-columns:1fr}.ci-checks li{gap:12px}.ci-pagination{gap:8px}.ci-pagination span{text-align:center}.ci-profile-form .ci-button{flex:1}.ci-source-link{min-height:32px}}
+@media(prefers-reduced-motion:reduce){.ci-dialog *{scroll-behavior:auto}}

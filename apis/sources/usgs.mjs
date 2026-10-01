@@ -43,6 +43,7 @@ function normalizeEarthquake(feature) {
     lat,
     lon,
     coordinates: [lon, lat, depthKm],
+    locationMethod: 'provider', locationPrecision: 'exact',
     depth: depthKm,
     // The GeoJSON flag does not establish that a tsunami warning was issued.
     tsunamiFlag: properties.tsunami === 1,
