@@ -2,9 +2,23 @@
 
 import "./apis/utils/env.mjs"; // Load .env first
 
+export function envInteger(name, fallback, min, max) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return fallback;
+  if (!/^\d+$/.test(raw) || !Number.isSafeInteger(Number(raw)) || Number(raw) < min || Number(raw) > max) {
+    throw new Error(`${name} must be an integer between ${min} and ${max}`);
+  }
+  return Number(raw);
+}
+
 export default {
-  port: parseInt(process.env.PORT) || 3117,
-  refreshIntervalMinutes: parseInt(process.env.REFRESH_INTERVAL_MINUTES) || 15,
+  port: envInteger('PORT', 3117, 1, 65535),
+  host: process.env.HOST || '127.0.0.1',
+  runsDir: process.env.RUNS_DIR || null,
+  publicUrl: process.env.PUBLIC_URL || `http://localhost:${envInteger('PORT', 3117, 1, 65535)}`,
+  auth: { user: process.env.AUTH_USER || '', password: process.env.AUTH_PASSWORD || '' },
+  maxSseClients: envInteger('MAX_SSE_CLIENTS', 100, 1, 10000),
+  refreshIntervalMinutes: envInteger('REFRESH_INTERVAL_MINUTES', 15, 1, 1440),
 
   llm: {
     provider: process.env.LLM_PROVIDER || null, // anthropic | openai | gemini | codex | openrouter | minimax | mistral | ollama | grok
@@ -25,6 +39,7 @@ export default {
     botToken: process.env.DISCORD_BOT_TOKEN || null,
     channelId: process.env.DISCORD_CHANNEL_ID || null,
     guildId: process.env.DISCORD_GUILD_ID || null, // Server ID (for instant slash command registration)
+    allowedUserIds: (process.env.DISCORD_ALLOWED_USER_IDS || '').split(',').map(id => id.trim()).filter(Boolean),
     webhookUrl: process.env.DISCORD_WEBHOOK_URL || null, // Fallback: webhook-only alerts (no bot needed)
   },
 

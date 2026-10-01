@@ -4,9 +4,11 @@
 
 import express from 'express';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
-import { exec } from 'child_process';
+import { openBrowser } from './lib/open-browser.mjs';
+import { inlineJson } from './lib/html.mjs';
+import { installHttpSecurity } from './lib/http-security.mjs';
 import config from './crucix.config.mjs';
 import { getLocale, currentLanguage, getSupportedLocales } from './lib/i18n.mjs';
 import { fullBriefing } from './apis/briefing.mjs';
@@ -19,7 +21,7 @@ import { DiscordAlerter } from './lib/alerts/discord.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
-const RUNS_DIR = join(ROOT, 'runs');
+const RUNS_DIR = config.runsDir ? resolve(config.runsDir) : join(ROOT, 'runs');
 const MEMORY_DIR = join(RUNS_DIR, 'memory');
 
 // Ensure directories exist
@@ -71,7 +73,7 @@ if (telegramAlerter.isConfigured) {
       `Sources: ${sourcesOk}/${sourcesTotal} OK${sourcesFailed > 0 ? ` (${sourcesFailed} failed)` : ''}`,
       `LLM: ${llmStatus}`,
       `SSE clients: ${sseClients.size}`,
-      `Dashboard: http://localhost:${config.port}`,
+      `Dashboard: ${config.publicUrl}`,
     ].join('\n');
   });
 
@@ -169,7 +171,7 @@ if (discordAlerter.isConfigured) {
       `Sources: ${sourcesOk}/${sourcesTotal} OK${sourcesFailed > 0 ? ` (${sourcesFailed} failed)` : ''}`,
       `LLM: ${llmStatus}`,
       `SSE clients: ${sseClients.size}`,
-      `Dashboard: http://localhost:${config.port}`,
+      `Dashboard: ${config.publicUrl}`,
     ].join('\n');
   });
 
@@ -234,6 +236,7 @@ if (discordAlerter.isConfigured) {
 
 // === Express Server ===
 const app = express();
+installHttpSecurity(app, config.auth);
 app.use(express.static(join(ROOT, 'dashboard/public')));
 app.get('/favicon.ico', (_req, res) => res.status(204).end());
 
@@ -244,13 +247,13 @@ app.get('/', (req, res) => {
   } else {
     const htmlPath = join(ROOT, 'dashboard/public/jarvis.html');
     let html = readFileSync(htmlPath, 'utf-8');
-    const dataScript = JSON.stringify(currentData).replace(/<\/script>/gi, '<\\/script>');
+    const dataScript = inlineJson(currentData);
     
     html = html.replace(/^(let|const) D = .*;\s*$/m, () => `let D = ${dataScript};`);
 
     // Inject locale data into the HTML
     const locale = getLocale();
-    const localeScript = `<script>window.__CRUCIX_LOCALE__ = ${JSON.stringify(locale).replace(/<\/script>/gi, '<\\/script>')};</script>`;
+    const localeScript = `<script>window.__CRUCIX_LOCALE__ = ${inlineJson(locale)};</script>`;
     html = html.replace('</head>', `${localeScript}\n</head>`);
     
     res.set('Cache-Control', 'no-store');
@@ -295,21 +298,26 @@ app.get('/api/locales', (req, res) => {
 
 // SSE: live updates
 app.get('/events', (req, res) => {
+  if (sseClients.size >= config.maxSseClients) return res.status(503).set('Retry-After', '15').end();
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     'Connection': 'keep-alive',
-    'Access-Control-Allow-Origin': '*',
+    'X-Accel-Buffering': 'no',
   });
   res.write('data: {"type":"connected"}\n\n');
   sseClients.add(res);
-  req.on('close', () => sseClients.delete(res));
+  const heartbeat = setInterval(() => {
+    if (!res.write(': heartbeat\n\n')) res.destroy();
+  }, 15000);
+  heartbeat.unref();
+  req.on('close', () => { clearInterval(heartbeat); sseClients.delete(res); });
 });
 
 function broadcast(data) {
   const msg = `data: ${JSON.stringify(data)}\n\n`;
   for (const client of sseClients) {
-    try { client.write(msg); } catch { sseClients.delete(client); }
+    try { if (!client.write(msg)) client.destroy(); } catch { client.destroy(); sseClients.delete(client); }
   }
 }
 
@@ -415,10 +423,10 @@ async function start() {
   console.log(`
   ╔══════════════════════════════════════════════╗
   ║           CRUCIX INTELLIGENCE ENGINE         ║
-  ║          Local Palantir · 26 Sources         ║
+  ║          Local Intelligence Engine          ║
   ╠══════════════════════════════════════════════╣
   ║  Dashboard:  http://localhost:${port}${' '.repeat(14 - String(port).length)}║
-  ║  Health:     http://localhost:${port}/api/health${' '.repeat(4 - String(port).length)}║
+  ║  Health:     http://localhost:${port}/api/health${' '.repeat(Math.max(0, 4 - String(port).length))}║
   ║  Refresh:    Every ${config.refreshIntervalMinutes} min${' '.repeat(20 - String(config.refreshIntervalMinutes).length)}║
   ║  LLM:        ${(config.llm.provider || 'disabled').padEnd(31)}║
   ║  Telegram:   ${config.telegram.botToken ? 'enabled' : 'disabled'}${' '.repeat(config.telegram.botToken ? 24 : 23)}║
@@ -426,15 +434,13 @@ async function start() {
   ╚══════════════════════════════════════════════╝
   `);
 
-  const server = app.listen(port);
+  const server = app.listen(port, config.host);
 
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
       console.error(`\n[Crucix] FATAL: Port ${port} is already in use!`);
       console.error(`[Crucix] A previous Crucix instance may still be running.`);
-      console.error(`[Crucix] Fix:  taskkill /F /IM node.exe   (Windows)`);
-      console.error(`[Crucix]       kill $(lsof -ti:${port})   (macOS/Linux)`);
-      console.error(`[Crucix] Or change PORT in .env\n`);
+      console.error(`[Crucix] Identify the process using this port, or change PORT in .env.\n`);
     } else {
       console.error(`[Crucix] Server error:`, err.stack || err.message);
     }
@@ -447,11 +453,7 @@ async function start() {
     // Auto-open browser
     // NOTE: On Windows, `start` in PowerShell is an alias for Start-Service, not cmd's start.
     // We must use `cmd /c start ""` to ensure it works in both cmd.exe and PowerShell.
-    const openCmd = process.platform === 'win32' ? 'cmd /c start ""' :
-                    process.platform === 'darwin' ? 'open' : 'xdg-open';
-    exec(`${openCmd} "http://localhost:${port}"`, (err) => {
-      if (err) console.log('[Crucix] Could not auto-open browser:', err.message);
-    });
+    openBrowser(`http://localhost:${port}`);
 
     // Try to load existing data first for instant display (await so dashboard shows immediately)
     try {

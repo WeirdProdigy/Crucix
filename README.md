@@ -71,11 +71,11 @@ It was built for anyone who wants to understand what's actually happening in the
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/calesthio/Crucix.git
+git clone https://github.com/mp3pintyo/Crucix.git
 cd Crucix
 
 # 2. Install dependencies (just Express)
-npm install
+npm ci
 
 # 3. Copy env template and add your API keys (see below)
 cp .env.example .env
@@ -97,13 +97,25 @@ The dashboard opens automatically at `http://localhost:3117` and immediately beg
 ### Docker
 
 ```bash
-git clone https://github.com/calesthio/Crucix.git
+git clone https://github.com/mp3pintyo/Crucix.git
 cd Crucix
 cp .env.example .env    # add your API keys
 docker compose up -d
 ```
 
 Dashboard at `http://localhost:3117`. Sweep data persists in `./runs/` via volume mount. Includes a health check endpoint.
+
+### Access and privacy (v2.1)
+
+The native server and Docker published port default to localhost. For LAN access, set `HOST=0.0.0.0` for native Node, or `BIND_ADDRESS=0.0.0.0` for Compose. Set both `AUTH_USER` and `AUTH_PASSWORD` to protect the dashboard, JSON APIs and event stream. A partial credential configuration fails at startup. Use an HTTPS reverse proxy when exposing password-protected access beyond the local machine; HTTP Basic authentication does not encrypt credentials. `/healthz` exposes only a minimal health status without authentication.
+
+`PUBLIC_URL` controls dashboard links in bot messages. `NO_AUTO_OPEN=1` disables automatic browser launch. `PORT` accepts integers from 1 to 65535. The event stream has heartbeats and a configurable `MAX_SSE_CLIENTS` limit.
+
+Public Telegram preview collection is disabled by default. Set `TELEGRAM_OSINT_ENABLED=true` to enable it. The OSINT source never reads private messages or control-bot updates; `TELEGRAM_BOT_TOKEN` is used only for alerts and commands. Discord commands are restricted to the configured channel and guild. Sweep/mute/unmute require Manage Server/Administrator permission or membership in `DISCORD_ALLOWED_USER_IDS`.
+
+The container runs as UID 1000. On Linux, prepare the bind-mounted directory with `mkdir -p runs && sudo chown 1000:1000 runs` before starting Compose. Keep existing sweep files and adjust their ownership if necessary. The container checks `/healthz` using the configured port.
+
+Run `npm run check` and `npm test` before submitting changes. See [the bilingual changelog](CHANGELOG.md) and [the audit plan](docs/audit/implementation-plan-2026-10-01.md).
 
 ---
 

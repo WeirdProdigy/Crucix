@@ -2,7 +2,10 @@ services:
   crucix:
     build: .
     ports:
-      - "${PORT:-3117}:${PORT:-3117}"
+      - "${BIND_ADDRESS:-127.0.0.1}:${PORT:-3117}:${PORT:-3117}"
+    environment:
+      HOST: 0.0.0.0
+      NO_AUTO_OPEN: 1
     env_file:
       - .env
     volumes:

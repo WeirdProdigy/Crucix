@@ -8,7 +8,9 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { exec } from 'child_process';
+import { pathToFileURL } from 'node:url';
+import { openBrowser } from '../lib/open-browser.mjs';
+import { inlineJson } from '../lib/html.mjs';
 import config from '../crucix.config.mjs';
 import { createLLMProvider } from '../lib/llm/index.mjs';
 import { generateLLMIdeas } from '../lib/llm/ideas.mjs';
@@ -1006,7 +1008,7 @@ async function cliInject() {
   }
   console.log(`Generated ${V2.ideas.length} leverageable ideas`);
 
-  const json = JSON.stringify(V2);
+  const json = inlineJson(V2);
   console.log('\n--- Synthesis ---');
   console.log('Size:', json.length, 'bytes | Air:', V2.air.length, '| Thermal:', V2.thermal.length,
     '| News:', V2.news.length, '| Ideas:', V2.ideas.length, '| Sources:', V2.health.length);
@@ -1023,13 +1025,7 @@ async function cliInject() {
   // Auto-open dashboard in default browser
   // NOTE: On Windows, `start` in PowerShell is an alias for Start-Service, not cmd's start.
   // We must use `cmd /c start ""` to ensure it works in both cmd.exe and PowerShell.
-  const openCmd = process.platform === 'win32' ? 'cmd /c start ""' :
-                  process.platform === 'darwin' ? 'open' : 'xdg-open';
-  const dashUrl = htmlPath.replace(/\\/g, '/');
-  exec(`${openCmd} "${dashUrl}"`, (err) => {
-    if (err) console.log('Could not auto-open browser:', err.message);
-    else console.log('Dashboard opened in browser!');
-  });
+  openBrowser(pathToFileURL(htmlPath).href);
 }
 
 // Run CLI if invoked directly
