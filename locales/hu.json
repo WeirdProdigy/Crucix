@@ -23,10 +23,15 @@
     "perf": "TELJ.",
     "perfLow": "ALACSONY",
     "perfHigh": "MAGAS",
-    "guideBtn": "Jelzések jelentése"
+    "guideBtn": "Jelzések jelentése",
+    "settings": "Beállítások",
+    "monitoring": "MEGFIGYELÉS",
+    "visuals": "LÁTVÁNY",
+    "visualsLite": "EGYSZERŰ",
+    "visualsFull": "TELJES"
   },
   "boot": {
-    "initializing": "CRUCIX MOTOR INDÍTÁSA v2.1.0",
+    "initializing": "CRUCIX MOTOR INDÍTÁSA",
     "connecting": "{count} OSINT-FORRÁS CSATLAKOZTATÁSA...",
     "sourceGroup1": "OPENSKY · FIRMS · KIWISDR · MARITIME",
     "sourceGroup2": "FRED · BLS · EIA · TREASURY · GSCPI",
@@ -62,7 +67,8 @@
     "cyberWatch": "Kiberfigyelés",
     "spaceWatch": "Űrfigyelés",
     "europeAlerts": "Európai riasztások",
-    "ecbIndicators": "EKB-mutatók"
+    "ecbIndicators": "EKB-mutatók",
+    "sourceHealth": "Források állapota"
   },
   "layers": {
     "airActivity": "Légi aktivitás",
@@ -106,12 +112,13 @@
     "scrollToZoom": "GÖRGESS A ZOOMHOZ · HÚZD A MOZGATÁSHOZ",
     "globeMode": "GÖMB NÉZET",
     "flatMode": "SÍK NÉZET",
-    "earthquake": "Földrengés",
+    "earthquake": "Földrengések",
     "disaster": "Katasztrófa",
     "weatherAlert": "Időjárási riasztás",
     "epaRadNet": "EPA RadNet",
     "spaceStation": "Űrállomás",
-    "gdeltEvent": "GDELT-esemény"
+    "gdeltEvent": "GDELT-esemény",
+    "rotateHint": "HÚZD A FORGATÁSHOZ · GÖRGESS A ZOOMHOZ"
   },
   "ideas": {
     "confidence": "Bizonyosság",
@@ -124,7 +131,11 @@
     "pending": "FOLYAMATBAN",
     "llmNotConfigured": "LLM NINCS BEÁLLÍTVA",
     "llmHelp": "Állítsd be a .env fájlban az LLM_PROVIDER és a hitelesítési adatokat az MI-alapú ötletekhez",
-    "disclosure": "KIZÁRÓLAG TÁJÉKOZTATÁSI CÉLRA. Ez nem pénzügyi tanácsadás, nem vételi vagy eladási ajánlás, és nem minősül felhívásnak. Minden jelzésalapú megállapítás nyilvánosan elérhető OSINT-adatokból származik, ezért befektetési döntés alapjául önmagában nem szolgálhat. Befektetés előtt konzultálj engedéllyel rendelkező pénzügyi tanácsadóval. A múltbeli teljesítmény nem jelent garanciát a jövőbeli eredményekre."
+    "disclosure": "KIZÁRÓLAG TÁJÉKOZTATÁSI CÉLRA. Ez nem pénzügyi tanácsadás, nem vételi vagy eladási ajánlás, és nem minősül felhívásnak. Minden jelzésalapú megállapítás nyilvánosan elérhető OSINT-adatokból származik, ezért befektetési döntés alapjául önmagában nem szolgálhat. Befektetés előtt konzultálj engedéllyel rendelkező pénzügyi tanácsadóval. A múltbeli teljesítmény nem jelent garanciát a jövőbeli eredményekre.",
+    "rules": "SZABÁLYOK",
+    "noRuleSignals": "Ebben a lekérdezésben nincs a szabályoknak megfelelő jelzés",
+    "cached": "Korábbi lekérdezésből megőrizve",
+    "generated": "Létrehozva"
   },
   "ioda": {
     "countries": "Országok",
@@ -367,5 +378,67 @@
     "errors": {
       "noDataYet": "Még nincs adat — az első lekérdezés folyamatban"
     }
+  },
+  "settings": {
+    "kicker": "Terminálbeállítások",
+    "title": "Panelek és térképrétegek",
+    "description": "Húzd át a paneleket, vagy használd a mozgatógombokat. A kijelölt panel Alt + nyílbillentyűvel is rendezhető. A rejtett panelek megtartják a helyüket.",
+    "close": "Beállítások bezárása",
+    "reset": "Panelelrendezés visszaállítása",
+    "layers": "Térképrétegek · földgömb és síktérkép",
+    "map": "Térképmodul",
+    "mapCopy": "A térkép a középső panelek felett jelenik meg.",
+    "regions": "Térképi régiószűrők",
+    "regionsCopy": "Régióválasztó mindkét térképnézethez.",
+    "left": "Bal oldali sáv",
+    "right": "Jobb oldali sáv",
+    "lane1": "Középső 1. sáv",
+    "lane2": "Középső 2. sáv",
+    "lane3": "Középső 3. sáv",
+    "center": "Középső oszlop",
+    "mapHidden": "Térkép elrejtve",
+    "emptyZone": "Ide húzhatsz vagy mozgathatsz paneleket",
+    "moveUp": "Mozgatás feljebb",
+    "moveDown": "Mozgatás lejjebb",
+    "moveTo": "Áthelyezés ide",
+    "show": "Megjelenítés",
+    "layer_nuclear": "Nukleáris / RadNet",
+    "layer_health": "WHO / kiegészítő egészség",
+    "layer_news": "Hírek / GDELT",
+    "layer_earthquake": "Jelentős földrengések · USGS"
+  },
+  "status": {
+    "connection": "Kapcsolat",
+    "connecting": "Csatlakozás",
+    "live": "Élő adatfolyam",
+    "offline": "Megszakadt · újracsatlakozás",
+    "polling": "Lekérdezés · adatfolyam újracsatlakozik",
+    "snapshot": "Statikus pillanatkép",
+    "data": "Adatok",
+    "fresh": "Friss",
+    "stale": "Elavult / gyorsítótárazott",
+    "disabled": "Nincs beállítva",
+    "error": "Hiba",
+    "ok": "Elérhető",
+    "noHealth": "A források állapota még nem érhető el",
+    "unknownTime": "Ismeretlen idő",
+    "justNow": "Most",
+    "minutesAgo": "perce",
+    "hoursAgo": "órája",
+    "daysAgo": "napja",
+    "sweepFailed": "Az utolsó lekérdezés sikertelen",
+    "sweeping": "LEKÉRDEZÉS…",
+    "airCached": "A repülési helyadatok gyorsítótárból származnak",
+    "mapUnavailable": "A térkép nem érhető el · ellenőrizd a kapcsolatot",
+    "noNews": "Ebben a pillanatképben nincs elérhető hír",
+    "noOsint": "Ebben a pillanatképben nincs elérhető OSINT-bejegyzés",
+    "noNuclear": "Ebben a pillanatképben nincs sugárzási mérés",
+    "noSnapshot": "Várakozás az első pillanatképre",
+    "mapFallback": "A 3D nem érhető el · síktérkép"
+  },
+  "earthquakes": {
+    "scope": "USGS jelentős események · 24 óra",
+    "depth": "Mélység",
+    "tsunamiPotential": "Cunami lehetőségét jelző adat · nem kiadott riasztás"
   }
 }

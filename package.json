@@ -1,7 +1,7 @@
 {
   "name": "crucix",
-  "version": "2.2.0",
-  "description": "Local intelligence engine - 27 OSINT sources, live dashboard, public demo at crucix.live, auto-refresh, optional LLM layer.",
+  "version": "2.3.0",
+  "description": "Local intelligence engine - 31 OSINT adapters, live dashboard, bounded requests, optional local or cloud AI.",
   "type": "module",
   "scripts": {
     "test": "node --test test/*.test.mjs",

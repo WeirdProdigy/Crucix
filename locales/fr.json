@@ -23,10 +23,15 @@
     "perf": "PERF",
     "perfLow": "BAS",
     "perfHigh": "HAUT",
-    "guideBtn": "Signification des Signaux"
+    "guideBtn": "Signification des Signaux",
+    "settings": "Réglages",
+    "monitoring": "SURVEILLANCE",
+    "visuals": "EFFETS",
+    "visualsLite": "LÉGERS",
+    "visualsFull": "COMPLETS"
   },
   "boot": {
-    "initializing": "INITIALISATION MOTEUR CRUCIX v2.1.0",
+    "initializing": "INITIALISATION MOTEUR CRUCIX",
     "connecting": "CONNEXION À {count} SOURCES OSINT...",
     "sourceGroup1": "OPENSKY · FIRMS · KIWISDR · MARITIME",
     "sourceGroup2": "FRED · BLS · EIA · TREASURY · GSCPI",
@@ -62,7 +67,8 @@
     "cyberWatch": "Surveillance Cyber",
     "spaceWatch": "Surveillance Spatiale",
     "europeAlerts": "Alertes Europe",
-    "ecbIndicators": "Indicateurs BCE"
+    "ecbIndicators": "Indicateurs BCE",
+    "sourceHealth": "État des sources"
   },
   "layers": {
     "airActivity": "Activité Aérienne",
@@ -106,12 +112,13 @@
     "scrollToZoom": "MOLETTE POUR ZOOMER · GLISSER POUR DÉPLACER",
     "globeMode": "MODE GLOBE",
     "flatMode": "MODE PLAT",
-    "earthquake": "Séisme",
+    "earthquake": "Séismes",
     "disaster": "Catastrophe",
     "weatherAlert": "Alerte Météo",
     "epaRadNet": "EPA RadNet",
     "spaceStation": "Station Spatiale",
-    "gdeltEvent": "Événement GDELT"
+    "gdeltEvent": "Événement GDELT",
+    "rotateHint": "GLISSER POUR TOURNER · MOLETTE POUR ZOOMER"
   },
   "ideas": {
     "confidence": "Confiance",
@@ -124,7 +131,11 @@
     "pending": "EN ATTENTE",
     "llmNotConfigured": "LLM NON CONFIGURÉ",
     "llmHelp": "Définir LLM_PROVIDER + identifiants dans .env pour activer les idées de trade IA",
-    "disclosure": "À TITRE INFORMATIF UNIQUEMENT. Ceci ne constitue pas un conseil financier, une recommandation d'achat ou de vente de titre, ni une sollicitation quelconque. Toutes les observations basées sur les signaux sont dérivées de données OSINT publiques et ne doivent pas être utilisées pour prendre des décisions d'investissement. Consultez un conseiller financier agréé avant tout investissement. Les performances passées ne garantissent pas les résultats futurs."
+    "disclosure": "À TITRE INFORMATIF UNIQUEMENT. Ceci ne constitue pas un conseil financier, une recommandation d'achat ou de vente de titre, ni une sollicitation quelconque. Toutes les observations basées sur les signaux sont dérivées de données OSINT publiques et ne doivent pas être utilisées pour prendre des décisions d'investissement. Consultez un conseiller financier agréé avant tout investissement. Les performances passées ne garantissent pas les résultats futurs.",
+    "rules": "RÈGLES",
+    "noRuleSignals": "Aucun signal ne remplit les règles dans cette collecte",
+    "cached": "Conservées d’une collecte précédente",
+    "generated": "Générées"
   },
   "ioda": {
     "countries": "Pays",
@@ -367,5 +378,67 @@
     "errors": {
       "noDataYet": "Pas encore de données — premier scan en cours"
     }
+  },
+  "settings": {
+    "kicker": "Réglages du tableau de bord",
+    "title": "Panneaux et couches de carte",
+    "description": "Glissez les modules ou utilisez les commandes de déplacement. Alt + flèches réordonne un module ciblé. Les modules masqués gardent leur place.",
+    "close": "Fermer les réglages",
+    "reset": "Réinitialiser les panneaux",
+    "layers": "Couches · globe et carte plane",
+    "map": "Module de carte",
+    "mapCopy": "Garder la carte au-dessus des panneaux centraux.",
+    "regions": "Filtres régionaux",
+    "regionsCopy": "Afficher le sélecteur de région dans les deux vues.",
+    "left": "Colonne gauche",
+    "right": "Colonne droite",
+    "lane1": "Voie centrale 1",
+    "lane2": "Voie centrale 2",
+    "lane3": "Voie centrale 3",
+    "center": "Colonne centrale",
+    "mapHidden": "Carte masquée",
+    "emptyZone": "Déposez ou déplacez les modules ici",
+    "moveUp": "Monter",
+    "moveDown": "Descendre",
+    "moveTo": "Déplacer vers",
+    "show": "Afficher",
+    "layer_nuclear": "Nucléaire / RadNet",
+    "layer_health": "OMS / santé complémentaire",
+    "layer_news": "Actualités / GDELT",
+    "layer_earthquake": "Séismes significatifs · USGS"
+  },
+  "status": {
+    "connection": "Connexion",
+    "connecting": "Connexion en cours",
+    "live": "Flux en direct",
+    "offline": "Déconnecté · nouvelle tentative",
+    "polling": "Interrogation · reconnexion du flux",
+    "snapshot": "Instantané statique",
+    "data": "Données",
+    "fresh": "Récentes",
+    "stale": "Anciennes / en cache",
+    "disabled": "Non configuré",
+    "error": "Échec",
+    "ok": "Disponible",
+    "noHealth": "État des sources encore indisponible",
+    "unknownTime": "Date inconnue",
+    "justNow": "À l’instant",
+    "minutesAgo": "min auparavant",
+    "hoursAgo": "h auparavant",
+    "daysAgo": "j auparavant",
+    "sweepFailed": "Dernière collecte échouée",
+    "sweeping": "COLLECTE…",
+    "airCached": "Positions aériennes en cache",
+    "mapUnavailable": "Carte indisponible · vérifiez la connexion",
+    "noNews": "Aucun titre disponible dans cet instantané",
+    "noOsint": "Aucune publication OSINT dans cet instantané",
+    "noNuclear": "Aucune mesure de radiation dans cet instantané",
+    "noSnapshot": "En attente du premier instantané",
+    "mapFallback": "3D indisponible · carte plane"
+  },
+  "earthquakes": {
+    "scope": "USGS significatifs · dernières 24h",
+    "depth": "Profondeur",
+    "tsunamiPotential": "Indicateur de potentiel de tsunami · aucune alerte émise"
   }
 }

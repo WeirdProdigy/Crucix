@@ -11,6 +11,9 @@ data.health = [{ n: 'Fixture live', err: false, timestamp: data.meta.timestamp }
   { n: 'Fixture stale', stale: true, timestamp: new Date(Date.now() - 3600000).toISOString() },
   { n: 'Fixture disabled', disabled: true }];
 data.newsFeed.unshift({ headline: '<img src=x onerror="window.__injected=1"', source: 'Fixture', timestamp: data.meta.timestamp, type: 'rss' });
+data.newsFeed.unshift({ headline: 'Fixture complete headline <img src=x onerror="window.__injected=3">', source: 'Fixture complete', timestamp: data.meta.timestamp, type: 'rss' });
+data.newsFeed.unshift({ headline: 'Fixture waiting for SSE', source: 'Fixture SSE', timestamp: data.meta.timestamp, type: 'rss' });
+data.news.unshift({ title: 'Fixture popup <img src=x onerror="window.__injected=4">', source: 'Fixture popup', lat: 40, lon: -30, region: 'Fixture' });
 data.earthquakes = [{ id: 'fixture-quake', magnitude: 6.2, place: 'Test earthquake', time: data.meta.timestamp, lat: 36, lon: 140, depth: 25, tsunamiFlag: 0, url: 'https://earthquake.usgs.gov/' }];
 data.ideas = [{ type: 'HEDGE', title: 'Fixture idea', rationale: 'Safe text <img src=x onerror="window.__injected=2">', ticker: 'TEST', confidence: 'HIGH', horizon: 'Days', risk: 'Fixture' }];
 data.ideasSource = 'rules';
@@ -43,7 +46,8 @@ const server = http.createServer((req, res) => {
     req.on('close', () => { clearTimeout(timer); streams.delete(res); }); return;
   }
   if (url.pathname === '/favicon.ico') { res.writeHead(204); res.end(); return; }
-  const html = template.replace(/^(let|const) D = .*;\s*$/m, () => `let D = ${inlineJson(data)};`);
+  const html = readFileSync(new URL('../../dashboard/public/jarvis.html', import.meta.url), 'utf8')
+    .replace(/^(let|const) D = .*;\s*$/m, () => `let D = ${inlineJson(data)};`);
   res.setHeader('Content-Type', 'text/html; charset=utf-8'); res.end(html);
 });
 server.listen(Number(process.env.QA_PORT || 3199), '127.0.0.1', () => console.log(`QA fixture http://127.0.0.1:${server.address().port}`));

@@ -4,7 +4,7 @@
 
 **Your own intelligence terminal. 31 sources. One command. Local processing.**
 
-## [Visit The Live Site: crucix.live](https://www.crucix.live/)
+## [Visit The Upstream Demo: crucix.live](https://www.crucix.live/)
 
 [![Live Website](https://img.shields.io/badge/live-crucix.live-00d4ff?style=for-the-badge)](https://www.crucix.live/)
 [![Open Demo](https://img.shields.io/badge/open-live%20dashboard-0b1220?style=for-the-badge&logo=googlechrome&logoColor=white)](https://www.crucix.live/)
@@ -37,8 +37,8 @@
 
 </div>
 
-> **Live website:** [https://www.crucix.live/](https://www.crucix.live/)
-> Explore the public demo first, then clone the repo to run Crucix locally.
+> **Upstream demo:** [crucix.live](https://www.crucix.live/) is maintained by the original project and may differ from this fork.
+> This fork's releases, audit and installation instructions are below.
 
 Crucix pulls satellite fire detection, flight tracking, radiation monitoring, satellite constellation tracking, economic indicators, live market prices, conflict data, sanctions lists, and social sentiment from 31 open-source intelligence feeds — in parallel, every 15 minutes — and renders everything on a single self-contained Jarvis-style dashboard.
 
@@ -74,7 +74,7 @@ It was built for anyone who wants to understand what's actually happening in the
 git clone https://github.com/mp3pintyo/Crucix.git
 cd Crucix
 
-# 2. Install dependencies (just Express)
+# 2. Install locked dependencies (Express plus optional Discord support)
 npm ci
 
 # 3. Copy env template and add your API keys (see below)
@@ -129,6 +129,14 @@ Ideas fall back to deterministic English/Hungarian rules when no model is enable
 
 `LLM_IDEAS_TIMEOUT_MS` and `LLM_ALERT_TIMEOUT_MS` accept 1000–360000 ms. Token ranges: `LLM_IDEAS_MAX_TOKENS` 128–16384; `LLM_ALERT_MAX_TOKENS` 128–4096. Defaults are 90000/30000 ms and 4096/800 tokens. Increase a local thinking model's budget explicitly when needed; `OLLAMA_REASONING_EFFORT` is optional and requires model support. The Codex subscription endpoint uses the timeout but does not support the same output-token cap in this adapter. Live provider/bot acceptance depends on your configured service; automated tests use mocked responses and local HTTP fixtures.
 
+### Dashboard usability and audit (v2.3)
+
+Settings share 13 logical layer switches between the flat map and globe, including earthquakes. Source health distinguishes failures, disabled collection and stale data; live connection status and snapshot age are separate. Ideas display rule/model origin and cached age. Missing first data has a waiting state; empty readings do not imply normal conditions.
+
+The settings dialog supports keyboard focus, Escape and focus restoration. Panel order can be changed with Alt+Up/Down and panels can be assigned to a zone. Preferences survive reload when storage is available. Reduced-motion preferences disable automatic globe rotation. Desktop and 390px mobile checks cover layers, saved settings, malicious text, empty data, connection recovery and polling fallback.
+
+Read the [full code audit and improvements](docs/audit/full-review-2026-10-01.md), the [individual assessment of all 104 upstream PRs and 50 issues](docs/audit/upstream-review-2026-10-01.md), and the [operations guide](docs/OPERATIONS.md) for source access, LAN/Docker, local models and troubleshooting. The [bilingual changelog](CHANGELOG.md) links each major release.
+
 ---
 
 ## What You Get
@@ -136,7 +144,7 @@ Ideas fall back to deterministic English/Hungarian rules when no model is enable
 ### Live Dashboard
 A self-contained Jarvis-style HUD with:
 - **3D WebGL globe** (Globe.gl) with atmosphere glow, star field, and smooth rotation — plus a classic flat map toggle
-- **9 marker types** across both views: fire detections, air traffic, radiation sites, maritime chokepoints, SDR receivers, OSINT events, health alerts, geolocated news, conflict events
+- **Shared layer controls** across both views: fire, air, radiation, maritime references, SDR, OSINT, health, inferred news, conflict, internet outages, weather, earthquakes and estimated satellite positions
 - **Animated 3D flight corridor arcs** between air traffic hotspots and global hubs
 - **Region filters** (World, Americas, Europe, Middle East, Asia Pacific, Africa) — rotates the globe or zooms the flat map
 - **Live market data** — indexes, crypto, energy, commodities via Yahoo Finance (no API key needed)
@@ -316,12 +324,12 @@ crucix/
 │   ├── utils/
 │   │   ├── fetch.mjs          # safeFetch() — timeout, retries, abort, auto-JSON
 │   │   └── env.mjs            # .env loader (no dotenv dependency)
-│   └── sources/               # 27 self-contained source modules
+│   └── sources/               # 31 registered source adapters
 │       ├── gdelt.mjs          # Each exports briefing() → structured data
 │       ├── fred.mjs           # Can run standalone: node apis/sources/fred.mjs
 │       ├── space.mjs          # CelesTrak satellite tracking
 │       ├── yfinance.mjs       # Yahoo Finance — free live market data
-│       └── ...                # 23 more
+│       └── ...                # Other registered sources and supporting modules
 │
 ├── dashboard/
 │   ├── inject.mjs             # Data synthesis + standalone HTML injection
@@ -329,7 +337,7 @@ crucix/
 │       └── jarvis.html        # Self-contained Jarvis HUD
 │
 ├── lib/
-│   ├── llm/                   # LLM abstraction (8 providers, raw fetch, no SDKs)
+│   ├── llm/                   # LLM abstraction (10 providers, raw fetch, no SDKs)
 │   │   ├── provider.mjs       # Base class
 │   │   ├── anthropic.mjs      # Claude
 │   │   ├── openai.mjs         # GPT
@@ -339,7 +347,9 @@ crucix/
 │   │   ├── codex.mjs          # Codex (ChatGPT subscription)
 │   │   ├── minimax.mjs        # MiniMax (M2.5, 204K context)
 │   │   ├── mistral.mjs        # Mistral AI
-│   │   ├── ideas.mjs          # LLM-powered trade idea generation
+│   │   ├── ollama.mjs         # Local Ollama
+│   │   ├── openai-compatible.mjs # Local/custom compatible endpoints
+│   │   ├── ideas.mjs          # Normalized ideas with rules fallback
 │   │   └── index.mjs          # Factory: createLLMProvider()
 │   ├── delta/                 # Change tracking between sweeps
 │   │   ├── engine.mjs         # Delta computation — semantic dedup, configurable thresholds, severity scoring
@@ -358,7 +368,7 @@ crucix/
 - **Pure ESM** — every file is `.mjs` with explicit imports
 - **Minimal dependencies** — Express is the only runtime dependency. `discord.js` is optional (for Discord bot). LLM providers use raw `fetch()`, no SDKs.
 - **Parallel execution** — `Promise.allSettled()` fires all 31 sources simultaneously
-- **Graceful degradation** — missing keys produce errors, not crashes. LLM failures don't kill sweeps.
+- **Graceful degradation** — missing keys are disabled, upstream errors are visible, and model failures use rules. Other sources continue.
 - **Each source is standalone** — run `node apis/sources/gdelt.mjs` to test any source independently
 - **Self-contained dashboard** — the HTML file works with or without the server
 
@@ -371,9 +381,9 @@ crucix/
 | Source | What It Tracks | Auth |
 |--------|---------------|------|
 | **GDELT** | Global news events, conflict mapping (100+ languages) | None |
-| **OpenSky** | Real-time ADS-B flight tracking across 6 hotspot regions | None |
+| **OpenSky** | ADS-B observations across 10 hotspots; fallback expires after one hour | None |
 | **NASA FIRMS** | Satellite fire/thermal anomaly detection (3hr latency) | Free key |
-| **Maritime/AIS** | Vessel tracking, dark ships, sanctions evasion | Free key |
+| **Maritime** | Reference chokepoints; the briefing adapter does not connect to live AIS | None for reference data |
 | **Safecast** | Citizen-science radiation monitoring near 6 nuclear sites | None |
 | **ACLED** | Armed conflict events: battles, explosions, protests | Free (OAuth2) |
 | **ReliefWeb** | UN humanitarian crisis tracking | None |
@@ -394,7 +404,7 @@ crucix/
 | **USAspending** | Federal spending and defense contracts | None |
 | **UN Comtrade** | Strategic commodity trade flows between major powers | None |
 
-### Tier 3: Weather, Environment, Tech, Social, SIGINT (7)
+### Tier 3: Weather, Environment, Tech, Social, SIGINT (8)
 
 | Source | What It Tracks | Auth |
 |--------|---------------|------|
@@ -403,8 +413,9 @@ crucix/
 | **USPTO Patents** | Patent filings in 7 strategic tech areas | None |
 | **Bluesky** | Social sentiment on geopolitical/market topics | None |
 | **Reddit** | Social sentiment from key subreddits | OAuth |
-| **Telegram** | 17 curated OSINT/conflict/finance channels (web scraping, expandable via config) | None |
+| **Telegram** | Public channel previews, opt-in; never private bot updates | Explicit opt-in |
 | **KiwiSDR** | Global HF radio receiver network (~600 receivers) | None |
+| **USGS** | Significant earthquakes in the past day | None |
 
 ### Tier 4: Space & Satellites (1)
 
@@ -418,6 +429,14 @@ crucix/
 |--------|---------------|------|
 | **Yahoo Finance** | Real-time prices: SPY, QQQ, BTC, Gold, WTI, VIX + 9 more | None |
 
+### Tier 6: Cyber & Infrastructure (3)
+
+| Source | What It Tracks | Auth |
+|--------|---------------|------|
+| **CISA KEV** | Known exploited vulnerability catalog | None |
+| **Cloudflare Radar** | Internet outages and traffic anomalies | API token |
+| **IODA** | Internet connectivity anomaly signals | None |
+
 ---
 
 ## npm Scripts
@@ -429,6 +448,8 @@ crucix/
 | `npm run inject` | `node dashboard/inject.mjs` | Inject latest data into static HTML |
 | `npm run brief:save` | `node apis/save-briefing.mjs` | Run sweep + save timestamped JSON |
 | `npm run diag` | `node diag.mjs` | Run diagnostics (Node version, imports, port check) |
+| `npm test` | `node --test test/*.test.mjs` | Local regressions using mocks/fixtures |
+| `npm run check` | `node scripts/check.mjs` | JavaScript syntax and locale checks |
 
 ---
 
@@ -440,8 +461,8 @@ All settings are in `.env` with sensible defaults:
 |----------|---------|-------------|
 | `PORT` | `3117` | Dashboard server port |
 | `REFRESH_INTERVAL_MINUTES` | `15` | Auto-refresh interval |
-| `LLM_PROVIDER` | disabled | `anthropic`, `openai`, `gemini`, `codex`, `openrouter`, `minimax`, `mistral`, or `grok` |
-| `LLM_API_KEY` | — | API key (not needed for codex) |
+| `LLM_PROVIDER` | disabled | `anthropic`, `openai`, `gemini`, `codex`, `openrouter`, `minimax`, `mistral`, `ollama`, `grok`, `openai-compatible` |
+| `LLM_API_KEY` | — | API key (not needed for codex/local Ollama; optional for a local compatible server) |
 | `LLM_MODEL` | per-provider default | Override model selection |
 | `TELEGRAM_BOT_TOKEN` | disabled | For Telegram alerts + bot commands |
 | `TELEGRAM_CHAT_ID` | — | Your Telegram chat ID |
@@ -451,6 +472,9 @@ All settings are in `.env` with sensible defaults:
 | `DISCORD_CHANNEL_ID` | — | Discord channel for alerts |
 | `DISCORD_GUILD_ID` | — | Server ID (instant slash command registration) |
 | `DISCORD_WEBHOOK_URL` | — | Webhook URL (alert-only fallback, no bot needed) |
+| `LLM_BASE_URL` | — | Separate OpenAI-compatible endpoint |
+| `LLM_IDEAS_EVERY_N_SWEEPS` | `1` | First sweep, then every Nth sweep; delta alerts run every sweep |
+| `TELEGRAM_OSINT_ENABLED` | `false` | Opt-in public preview source |
 
 Delta engine thresholds (how sensitive the system is to changes between sweeps) can be customized in `crucix.config.mjs` under the `delta.thresholds` section. The defaults are tuned to filter out noise while catching meaningful moves.
 
@@ -465,6 +489,7 @@ When running `npm run dev`:
 | `GET /` | Jarvis HUD dashboard |
 | `GET /api/data` | Current synthesized intelligence data (JSON) |
 | `GET /api/health` | Server status, uptime, source count, LLM status |
+| `GET /healthz` | Minimal unauthenticated liveness status |
 | `GET /events` | SSE stream for live push updates |
 
 ---
@@ -493,19 +518,16 @@ A previous Crucix instance may still be running in the background.
 
 ```powershell
 # Windows PowerShell
-netstat -ano | findstr 3117
-taskkill /F /PID <the_PID_from_above>
-
-# Or kill all Node processes
-taskkill /F /IM node.exe
+Get-NetTCPConnection -LocalPort 3117
+Get-Process -Id <OwningProcess_from_above>
 ```
 
 ```bash
 # macOS / Linux
-lsof -ti:3117 | xargs kill
+lsof -i :3117
 ```
 
-Then try starting again. You can also change the port by setting `PORT=3118` in your `.env` file.
+Identify the process before taking action. Reuse an existing Crucix instance or choose `PORT=3118`; avoid stopping unrelated applications. See [the operations guide](docs/OPERATIONS.md).
 
 **4. Check Node.js version:**
 ```bash
@@ -519,9 +541,9 @@ This is normal — the first sweep takes 30–60 seconds to query all 31 sources
 
 ### Some sources show errors
 
-Expected behavior. Sources that require API keys will return structured errors if the key isn't set. The rest of the sweep continues normally. Check the Source Integrity section in the dashboard (or the server logs) to see which sources failed and why. The 3 most impactful free keys to add are `FRED_API_KEY`, `FIRMS_MAP_KEY`, and `EIA_API_KEY`.
+Missing keys disable the corresponding source; provider failures have a separate error state. Other sources continue. Check Source Integrity or sanitized server logs for the affected source and reason. Optional keys include `FRED_API_KEY`, `FIRMS_MAP_KEY` and `EIA_API_KEY`.
 
-OpenSky can also return `HTTP 429` when its public hotspots are queried too aggressively. Crucix does not try to evade that limit. Instead, it surfaces the throttle/error in source health and preserves the most recent non-empty air traffic snapshot from `runs/` so the dashboard flight layer does not suddenly go blank on a throttled sweep.
+OpenSky may return `HTTP 429`. Crucix surfaces the error, preserves successful current regions, and can reuse an original observation from `runs/` for at most one hour when all regions fail. Expired, missing or invalid timestamps are rejected; stale data stays visibly labelled.
 
 ### Telegram bot not responding to commands
 
@@ -556,7 +578,7 @@ To update them: run the dashboard, wait for a sweep to complete, then use your b
 
 ## Contributing
 
-Found a bug? Want to add a 28th source? PRs welcome. Each source is a standalone module in `apis/sources/` — just export a `briefing()` function that returns structured data and add it to the orchestrator in `apis/briefing.mjs`.
+Found a bug or want to add another source? PRs welcome. Each source is a standalone module in `apis/sources/` — export a `briefing()` function that returns structured data and add it to the orchestrator in `apis/briefing.mjs`.
 
 If you find this useful, a star helps others find it too.
 

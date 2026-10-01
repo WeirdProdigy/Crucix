@@ -23,10 +23,15 @@
     "perf": "PERF",
     "perfLow": "LOW",
     "perfHigh": "HIGH",
-    "guideBtn": "What Signals Mean"
+    "guideBtn": "What Signals Mean",
+    "settings": "Settings",
+    "monitoring": "MONITORING",
+    "visuals": "VISUALS",
+    "visualsLite": "LITE",
+    "visualsFull": "FULL"
   },
   "boot": {
-    "initializing": "INITIALIZING CRUCIX ENGINE v2.1.0",
+    "initializing": "INITIALIZING CRUCIX ENGINE",
     "connecting": "CONNECTING {count} OSINT SOURCES...",
     "sourceGroup1": "OPENSKY · FIRMS · KIWISDR · MARITIME",
     "sourceGroup2": "FRED · BLS · EIA · TREASURY · GSCPI",
@@ -62,7 +67,8 @@
     "cyberWatch": "Cyber Watch",
     "spaceWatch": "Space Watch",
     "europeAlerts": "Europe Alerts",
-    "ecbIndicators": "ECB Indicators"
+    "ecbIndicators": "ECB Indicators",
+    "sourceHealth": "Source health"
   },
   "layers": {
     "airActivity": "Air Activity",
@@ -106,12 +112,13 @@
     "scrollToZoom": "SCROLL TO ZOOM · DRAG TO PAN",
     "globeMode": "GLOBE MODE",
     "flatMode": "FLAT MODE",
-    "earthquake": "Earthquake",
+    "earthquake": "Earthquakes",
     "disaster": "Disaster",
     "weatherAlert": "Weather Alert",
     "epaRadNet": "EPA RadNet",
     "spaceStation": "Space Station",
-    "gdeltEvent": "GDELT Event"
+    "gdeltEvent": "GDELT Event",
+    "rotateHint": "DRAG TO ROTATE · SCROLL TO ZOOM"
   },
   "ideas": {
     "confidence": "Confidence",
@@ -124,7 +131,11 @@
     "pending": "PENDING",
     "llmNotConfigured": "LLM NOT CONFIGURED",
     "llmHelp": "Set LLM_PROVIDER + credentials in .env to enable AI-powered trade ideas",
-    "disclosure": "FOR INFORMATIONAL PURPOSES ONLY. This is not financial advice, a recommendation to buy or sell any security, or a solicitation of any kind. All signal-based observations are derived from publicly available OSINT data and should not be relied upon for investment decisions. Consult a licensed financial advisor before making any investment. Past performance does not guarantee future results."
+    "disclosure": "FOR INFORMATIONAL PURPOSES ONLY. This is not financial advice, a recommendation to buy or sell any security, or a solicitation of any kind. All signal-based observations are derived from publicly available OSINT data and should not be relied upon for investment decisions. Consult a licensed financial advisor before making any investment. Past performance does not guarantee future results.",
+    "rules": "RULES",
+    "noRuleSignals": "No qualifying rule signals in this sweep",
+    "cached": "Preserved from an earlier sweep",
+    "generated": "Generated"
   },
   "ioda": {
     "countries": "Countries",
@@ -367,5 +378,67 @@
     "errors": {
       "noDataYet": "No data yet — first sweep in progress"
     }
+  },
+  "settings": {
+    "kicker": "Dashboard settings",
+    "title": "Panels and map layers",
+    "description": "Drag modules or use the move controls. Alt + arrow keys reorder a focused module. Hidden modules keep their place.",
+    "close": "Close settings",
+    "reset": "Reset panel layout",
+    "layers": "Map layers · globe and flat",
+    "map": "Map module",
+    "mapCopy": "Keep the map above the center panels.",
+    "regions": "Map region filters",
+    "regionsCopy": "Show the region selector for both map views.",
+    "left": "Left rail",
+    "right": "Right rail",
+    "lane1": "Center lane 1",
+    "lane2": "Center lane 2",
+    "lane3": "Center lane 3",
+    "center": "Center column",
+    "mapHidden": "Map hidden",
+    "emptyZone": "Drop or move modules here",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "moveTo": "Move to",
+    "show": "Show",
+    "layer_nuclear": "Nuclear / RadNet",
+    "layer_health": "WHO / supplemental health",
+    "layer_news": "News / GDELT",
+    "layer_earthquake": "USGS significant earthquakes"
+  },
+  "status": {
+    "connection": "Connection",
+    "connecting": "Connecting",
+    "live": "Live stream",
+    "offline": "Disconnected · retrying",
+    "polling": "Polling · stream reconnecting",
+    "snapshot": "Static snapshot",
+    "data": "Data",
+    "fresh": "Fresh",
+    "stale": "Stale / cached",
+    "disabled": "Not configured",
+    "error": "Failed",
+    "ok": "Available",
+    "noHealth": "Source status is not available yet",
+    "unknownTime": "Unknown time",
+    "justNow": "Just now",
+    "minutesAgo": "min ago",
+    "hoursAgo": "h ago",
+    "daysAgo": "d ago",
+    "sweepFailed": "Last sweep failed",
+    "sweeping": "SWEEPING…",
+    "airCached": "Air positions are cached",
+    "mapUnavailable": "Map unavailable · check the connection",
+    "noNews": "No headlines available in this snapshot",
+    "noOsint": "No OSINT posts available in this snapshot",
+    "noNuclear": "No radiation readings in this snapshot",
+    "noSnapshot": "Waiting for the first snapshot",
+    "mapFallback": "3D unavailable · flat mode"
+  },
+  "earthquakes": {
+    "scope": "USGS significant · last 24h",
+    "depth": "Depth",
+    "tsunamiPotential": "Tsunami potential flag · not an issued warning"
   }
 }

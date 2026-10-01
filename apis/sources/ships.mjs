@@ -1,6 +1,4 @@
-// Ship/Vessel Tracking — aisstream.io (free real-time global AIS)
-// Also includes fallback to public vessel tracking data
-// Detects: dark ships, sanctions evasion, naval deployments, port congestion
+// Maritime reference chokepoints. This briefing does not connect to an AIS stream.
 
 import { safeFetch } from '../utils/fetch.mjs';
 
@@ -35,9 +33,10 @@ export async function briefing() {
     status: 'reference',
     message: hasKey
       ? 'AIS key configured; this briefing provides reference chokepoints, not a live vessel stream'
-      : 'Set AISSTREAM_API_KEY for real-time global vessel tracking (free at aisstream.io)',
+      : 'Reference chokepoints only; configuring an AIS key does not start a live vessel stream',
     chokepoints: CHOKEPOINTS,
-    monitoringCapabilities: [
+    monitoringCapabilities: [],
+    plannedMonitoringCapabilities: [
       'Dark ship detection (AIS transponder shutoffs)',
       'Sanctions evasion (ship-to-ship transfers)',
       'Naval deployment tracking',
@@ -45,7 +44,7 @@ export async function briefing() {
       'Chokepoint traffic anomalies',
       'Oil tanker route changes',
     ],
-    hint: 'For now, I can use web search to check maritime news and shipping disruptions',
+    hint: 'Live vessel monitoring requires a separately implemented persistent AIS collector',
   };
 }
 

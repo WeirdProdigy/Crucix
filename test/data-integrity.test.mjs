@@ -4,7 +4,7 @@ import http from 'node:http';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fetchAllNews, buildNewsFeed, loadOpenSkyFallback } from '../dashboard/inject.mjs';
+import { fetchAllNews, buildNewsFeed, loadOpenSkyFallback, sourceTimestamp } from '../dashboard/inject.mjs';
 import { runSource } from '../apis/briefing.mjs';
 import { synthesize } from '../dashboard/inject.mjs';
 import { MemoryManager } from '../lib/delta/memory.mjs';
@@ -39,6 +39,14 @@ test('GDELT timestamps preserve provider time, unknown dates remain unknown', ()
   const feed = buildNewsFeed([], { allArticles: [{ title: 'Known', seendate: '20260930T123456Z' }, { title: 'Unknown', seendate: 'bad' }] }, [], []);
   assert.equal(feed[0].timestamp, '2026-09-30T12:34:56.000Z');
   assert.equal(feed[1].timestamp, null);
+  assert.equal(sourceTimestamp('20260230T120000Z'), null);
+  assert.equal(sourceTimestamp('2026-02-30T12:00:00Z'), null);
+  assert.equal(sourceTimestamp('20260930T256000Z'), null);
+  for (const invalid of ['20261001T240000Z', '20261001T126000Z', '20261001T125960Z']) {
+    assert.equal(sourceTimestamp(invalid), null, invalid);
+  }
+  assert.equal(sourceTimestamp('20261001T235959Z'), '2026-10-01T23:59:59.000Z');
+  assert.equal(sourceTimestamp('20240229T000000Z'), '2024-02-29T00:00:00.000Z');
 });
 test('air fallback uses observation time, rejects unknown, future and expired snapshots', t => {
   const dir = mkdtempSync(join(tmpdir(), 'crucix-air-'));

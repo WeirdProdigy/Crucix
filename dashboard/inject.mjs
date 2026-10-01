@@ -774,7 +774,13 @@ export async function synthesize(data, options = {}) {
 export function sourceTimestamp(raw) {
   if (!raw) return null;
   const compact = String(raw).match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
+  if (compact && (Number(compact[4]) > 23 || Number(compact[5]) > 59 || Number(compact[6]) > 59)) return null;
   const value = compact ? `${compact[1]}-${compact[2]}-${compact[3]}T${compact[4]}:${compact[5]}:${compact[6]}Z` : raw;
+  const calendar = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
+  if (calendar) {
+    const day = new Date(`${calendar[1]}T00:00:00Z`);
+    if (!Number.isFinite(day.getTime()) || day.toISOString().slice(0, 10) !== calendar[1]) return null;
+  }
   const ms = Date.parse(value);
   return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
 }
