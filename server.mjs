@@ -11,6 +11,7 @@ import { inlineJson } from './lib/html.mjs';
 import { installHttpSecurity } from './lib/http-security.mjs';
 import { saveSnapshot } from './lib/snapshots.mjs';
 import { buildEvents, clusterEvents } from './lib/intelligence/events.mjs';
+import { freshLiveSnapshot } from './lib/intelligence/live-sources.mjs';
 import { HistoryStore } from './lib/intelligence/history.mjs';
 import { installIntelligenceRoutes } from './lib/intelligence/routes.mjs';
 import { renderOfflineShell } from './lib/offline-shell.mjs';
@@ -264,7 +265,7 @@ app.get('/', (req, res) => {
   } else {
     const htmlPath = join(ROOT, 'dashboard/public/jarvis.html');
     let html = readFileSync(htmlPath, 'utf-8');
-    const dataScript = inlineJson(currentData);
+    const dataScript = inlineJson(freshLiveSnapshot(currentData));
     
     html = html.replace(/^(let|const) D = .*;\s*$/m, () => `let D = ${dataScript};`);
 
@@ -281,10 +282,10 @@ app.get('/', (req, res) => {
 // API: current data
 app.get('/api/data', (req, res) => {
   if (!currentData) return res.status(503).json({ error: 'No data yet — first sweep in progress' });
-  res.json(currentData);
+  res.json(freshLiveSnapshot(currentData));
 });
 
-installIntelligenceRoutes(app, { getSnapshot: () => currentData, history, language: currentLanguage });
+installIntelligenceRoutes(app, { getSnapshot: () => freshLiveSnapshot(currentData), history, language: currentLanguage });
 
 // API: health check
 app.get('/api/health', (req, res) => {

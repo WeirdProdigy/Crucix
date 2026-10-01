@@ -31,6 +31,14 @@ export default {
   maxSseClients: envInteger('MAX_SSE_CLIENTS', 100, 1, 10000),
   refreshIntervalMinutes: envInteger('REFRESH_INTERVAL_MINUTES', 15, 1, 1440),
 
+  // Small public watchlists. Adapters validate/cap these values; no API keys.
+  publicSources: {
+    meteoalarmCountries: ['hungary', 'austria', 'germany'],
+    routingASNs: ['AS5483'],
+    weatherLocations: [{ label: 'Budapest', lat: 47.4979, lon: 19.0402 }],
+    ooniCountries: ['HU'],
+  },
+
   llm: {
     provider: process.env.LLM_PROVIDER || null, // anthropic | openai | gemini | codex | openrouter | minimax | mistral | ollama | grok
     apiKey: process.env.LLM_API_KEY || null,

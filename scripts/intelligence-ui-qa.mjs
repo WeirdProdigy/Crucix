@@ -95,7 +95,7 @@ async function historyChecks() {
     await page.waitForFunction(() => document.querySelector('[data-ci-page="next"]'));
     await page.locator('#ci-history-limit').fill('1'); await page.locator('#ci-history-limit').dispatchEvent('change'); await page.waitForFunction(() => document.querySelectorAll('.ci-event-card').length === 1);
     const initial = await page.locator('.ci-event-card').innerText(); await page.locator('[data-ci-page="next"]').click(); await page.waitForFunction(old => { const card = document.querySelector('.ci-event-card'); return card && card.innerText !== old; }, initial);
-    await page.locator('#ci-history-q').fill('Test earthquake'); await page.waitForFunction(() => document.querySelector('.ci-history-status')?.innerText.includes('1 '));
+    await page.locator('#ci-history-q').fill('Test earthquake'); await page.waitForFunction(() => document.querySelector('.ci-history-status')?.innerText.includes('1 ') && document.querySelector('.ci-event-card')?.innerText.includes('Test earthquake'));
     assert.match(await page.locator('.ci-history-results').innerText(), /Test earthquake/);
     // Clicking after typing also commits the input's native change event. This
     // physical click guards the previous modal-recentering/export regression.

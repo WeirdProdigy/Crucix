@@ -12,6 +12,8 @@
 <script src="vendor/countries-110m-2.0.2.js"></script>
 <link rel="stylesheet" href="intelligence.css">
 <script src="intelligence.js"></script>
+<script src="live-sources.js"></script>
+<link rel="stylesheet" href="live-sources.css">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#020408">
 <script src="pwa.js"></script>
@@ -496,7 +498,7 @@ const dashboardDefaultZones = {
   center1:['newsTicker'],
   center2:['macroMarkets'],
   center3:['tradeIdeas'],
-  right:['crossSourceSignals','osintStream','signalCore','sourceHealth','internetOutages','healthAlerts','supplementalHealth','sweepDelta']
+  right:['liveSources','crossSourceSignals','osintStream','signalCore','sourceHealth','internetOutages','healthAlerts','supplementalHealth','sweepDelta']
 };
 const dashboardPanelIds = Object.values(dashboardDefaultZones).flat();
 const dashboardFixedModuleIds = ['map','mapRegions'];
@@ -513,7 +515,8 @@ const mapLayerRegistry = [
   {id:'health',key:'map.healthAlert',label:'WHO / supplemental health',types:['health','healthSupplemental']},
   {id:'network',key:'map.internetOutage',label:'Internet outages',types:['ioda']},
   {id:'news',key:'map.worldNews',label:'News / GDELT',types:['news','gdelt']},
-  {id:'weather',key:'map.weatherAlert',label:'Weather alerts',types:['weather']},
+  {id:'weather',key:'map.weatherAlert',label:'Weather alerts / forecasts',types:['weather','forecast']},
+  {id:'disaster',key:'map.disaster',label:'Current natural events',types:['disaster']},
   {id:'space',key:'map.spaceStation',label:'Space stations',types:['space']},
   {id:'earthquake',key:'map.earthquake',label:'Earthquakes · USGS significant (24h)',types:['earthquake']}
 ];
@@ -537,12 +540,13 @@ function setMapLayer(id,visible){
 }
 function normalizeSnapshot(data){
   const out={...data,meta:{...(data?.meta||{})}};
-  for(const key of ['air','thermal','chokepoints','nuke','who','supplementalHealth','news','newsFeed','tSignals','fred','bls','ideas','health','earthquakes','events','eventClusters'])out[key]=Array.isArray(data?.[key])?data[key]:[];
+  for(const key of ['air','thermal','chokepoints','nuke','who','supplementalHealth','news','newsFeed','tSignals','fred','bls','ideas','health','earthquakes','events','eventClusters','liveSources'])out[key]=Array.isArray(data?.[key])?data[key]:[];
   out.tg={posts:0,urgent:[],topPosts:[],...(data?.tg||{})};
   for(const key of ['urgent','topPosts'])if(!Array.isArray(out.tg[key]))out.tg[key]=[];
   out.sdr={total:0,online:0,zones:[],...(data?.sdr||{})};if(!Array.isArray(out.sdr.zones))out.sdr.zones=[];
   out.energy={wtiRecent:[],...(data?.energy||{})};if(!Array.isArray(out.energy.wtiRecent))out.energy.wtiRecent=[];
   out.treasury={...(data?.treasury||{})};
+  out.liveSources=out.liveSources.filter(row=>row&&typeof row==='object'&&Object.hasOwn(CrucixLiveSources.policies,row.source)).slice(0,9);
   for(const key of ['sourcesOk','sourcesQueried','sourcesFailed','totalDurationMs'])if(!Number.isFinite(out.meta[key]))out.meta[key]=0;
   return out;
 }
@@ -625,6 +629,7 @@ function getPanelLabel(panelId){
     case 'nuclearWatch': return t('panels.nuclearWatch','Nuclear Watch');
     case 'riskGauges': return t('panels.riskGauges','Risk Gauges');
     case 'spaceWatch': return t('panels.spaceWatch','Space Watch');
+    case 'liveSources': return t('liveSources.title','Current public data');
     case 'newsTicker': return t('panels.newsTicker','Live News Ticker');
     case 'macroMarkets': return t('panels.macroMarkets','Macro + Markets');
     case 'tradeIdeas': return t('panels.tradeIdeas','Leverageable Ideas');
@@ -930,6 +935,7 @@ function renderTopbar(){
 }
 
 function sourceState(source){
+  if(CrucixLiveSources.policies[source.n])return CrucixLiveSources.state(D.liveSources.find(row=>row.source===source.n)||{source:source.n,status:source.err?'error':source.stale?'stale':'ok',observedAt:source.observedAt});
   if(source.disabled||source.unconfigured||['disabled','unconfigured','not_configured'].includes(source.status))return 'disabled';
   if(source.stale||['stale','cached','degraded'].includes(source.status))return 'stale';
   if(source.err||source.error||['error','failed'].includes(source.status))return 'error';
@@ -1201,6 +1207,7 @@ function buildPanelHtml(panelId, zone){
     case 'osintStream': return buildOsintPanel(zone.startsWith('center') ? 'lp-osint' : 'right-osint', zone.startsWith('center') ? 240 : 260);
     case 'signalCore': return buildSignalCorePanel();
     case 'sourceHealth': return buildSourceHealthPanel();
+    case 'liveSources': return CrucixLiveSources.renderPanel(D.liveSources,t,currentSnapshot().events);
     case 'internetOutages': return buildInternetOutagesPanel();
     case 'healthAlerts': return buildHealthAlertsPanel();
     case 'supplementalHealth': return buildSupplementalHealthPanel();
@@ -1500,6 +1507,7 @@ function plotMarkers(){
   });
 
   // === NOAA severe weather alerts (orange) ===
+  CrucixLiveSources.observations(D.liveSources).filter(row=>hasCoordinates(row.lat,row.lon)).forEach(row=>points.push({lat:row.lat,lng:row.lon,size:.22,alt:.01,color:row.kind==='disaster'?'rgba(255,112,67,.8)':'rgba(100,200,255,.8)',type:row.kind==='disaster'?'disaster':row.kind==='forecast'?'forecast':'weather',priority:2,popHead:row.title,popMeta:row.source,popText:row.summary}));
   (D.noaa?.alerts||[]).forEach(a=>{
     points.push({
       lat:a.lat, lng:a.lon, size:0.22, alt:0.01,
@@ -1644,6 +1652,23 @@ function plotMarkers(){
   onGlobeZoom();
 }
 
+function currentSnapshot(){
+  const rows=CrucixLiveSources.observations(D.liveSources);
+  const names=new Set(Object.keys(CrucixLiveSources.policies));
+  return {...D,events:D.events.filter(event=>event&&typeof event==='object'&&(!names.has(event.source?.name)||rows.some(row=>row.source===event.source.name&&row.title===event.title&&row.observedAt===event.observedAt)))};
+}
+let liveExpirySignature='';
+function refreshLiveFreshness(){
+  const signature=JSON.stringify(D.liveSources.map(source=>[source.source,CrucixLiveSources.state(source),CrucixLiveSources.observations([source]).map(row=>row.providerId||row.id||row.title)]));
+  if(signature===liveExpirySignature)return;
+  liveExpirySignature=signature;
+  window.CrucixIntelligence?.update(currentSnapshot());
+  const panel=document.querySelector('.live-sources-panel');
+  if(panel)panel.outerHTML=CrucixLiveSources.renderPanel(D.liveSources,t,currentSnapshot().events);
+  const healthPanel=document.querySelector('[data-source-state]')?.closest('.g-panel');
+  if(healthPanel)healthPanel.outerHTML=buildSourceHealthPanel();
+  plotMarkers();if(flatG){flatG.selectAll('.markers,.corridors-layer').remove();plotFlatMarkers();}
+}
 function findEvent(item){
   const url=safeExternalUrl(item?.url);const title=String(item?.title||item?.headline||item?.text||'');
   return D.events.find(e=>(url&&e.source.url===url)||(title&&e.title===title));
@@ -1841,6 +1866,12 @@ function plotFlatMarkers(){
     if(marker){marker.attr('data-cluster-id',cluster.id).attr('role','button').attr('tabindex',0).attr('aria-label',t('intelligence.cluster','Grouped reports')+' '+cluster.count).on('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();CrucixIntelligence.openCluster(cluster);}});marker.append('text').attr('text-anchor','middle').attr('dy','.35em').attr('fill','#020408').attr('font-size','9px').text(cluster.count);}
   }
   // NOAA weather
+  for(const row of CrucixLiveSources.observations(D.liveSources).filter(row=>hasCoordinates(row.lat,row.lon))){
+    flatMarkerType=row.kind==='disaster'?'disaster':row.kind==='forecast'?'forecast':'weather';
+    const event=currentSnapshot().events.find(event=>event.source.name===row.source&&event.title===row.title&&event.observedAt===row.observedAt);
+    const marker=addPt(row.lat,row.lon,4,'rgba(100,200,255,.8)','rgba(100,200,255,.3)',ev=>event?CrucixIntelligence.openEvent(event.id):showPopup(ev,row.title,row.summary,row.source),2);
+    if(marker&&event)marker.attr('role','button').attr('tabindex',0).attr('aria-label',row.title).on('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();CrucixIntelligence.openEvent(event.id);}});
+  }
   flatMarkerType='weather';
   (D.noaa?.alerts||[]).forEach(a=>{addPt(a.lat,a.lon,4,'rgba(255,152,0,0.7)','rgba(255,152,0,0.3)',ev=>showPopup(ev,a.event,a.headline||'','NOAA/NWS'),2)});
   // EPA RadNet
@@ -2243,7 +2274,7 @@ function syncResponsiveLayout(force=false){
 
 // === REINIT (for live updates without boot sequence) ===
 function reinit(){
-  window.CrucixIntelligence?.update(D);
+  window.CrucixIntelligence?.update(currentSnapshot());
   rerenderDashboard(true);
   plotMarkers();
   if(document.getElementById('settingsOverlay')?.classList.contains('show')) renderSettingsBoard();
@@ -2322,8 +2353,10 @@ function init(){
   syncResponsiveLayout(true);
 }
 document.addEventListener('DOMContentLoaded',()=>{
+  document.addEventListener('toggle',ev=>{const article=ev.target.closest?.('.live-source');if(article&&ev.target.tagName==='DETAILS')CrucixLiveSources.setExpanded(article.dataset.liveSource,ev.target.open);},true);
+  document.addEventListener('click',ev=>{const button=ev.target.closest?.('.live-detail[data-event-id]');if(button)CrucixIntelligence.openEvent(button.dataset.eventId);});
   document.documentElement.lang=L.meta?.code||'en';document.title=t('dashboard.title',document.title);
-  window.CrucixIntelligence?.init({getSnapshot:()=>D,getLayout:()=>dashboardLayout,
+  window.CrucixIntelligence?.init({getSnapshot:currentSnapshot,getLayout:()=>dashboardLayout,
     applyLayout:value=>{dashboardLayout=normalizeDashboardLayout(value);saveDashboardLayout();reinit();},
     getLayers:()=>mapLayers,applyLayers:value=>{for(const layer of mapLayerRegistry)if(typeof value?.[layer.id]==='boolean')mapLayers[layer.id]=value[layer.id];flightsVisible=mapLayers.air!==false;writePreference(MAP_LAYER_STORAGE_KEY,JSON.stringify(mapLayers));reinit();},
     getRegion:()=>currentRegion,applyRegion:setRegion,t,escapeText:esc,historyEnabled:location.protocol!=='file:',profilesEnabled:true});
@@ -2334,7 +2367,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     fetch('/api/health',{cache:'no-store',signal:AbortSignal.timeout(10000)}).then(response=>response.ok?response.json():null).then(health=>{if(Number.isFinite(health?.refreshIntervalMinutes)&&health.refreshIntervalMinutes>0)refreshIntervalMinutes=health.refreshIntervalMinutes;updateRuntimeStatus();}).catch(()=>{});
     fallbackTimer=setInterval(()=>{if(!sseConnected)pollSnapshot();},60000);
   }
-  freshnessTimer=setInterval(updateRuntimeStatus,30000);
+  freshnessTimer=setInterval(()=>{updateRuntimeStatus();refreshLiveFreshness();},30000);
   updateRuntimeStatus();
 });
 window.addEventListener('beforeunload',()=>{liveEvents?.close();clearInterval(fallbackTimer);clearInterval(freshnessTimer);});

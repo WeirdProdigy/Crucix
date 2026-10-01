@@ -49,6 +49,16 @@ import { briefing as cisaKev } from './sources/cisa-kev.mjs';
 import { briefing as cloudflareRadar } from './sources/cloudflare-radar.mjs';
 import { briefing as ioda } from './sources/ioda.mjs';
 import { briefing as usgs } from './sources/usgs.mjs';
+import { briefing as meteoalarm } from './sources/meteoalarm.mjs';
+import { briefing as gdacs } from './sources/gdacs.mjs';
+import { briefing as swpc } from './sources/swpc.mjs';
+import { briefing as ecb } from './sources/ecb.mjs';
+import { briefing as eonet } from './sources/eonet.mjs';
+import { briefing as ripestat } from './sources/ripestat.mjs';
+import { briefing as epss } from './sources/epss.mjs';
+import { briefing as metNorway } from './sources/met-norway.mjs';
+import { briefing as ooni } from './sources/ooni.mjs';
+import config from '../crucix.config.mjs';
 
 const SOURCE_TIMEOUT_MS = 30_000; // 30s max per individual source
 
@@ -132,6 +142,16 @@ export async function fullBriefing() {
     runSource('Cloudflare-Radar', cloudflareRadar),
     runSource('IODA', ioda),
     runSource('USGS', usgs),
+    // Current free public data. Each adapter checks provider timestamps.
+    runSource('Meteoalarm', meteoalarm, { countries: config.publicSources.meteoalarmCountries }),
+    runSource('GDACS', gdacs),
+    runSource('NOAA-SWPC', swpc),
+    runSource('ECB', ecb),
+    runSource('NASA-EONET', eonet),
+    runSource('RIPEstat', ripestat, { resources: config.publicSources.routingASNs }),
+    runSource('FIRST-EPSS', epss),
+    runSource('MET-Norway', metNorway, { locations: config.publicSources.weatherLocations }),
+    runSource('OONI', ooni, { countries: config.publicSources.ooniCountries }),
   ];
 
   console.error(`[Crucix] Starting intelligence sweep — ${allPromises.length} sources...`);

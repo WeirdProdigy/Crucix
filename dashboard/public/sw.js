@@ -1,7 +1,7 @@
 /* Explicit shell-only policy: no API, event stream, live navigation response or
  * authentication response is written to CacheStorage. Snapshot opt-in uses IDB. */
-const CACHE = 'crucix-shell-v2.6.0';
-const BASE = ['/offline-shell', '/manifest.webmanifest', '/intelligence.js', '/intelligence.css', '/pwa.js', '/icons/icon-192.png', '/icons/icon-512.png', '/vendor/manifest.json'];
+const CACHE = 'crucix-shell-v2.7.0';
+const BASE = ['/offline-shell', '/manifest.webmanifest', '/intelligence.js', '/intelligence.css', '/live-sources.js', '/live-sources.css', '/pwa.js', '/icons/icon-192.png', '/icons/icon-512.png', '/vendor/manifest.json'];
 const isVendor = path => /^\/vendor\/[a-zA-Z0-9./_-]+$/.test(path) && !path.includes('..');
 async function assetList(cache) {
   const manifest = await cache.match('/vendor/manifest.json');

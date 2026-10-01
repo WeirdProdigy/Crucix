@@ -1,7 +1,7 @@
 (function (window, document) {
   'use strict';
   const DB = 'crucix-offline-v1', MAX_BYTES = 5 * 1024 * 1024;
-  const KEYS = ['meta','air','airMeta','thermal','tSignals','chokepoints','nuke','nukeSignals','sdr','earthquakes','ioda','tg','who','supplementalHealth','fred','energy','metals','bls','treasury','gscpi','defense','noaa','epa','acled','gdelt','space','health','news','markets','ideas','ideasSource','ideasCached','delta','newsFeed','events'];
+  const KEYS = ['meta','air','airMeta','thermal','tSignals','chokepoints','nuke','nukeSignals','sdr','earthquakes','ioda','tg','who','supplementalHealth','fred','energy','metals','bls','treasury','gscpi','defense','noaa','epa','acled','gdelt','space','health','news','markets','ideas','ideasSource','ideasCached','delta','newsFeed','events','liveSources'];
   let options = {}, enabled = false, storedAt = null, cachedView = false, error = '', registration = null, installPrompt = null, initialized = false;
   const t = (key, fallback) => options.t?.('pwa.' + key, fallback) || fallback;
   const el = (tag, text) => { const node = document.createElement(tag); if (text) node.textContent = text; return node; };
@@ -32,7 +32,7 @@
     if(Date.parse(snapshot.meta.timestamp)>Date.now()+300000)return null;
     const day=snapshot.meta.timestamp.match(/^(\d{4}-\d{2}-\d{2})/);
     if(!day||new Date(day[1]+'T00:00:00Z').toISOString().slice(0,10)!==day[1])return null;
-    for(const key of ['air','thermal','who','ideas','newsFeed','health','earthquakes','events'])if(snapshot[key]!==undefined&&!Array.isArray(snapshot[key]))return null;
+    for(const key of ['air','thermal','who','ideas','newsFeed','health','earthquakes','events','liveSources'])if(snapshot[key]!==undefined&&!Array.isArray(snapshot[key]))return null;
     const value = {};
     for (const key of KEYS) if (Object.hasOwn(snapshot, key)) value[key] = snapshot[key];
     const json = JSON.stringify(value);
@@ -77,7 +77,7 @@
   function renderStatus() {
     const strip = document.querySelector('.status-strip'); if (!strip) return;
     let node = document.getElementById('pwaFreshness'); if (!node) { node=el('span');node.id='pwaFreshness';strip.append(node); }
-    node.textContent = cachedView ? t('cached','Offline snapshot') + ' · ' + (options.getSnapshot?.()?.meta?.timestamp || t('unknown','Unknown time')) : '';
+    node.textContent = cachedView ? t('cached','Offline snapshot') + ' Â· ' + (options.getSnapshot?.()?.meta?.timestamp || t('unknown','Unknown time')) : '';
     node.dataset.offlineSnapshot = String(cachedView);
   }
   async function cacheLive(snapshot) {
@@ -96,11 +96,11 @@
     dialog.append(el('p',t('help','Install from Chrome or Edge on localhost/HTTPS. The interface works offline; fresh collection and history search need the local server.')));
     const label=el('label');const input=el('input');input.type='checkbox';input.id='pwa-save-snapshot';input.checked=enabled;label.append(input,document.createTextNode(' '+t('save','Keep the last snapshot on this browser')));dialog.append(label);
     dialog.append(el('p',t('privacy','Off by default. Enabling stores the displayed intelligence on this browser until you clear it.')));
-    const message=el('p',error || (storedAt ? t('saved','Last local save')+' · '+storedAt : t('empty','No local snapshot saved.')));message.id='pwa-message';message.setAttribute('role','status');dialog.append(message);
+    const message=el('p',error || (storedAt ? t('saved','Last local save')+' Â· '+storedAt : t('empty','No local snapshot saved.')));message.id='pwa-message';message.setAttribute('role','status');dialog.append(message);
     input.onchange=async()=>{input.disabled=true;try{await setOfflineEnabled(input.checked);message.textContent=enabled?t('saved','Snapshot saved locally.'):t('cleared','Local snapshot deleted.');}catch{input.checked=enabled;message.textContent=t('storageError','Local snapshot storage unavailable.');}finally{input.disabled=false;}};
     dialog.append(button(t('clear','Delete local snapshot'),async()=>{await clearSnapshot();input.checked=false;message.textContent=t('cleared','Local snapshot deleted.');},'pwa-clear'));
     const install=button(t('install','Install app'),async()=>{await installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;install.disabled=true;},'pwa-install');install.disabled=!installPrompt;dialog.append(install);
-    if (!installPrompt) dialog.append(el('p',t('installHelp','Use your browser’s Install app menu when available. First open this address online.')));
+    if (!installPrompt) dialog.append(el('p',t('installHelp','Use your browserâ€™s Install app menu when available. First open this address online.')));
     const update=button(t('update','Apply downloaded update'),()=>{const waiting=registration?.waiting;if(!waiting){update.disabled=true;message.textContent=t('noUpdate','No downloaded update is waiting.');return;}waiting.postMessage({type:'APPLY_UPDATE'});window.navigator.serviceWorker.addEventListener('controllerchange',()=>window.location.reload(),{once:true});},'pwa-update');update.disabled=!registration?.waiting;dialog.append(update);
     dialog.append(button(t('close','Close'),()=>dialog.close(),'pwa-close'));
     dialog.addEventListener('close',()=>{dialog.remove();document.getElementById('pwaTrigger')?.focus();});dialog.addEventListener('click',event=>{const rect=dialog.getBoundingClientRect();if(event.target===dialog&&(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom))dialog.close();});

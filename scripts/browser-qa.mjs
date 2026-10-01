@@ -35,7 +35,7 @@ async function mainChecks(){
  await page.locator('#settingsTrigger').click();
  assert.strictEqual(await page.evaluate(()=>document.getElementById('main').inert),true);
  assert.strictEqual(await page.locator('#settingsOverlay').getAttribute('aria-hidden'),'false');
- assert.strictEqual(await page.locator('input[data-layer-id]').count(),13);
+ assert.strictEqual(await page.locator('input[data-layer-id]').count(),14);
  const quakeBefore=await page.locator('.markers [data-layer="earthquake"]').count();console.log('QUAKE',quakeBefore);assert.strictEqual(quakeBefore,1);
  await page.locator('#layer-earthquake').uncheck();assert.strictEqual(await page.locator('.markers [data-layer="earthquake"]').count(),0);
  await page.locator('#layer-earthquake').check();assert.strictEqual(await page.locator('.markers [data-layer="earthquake"]').count(),1);

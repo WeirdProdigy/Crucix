@@ -113,7 +113,7 @@
     "globeMode": "GLOBE MODE",
     "flatMode": "FLAT MODE",
     "earthquake": "Earthquakes",
-    "disaster": "Disaster",
+    "disaster": "Natural event",
     "weatherAlert": "Weather Alert",
     "epaRadNet": "EPA RadNet",
     "spaceStation": "Space Station",
@@ -555,7 +555,7 @@
     "kind_earthquake": "Earthquake",
     "kind_health": "Health",
     "kind_outage": "Internet outage",
-    "kind_network": "Internet outage",
+    "kind_network": "Routing / connectivity",
     "kind_conflict": "Conflict",
     "kind_weather": "Weather",
     "kind_thermal": "Thermal / fire",
@@ -581,7 +581,17 @@
     "precision_region": "Region",
     "precision_country": "Country",
     "precision_unknown": "Unknown",
-    "groupNews": "Group nearby reports"
+    "groupNews": "Group nearby reports",
+    "kind_disaster": "Natural event",
+    "kind_space-weather": "Space weather",
+    "kind_economic": "Economy / reference rate",
+    "kind_forecast": "Forecast",
+    "kind_cyber": "Cyber risk",
+    "forecastAt": "Forecast for",
+    "startsAt": "Starts at",
+    "validUntil": "Valid until",
+    "method_forecast-grid": "Forecast grid point",
+    "method_configured-point": "Configured forecast location"
   },
   "pwa": {
     "menu": "Install / offline",
@@ -603,5 +613,23 @@
     "unknown": "Unknown time",
     "storageError": "Local snapshot storage unavailable.",
     "shellError": "Offline interface installation failed; reconnect and reload to retry."
+  },
+  "liveSources": {
+    "title": "Current public data",
+    "help": "Only records within each provider’s freshness window are shown. Forecasts and model estimates are labelled.",
+    "providerTime": "Provider time",
+    "forecastFor": "Forecast for",
+    "startsAt": "Starts at",
+    "validUntil": "Valid until",
+    "records": "current records",
+    "noRecords": "No current records in the watched scope",
+    "expired": "Provider data expired or its timestamp is unknown. Live records are hidden.",
+    "unavailable": "Source unavailable",
+    "ok": "Current",
+    "error": "Unavailable",
+    "stale": "Expired",
+    "showRecords": "Show records",
+    "original": "Original source",
+    "waiting": "Waiting for the first collection"
   }
 }

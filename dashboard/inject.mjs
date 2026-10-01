@@ -16,6 +16,7 @@ import config from '../crucix.config.mjs';
 import { createLLMProvider } from '../lib/llm/index.mjs';
 import { generateRuleBasedIdeas, resolveIdeas } from '../lib/llm/rule-ideas.mjs';
 import { buildEvents } from '../lib/intelligence/events.mjs';
+import { normalizeLiveSources } from '../lib/intelligence/live-sources.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -695,10 +696,13 @@ export async function synthesize(data, options = {}) {
     }))
   };
 
+  const liveSources = normalizeLiveSources(data.sources, options.now ?? Date.now());
+  const liveStates = new Map(liveSources.map(row=>[row.source,row]));
   const health = Object.entries(data.sources).map(([name, src]) => ({
     n: name, err: Boolean(src.error), stale: Boolean(src.stale) || (name === 'OpenSky' && Boolean(airFallback)),
     disabled: Boolean(src.disabled), message: src.error || src.message || null,
     timestamp: name === 'OpenSky' && airFallback ? airFallback.timestamp : src.timestamp || null,
+    ...(liveStates.has(name) ? { stale:liveStates.get(name).status==='stale', err:liveStates.get(name).status==='error', observedAt:liveStates.get(name).observedAt, freshness:liveStates.get(name).freshness } : {}),
   }));
 
   // === Yahoo Finance live market data ===
@@ -756,7 +760,7 @@ export async function synthesize(data, options = {}) {
   const news = allNews.filter(n => Number.isFinite(n.lat) && Number.isFinite(n.lon));
 
   const V2 = {
-    meta: data.crucix, air, thermal, tSignals, chokepoints, nuke, nukeSignals,
+    meta: data.crucix, air, thermal, tSignals, chokepoints, nuke, nukeSignals, liveSources,
     airMeta: {
       fallback: Boolean(airFallback),
       liveTotal: sumAirHotspots(liveAirHotspots),
@@ -778,7 +782,7 @@ export async function synthesize(data, options = {}) {
   };
 
   V2.ideas = generateIdeas(V2);
-  V2.events = buildEvents(V2);
+  V2.events = buildEvents(V2, { now: options.now ?? Date.now() });
   return V2;
 }
 

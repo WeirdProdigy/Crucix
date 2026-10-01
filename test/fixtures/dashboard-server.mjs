@@ -10,6 +10,8 @@ import { HistoryStore } from '../../lib/intelligence/history.mjs';
 import { installIntelligenceRoutes } from '../../lib/intelligence/routes.mjs';
 import { getLocaleForLanguage } from '../../lib/i18n.mjs';
 import { renderOfflineShell } from '../../lib/offline-shell.mjs';
+import { POLICIES } from '../../apis/utils/freshness.mjs';
+import { normalizeLiveSources } from '../../lib/intelligence/live-sources.mjs';
 const template = readFileSync(new URL('../../dashboard/public/jarvis.html', import.meta.url), 'utf8');
 const embedded = template.match(/^(?:let|const) D = (.*);\s*$/m);
 const data = JSON.parse(embedded[1]);
@@ -39,6 +41,22 @@ const streams = new Set();
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/control') {
+    if(url.searchParams.has('liveSources')){
+      const enabled=url.searchParams.get('liveSources')==='true';
+      const now=Date.now();
+      data.liveSources=enabled?normalizeLiveSources(Object.fromEntries(Object.keys(POLICIES).map((source,index)=>[source,{
+        source,status:'ok',observedAt:new Date(now-600000).toISOString(),timestamp:new Date(now).toISOString(),
+        summary:source==='NOAA-SWPC'?'Current NOAA R0/S0/G0: no active space-weather alert.':'Fixture current '+source,
+        attribution:source+' public source attribution',
+        observations:source==='NOAA-SWPC'||source==='Meteoalarm'?[]:[{providerId:'live-'+index,source,kind:source==='ECB'?'economic':source==='MET-Norway'?'forecast':source==='FIRST-EPSS'?'cyber':source==='RIPEstat'||source==='OONI'?'network':'disaster',
+          title:'Fixture current '+source+' <img onerror="window.__liveXss=1">',summary:'Public data: safe text only',url:'https://example.org/public/'+index,observedAt:new Date(now-600000).toISOString(),
+          ...(source==='MET-Norway'?{forecastAt:new Date(now+3600000).toISOString(),validUntil:new Date(now+7200000).toISOString()}:{}),
+          ...(['MET-Norway','GDACS','NASA-EONET'].includes(source)?{lat:47.5+index,lon:19+index,locationMethod:'provider',locationPrecision:'approximate'}:{}),
+        }]
+      }]))):[];
+      if(enabled&&url.searchParams.get('expired')==='true')data.liveSources[0].observedAt='2025-01-01T00:00:00Z';
+      data.events=buildEvents(data);data.eventClusters=clusterEvents(data.events);history.add(data.events);
+    }
     if(['en','hu','fr'].includes(url.searchParams.get('language')))fixtureLanguage=url.searchParams.get('language');
     online = url.searchParams.get('online') !== 'false';
     if (!online) for (const client of streams) client.end();

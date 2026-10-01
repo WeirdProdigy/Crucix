@@ -113,7 +113,7 @@
     "globeMode": "GÖMB NÉZET",
     "flatMode": "SÍK NÉZET",
     "earthquake": "Földrengések",
-    "disaster": "Katasztrófa",
+    "disaster": "Természeti esemény",
     "weatherAlert": "Időjárási riasztás",
     "epaRadNet": "EPA RadNet",
     "spaceStation": "Űrállomás",
@@ -555,7 +555,7 @@
     "kind_earthquake": "Földrengés",
     "kind_health": "Egészségügy",
     "kind_outage": "Internetkimaradás",
-    "kind_network": "Internetkimaradás",
+    "kind_network": "Útvonalválasztás / kapcsolat",
     "kind_conflict": "Konfliktus",
     "kind_weather": "Időjárás",
     "kind_thermal": "Hőjelzés / tűz",
@@ -581,7 +581,17 @@
     "precision_region": "Régió",
     "precision_country": "Ország",
     "precision_unknown": "Ismeretlen",
-    "groupNews": "Közeli jelentések csoportosítása"
+    "groupNews": "Közeli jelentések csoportosítása",
+    "kind_disaster": "Természeti esemény",
+    "kind_space-weather": "Űridőjárás",
+    "kind_economic": "Gazdaság / referenciaárfolyam",
+    "kind_forecast": "Előrejelzés",
+    "kind_cyber": "Kiberkockázat",
+    "forecastAt": "Előrejelzés erre az időre",
+    "startsAt": "Kezdőidő",
+    "validUntil": "Érvényes eddig",
+    "method_forecast-grid": "Előrejelzési rácspont",
+    "method_configured-point": "Beállított előrejelzési hely"
   },
   "pwa": {
     "menu": "Telepítés / offline",
@@ -603,5 +613,23 @@
     "unknown": "Ismeretlen időpont",
     "storageError": "A helyi pillanatkép nem menthető ebben a böngészőben.",
     "shellError": "Az offline felület telepítése sikertelen; csatlakozz újra és töltsd újra az oldalt."
+  },
+  "liveSources": {
+    "title": "Friss nyilvános adatok",
+    "help": "Csak a forrásonkénti frissességi határon belüli rekordok látszanak. Az előrejelzést és a modellbecslést külön jelöljük.",
+    "providerTime": "Forrás adatideje",
+    "forecastFor": "Előrejelzés erre az időre",
+    "startsAt": "Kezdőidő",
+    "validUntil": "Érvényes eddig",
+    "records": "friss rekord",
+    "noRecords": "Nincs aktuális rekord a figyelt adatkörben",
+    "expired": "A forrás adatai lejártak vagy az adatidejük ismeretlen. Az élő rekordokat elrejtettük.",
+    "unavailable": "A forrás nem elérhető",
+    "ok": "Friss",
+    "error": "Nem elérhető",
+    "stale": "Lejárt",
+    "showRecords": "Rekordok megnyitása",
+    "original": "Eredeti forrás",
+    "waiting": "Várakozás az első adatgyűjtésre"
   }
 }

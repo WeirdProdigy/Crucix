@@ -113,7 +113,7 @@
     "globeMode": "MODE GLOBE",
     "flatMode": "MODE PLAT",
     "earthquake": "Séismes",
-    "disaster": "Catastrophe",
+    "disaster": "Événement naturel",
     "weatherAlert": "Alerte Météo",
     "epaRadNet": "EPA RadNet",
     "spaceStation": "Station Spatiale",
@@ -555,7 +555,7 @@
     "kind_earthquake": "Séisme",
     "kind_health": "Santé",
     "kind_outage": "Coupure internet",
-    "kind_network": "Coupure internet",
+    "kind_network": "Routage / connectivité",
     "kind_conflict": "Conflit",
     "kind_weather": "Météo",
     "kind_thermal": "Thermique / incendie",
@@ -581,7 +581,17 @@
     "precision_region": "Région",
     "precision_country": "Pays",
     "precision_unknown": "Inconnue",
-    "groupNews": "Regrouper les rapports proches"
+    "groupNews": "Regrouper les rapports proches",
+    "kind_disaster": "Événement naturel",
+    "kind_space-weather": "Météo spatiale",
+    "kind_economic": "Économie / taux de référence",
+    "kind_forecast": "Prévision",
+    "kind_cyber": "Risque cyber",
+    "forecastAt": "Prévision pour",
+    "startsAt": "Début",
+    "validUntil": "Valable jusqu’au",
+    "method_forecast-grid": "Point de grille de prévision",
+    "method_configured-point": "Lieu de prévision configuré"
   },
   "pwa": {
     "menu": "Installer / hors ligne",
@@ -603,5 +613,23 @@
     "unknown": "Date inconnue",
     "storageError": "Le stockage local de l’instantané est indisponible.",
     "shellError": "L’installation hors ligne a échoué ; reconnectez-vous et rechargez la page."
+  },
+  "liveSources": {
+    "title": "Données publiques récentes",
+    "help": "Seules les données respectant la limite de fraîcheur de chaque source sont affichées. Les prévisions et estimations sont identifiées.",
+    "providerTime": "Date des données",
+    "forecastFor": "Prévision pour",
+    "startsAt": "Début",
+    "validUntil": "Valable jusqu’au",
+    "records": "données récentes",
+    "noRecords": "Aucune donnée actuelle dans le périmètre suivi",
+    "expired": "Données expirées ou date inconnue. Les données en direct sont masquées.",
+    "unavailable": "Source indisponible",
+    "ok": "Récent",
+    "error": "Indisponible",
+    "stale": "Expiré",
+    "showRecords": "Afficher les données",
+    "original": "Source originale",
+    "waiting": "En attente de la première collecte"
   }
 }

@@ -136,7 +136,7 @@ test('committing an unchanged completed search does not clear results during exp
 });
 
 test('history type filter offers only API-supported event categories',async()=>{
-  const h=harness({historyEnabled:true});h.api.openHistory();await tick();const values=byId(h,'ci-history-kind').children.map(option=>option.value);assert.deepEqual(values.sort(),['','conflict','earthquake','health','news','osint','outage','signal','weather']);
+  const h=harness({historyEnabled:true});h.api.openHistory();await tick();const values=byId(h,'ci-history-kind').children.map(option=>option.value);assert.deepEqual(values.sort(),['','conflict','cyber','disaster','earthquake','economic','forecast','health','network','news','osint','outage','signal','space-weather','weather']);
 });
 
 test('history reports empty, failed and offline states and clamps invalid page size',async()=>{
@@ -147,7 +147,7 @@ test('history reports empty, failed and offline states and clamps invalid page s
 test('saved profiles normalize hostile settings and keep twelve own entries at most',()=>{
   const profiles=Array.from({length:20},(_,i)=>({id:'user-'+i,name:'Profile '+i,layout:{zones:{left:['sensorGrid','evil','sensorGrid'],right:['newsTicker']},visibility:{newsTicker:false,evil:false},fixed:{map:false,evil:false}},layers:{news:false,evil:false},region:'malicious'}));const storage={getItem:()=>JSON.stringify({version:1,profiles}),setItem(){}};const h=harness({profilesEnabled:true,storage});h.api.openProfiles();
   assert.equal(byId(h,'ci-body').querySelectorAll('[data-ci-profile-action="delete"]').length,12);click(h,'[data-ci-profile-action="apply"][data-profile-id="user-0"]');
-  assert.equal(h.state.region,'world');assert.equal(h.state.layers.news,false);assert.equal(Object.hasOwn(h.state.layers,'evil'),false);assert.equal(Object.hasOwn(h.state.layout.visibility,'evil'),false);assert.equal(Object.values(h.state.layout.zones).flat().length,15);assert.equal(new Set(Object.values(h.state.layout.zones).flat()).size,15);
+  assert.equal(h.state.region,'world');assert.equal(h.state.layers.news,false);assert.equal(Object.hasOwn(h.state.layers,'evil'),false);assert.equal(Object.hasOwn(h.state.layout.visibility,'evil'),false);assert.equal(Object.values(h.state.layout.zones).flat().length,16);assert.equal(new Set(Object.values(h.state.layout.zones).flat()).size,16);
   change(h,'ci-profile-name','13th');click(h,'[data-ci-profile-action="save"]');assert.equal(byId(h,'ci-body').querySelectorAll('[data-ci-profile-action="delete"]').length,12);assert.match(byId(h,'ci-body').textContent,/12/);
 });
 
