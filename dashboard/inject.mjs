@@ -11,9 +11,10 @@ import { fileURLToPath } from 'url';
 import { pathToFileURL } from 'node:url';
 import { openBrowser } from '../lib/open-browser.mjs';
 import { inlineJson } from '../lib/html.mjs';
+import { safeFetch } from '../apis/utils/fetch.mjs';
 import config from '../crucix.config.mjs';
 import { createLLMProvider } from '../lib/llm/index.mjs';
-import { generateLLMIdeas } from '../lib/llm/ideas.mjs';
+import { generateRuleBasedIdeas, resolveIdeas } from '../lib/llm/rule-ideas.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -303,40 +304,43 @@ function summarizeAirHotspots(hotspots = []) {
   }));
 }
 
-function loadOpenSkyFallback(currentTimestamp) {
-  const runsDir = join(ROOT, 'runs');
+export function loadOpenSkyFallback(currentTimestamp, runsDir = config.runsDir || join(ROOT, 'runs'), ttlMs = 3600000) {
   if (!existsSync(runsDir)) return null;
 
   const currentMs = currentTimestamp ? new Date(currentTimestamp).getTime() : NaN;
+  if (!Number.isFinite(currentMs)) return null;
   const files = readdirSync(runsDir)
     .filter(name => /^briefing_.*\.json$/.test(name))
     .sort()
     .reverse();
 
+  const candidates = [];
   for (const file of files) {
     const filePath = join(runsDir, file);
     try {
       const prior = JSON.parse(readFileSync(filePath, 'utf8'));
-      const priorTimestamp = prior.sources?.OpenSky?.timestamp || prior.crucix?.timestamp || null;
-      if (priorTimestamp && Number.isFinite(currentMs) && new Date(priorTimestamp).getTime() >= currentMs) continue;
+      const priorTimestamp = prior.sources?.OpenSky?.timestamp || null;
+      const priorMs = Date.parse(priorTimestamp);
+      if (!Number.isFinite(priorMs) || priorMs >= currentMs || currentMs - priorMs > ttlMs) continue;
 
       const hotspots = prior.sources?.OpenSky?.hotspots || [];
-      if (sumAirHotspots(hotspots) > 0) {
-        return { file, timestamp: priorTimestamp, hotspots };
+      if (!prior.sources?.OpenSky?.error && sumAirHotspots(hotspots) > 0) {
+        candidates.push({ file, timestamp: priorTimestamp, hotspots, ageMs: currentMs - priorMs });
       }
     } catch {
       // Ignore unreadable historical runs and continue searching backward.
     }
   }
 
-  return null;
+  return candidates.sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))[0] || null;
 }
 
 // === RSS Fetching ===
 async function fetchRSS(url, source) {
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    const xml = await res.text();
+    const response = await safeFetch(url, { timeout: 8000, retries: 0, format: 'text', maxBytes: 2 * 1024 * 1024 });
+    if (response.error) throw new Error(response.error);
+    const xml = response.rawText;
     const items = [];
     const itemRegex = /<item>([\s\S]*?)<\/item>/g;
     let match;
@@ -354,24 +358,18 @@ async function fetchRSS(url, source) {
   }
 }
 
-const RSS_SOURCE_FALLBACKS = {
-  'SBS Australia': { lat: -35.2809, lon: 149.13, region: 'Australia' },
-  'Indian Express': { lat: 28.6139, lon: 77.209, region: 'India' },
-  'The Hindu': { lat: 13.0827, lon: 80.2707, region: 'India' },
-  'MercoPress': { lat: -34.9011, lon: -56.1645, region: 'South America' }
-};
 const REGIONAL_NEWS_SOURCES = ['MercoPress', 'Indian Express', 'The Hindu', 'SBS Australia'];
 
-export async function fetchAllNews() {
-  const feeds = [
+export async function fetchAllNews(customFeeds) {
+  const feeds = customFeeds || [
     // Global
-    ['http://feeds.bbci.co.uk/news/world/rss.xml', 'BBC'],
+    ['https://feeds.bbci.co.uk/news/world/rss.xml', 'BBC'],
     ['https://rss.nytimes.com/services/xml/rss/nyt/World.xml', 'NYT'],
     ['https://www.aljazeera.com/xml/rss/all.xml', 'Al Jazeera'],
     // USA
     ['https://feeds.npr.org/1001/rss.xml', 'NPR'],
     ['https://feeds.bbci.co.uk/news/technology/rss.xml', 'BBC Tech'],
-    ['http://feeds.bbci.co.uk/news/science_and_environment/rss.xml', 'BBC Science'],
+    ['https://feeds.bbci.co.uk/news/science_and_environment/rss.xml', 'BBC Science'],
     ['https://rss.nytimes.com/services/xml/rss/nyt/Americas.xml', 'NYT Americas'],
     // Europe
     ['https://rss.dw.com/rdf/rss-en-all', 'DW'],
@@ -407,18 +405,15 @@ export async function fetchAllNews() {
     const key = item.title.substring(0, 40).toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    const geo = geoTagText(item.title) || RSS_SOURCE_FALLBACKS[item.source];
-    if (geo) {
+    const geo = geoTagText(item.title);
       geoNews.push({
         title: item.title.substring(0, 100),
         source: item.source,
         date: item.date,
         url: item.url,
-        lat: geo.lat + (Math.random() - 0.5) * 2,
-        lon: geo.lon + (Math.random() - 0.5) * 2,
-        region: geo.region
+        ...(geo ? { lat: geo.lat, lon: geo.lon, region: geo.region, locationMethod: 'headline-keyword' }
+          : { region: 'Global', locationMethod: 'unknown' }),
       });
-    }
   }
 
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -444,152 +439,15 @@ export async function fetchAllNews() {
 }
 
 // === Leverageable Ideas from Signals ===
-export function generateIdeas(V2) {
-  const ideas = [];
-  const vix = V2.fred.find(f => f.id === 'VIXCLS');
-  const hy = V2.fred.find(f => f.id === 'BAMLH0A0HYM2');
-  const spread = V2.fred.find(f => f.id === 'T10Y2Y');
-
-  if (V2.tg.urgent.length > 3 && V2.energy.wti > 68) {
-    ideas.push({
-      title: 'Conflict-Energy Nexus Active',
-      text: `${V2.tg.urgent.length} urgent conflict signals with WTI at $${V2.energy.wti}. Geopolitical risk premium may expand. Consider energy exposure.`,
-      type: 'long', confidence: 'Medium', horizon: 'swing'
-    });
-  }
-  if (vix && vix.value > 20) {
-    ideas.push({
-      title: 'Elevated Volatility Regime',
-      text: `VIX at ${vix.value} — fear premium elevated. Portfolio hedges justified. Short-term equity upside is capped.`,
-      type: 'hedge', confidence: vix.value > 25 ? 'High' : 'Medium', horizon: 'tactical'
-    });
-  }
-  if (vix && vix.value > 20 && hy && hy.value > 3) {
-    ideas.push({
-      title: 'Safe Haven Demand Rising',
-      text: `VIX ${vix.value} + HY spread ${hy.value}% = risk-off building. Gold, treasuries, quality dividends may outperform.`,
-      type: 'hedge', confidence: 'Medium', horizon: 'tactical'
-    });
-  }
-  if (V2.energy.wtiRecent.length > 1) {
-    const latest = V2.energy.wtiRecent[0];
-    const oldest = V2.energy.wtiRecent[V2.energy.wtiRecent.length - 1];
-    const pct = ((latest - oldest) / oldest * 100).toFixed(1);
-    if (Math.abs(pct) > 3) {
-      ideas.push({
-        title: pct > 0 ? 'Oil Momentum Building' : 'Oil Under Pressure',
-        text: `WTI moved ${pct > 0 ? '+' : ''}${pct}% recently to $${V2.energy.wti}/bbl. ${pct > 0 ? 'Energy and commodity names benefit.' : 'Demand concerns may be emerging.'}`,
-        type: pct > 0 ? 'long' : 'watch', confidence: 'Medium', horizon: 'swing'
-      });
-    }
-  }
-  if (spread) {
-    ideas.push({
-      title: spread.value > 0 ? 'Yield Curve Normalizing' : 'Yield Curve Inverted',
-      text: `10Y-2Y spread at ${spread.value.toFixed(2)}. ${spread.value > 0 ? 'Recession signal fading — cyclical rotation possible.' : 'Inversion persists — defensive positioning warranted.'}`,
-      type: 'watch', confidence: 'Medium', horizon: 'strategic'
-    });
-  }
-  const debt = parseFloat(V2.treasury.totalDebt);
-  if (debt > 35e12) {
-    ideas.push({
-      title: 'Fiscal Trajectory Supports Hard Assets',
-      text: `National debt at $${(debt / 1e12).toFixed(1)}T. Long-term gold, bitcoin, and real asset appreciation thesis intact.`,
-      type: 'long', confidence: 'High', horizon: 'strategic'
-    });
-  }
-  const totalThermal = V2.thermal.reduce((s, t) => s + t.det, 0);
-  if (totalThermal > 30000 && V2.tg.urgent.length > 2) {
-    ideas.push({
-      title: 'Satellite Confirms Conflict Intensity',
-      text: `${totalThermal.toLocaleString()} thermal detections + ${V2.tg.urgent.length} urgent OSINT flags. Defense sector procurement may accelerate.`,
-      type: 'watch', confidence: 'Medium', horizon: 'swing'
-    });
-  }
-
-  // Yield Curve + Labor Interaction
-  const unemployment = V2.bls.find(b => b.id === 'LNS14000000' || b.id === 'UNRATE');
-  const payrolls = V2.bls.find(b => b.id === 'CES0000000001' || b.id === 'PAYEMS');
-  if (spread && unemployment && payrolls) {
-    const weakLabor = (unemployment.value > 4.3) || (payrolls.momChange && payrolls.momChange < -50);
-    if (spread.value > 0.3 && weakLabor) {
-      ideas.push({
-        title: 'Steepening Curve Meets Weak Labor',
-        text: `10Y-2Y at ${spread.value.toFixed(2)} + UE ${unemployment.value}%. Curve steepening with deteriorating employment = recession positioning warranted.`,
-        type: 'hedge', confidence: 'High', horizon: 'tactical'
-      });
-    }
-  }
-
-  // ACLED Conflict + Energy Momentum
-  const conflictEvents = V2.acled?.totalEvents || 0;
-  if (conflictEvents > 50 && V2.energy.wtiRecent.length > 1) {
-    const wtiMove = V2.energy.wtiRecent[0] - V2.energy.wtiRecent[V2.energy.wtiRecent.length - 1];
-    if (wtiMove > 2) {
-      ideas.push({
-        title: 'Conflict Fueling Energy Momentum',
-        text: `${conflictEvents} ACLED events this week + WTI up $${wtiMove.toFixed(1)}. Conflict-energy transmission channel active.`,
-        type: 'long', confidence: 'Medium', horizon: 'swing'
-      });
-    }
-  }
-
-  // Defense + Conflict Intensity
-  const totalFatalities = V2.acled?.totalFatalities || 0;
-  const totalThermalAll = V2.thermal.reduce((s, t) => s + t.det, 0);
-  if (totalFatalities > 500 && totalThermalAll > 20000) {
-    ideas.push({
-      title: 'Defense Procurement Acceleration Signal',
-      text: `${totalFatalities.toLocaleString()} conflict fatalities + ${totalThermalAll.toLocaleString()} thermal detections. Defense contractors may see accelerated procurement.`,
-      type: 'long', confidence: 'Medium', horizon: 'swing'
-    });
-  }
-
-  // HY Spread + VIX Divergence
-  if (hy && vix) {
-    const hyWide = hy.value > 3.5;
-    const vixLow = vix.value < 18;
-    const hyTight = hy.value < 2.5;
-    const vixHigh = vix.value > 25;
-    if (hyWide && vixLow) {
-      ideas.push({
-        title: 'Credit Stress Ignored by Equity Vol',
-        text: `HY spread ${hy.value.toFixed(1)}% (wide) but VIX only ${vix.value.toFixed(0)} (complacent). Equity may be underpricing credit deterioration.`,
-        type: 'watch', confidence: 'Medium', horizon: 'tactical'
-      });
-    } else if (hyTight && vixHigh) {
-      ideas.push({
-        title: 'Equity Fear Exceeds Credit Stress',
-        text: `VIX at ${vix.value.toFixed(0)} but HY spread only ${hy.value.toFixed(1)}%. Equity vol may be overshooting — credit markets aren't confirming.`,
-        type: 'watch', confidence: 'Medium', horizon: 'tactical'
-      });
-    }
-  }
-
-  // Supply Chain + Inflation Pipeline
-  const ppi = V2.bls.find(b => b.id === 'WPUFD49104' || b.id === 'PCU--PCU--');
-  const cpi = V2.bls.find(b => b.id === 'CUUR0000SA0' || b.id === 'CPIAUCSL');
-  if (ppi && cpi && V2.gscpi) {
-    const supplyPressure = V2.gscpi.value > 0.5;
-    const ppiRising = ppi.momChangePct > 0.3;
-    if (supplyPressure && ppiRising) {
-      ideas.push({
-        title: 'Inflation Pipeline Building Pressure',
-        text: `GSCPI at ${V2.gscpi.value.toFixed(2)} (${V2.gscpi.interpretation}) + PPI momentum +${ppi.momChangePct?.toFixed(1)}%. Input costs flowing through — CPI may follow.`,
-        type: 'long', confidence: 'Medium', horizon: 'strategic'
-      });
-    }
-  }
-
-  return ideas.slice(0, 8);
-}
+export function generateIdeas(V2) { return generateRuleBasedIdeas(V2, config.llm.tradeIdeasLang); }
 
 // === Synthesize raw sweep data into dashboard format ===
-export async function synthesize(data) {
+export async function synthesize(data, options = {}) {
   const liveAirHotspots = data.sources.OpenSky?.hotspots || [];
-  const airFallback = sumAirHotspots(liveAirHotspots) > 0
-    ? null
-    : loadOpenSkyFallback(data.sources.OpenSky?.timestamp || data.crucix?.timestamp);
+  const hasUsableLiveAir = liveAirHotspots.some(h => !h.error && Number.isFinite(h.totalAircraft));
+  const airFallback = !hasUsableLiveAir && (data.sources.OpenSky?.error || !data.sources.OpenSky)
+    ? loadOpenSkyFallback(data.crucix?.timestamp, options.runsDir, options.airFallbackTtlMs)
+    : null;
   const effectiveAirHotspots = airFallback?.hotspots || liveAirHotspots;
   const air = summarizeAirHotspots(effectiveAirHotspots);
   const thermal = (data.sources.FIRMS?.hotspots || []).map(h => ({
@@ -659,10 +517,10 @@ export async function synthesize(data) {
   }));
   const tgData = data.sources.Telegram || {};
   const tgUrgent = (tgData.urgentPosts || []).filter(p => isEnglish(p.text)).map(p => ({
-    channel: p.channel, text: p.text?.substring(0, 200), views: p.views, date: p.date, urgentFlags: p.urgentFlags || []
+    channel: p.channel, text: p.text?.substring(0, 200), views: p.views, date: p.date, url: sanitizeExternalUrl(p.url), urgentFlags: p.urgentFlags || []
   }));
   const tgTop = (tgData.topPosts || []).filter(p => isEnglish(p.text)).map(p => ({
-    channel: p.channel, text: p.text?.substring(0, 200), views: p.views, date: p.date, urgentFlags: []
+    channel: p.channel, text: p.text?.substring(0, 200), views: p.views, date: p.date, url: sanitizeExternalUrl(p.url), urgentFlags: []
   }));
   const who = (data.sources.WHO?.diseaseOutbreakNews || [])
     .map(w => {
@@ -808,7 +666,7 @@ export async function synthesize(data) {
     byType: acledData.byType || {},
     deadliestEvents: (acledData.deadliestEvents || []).slice(0, 15).map(e => ({
       date: e.date, type: e.type, country: e.country, location: e.location,
-      fatalities: e.fatalities || 0, lat: e.lat || null, lon: e.lon || null
+      fatalities: e.fatalities || 0, lat: e.lat ?? null, lon: e.lon ?? null
     }))
   };
 
@@ -827,7 +685,9 @@ export async function synthesize(data) {
   };
 
   const health = Object.entries(data.sources).map(([name, src]) => ({
-    n: name, err: Boolean(src.error), stale: Boolean(src.stale)
+    n: name, err: Boolean(src.error), stale: Boolean(src.stale) || (name === 'OpenSky' && Boolean(airFallback)),
+    disabled: Boolean(src.disabled), message: src.error || src.message || null,
+    timestamp: name === 'OpenSky' && airFallback ? airFallback.timestamp : src.timestamp || null,
   }));
 
   // === Yahoo Finance live market data ===
@@ -878,10 +738,11 @@ export async function synthesize(data) {
   if (yfWti?.price) energy.wti = yfWti.price;
   if (yfBrent?.price) energy.brent = yfBrent.price;
   if (yfNatgas?.price) energy.natgas = yfNatgas.price;
-  if (yfWti?.history?.length) energy.wtiRecent = yfWti.history.map(h => h.close);
+  if (yfWti?.history?.length) energy.wtiRecent = yfWti.history.slice().reverse().map(h => h.close);
 
   // Fetch RSS
-  const news = await fetchAllNews();
+  const allNews = options.news ?? await fetchAllNews();
+  const news = allNews.filter(n => Number.isFinite(n.lat) && Number.isFinite(n.lon));
 
   const V2 = {
     meta: data.crucix, air, thermal, tSignals, chokepoints, nuke, nukeSignals,
@@ -891,30 +752,41 @@ export async function synthesize(data) {
       timestamp: airFallback?.timestamp || data.sources.OpenSky?.timestamp || data.crucix?.timestamp || null,
       source: airFallback ? 'OpenSky fallback' : 'OpenSky',
       ...(airFallback ? { fallbackFile: airFallback.file } : {}),
+      ...(airFallback ? { stale: true, ageMs: airFallback.ageMs } : {}),
       ...(data.sources.OpenSky?.error ? { error: data.sources.OpenSky.error } : {}),
     },
     sdr: { total: sdrNet.totalReceivers || 0, online: sdrNet.online || 0, zones: sdrZones },
+    earthquakes: data.sources.USGS?.earthquakes || [],
     ioda,
     tg: { posts: tgData.totalPosts || 0, urgent: tgUrgent, topPosts: tgTop },
     who, supplementalHealth, fred, energy, metals, bls, treasury, gscpi, defense, noaa, epa, acled, gdelt, space, health, news,
     markets, // Live Yahoo Finance market data
-    ideas: [], ideasSource: 'disabled',
+    ideas: [], ideasSource: 'rules',
     // newsFeed for ticker (merged RSS + GDELT + Telegram)
-    newsFeed: buildNewsFeed(news, gdeltData, tgUrgent, tgTop),
+    newsFeed: buildNewsFeed(allNews, gdeltData, tgUrgent, tgTop),
   };
 
+  V2.ideas = generateIdeas(V2);
   return V2;
 }
 
 // === Unified News Feed for Ticker ===
-function buildNewsFeed(rssNews, gdeltData, tgUrgent, tgTop) {
+export function sourceTimestamp(raw) {
+  if (!raw) return null;
+  const compact = String(raw).match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
+  const value = compact ? `${compact[1]}-${compact[2]}-${compact[3]}T${compact[4]}:${compact[5]}:${compact[6]}Z` : raw;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
+
+export function buildNewsFeed(rssNews, gdeltData, tgUrgent, tgTop) {
   const feed = [];
 
   // RSS news
   for (const n of rssNews) {
     feed.push({
       headline: n.title, source: n.source, type: 'rss',
-      timestamp: n.date, region: n.region, urgent: false, url: n.url
+      timestamp: sourceTimestamp(n.date), region: n.region, urgent: false, url: n.url
     });
   }
 
@@ -924,7 +796,7 @@ function buildNewsFeed(rssNews, gdeltData, tgUrgent, tgTop) {
       const geo = geoTagText(a.title);
       feed.push({
         headline: a.title.substring(0, 100), source: 'GDELT', type: 'gdelt',
-        timestamp: new Date().toISOString(), region: geo?.region || 'Global', urgent: false, url: sanitizeExternalUrl(a.url)
+        timestamp: sourceTimestamp(a.seendate || a.date), region: geo?.region || 'Global', urgent: false, url: sanitizeExternalUrl(a.url)
       });
     }
   }
@@ -934,7 +806,7 @@ function buildNewsFeed(rssNews, gdeltData, tgUrgent, tgTop) {
     const text = (p.text || '').replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '').trim();
     feed.push({
       headline: text.substring(0, 100), source: p.channel?.toUpperCase() || 'TELEGRAM',
-      type: 'telegram', timestamp: p.date, region: 'OSINT', urgent: true
+      type: 'telegram', timestamp: sourceTimestamp(p.date), region: 'OSINT', urgent: true, url: sanitizeExternalUrl(p.url)
     });
   }
 
@@ -943,7 +815,7 @@ function buildNewsFeed(rssNews, gdeltData, tgUrgent, tgTop) {
     const text = (p.text || '').replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '').trim();
     feed.push({
       headline: text.substring(0, 100), source: p.channel?.toUpperCase() || 'TELEGRAM',
-      type: 'telegram', timestamp: p.date, region: 'OSINT', urgent: false
+      type: 'telegram', timestamp: sourceTimestamp(p.date), region: 'OSINT', urgent: false, url: sanitizeExternalUrl(p.url)
     });
   }
 
@@ -984,28 +856,7 @@ async function cliInject() {
   const V2 = await synthesize(data);
   const llmProvider = createLLMProvider(config.llm);
 
-  if (llmProvider?.isConfigured) {
-    try {
-      console.log(`[LLM] Generating ideas via ${llmProvider.name}...`);
-      const llmIdeas = await generateLLMIdeas(llmProvider, V2, null, []);
-      if (llmIdeas?.length) {
-        V2.ideas = llmIdeas;
-        V2.ideasSource = 'llm';
-        console.log(`[LLM] Generated ${llmIdeas.length} ideas`);
-      } else {
-        V2.ideas = [];
-        V2.ideasSource = 'llm-failed';
-        console.log('[LLM] No ideas returned');
-      }
-    } catch (err) {
-      V2.ideas = [];
-      V2.ideasSource = 'llm-failed';
-      console.log('[LLM] Idea generation failed:', err.message);
-    }
-  } else {
-    V2.ideas = [];
-    V2.ideasSource = 'disabled';
-  }
+  Object.assign(V2, await resolveIdeas(llmProvider, V2, null, [], config.llm.tradeIdeasLang));
   console.log(`Generated ${V2.ideas.length} leverageable ideas`);
 
   const json = inlineJson(V2);
@@ -1023,8 +874,6 @@ async function cliInject() {
   if (!shouldOpen) return;
 
   // Auto-open dashboard in default browser
-  // NOTE: On Windows, `start` in PowerShell is an alias for Start-Service, not cmd's start.
-  // We must use `cmd /c start ""` to ensure it works in both cmd.exe and PowerShell.
   openBrowser(pathToFileURL(htmlPath).href);
 }
 

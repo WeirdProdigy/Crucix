@@ -67,7 +67,7 @@ export async function briefing(apiKey) {
     entries.map(async ([id, label]) => {
       const data = await getSeriesLatest(id, apiKey);
       const obs = data?.observations;
-      if (!obs?.length) return { id, label, value: null, date: null, recent: [] };
+      if (!obs?.length) return { id, label, value: null, date: null, recent: [], ...(data.error ? { error: data.error } : {}) };
       const latest = obs.find(o => o.value !== '.');
       const validObs = obs.filter(o => o.value !== '.');
       return {
@@ -98,6 +98,7 @@ export async function briefing(apiKey) {
     source: 'FRED',
     timestamp: new Date().toISOString(),
     indicators: results.filter(r => r.value !== null),
+    ...(results.some(r => r.error) ? { error: `FRED unavailable for ${results.filter(r => r.error).length}/${results.length} indicators` } : {}),
     signals,
   };
 }

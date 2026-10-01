@@ -11,11 +11,22 @@ export function envInteger(name, fallback, min, max) {
   return Number(raw);
 }
 
+export function envUrl(name, fallback) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  let url;
+  try { url = new URL(raw); } catch { throw new Error(`${name} must be an absolute HTTP or HTTPS URL`); }
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+    throw new Error(`${name} must use HTTP or HTTPS without embedded credentials`);
+  }
+  return url.toString().replace(/\/$/, '');
+}
+
 export default {
   port: envInteger('PORT', 3117, 1, 65535),
   host: process.env.HOST || '127.0.0.1',
   runsDir: process.env.RUNS_DIR || null,
-  publicUrl: process.env.PUBLIC_URL || `http://localhost:${envInteger('PORT', 3117, 1, 65535)}`,
+  publicUrl: envUrl('PUBLIC_URL', `http://localhost:${envInteger('PORT', 3117, 1, 65535)}`),
   auth: { user: process.env.AUTH_USER || '', password: process.env.AUTH_PASSWORD || '' },
   maxSseClients: envInteger('MAX_SSE_CLIENTS', 100, 1, 10000),
   refreshIntervalMinutes: envInteger('REFRESH_INTERVAL_MINUTES', 15, 1, 1440),
@@ -25,13 +36,20 @@ export default {
     apiKey: process.env.LLM_API_KEY || null,
     model: process.env.LLM_MODEL || null,
     baseUrl: process.env.OLLAMA_BASE_URL || null,
+    compatibleBaseUrl: process.env.LLM_BASE_URL || null,
+    reasoningEffort: process.env.OLLAMA_REASONING_EFFORT || null,
+    ideasMaxTokens: envInteger('LLM_IDEAS_MAX_TOKENS', 4096, 128, 16384),
+    ideasTimeoutMs: envInteger('LLM_IDEAS_TIMEOUT_MS', 90000, 1000, 360000),
+    alertMaxTokens: envInteger('LLM_ALERT_MAX_TOKENS', 800, 128, 4096),
+    alertTimeoutMs: envInteger('LLM_ALERT_TIMEOUT_MS', 30000, 1000, 360000),
+    everyNSweeps: envInteger('LLM_IDEAS_EVERY_N_SWEEPS', 1, 1, 96),
     tradeIdeasLang: process.env.TRADE_IDEAS_LANG || process.env.CRUCIX_LANG || 'en',
   },
 
   telegram: {
     botToken: process.env.TELEGRAM_BOT_TOKEN || null,
     chatId: process.env.TELEGRAM_CHAT_ID || null,
-    botPollingInterval: parseInt(process.env.TELEGRAM_POLL_INTERVAL) || 5000,
+    botPollingInterval: envInteger('TELEGRAM_POLL_INTERVAL', 5000, 1000, 300000),
     channels: process.env.TELEGRAM_CHANNELS || null, // Comma-separated extra channel IDs
   },
 

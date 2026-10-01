@@ -5,6 +5,7 @@
 
 import './utils/env.mjs'; // Load API keys from .env
 import { pathToFileURL } from 'node:url';
+import packageInfo from '../package.json' with { type: 'json' };
 
 // === Tier 1: Core OSINT & Geopolitical ===
 import { briefing as gdelt } from './sources/gdelt.mjs';
@@ -47,8 +48,18 @@ import { briefing as yfinance } from './sources/yfinance.mjs';
 import { briefing as cisaKev } from './sources/cisa-kev.mjs';
 import { briefing as cloudflareRadar } from './sources/cloudflare-radar.mjs';
 import { briefing as ioda } from './sources/ioda.mjs';
+import { briefing as usgs } from './sources/usgs.mjs';
 
 const SOURCE_TIMEOUT_MS = 30_000; // 30s max per individual source
+
+export function sourceErrors(value, depth = 0) {
+  if (!value || typeof value !== 'object' || depth > 8) return [];
+  const errorKey = key => ['error', 'outbreakError', 'defenseError'].includes(key);
+  const own = Object.entries(value).filter(([key, child]) => errorKey(key) && typeof child === 'string' && child)
+    .map(([, child]) => child);
+  return own.concat(Object.entries(value).filter(([key]) => !errorKey(key))
+    .flatMap(([, child]) => sourceErrors(child, depth + 1))).slice(0, 10);
+}
 
 export async function runSource(name, fn, ...args) {
   const start = Date.now();
@@ -59,7 +70,15 @@ export async function runSource(name, fn, ...args) {
       timer = setTimeout(() => reject(new Error(`Source ${name} timed out after ${SOURCE_TIMEOUT_MS / 1000}s`)), SOURCE_TIMEOUT_MS);
     });
     const data = await Promise.race([dataPromise, timeoutPromise]);
-    return { name, status: 'ok', durationMs: Date.now() - start, data };
+    const errors = sourceErrors(data);
+    if (['error', 'failed', 'unavailable'].includes(data?.status) && !errors.length) errors.push(data.message || 'Source unavailable');
+    const disabled = data?.disabled || ['no_key', 'disabled', 'no_credentials'].includes(data?.status);
+    const status = !data || typeof data !== 'object' ? 'error'
+      : disabled ? 'disabled' : errors.length ? 'error' : data.stale ? 'stale' : 'ok';
+    if (disabled) data.disabled = true;
+    if (errors.length && !data.error) data.error = `Partial source failure: ${errors[0]}`;
+    return { name, status, durationMs: Date.now() - start, data,
+      ...(status === 'error' ? { error: data?.error || 'Invalid source payload' } : {}) };
   } catch (e) {
     return { name, status: 'error', durationMs: Date.now() - start, error: e.message };
   } finally {
@@ -112,6 +131,7 @@ export async function fullBriefing() {
     runSource('CISA-KEV', cisaKev),
     runSource('Cloudflare-Radar', cloudflareRadar),
     runSource('IODA', ioda),
+    runSource('USGS', usgs),
   ];
 
   console.error(`[Crucix] Starting intelligence sweep — ${allPromises.length} sources...`);
@@ -125,17 +145,19 @@ export async function fullBriefing() {
 
   const output = {
     crucix: {
-      version: '2.0.0',
+      version: packageInfo.version,
       timestamp: new Date().toISOString(),
       totalDurationMs: totalMs,
       sourcesQueried: sources.length,
       sourcesOk: sources.filter(s => s.status === 'ok').length,
-      sourcesFailed: sources.filter(s => s.status !== 'ok').length,
+      sourcesFailed: sources.filter(s => s.status === 'error' || s.status === 'failed').length,
+      sourcesDisabled: sources.filter(s => s.status === 'disabled').length,
+      sourcesStale: sources.filter(s => s.status === 'stale').length,
     },
     sources: Object.fromEntries(
-      sources.filter(s => s.status === 'ok').map(s => [s.name, s.data])
+      sources.filter(s => s.name).map(s => [s.name, s.data || { error: s.error }])
     ),
-    errors: sources.filter(s => s.status !== 'ok').map(s => ({ name: s.name, error: s.error })),
+    errors: sources.filter(s => s.status === 'error' || s.status === 'failed').map(s => ({ name: s.name, error: s.error })),
     timing: Object.fromEntries(
       sources.map(s => [s.name, { status: s.status, ms: s.durationMs }])
     ),

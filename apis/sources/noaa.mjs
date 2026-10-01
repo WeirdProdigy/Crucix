@@ -11,10 +11,10 @@ export async function getActiveAlerts(opts = {}) {
     severity = null,  // Extreme, Severe, Moderate, Minor
     urgency = null,   // Immediate, Expected, Future
     event = null,     // e.g. "Tornado Warning", "Hurricane Warning"
-    limit = 50,
   } = opts;
 
-  const params = new URLSearchParams({ limit: String(limit), status: 'actual' });
+  // NWS /alerts/active does not support limit; totals must cover all active alerts.
+  const params = new URLSearchParams({ status: 'actual' });
   if (severity) params.set('severity', severity);
   if (urgency) params.set('urgency', urgency);
   if (event) params.set('event', event);
@@ -32,7 +32,15 @@ export async function getSevereAlerts() {
 // Briefing — severe weather events that could impact markets/supply chains
 export async function briefing() {
   const alerts = await getSevereAlerts();
-  const features = alerts?.features || [];
+  const source = 'NOAA/NWS';
+  const timestamp = new Date().toISOString();
+  if (alerts?.error) {
+    return { source, timestamp, error: alerts.error, ...(alerts.status ? { status: alerts.status } : {}) };
+  }
+  if (!Array.isArray(alerts?.features) || alerts.features.some(feature => !feature || typeof feature !== 'object')) {
+    return { source, timestamp, error: 'Invalid NOAA/NWS alert response: expected a features array' };
+  }
+  const features = alerts.features;
 
   // Categorize by impact type
   const hurricanes = features.filter(f => /hurricane|typhoon|tropical/i.test(f.properties?.event));
@@ -46,8 +54,8 @@ export async function briefing() {
   });
 
   return {
-    source: 'NOAA/NWS',
-    timestamp: new Date().toISOString(),
+    source,
+    timestamp,
     totalSevereAlerts: features.length,
     summary: {
       hurricanes: hurricanes.length,

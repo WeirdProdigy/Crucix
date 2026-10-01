@@ -28,7 +28,7 @@ export async function searchEvents(query = '', opts = {}) {
     sort: sortBy,
   });
 
-  return safeFetch(`${BASE}/doc/doc?${params}`);
+  return safeFetch(`${BASE}/doc/doc?${params}`, { retryDelay: 5000 });
 }
 
 // Get tone/sentiment timeline for a topic
@@ -39,7 +39,7 @@ export async function toneTrend(query, timespan = '7d') {
     timespan,
     format: 'json',
   });
-  return safeFetch(`${BASE}/doc/doc?${params}`);
+  return safeFetch(`${BASE}/doc/doc?${params}`, { retryDelay: 5000 });
 }
 
 // Get volume timeline for a topic (how much coverage)
@@ -50,7 +50,7 @@ export async function volumeTrend(query, timespan = '7d') {
     timespan,
     format: 'json',
   });
-  return safeFetch(`${BASE}/doc/doc?${params}`);
+  return safeFetch(`${BASE}/doc/doc?${params}`, { retryDelay: 5000 });
 }
 
 // GEO API — geographic event mapping
@@ -96,6 +96,7 @@ export async function briefing() {
     'conflict OR military OR economy OR crisis OR war OR sanctions OR tariff OR strike OR outbreak',
     { maxRecords: 50, timespan: '24h' }
   );
+  if (all.error) return { source: 'GDELT', timestamp: new Date().toISOString(), error: all.error, allArticles: [], geoPoints: [] };
 
   const articles = (all?.articles || []).map(compactArticle);
 

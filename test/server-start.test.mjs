@@ -15,7 +15,7 @@ test('real server starts on a five-digit port with isolated runtime data', { tim
   const directory = mkdtempSync(join(tmpdir(), 'crucix-server-'));
   const envFile = join(directory, 'empty.env');
   writeFileSync(envFile, '');
-  const child = spawn(process.execPath, ['server.mjs'], {
+  const child = spawn(process.execPath, ['--import', new URL('./fixtures/block-network.mjs', import.meta.url).href, 'server.mjs'], {
     cwd: new URL('..', import.meta.url), windowsHide: true,
     env: { ...process.env, CRUCIX_ENV_FILE: envFile, RUNS_DIR: join(directory, 'runs'), PORT: String(port), HOST: '127.0.0.1',
       NO_AUTO_OPEN: '1', AUTH_USER: '', AUTH_PASSWORD: '', LLM_PROVIDER: '', TELEGRAM_BOT_TOKEN: '',

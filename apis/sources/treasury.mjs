@@ -58,6 +58,7 @@ export async function briefing() {
 
   return {
     source: 'US Treasury',
+    ...(debt.error || rates.error ? { error: debt.error || rates.error } : {}),
     timestamp: new Date().toISOString(),
     debt: debtData.slice(0, 5).map(d => ({
       date: d.record_date,

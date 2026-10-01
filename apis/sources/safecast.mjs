@@ -16,7 +16,7 @@ export async function getMeasurements(opts = {}) {
   } = opts;
 
   const params = new URLSearchParams({ limit: String(limit) });
-  if (latitude && longitude) {
+  if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
     params.set('latitude', String(latitude));
     params.set('longitude', String(longitude));
     params.set('distance', String(distance * 1000)); // meters
@@ -52,6 +52,7 @@ export async function briefing() {
       const avgCPM = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : null;
 
       return {
+        ...(data.error ? { error: data.error } : {}),
         site: site.label,
         key,
         recentReadings: values.length,
@@ -72,7 +73,9 @@ export async function briefing() {
     sites: results,
     signals: anomalies.length > 0
       ? anomalies.map(a => `ELEVATED RADIATION at ${a.site}: ${a.avgCPM?.toFixed(1)} CPM (normal: 10-80)`)
-      : ['All monitored nuclear sites within normal radiation levels'],
+      : results.every(r => r.recentReadings > 0 && !r.error)
+        ? ['Available readings at monitored sites below the configured threshold']
+        : ['Insufficient readings to assess every monitored site'],
   };
 }
 

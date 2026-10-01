@@ -1,3 +1,4 @@
+import { readBoundedText } from '../utils/fetch.mjs';
 // ReliefWeb — UN OCHA humanitarian crisis tracking
 // Requires approved appname since Nov 2025. Register at https://apidoc.reliefweb.int/parameters#appname
 // Falls back to HDX (Humanitarian Data Exchange) if ReliefWeb API returns 403.
@@ -33,8 +34,7 @@ const HEALTH_KEYWORD_RE = /outbreak|epidemic|pandemic|cholera|measles|mpox|dengu
 async function rwPost(endpoint, body) {
   const url = `${BASE}/${endpoint}?appname=${APPNAME}`;
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
+    const signal = AbortSignal.timeout(15000);
     const res = await fetch(url, {
       method: 'POST',
       headers: {
@@ -42,14 +42,13 @@ async function rwPost(endpoint, body) {
         'User-Agent': 'Crucix/1.0',
       },
       body: JSON.stringify(body),
-      signal: controller.signal,
+      signal,
     });
-    clearTimeout(timer);
     if (!res.ok) {
-      const errBody = await res.text().catch(() => '');
+      const errBody = await readBoundedText(res).catch(() => '');
       throw new Error(`HTTP ${res.status}: ${errBody.slice(0, 200)}`);
     }
-    return await res.json();
+    return JSON.parse(await readBoundedText(res));
   } catch (e) {
     return { error: e.message, source: url };
   }

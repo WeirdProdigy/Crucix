@@ -1,3 +1,4 @@
+import { readBoundedText } from '../utils/fetch.mjs';
 // WHO — World Health Organization Global Health Observatory
 // No auth required. Disease outbreak monitoring.
 
@@ -80,20 +81,18 @@ function stripHtml(text, limit = 300) {
 // empty array, while `diseaseoutbreaknews` returns the live DON items.
 export async function getOutbreakNews() {
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
+    const signal = AbortSignal.timeout(15000);
     const res = await fetch(`${DON_API}${DON_QUERY}`, {
-      signal: controller.signal,
+      signal,
       headers: { 'User-Agent': 'Crucix/1.0' },
     });
-    clearTimeout(timer);
 
     if (!res.ok) {
-      const body = await res.text().catch(() => '');
+      const body = await readBoundedText(res).catch(() => '');
       throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
     }
 
-    const data = await res.json();
+    const data = JSON.parse(await readBoundedText(res));
     const items = data?.value || [];
 
     // Prefer recent items, but the official DON feed is sparse and may go

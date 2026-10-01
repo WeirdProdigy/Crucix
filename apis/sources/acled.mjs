@@ -1,3 +1,4 @@
+import { readBoundedText } from '../utils/fetch.mjs';
 // ACLED — Armed Conflict Location & Event Data
 // Auth strategy (tries in order):
 //   1. Cookie-based session: POST /user/login?_format=json → session cookie
@@ -17,17 +18,15 @@ let sessionCache = { cookies: null, token: null, method: null, expires: 0 };
 
 // Strategy 1: Cookie-based session login (mirrors browser login)
 async function loginCookie(email, password) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
+  const signal = AbortSignal.timeout(15000);
   try {
     const res = await fetch(LOGIN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: email, pass: password }),
       redirect: 'manual',
-      signal: controller.signal,
+      signal,
     });
-    clearTimeout(timer);
 
     // Collect Set-Cookie headers
     const setCookies = res.headers.getSetCookie?.() || [];
@@ -42,10 +41,9 @@ async function loginCookie(email, password) {
       return { cookies: cookieStr };
     }
 
-    const errText = await res.text().catch(() => '');
-    return { error: `Cookie login failed (HTTP ${res.status}): ${errText.slice(0, 200)}` };
+    await res.body?.cancel();
+    return { error: `Cookie login failed (HTTP ${res.status})` };
   } catch (e) {
-    clearTimeout(timer);
     const cause = e.cause ? ` → ${e.cause.message || e.cause.code || e.cause}` : '';
     return { error: `Cookie login error: ${e.message}${cause}` };
   }
@@ -53,8 +51,7 @@ async function loginCookie(email, password) {
 
 // Strategy 2: OAuth2 password grant
 async function loginOAuth(email, password) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
+  const signal = AbortSignal.timeout(15000);
   try {
     const body = new URLSearchParams({
       username: email,
@@ -67,23 +64,21 @@ async function loginOAuth(email, password) {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
-      signal: controller.signal,
+      signal,
     });
-    clearTimeout(timer);
 
     if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      return { error: `OAuth failed (HTTP ${res.status}): ${errText.slice(0, 200)}` };
+      await res.body?.cancel();
+      return { error: `OAuth failed (HTTP ${res.status})` };
     }
 
-    const data = await res.json();
+    const data = JSON.parse(await readBoundedText(res));
     if (!data.access_token) {
-      return { error: `OAuth response missing access_token: ${JSON.stringify(data).slice(0, 200)}` };
+      return { error: 'OAuth response missing access_token' };
     }
 
     return { token: data.access_token };
   } catch (e) {
-    clearTimeout(timer);
     const cause = e.cause ? ` → ${e.cause.message || e.cause.code || e.cause}` : '';
     return { error: `OAuth error: ${e.message}${cause}` };
   }
@@ -179,18 +174,15 @@ export async function getEvents(opts = {}) {
       console.error(`[ACLED DEBUG] Data request: GET ${url}`);
       console.error(`[ACLED DEBUG] Authentication method: ${session.method}; credential headers redacted`);
     }
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 25000);
+    const signal = AbortSignal.timeout(25000);
     const res = await fetch(url, {
       headers: hdrs,
-      signal: controller.signal,
+      signal,
     });
-    clearTimeout(timer);
     if (debug) console.error(`[ACLED DEBUG] Data response: HTTP ${res.status}`);
 
     if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      if (debug) console.error(`[ACLED DEBUG] Error body: ${errText.slice(0, 500)}`);
+      await res.body?.cancel();
       if (res.status === 401 || res.status === 403) {
         // Clear cache and report
         sessionCache = { cookies: null, token: null, method: null, expires: 0 };
@@ -201,12 +193,12 @@ export async function getEvents(opts = {}) {
             + '  3. Ensure your account has the "API" access group\n'
             + '  Contact access@acleddata.com if issues persist.'
           : '';
-        return { error: `ACLED data access denied (HTTP ${res.status}, auth method: ${session.method}). Response: ${errText.slice(0, 300)}${hint}` };
+        return { error: `ACLED data access denied (HTTP ${res.status}, auth method: ${session.method}).${hint}` };
       }
-      return { error: `HTTP ${res.status}: ${errText.slice(0, 200)}` };
+      return { error: `HTTP ${res.status}` };
     }
 
-    const data = await res.json();
+    const data = JSON.parse(await readBoundedText(res));
 
     // ACLED may return a 200 with an error status in the body
     if (data?.status && data.status !== 200) {

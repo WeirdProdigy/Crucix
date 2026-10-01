@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { briefing } from '../apis/sources/telegram.mjs';
+import { briefing, flagUrgent } from '../apis/sources/telegram.mjs';
 
 test('command bot token never causes private message collection', async () => {
   const oldFetch = globalThis.fetch;
@@ -21,4 +21,8 @@ test('command bot token never causes private message collection', async () => {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
     }
   }
+});
+test('urgent keyword matching does not turn ordinary word substrings into alerts', () => {
+  assert.equal(flagUrgent({ text: 'Unconfirmed rumor' }), null);
+  assert.ok(flagUrgent({ text: 'Breaking news: missile launch' }).includes('breaking'));
 });

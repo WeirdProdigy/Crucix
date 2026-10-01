@@ -21,6 +21,8 @@ const CHOKEPOINTS = {
   bosporusStrait: { label: 'Bosphorus', lat: 41.1, lon: 29.1, note: 'Black Sea access' },
   panamaCanal: { label: 'Panama Canal', lat: 9.1, lon: -79.7, note: '5% of world trade' },
   capeOfGoodHope: { label: 'Cape of Good Hope', lat: -34.4, lon: 18.5, note: 'Suez alternative' },
+  beringStrait: { label: 'Bering Strait', lat: 65.8, lon: -169, note: 'Arctic Pacific gateway' },
+  lancasterSound: { label: 'Lancaster Sound', lat: 74.1, lon: -83, note: 'Northwest Passage gateway' },
 };
 
 // For non-realtime briefing, use web-searchable vessel data
@@ -30,9 +32,9 @@ export async function briefing() {
   return {
     source: 'Maritime/AIS',
     timestamp: new Date().toISOString(),
-    status: hasKey ? 'ready' : 'limited',
+    status: 'reference',
     message: hasKey
-      ? 'AIS stream connected — use WebSocket listener for real-time data'
+      ? 'AIS key configured; this briefing provides reference chokepoints, not a live vessel stream'
       : 'Set AISSTREAM_API_KEY for real-time global vessel tracking (free at aisstream.io)',
     chokepoints: CHOKEPOINTS,
     monitoringCapabilities: [

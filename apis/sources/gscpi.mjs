@@ -1,3 +1,4 @@
+import { readBoundedText } from '../utils/fetch.mjs';
 // GSCPI — NY Fed Global Supply Chain Pressure Index
 // Measures global supply chain stress (standard deviations from historical average).
 // Values above 0 = above average pressure. Above 1.0 = elevated. Below -1.0 = unusually loose.
@@ -7,18 +8,16 @@ const GSCPI_CSV_URL = 'https://www.newyorkfed.org/medialibrary/research/interact
 
 // Fetch and parse the GSCPI CSV from the NY Fed
 // The CSV is wide-format: each column is a revision vintage, last column is latest estimate.
-// Uses raw fetch instead of safeFetch because safeFetch truncates non-JSON to 500 chars.
+// CSV bodies are bounded and read under the same deadline as the request.
 export async function getGSCPI(months = 12) {
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 20000);
+    const signal = AbortSignal.timeout(20000);
     const res = await fetch(GSCPI_CSV_URL, {
-      signal: controller.signal,
+      signal,
       headers: { 'User-Agent': 'Crucix/1.0' },
     });
-    clearTimeout(timer);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
+    const text = await readBoundedText(res);
     return { data: parseCSV(text, months) };
   } catch (e) {
     return { error: e.message || 'Failed to fetch GSCPI data', data: [] };

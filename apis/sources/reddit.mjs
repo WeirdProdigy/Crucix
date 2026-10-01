@@ -33,6 +33,7 @@ async function getToken() {
         'User-Agent': 'Crucix/1.0 intelligence-engine',
       },
       body: 'grant_type=client_credentials',
+      signal: AbortSignal.timeout(15000),
     });
     if (!res.ok) return null;
     const data = await res.json();
@@ -56,10 +57,7 @@ export async function getHot(subreddit, opts = {}) {
     });
   }
 
-  // Try public endpoint (may 403)
-  return safeFetch(`https://www.reddit.com/r/${subreddit}/hot.json?limit=${limit}&raw_json=1`, {
-    headers: { 'User-Agent': 'Crucix/1.0 intelligence-engine' },
-  });
+  return { error: 'Reddit OAuth token required' };
 }
 
 function compactPost(child) {
@@ -77,18 +75,21 @@ function compactPost(child) {
 export async function briefing() {
   const token = await getToken();
 
-  if (!token && !process.env.REDDIT_CLIENT_ID) {
+  if (!process.env.REDDIT_CLIENT_ID || !process.env.REDDIT_CLIENT_SECRET) {
     return {
       source: 'Reddit',
       timestamp: new Date().toISOString(),
       status: 'no_key',
+      disabled: true,
       message: 'Reddit requires OAuth. Register at https://www.reddit.com/prefs/apps/ (script type), set REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET in .env',
     };
   }
 
   const subredditResults = {};
+  if (!token) return { source: 'Reddit', timestamp: new Date().toISOString(), error: 'Reddit OAuth authentication failed' };
   for (const sub of SUBREDDITS) {
     const result = await getHot(sub, { limit: 10, token });
+    if (result.error) return { source: 'Reddit', timestamp: new Date().toISOString(), error: result.error, subreddits: subredditResults };
     const children = result?.data?.children || [];
     subredditResults[sub] = children.map(compactPost).filter(Boolean);
     await delay(token ? 1000 : 2000);

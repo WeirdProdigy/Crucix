@@ -9,13 +9,14 @@ import { fileURLToPath } from 'url';
 import { openBrowser } from './lib/open-browser.mjs';
 import { inlineJson } from './lib/html.mjs';
 import { installHttpSecurity } from './lib/http-security.mjs';
+import { saveSnapshot } from './lib/snapshots.mjs';
 import config from './crucix.config.mjs';
 import { getLocale, currentLanguage, getSupportedLocales } from './lib/i18n.mjs';
 import { fullBriefing } from './apis/briefing.mjs';
 import { synthesize, generateIdeas } from './dashboard/inject.mjs';
-import { MemoryManager } from './lib/delta/index.mjs';
+import { MemoryManager, computeDelta } from './lib/delta/index.mjs';
 import { createLLMProvider } from './lib/llm/index.mjs';
-import { generateLLMIdeas } from './lib/llm/ideas.mjs';
+import { IdeaCadence } from './lib/llm/cadence.mjs';
 import { TelegramAlerter } from './lib/alerts/telegram.mjs';
 import { DiscordAlerter } from './lib/alerts/discord.mjs';
 
@@ -39,6 +40,7 @@ const sseClients = new Set();
 
 // === Delta/Memory ===
 const memory = new MemoryManager(RUNS_DIR);
+const ideaCadence = new IdeaCadence({ everyNSweeps: config.llm.everyNSweeps });
 
 // === LLM + Telegram + Discord ===
 const llmProvider = createLLMProvider(config.llm);
@@ -280,7 +282,8 @@ app.get('/api/health', (req, res) => {
     sweepStartedAt,
     sourcesOk: currentData?.meta?.sourcesOk || 0,
     sourcesFailed: currentData?.meta?.sourcesFailed || 0,
-    llmEnabled: !!config.llm.provider,
+    llmEnabled: !!llmProvider?.isConfigured,
+    ideasEveryNSweeps: ideaCadence.everyNSweeps,
     llmProvider: config.llm.provider,
     telegramEnabled: !!(config.telegram.botToken && config.telegram.chatId),
     refreshIntervalMinutes: config.refreshIntervalMinutes,
@@ -340,45 +343,24 @@ async function runSweepCycle() {
     const rawData = await fullBriefing();
 
     // 2. Save to runs/latest.json
-    writeFileSync(join(RUNS_DIR, 'latest.json'), JSON.stringify(rawData, null, 2));
+    saveSnapshot(RUNS_DIR, rawData);
     lastSweepTime = new Date().toISOString();
 
     // 3. Synthesize into dashboard format
     console.log('[Crucix] Synthesizing dashboard data...');
     const synthesized = await synthesize(rawData);
 
-    // 4. Delta computation + memory
-    const delta = memory.addRun(synthesized);
+    // Calculate against the prior run; persist only after ideas have been resolved.
+    const previous = memory.getLastRun();
+    const delta = computeDelta(synthesized, previous, config.delta.thresholds,
+      memory.getRunHistory().map(run => run.data));
     synthesized.delta = delta;
-
-    // 5. LLM-powered trade ideas (LLM-only feature) — isolated so failures don't kill sweep
-    if (llmProvider?.isConfigured) {
-      try {
-        console.log('[Crucix] Generating LLM trade ideas...');
-        const previousIdeas = memory.getLastRun()?.ideas || [];
-        const llmIdeas = await generateLLMIdeas(
-          llmProvider,
-          synthesized,
-          delta,
-          previousIdeas,
-          config.llm.tradeIdeasLang
-        );
-        if (llmIdeas) {
-          synthesized.ideas = llmIdeas;
-          synthesized.ideasSource = 'llm';
-          console.log(`[Crucix] LLM generated ${llmIdeas.length} ideas`);
-        } else {
-          synthesized.ideas = [];
-          synthesized.ideasSource = 'llm-failed';
-        }
-      } catch (llmErr) {
-        console.error('[Crucix] LLM ideas failed (non-fatal):', llmErr.message);
-        synthesized.ideas = [];
-        synthesized.ideasSource = 'llm-failed';
-      }
-    } else {
-      synthesized.ideas = [];
-      synthesized.ideasSource = 'disabled';
+    Object.assign(synthesized, await ideaCadence.resolve(llmProvider, synthesized, delta,
+      previous?.ideas || [], config.llm.tradeIdeasLang));
+    memory.addRun(synthesized, config.delta.thresholds);
+    if (discordAlerter.isConfigured && synthesized.ideasSource === 'llm' && !synthesized.ideasCached) {
+      discordAlerter.sendActionableIdeas(synthesized.ideas).catch(error =>
+        console.error('[Discord] Idea delivery failed:', error.message));
     }
 
     // 6. Alert evaluation — Telegram + Discord (LLM with rule-based fallback, multi-tier, semantic dedup)
@@ -451,15 +433,14 @@ async function start() {
     console.log(`[Crucix] Server running on http://localhost:${port}`);
 
     // Auto-open browser
-    // NOTE: On Windows, `start` in PowerShell is an alias for Start-Service, not cmd's start.
-    // We must use `cmd /c start ""` to ensure it works in both cmd.exe and PowerShell.
     openBrowser(`http://localhost:${port}`);
 
     // Try to load existing data first for instant display (await so dashboard shows immediately)
     try {
       const existing = JSON.parse(readFileSync(join(RUNS_DIR, 'latest.json'), 'utf8'));
-      const data = await synthesize(existing);
+      const data = await synthesize(existing, { news: [] });
       currentData = data;
+      lastSweepTime = data.meta?.timestamp || null;
       console.log('[Crucix] Loaded existing data from runs/latest.json — dashboard ready instantly');
       broadcast({ type: 'update', data: currentData });
     } catch {

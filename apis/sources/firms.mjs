@@ -1,3 +1,4 @@
+import { readBoundedText } from '../utils/fetch.mjs';
 // NASA FIRMS — Fire Information for Resource Management System
 // Detects active fires/thermal anomalies globally within 3 hours of satellite pass.
 // Detects military strikes, explosions, wildfires, industrial fires.
@@ -32,19 +33,16 @@ async function fetchFires(opts = {}) {
   if (!key) return { error: 'No FIRMS_MAP_KEY' };
 
   const url = `${FIRMS_BASE}/${key}/${source}/${west},${south},${east},${north}/${days}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 25000);
+  const signal = AbortSignal.timeout(25000);
   try {
     const res = await fetch(url, {
-      signal: controller.signal,
+      signal,
       headers: { 'User-Agent': 'Crucix/1.0' },
     });
-    clearTimeout(timer);
     if (!res.ok) return { error: `HTTP ${res.status}` };
-    const text = await res.text();
+    const text = await readBoundedText(res);
     return parseCSV(text);
   } catch (e) {
-    clearTimeout(timer);
     return { error: e.message };
   }
 }

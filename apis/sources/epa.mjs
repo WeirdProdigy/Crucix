@@ -130,6 +130,7 @@ export async function briefing() {
 
   // Fetch recent analytical results (broad pull)
   const recentData = await getAnalyticalResults({ rows: 100 });
+  if (recentData.error) return { source: 'EPA RadNet', timestamp: new Date().toISOString(), error: recentData.error, readings: [], signals: ['Radiation readings unavailable'] };
   const recentRecords = Array.isArray(recentData) ? recentData : [];
 
   // Compact all readings
@@ -141,7 +142,7 @@ export async function briefing() {
     ['GROSS BETA', 'IODINE-131', 'CESIUM-137'].map(async analyte => {
       const data = await getResultsByAnalyte(analyte, { rows: 20 });
       const records = Array.isArray(data) ? data : [];
-      return { analyte, records: records.map(compactReading) };
+      return { analyte, records: records.map(compactReading), ...(data.error ? { error: data.error } : {}) };
     })
   );
 
@@ -197,11 +198,14 @@ export async function briefing() {
     source: 'EPA RadNet',
     timestamp: new Date().toISOString(),
     totalReadings: readings.length,
+    ...(analyteResults.some(r => r.error) ? { error: 'Some EPA analyte requests failed' } : {}),
     readings: readings.slice(0, 50), // cap for briefing size
     stateSummary,
     signals: signals.length > 0
       ? signals
-      : ['All EPA RadNet readings within normal background levels'],
+      : readings.length && !analyteResults.some(r => r.error)
+        ? ['Available EPA RadNet readings below the configured thresholds']
+        : ['Insufficient EPA RadNet readings for a complete assessment'],
     monitoredAnalytes: KEY_ANALYTES,
     thresholds: THRESHOLDS,
     note: 'RadNet data may lag by hours to days. Near-real-time gamma data updates more frequently.',

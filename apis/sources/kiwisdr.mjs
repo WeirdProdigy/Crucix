@@ -1,3 +1,4 @@
+import { readBoundedText } from '../utils/fetch.mjs';
 // KiwiSDR Network — Global software-defined radio receiver network
 // No auth required. ~900 public HF receivers worldwide (0-30 MHz).
 // Useful for SIGINT awareness: HF band activity, receiver distribution,
@@ -11,15 +12,13 @@ const RECEIVERBOOK_URL = 'https://www.receiverbook.de/map?type=kiwisdr';
 // Fetch the full list of public KiwiSDR receivers from receiverbook.de
 export async function getAllReceivers() {
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 20000);
+    const signal = AbortSignal.timeout(20000);
     const res = await fetch(RECEIVERBOOK_URL, {
       headers: { 'User-Agent': 'Crucix/1.0' },
-      signal: controller.signal,
+      signal,
     });
-    clearTimeout(timer);
     if (!res.ok) return { error: `HTTP ${res.status}` };
-    const html = await res.text();
+    const html = await readBoundedText(res);
     // Extract embedded JS: var receivers = [...];
     const match = html.match(/var\s+receivers\s*=\s*(\[[\s\S]*?\]);/);
     if (!match) return { error: 'Could not parse receiver data from page' };

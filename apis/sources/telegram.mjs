@@ -153,6 +153,7 @@ function parseWebPreview(html, channelId) {
     if (text || hasMedia) {
       messages.push({
         postId,
+        url: /^\w+\/\d+$/.test(postId) ? `https://t.me/${postId}` : undefined,
         text,
         date,
         views,
@@ -186,9 +187,9 @@ async function scrapeChannel(channelId) {
 // ─── Analysis helpers ───────────────────────────────────────────────────────
 
 // Flag urgent/high-priority posts
-function flagUrgent(post) {
+export function flagUrgent(post) {
   const lower = (post.text || '').toLowerCase();
-  const matched = URGENT_KEYWORDS.filter(k => lower.includes(k));
+  const matched = URGENT_KEYWORDS.filter(k => new RegExp(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(lower));
   return matched.length > 0 ? matched : null;
 }
 

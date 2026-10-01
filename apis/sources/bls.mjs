@@ -1,3 +1,4 @@
+import { readBoundedText } from '../utils/fetch.mjs';
 // BLS — Bureau of Labor Statistics
 // CPI, unemployment, nonfarm payrolls, PPI. No auth required (v1 API).
 // v2 with registration key supports more requests; v1 is rate-limited but functional.
@@ -37,16 +38,14 @@ export async function getSeries(seriesIds, opts = {}) {
   if (apiKey) payload.registrationkey = apiKey;
 
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
+    const signal = AbortSignal.timeout(15000);
     const res = await fetch(base, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
-      signal: controller.signal,
+      signal,
     });
-    clearTimeout(timer);
-    return await res.json();
+    return JSON.parse(await readBoundedText(res));
   } catch (e) {
     return { error: e.message };
   }
