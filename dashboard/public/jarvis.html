@@ -4,14 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CRUCIX — Intelligence Terminal</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
-<script src="https://d3js.org/d3.v7.min.js"></script>
-<script src="https://d3js.org/topojson.v3.min.js"></script>
-<script src="https://unpkg.com/globe.gl@2.33.0"></script>
+<link href="vendor/fonts.css" rel="stylesheet">
+<script src="vendor/gsap-3.12.5.min.js"></script>
+<script src="vendor/d3-7.9.0.min.js"></script>
+<script src="vendor/topojson-client-3.1.0.min.js"></script>
+<script src="vendor/globe.gl-2.33.0.min.js"></script>
+<script src="vendor/countries-110m-2.0.2.js"></script>
 <link rel="stylesheet" href="intelligence.css">
 <script src="intelligence.js"></script>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#020408">
+<script src="pwa.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -56,7 +59,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .region-btn{border:1px solid var(--border);background:rgba(255,255,255,0.02);color:var(--dim);font-family:var(--mono);font-size:11px;padding:6px 12px;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;transition:all 0.2s}
 .region-btn:hover{border-color:var(--accent);color:var(--text)}
 .region-btn.active{color:#03140d;background:var(--accent);border-color:var(--accent)}
-.top-right{display:flex;align-items:center;gap:10px}
+.top-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;max-width:100%}
 .meta-pill{font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:0.06em;padding:5px 10px;border:1px solid var(--border)}
 .meta-pill .v{color:var(--text);font-weight:500}
 .alert-badge{padding:5px 12px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;border:1px solid rgba(255,95,99,0.4);color:#fff;background:linear-gradient(135deg,rgba(255,95,99,0.2),rgba(255,95,99,0.08))}
@@ -895,7 +898,7 @@ function renderRegionControls(){
 function renderTopbar(){
   const mobile = isMobileLayout();
   const showRegionControls = isFixedModuleVisible('map') && isFixedModuleVisible('mapRegions');
-  const ts = new Date(D.meta.timestamp);
+  const ts = D.meta.timestamp ? new Date(D.meta.timestamp) : new Date(NaN);
   const dateLocale=L.meta?.code==='hu'?'hu-HU':L.meta?.code==='fr'?'fr-FR':'en-US';
   const knownTime=Number.isFinite(ts.getTime());
   const d = !knownTime?t('status.unknownTime','Unknown time'):ts.toLocaleDateString(dateLocale,{month:'short',day:'numeric',year:'numeric'}).toUpperCase();
@@ -915,6 +918,8 @@ function renderTopbar(){
       <button class="guide-btn" id="settingsTrigger" onclick="openSettings()" aria-haspopup="dialog">${t('dashboard.settings','Settings')}</button>
       <button class="guide-btn" id="eventsTrigger" onclick="CrucixIntelligence.openEvents()" aria-haspopup="dialog">${t('intelligence.events','Events')}</button>
       <button class="guide-btn" id="historyTrigger" onclick="CrucixIntelligence.openHistory()" aria-haspopup="dialog">${t('intelligence.history','Event history')}</button>
+      <button class="guide-btn" id="profilesTrigger" onclick="CrucixIntelligence.openProfiles()" aria-haspopup="dialog">${t('intelligence.profiles','Workspace profiles')}</button>
+      ${location.protocol==='file:'?'':`<button class="guide-btn" id="pwaTrigger" onclick="CrucixPWA.openSettings()" aria-haspopup="dialog">${t('pwa.menu','Install / offline')}</button>`}
       <button class="guide-btn" id="clusterTrigger" onclick="toggleNewsGrouping()" aria-pressed="${groupNews}">${t('intelligence.groupNews','Group nearby reports')}</button>
       <button class="guide-btn" onclick="openGlossary()">${t('dashboard.guideBtn','What Signals Mean')}</button>
       <span class="alert-badge">${D.delta?.summary?.criticalChanges>0?t('dashboard.highAlert','HIGH ALERT'):t('dashboard.monitoring','MONITORING')}</span>
@@ -1286,8 +1291,8 @@ function initGlobe(){
   globe = Globe()
     .width(w)
     .height(h)
-    .globeImageUrl('//unpkg.com/three-globe@2.33.0/example/img/earth-night.jpg')
-    .bumpImageUrl('//unpkg.com/three-globe@2.33.0/example/img/earth-topology.png')
+    .globeImageUrl('vendor/earth-night-2.33.0.jpg')
+    .bumpImageUrl('vendor/earth-topology-2.33.0.png')
     .backgroundImageUrl('')
     .backgroundColor('rgba(0,0,0,0)')
     .atmosphereColor('#64f0c8')
@@ -1752,7 +1757,7 @@ function drawFlatMap(){
   const version=++flatDrawVersion;
   flatG.append('path').datum(d3.geoGraticule()()).attr('class','graticule').attr('d',flatPath);
   plotFlatMarkers();
-  if(!mapGeometryPromise)mapGeometryPromise=fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(r=>{if(!r.ok)throw new Error('Map geometry unavailable');return r.json()}).catch(()=>{mapGeometryPromise=null;return null});
+  if(!mapGeometryPromise)mapGeometryPromise=window.__CRUCIX_WORLD_GEOMETRY__?Promise.resolve(window.__CRUCIX_WORLD_GEOMETRY__):fetch('vendor/countries-110m-2.0.2.json').then(r=>{if(!r.ok)throw new Error('Map geometry unavailable');return r.json()}).catch(()=>{mapGeometryPromise=null;return null});
   mapGeometryPromise.then(world=>{
     if(version!==flatDrawVersion)return;
     if(!world){document.getElementById('mapHint').textContent=t('status.mapUnavailable','Map background unavailable · signal points retained');return;}
@@ -2264,12 +2269,14 @@ function updateRuntimeStatus(){
   fresh.dataset.state=stale?'stale':'live';
   fresh.textContent=t('status.data','Data')+': '+(!Number.isFinite(timestamp)?t('status.noSnapshot','Waiting for the first snapshot'):stale?t('status.stale','Stale / cached'):t('status.fresh','Fresh'))+' · '+getAge(D.meta?.timestamp);
   if(air)air.textContent=D.airMeta?.fallback?t('status.airCached','Air positions are cached')+' · '+getAge(D.airMeta.timestamp):'';
+  window.CrucixPWA?.renderStatus();
 }
-function applySnapshot(data){
+function applySnapshot(data,{cached=false}={}){
   if(!validSnapshot(data))throw new Error('Invalid dashboard snapshot');
   const incomingTime=Date.parse(data.meta.timestamp),currentTime=Date.parse(D.meta?.timestamp);
   if(Number.isFinite(currentTime)&&incomingTime<currentTime)return false;
   D=normalizeSnapshot(data);lastSweepError='';reinit();updateRuntimeStatus();
+  if(!cached){window.CrucixPWA?.markLive();window.CrucixPWA?.cacheLive(D);}
   return true;
 }
 async function pollSnapshot(){
@@ -2318,9 +2325,10 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.documentElement.lang=L.meta?.code||'en';document.title=t('dashboard.title',document.title);
   window.CrucixIntelligence?.init({getSnapshot:()=>D,getLayout:()=>dashboardLayout,
     applyLayout:value=>{dashboardLayout=normalizeDashboardLayout(value);saveDashboardLayout();reinit();},
-    getLayers:()=>mapLayers,applyLayers:value=>{for(const layer of mapLayerRegistry)if(typeof value?.[layer.id]==='boolean')setMapLayer(layer.id,value[layer.id]);},
-    getRegion:()=>currentRegion,applyRegion:setRegion,t,escapeText:esc,historyEnabled:true,profilesEnabled:false});
+    getLayers:()=>mapLayers,applyLayers:value=>{for(const layer of mapLayerRegistry)if(typeof value?.[layer.id]==='boolean')mapLayers[layer.id]=value[layer.id];flightsVisible=mapLayers.air!==false;writePreference(MAP_LAYER_STORAGE_KEY,JSON.stringify(mapLayers));reinit();},
+    getRegion:()=>currentRegion,applyRegion:setRegion,t,escapeText:esc,historyEnabled:location.protocol!=='file:',profilesEnabled:true});
   init();
+  if(location.protocol!=='file:')CrucixPWA.init({getSnapshot:()=>D,applySnapshot:data=>!D.meta.timestamp&&applySnapshot(data,{cached:true}),t});
   if(location.protocol!=='file:'){
     connectSSE();pollSnapshot();
     fetch('/api/health',{cache:'no-store',signal:AbortSignal.timeout(10000)}).then(response=>response.ok?response.json():null).then(health=>{if(Number.isFinite(health?.refreshIntervalMinutes)&&health.refreshIntervalMinutes>0)refreshIntervalMinutes=health.refreshIntervalMinutes;updateRuntimeStatus();}).catch(()=>{});

@@ -15,7 +15,7 @@ assert(['detail', 'history', 'profiles', 'all'].includes(phase), 'QA_PHASE is de
 const artifacts = process.env.QA_ARTIFACT_DIR || path.join(os.tmpdir(), 'crucix-intelligence-qa');
 fs.mkdirSync(artifacts, { recursive: true });
 const vendor = fileURLToPath(new URL('../dashboard/public/vendor/', import.meta.url));
-const errors = [], external = [];
+const errors = [], external = [], legacyAssets = [];
 const browser = await chromium.launch({ headless: true, args: ['--enable-unsafe-swiftshader'] });
 
 async function localAssets(context) {
@@ -29,6 +29,7 @@ async function localAssets(context) {
     ];
     const file = mappings.find(([pattern]) => pattern.test(url.href))?.[1];
     if (!file) { external.push(url.origin + url.pathname); return route.abort(); }
+    legacyAssets.push(url.origin + url.pathname);
     const absolute = path.join(vendor, file);
     const contentType = file.endsWith('.js') ? 'application/javascript' : file.endsWith('.json') ? 'application/json' : file.endsWith('.css') ? 'text/css' : file.endsWith('.png') ? 'image/png' : 'image/jpeg';
     const body = file === 'fonts.css' ? fs.readFileSync(absolute, 'utf8').replace(/url\((['"]?)fonts\//g, 'url($1/vendor/fonts/') : fs.readFileSync(absolute);
@@ -153,14 +154,23 @@ async function profileChecks() {
   for (const blockedStorage of [false, true]) {
     const { context, page } = await prepare({ width: blockedStorage ? 390 : 1440, height: blockedStorage ? 844 : 1000 }, 'en', blockedStorage);
     try {
-      assert(await page.evaluate(() => CrucixIntelligence.openProfiles()), 'Enable phase 2.6 profiles first');
+      await page.locator('.region-btn[data-region="europe"]').click();
+      await page.locator('#settingsTrigger').click(); await page.locator('#layer-space').uncheck(); await page.locator('#zone-tradeIdeas').selectOption('right'); await page.locator('#panel-nuclearWatch').uncheck(); await page.keyboard.press('Escape');
+      const before = await page.evaluate(() => ({ layout: dashboardLayout, layers: mapLayers, region: currentRegion }));
+      await page.locator('#profilesTrigger').click(); await page.waitForSelector('#ci-profile-name');
       if (blockedStorage) assert.match(await page.locator('#ci-body').innerText(), /session/i);
       await page.locator('#ci-profile-name').fill('<svg onload="window.__profileAttack=1">Saved view'); await page.locator('[data-ci-profile-action="save"]').click(); assert.equal(await page.locator('[data-ci-profile-action="delete"]').count(), 1); assert.equal(await page.evaluate(() => window.__profileAttack), undefined);
-      await page.locator('[data-ci-profile-action="apply"][data-profile-id="research"]').click(); await page.locator('[data-ci-profile-action="apply"][data-profile-id="market"]').click(); await page.locator('[data-ci-profile-action="apply"][data-profile-id="custom"]').click();
+      await page.locator('[data-ci-profile-action="apply"][data-profile-id="research"]').click(); assert.equal(await page.evaluate(() => currentRegion), 'world'); assert.notDeepEqual(await page.evaluate(() => dashboardLayout), before.layout);
+      await page.locator('[data-ci-profile-action="apply"][data-profile-id="market"]').click(); await page.locator('[data-ci-profile-action="apply"][data-profile-id="custom"]').click();
+      assert.deepEqual(await page.evaluate(() => ({ layout: dashboardLayout, layers: mapLayers, region: currentRegion })), before, 'Custom profile restores actual host panels, layer state and region');
+      const sizing = await page.locator('#ci-dialog').evaluate(node => ({ width: node.getBoundingClientRect().width, scrollWidth: node.scrollWidth, clientWidth: node.clientWidth, contentScroll: document.getElementById('ci-body').scrollHeight > document.getElementById('ci-body').clientHeight }));
+      assert(sizing.width <= (blockedStorage ? 390 : 1440) && sizing.scrollWidth <= sizing.clientWidth + 1, 'Profile dialog fits viewport without horizontal clipping'); if (blockedStorage) assert(sizing.contentScroll, 'Mobile profiles scroll vertically');
       await page.screenshot({ path: path.join(artifacts, blockedStorage ? 'profiles-mobile-session.png' : 'profiles-desktop.png') });
       await page.keyboard.press('Escape');
-      if (!blockedStorage) { await page.reload({ waitUntil: 'domcontentloaded' }); await page.waitForSelector('#eventsTrigger'); assert(await page.evaluate(() => CrucixIntelligence.openProfiles())); assert.equal(await page.locator('[data-ci-profile-action="delete"]').count(), 1); }
-      console.log('PROFILES PASS', { blockedStorage });
+      assert.equal(await page.evaluate(() => document.activeElement.id), 'profilesTrigger', 'Recreated profile toolbar trigger regains focus');
+      if (!blockedStorage) { await page.reload({ waitUntil: 'domcontentloaded' }); await page.waitForSelector('#eventsTrigger'); await page.locator('#profilesTrigger').click(); assert.equal(await page.locator('[data-ci-profile-action="delete"]').count(), 1); const own = await page.locator('[data-ci-profile-action="delete"]').getAttribute('data-profile-id'); await page.locator('[data-ci-profile-action="apply"][data-profile-id="' + own + '"]').click(); assert.deepEqual(await page.evaluate(() => ({ layout: dashboardLayout, layers: mapLayers, region: currentRegion })), before, 'Persisted profile restores full workspace after reload'); }
+      else { await page.locator('#profilesTrigger').click(); assert.equal(await page.locator('[data-ci-profile-action="delete"]').count(), 1, 'Session fallback survives closing/reopening profiles'); }
+      console.log('PROFILES PASS', { blockedStorage, customRestored: true, persistedReload: !blockedStorage, sizing });
     } finally { await context.close(); }
   }
 }
@@ -169,5 +179,6 @@ try {
   if (phase === 'history' || phase === 'all') { await historyChecks(); await clusterChecks(); }
   if (phase === 'profiles' || phase === 'all') await profileChecks();
   assert.deepEqual(errors, [], 'No browser runtime errors'); assert.deepEqual(external, [], 'No unexpected external requests');
+  if (phase === 'profiles' || phase === 'all') assert.deepEqual(legacyAssets, [], 'PWA phase loads all assets locally without legacy CDN routing');
   console.log('Intelligence UI QA passed', { phase, target: target.origin, artifacts, browserPlugin: 'not available; existing Playwright used' });
 } finally { await browser.close(); }

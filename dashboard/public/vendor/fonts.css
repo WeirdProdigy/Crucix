@@ -3,68 +3,68 @@
   font-style: normal;
   font-weight: 300;
   font-display: swap;
-  src: url(/vendor/fonts/daa80217e8c386f876d7.ttf) format('truetype');
+  src: url(fonts/daa80217e8c386f876d7.ttf) format('truetype');
 }
 @font-face {
   font-family: 'IBM Plex Mono';
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url(/vendor/fonts/b0c618f6d8ea996806c2.ttf) format('truetype');
+  src: url(fonts/b0c618f6d8ea996806c2.ttf) format('truetype');
 }
 @font-face {
   font-family: 'IBM Plex Mono';
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url(/vendor/fonts/1a6844598cfc2dfd164d.ttf) format('truetype');
+  src: url(fonts/1a6844598cfc2dfd164d.ttf) format('truetype');
 }
 @font-face {
   font-family: 'IBM Plex Mono';
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url(/vendor/fonts/feead6344d56160370c1.ttf) format('truetype');
+  src: url(fonts/feead6344d56160370c1.ttf) format('truetype');
 }
 @font-face {
   font-family: 'IBM Plex Mono';
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url(/vendor/fonts/aff9ea090b10d89880e4.ttf) format('truetype');
+  src: url(fonts/aff9ea090b10d89880e4.ttf) format('truetype');
 }
 @font-face {
   font-family: 'Space Grotesk';
   font-style: normal;
   font-weight: 300;
   font-display: swap;
-  src: url(/vendor/fonts/aab63435a01a8dd21eeb.ttf) format('truetype');
+  src: url(fonts/aab63435a01a8dd21eeb.ttf) format('truetype');
 }
 @font-face {
   font-family: 'Space Grotesk';
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url(/vendor/fonts/0dfc29fde7d95ca65fe2.ttf) format('truetype');
+  src: url(fonts/0dfc29fde7d95ca65fe2.ttf) format('truetype');
 }
 @font-face {
   font-family: 'Space Grotesk';
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url(/vendor/fonts/56632cca6632f379925b.ttf) format('truetype');
+  src: url(fonts/56632cca6632f379925b.ttf) format('truetype');
 }
 @font-face {
   font-family: 'Space Grotesk';
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url(/vendor/fonts/d03f1389be8c7cea7e4f.ttf) format('truetype');
+  src: url(fonts/d03f1389be8c7cea7e4f.ttf) format('truetype');
 }
 @font-face {
   font-family: 'Space Grotesk';
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url(/vendor/fonts/aaf352f017a5007bcd68.ttf) format('truetype');
+  src: url(fonts/aaf352f017a5007bcd68.ttf) format('truetype');
 }

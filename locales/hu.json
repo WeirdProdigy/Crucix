@@ -582,5 +582,26 @@
     "precision_country": "Ország",
     "precision_unknown": "Ismeretlen",
     "groupNews": "Közeli jelentések csoportosítása"
+  },
+  "pwa": {
+    "menu": "Telepítés / offline",
+    "title": "Telepítés és offline használat",
+    "help": "Chrome-ban vagy Edge-ben, localhoston vagy HTTPS-en telepíthető. A felület offline is indul; az új adatgyűjtéshez és az előzmények kereséséhez szükséges a helyi szerver.",
+    "save": "Az utolsó pillanatkép mentése ebben a böngészőben",
+    "privacy": "Alapból kikapcsolt. Engedélyezéskor a megjelenített adatok ebben a böngészőben maradnak, amíg nem törlöd őket. A törlés a további mentést is kikapcsolja.",
+    "saved": "Helyi pillanatkép mentve",
+    "empty": "Nincs mentett helyi pillanatkép.",
+    "clear": "Helyi pillanatkép törlése",
+    "cleared": "A helyi pillanatkép törölve; a további mentés kikapcsolva.",
+    "install": "Alkalmazás telepítése",
+    "installHelp": "Ha elérhető, használd a böngésző Alkalmazás telepítése menüjét. Ezt a címet először online nyisd meg.",
+    "update": "Letöltött frissítés alkalmazása",
+    "updateReady": "Új frissítés letöltve. Akkor alkalmazd, amikor készen állsz.",
+    "noUpdate": "Nincs alkalmazásra váró letöltött frissítés.",
+    "close": "Bezárás",
+    "cached": "Mentett pillanatkép · gyűjtési idő",
+    "unknown": "Ismeretlen időpont",
+    "storageError": "A helyi pillanatkép nem menthető ebben a böngészőben.",
+    "shellError": "Az offline felület telepítése sikertelen; csatlakozz újra és töltsd újra az oldalt."
   }
 }

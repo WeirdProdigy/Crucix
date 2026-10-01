@@ -35,6 +35,11 @@ test('real server starts on a five-digit port with isolated runtime data', { tim
       const response = await fetch(`http://127.0.0.1:${port}/api/health`);
       assert.equal(response.status, 200);
       assert.equal((await response.json()).status, 'ok');
+      const shell=await fetch(`http://127.0.0.1:${port}/offline-shell`);
+      assert.equal(shell.status,200);assert.equal(shell.headers.get('cache-control'),'no-store');
+      const html=await shell.text();const empty=JSON.parse(html.match(/^(?:let|const) D = (.*);\s*$/m)[1]);
+      assert.equal(empty.meta.timestamp,null);assert.deepEqual(empty.events,[]);assert.deepEqual(empty.newsFeed,[]);
+      const manifest=await fetch(`http://127.0.0.1:${port}/manifest.webmanifest`);assert.equal(manifest.status,200);assert.equal((await manifest.json()).display,'standalone');
       assert.ok(!logs.includes('Invalid count value'));
       return;
     } catch { await new Promise(resolve => setTimeout(resolve, 50)); }

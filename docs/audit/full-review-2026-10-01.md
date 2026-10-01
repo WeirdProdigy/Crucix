@@ -37,6 +37,8 @@ A legjobb következő termékfejlesztés egy esemény részletező nézet lenne:
 
 ## Hasonló projektekből átvehető minták
 
+A lentiek a 2.3-as audit döntései. Az azóta elkészült eseményrészletező, történet/export, profilok és PWA tételes megfeleltetését a [2.4–2.6 megvalósítási jegyzék](intelligence-workspace-implementation.md) mutatja. A felhasználó PWA-t választott; Tauri nem része a kérésnek.
+
 | Elsődleges forrás | Hasznos minta | Crucix döntés |
 | --- | --- | --- |
 | [World Monitor](https://github.com/koala73/worldmonitor) | Közös flat/globe rétegkatalógus, panelváltozatok és helyi AI | Rétegkapcsolók és helyi compatible modell most; tematikus nézetek később |
@@ -70,7 +72,7 @@ flowchart LR
 - Böngésző-QA: determinisztikus [fixture szerver](../../test/fixtures/dashboard-server.mjs), malicious text, rétegek, fókusz, 390px mobil, SSE/offline/reconnect. A végső eredményt a [QA jegyzőkönyv](browser-qa-2026-10-01.md) rögzíti.
 - Éles botokat/modelleket és minden külső szolgáltatást nem terheltünk tesztkulcsokkal. A publikus feed változása, egress, kulcsjog és szolgáltatói korlát továbbra is környezeti tényező.
 - A Codex subscription adapter timeoutot használ, de a jelenlegi endpointadapter nem küld output-token capet. A helyi modellek thinking paramétere modellfüggő.
-- A dashboard továbbra is CDN-ről tölti a térkép/script/font könyvtárakat. Teljes offline működéshez ezeket vendorolni és verziózni kell; ez külön build/licence/frissítési döntés.
+- A 2.3-as dashboard még CDN-ről töltötte a térkép/script/font könyvtárakat. A 2.6-os kiadás verziózott helyi függőségekkel, licencekkel, hash-jegyzékkel és offline PWA-val ezt megoldja; részletek a megvalósítási jegyzékben.
 - Basic hitelesítés távoli használatához HTTPS szükséges. Linuxon a bind mount írhatósága az UID1000 jogától függ. A gyári localhost beállítás és a telepítési útmutató ezt explicitté teszi.
 
 ## Kiadások

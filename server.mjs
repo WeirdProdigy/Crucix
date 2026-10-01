@@ -13,6 +13,7 @@ import { saveSnapshot } from './lib/snapshots.mjs';
 import { buildEvents, clusterEvents } from './lib/intelligence/events.mjs';
 import { HistoryStore } from './lib/intelligence/history.mjs';
 import { installIntelligenceRoutes } from './lib/intelligence/routes.mjs';
+import { renderOfflineShell } from './lib/offline-shell.mjs';
 import config from './crucix.config.mjs';
 import { getLocale, currentLanguage, getSupportedLocales } from './lib/i18n.mjs';
 import { fullBriefing } from './apis/briefing.mjs';
@@ -252,11 +253,14 @@ const app = express();
 installHttpSecurity(app, config.auth);
 app.use(express.static(join(ROOT, 'dashboard/public')));
 app.get('/favicon.ico', (_req, res) => res.status(204).end());
+app.get('/offline-shell', (_req, res) => {
+  res.type('html').send(renderOfflineShell(readFileSync(join(ROOT, 'dashboard/public/jarvis.html'), 'utf8'), getLocale()));
+});
 
-// Serve loading page until first sweep completes, then the dashboard with injected locale
+// Serve an empty dashboard until the first sweep, then inject the current locale.
 app.get('/', (req, res) => {
   if (!currentData) {
-    res.sendFile(join(ROOT, 'dashboard/public/loading.html'));
+    res.type('html').send(renderOfflineShell(readFileSync(join(ROOT, 'dashboard/public/jarvis.html'), 'utf8'), getLocale(), { offline: false }));
   } else {
     const htmlPath = join(ROOT, 'dashboard/public/jarvis.html');
     let html = readFileSync(htmlPath, 'utf-8');

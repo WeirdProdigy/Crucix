@@ -1,5 +1,7 @@
 # Changelog / Változásnapló
 
+- [2.6.0 — Mentett munkaterületek és PWA / Saved workspaces and PWA](docs/releases/v2.6.0.md) — 2026-10-01
+
 - [2.5.0 — Kereshető történet és export / Searchable history and export](docs/releases/v2.5.0.md) — 2026-10-01
 
 - [2.4.0 — Követhető események / Traceable events](docs/releases/v2.4.0.md) — 2026-10-01

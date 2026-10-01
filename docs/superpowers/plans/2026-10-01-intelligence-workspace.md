@@ -1,6 +1,6 @@
 # Intelligence Workspace Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Ship traceable events, searchable persistent history/export and themed offline-installable workspaces.
 
@@ -34,10 +34,10 @@
 
 **Interfaces:** `buildEvents(snapshot) -> EventRecord[]`; `clusterEvents(events, {cellDegrees=4,windowHours=24}) -> Cluster[]`; IDs `event-<hex>`. `EventRecord` exactly follows spec; clusters expose `id,eventIds,lat,lon,count,sourceCount,label`.
 
-- [ ] Write/run failing behavior tests for time separation, stable IDs, unsafe URL, coordinates, distinct-origin relations and unrelated near reports.
-- [ ] Implement pure bounded normalization and optional clustering, without executing external PR code.
-- [ ] Root preserves original metadata through synthesis and adds events after delta generation.
-- [ ] Full tests + browser detail/marker/ticker access, then publish 2.4.
+- [x] Write/run failing behavior tests for time separation, stable IDs, unsafe URL, coordinates, distinct-origin relations and unrelated near reports.
+- [x] Implement pure bounded normalization and optional clustering, without executing external PR code.
+- [x] Root preserves original metadata through synthesis and adds events after delta generation.
+- [x] Full tests + browser detail/marker/ticker access, then publish 2.4.
 
 ### Task 2: Bounded history and export
 
@@ -45,10 +45,10 @@
 
 **Interfaces:** `new HistoryStore(runsDir,{maxRecords=10000,retentionDays=30,maxBytes=20*1024*1024,now=Date.now})`; sync `add(events)`, `query(filters={}) -> {items,total,limit,offset,stats}`, `get(id)`; `exportRecords(records,format,{generatedAt,total,language}) -> {contentType,extension,body}`. Filter keys `q,kind,source,from,to,limit,offset`. Export formats `json,csv,html,stix`; no PDF runtime dependency.
 
-- [ ] Write/run failing tests for persistence, duplicate/old updates, caps, corrupt backup, Unicode search/filter/date/pagination validation.
-- [ ] Implement journal atomic save and validated query; preserve original archives.
-- [ ] Write/run export escaping/formula/STIX identity and non-threat serialization tests; implement serializers.
-- [ ] Root API guard integration + history/timeline/export UI and spatial grouping; full tests/browser QA, then publish 2.5.
+- [x] Write/run failing tests for persistence, duplicate/old updates, caps, corrupt backup, Unicode search/filter/date/pagination validation.
+- [x] Implement journal atomic save and validated query; preserve original archives.
+- [x] Write/run export escaping/formula/STIX identity and non-threat serialization tests; implement serializers.
+- [x] Root API guard integration + history/timeline/export UI and spatial grouping; full tests/browser QA, then publish 2.5.
 
 ### Task 3: Browser workspace UI
 
@@ -56,23 +56,23 @@
 
 **Interfaces:** global `window.CrucixIntelligence.init({getSnapshot,getLayout,applyLayout,getLayers,applyLayers,getRegion,applyRegion,t,escapeText})`, `.update(snapshot)`, `.openEvent(eventOrId)`, `.openHistory()`, `.openProfiles()`. Module uses plain DOM/textContent, safe links, accessible dialog. Browser module may use `/api/history`, `/api/events/:id` and `/api/export` after 2.5 server integration. Phase 2.4 only detail/local event list is active; root controls feature flags `historyEnabled`, `profilesEnabled`.
 
-- [ ] Write/run behavior/DOM tests for malicious content, modal focus/Escape, no-time/place, result/filter state, blocked storage and profile normalization.
-- [ ] Implement detail and history timeline/export, preset + custom profile UI in module; no edits to root-owned HTML/locales/server.
-- [ ] Root wires event click and toolbar actions, adds locale keys and tests desktop/mobile workflows at release checkpoints.
+- [x] Write/run behavior/DOM tests for malicious content, modal focus/Escape, no-time/place, result/filter state, blocked storage and profile normalization.
+- [x] Implement detail and history timeline/export, preset + custom profile UI in module; no edits to root-owned HTML/locales/server.
+- [x] Root wires event click and toolbar actions, adds locale keys and tests desktop/mobile workflows at release checkpoints.
 
 ### Task 4: PWA and local assets
 
 **Files:** root creates asset manifest/vendor helper, local asset tree, `manifest.webmanifest`, `sw.js`, snapshot cache module and PWA tests; integrates server offline shell.
 
-- [ ] Inventory real CDN/world/font/texture dependencies; pin official originals, retain licence/hash ledger.
-- [ ] Write failing SW policy/HTTP/opt-in snapshot tests; implement shell-only precache and network-first navigation.
-- [ ] Wire install/save/clear/offline/update controls and safe persistence, with APIs always network-only.
-- [ ] Prove reload with blocked network, local flat/globe rendering and opt-in data-age label; verify no sensitive API response enters cache.
+- [x] Inventory real CDN/world/font/texture dependencies; pin official originals, retain licence/hash ledger.
+- [x] Write failing SW policy/HTTP/opt-in snapshot tests; implement shell-only precache and network-first navigation.
+- [x] Wire install/save/clear/offline/update controls and safe persistence, with APIs always network-only.
+- [x] Prove reload with blocked network, local flat/globe rendering and opt-in data-age label; verify no sensitive API response enters cache.
 - [ ] Profiles + PWA full tests/browser QA + Node/Docker CI; publish 2.6 and update implementation register.
 
 ### Task 5: Independent review and release handoff
 
-- [ ] Read every changed interface and reviewer finding; fix concrete regressions with targeted tests.
-- [ ] Verify `npm test`, `npm run check`, `npm audit --omit=dev`, whitespace and browser evidence.
-- [ ] Publish each major batch to `fork/master`, release HU/EN notes and dispatch exact tag CI.
+- [x] Read every changed interface and reviewer finding; fix concrete regressions with targeted tests.
+- [x] Verify `npm test`, `npm run check`, `npm audit --omit=dev`, whitespace and browser evidence.
+- [x] Publish each major batch to `fork/master`, release HU/EN notes and dispatch exact tag CI.
 - [ ] Verify final CI/container publication and clean workspace; keep provider/live-feed limitations explicit.

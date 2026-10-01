@@ -9,6 +9,7 @@ import { buildEvents, clusterEvents } from '../../lib/intelligence/events.mjs';
 import { HistoryStore } from '../../lib/intelligence/history.mjs';
 import { installIntelligenceRoutes } from '../../lib/intelligence/routes.mjs';
 import { getLocaleForLanguage } from '../../lib/i18n.mjs';
+import { renderOfflineShell } from '../../lib/offline-shell.mjs';
 const template = readFileSync(new URL('../../dashboard/public/jarvis.html', import.meta.url), 'utf8');
 const embedded = template.match(/^(?:let|const) D = (.*);\s*$/m);
 const data = JSON.parse(embedded[1]);
@@ -33,10 +34,12 @@ const history = new HistoryStore(historyDir);history.add(data.events);
 const api=express();installIntelligenceRoutes(api,{getSnapshot:()=>data,history,language:'en'});
 process.on('exit',()=>rmSync(historyDir,{recursive:true,force:true}));
 let online = true;
+let fixtureLanguage = 'en';
 const streams = new Set();
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/control') {
+    if(['en','hu','fr'].includes(url.searchParams.get('language')))fixtureLanguage=url.searchParams.get('language');
     online = url.searchParams.get('online') !== 'false';
     if (!online) for (const client of streams) client.end();
     res.end('ok'); return;
@@ -63,6 +66,9 @@ const server = http.createServer((req, res) => {
     req.on('close', () => { clearTimeout(timer); streams.delete(res); }); return;
   }
   if (url.pathname === '/favicon.ico') { res.writeHead(204); res.end(); return; }
+  if (url.pathname === '/offline-shell') {
+    res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});res.end(renderOfflineShell(readFileSync(new URL('../../dashboard/public/jarvis.html',import.meta.url),'utf8'),getLocaleForLanguage(fixtureLanguage)));return;
+  }
   if (['/api/history','/api/export'].includes(url.pathname)||url.pathname.startsWith('/api/events/')) { api(req,res);return; }
   if (url.pathname !== '/') {
     const root = resolve('dashboard/public');const file = resolve(root, '.' + url.pathname);
@@ -74,7 +80,7 @@ const server = http.createServer((req, res) => {
   }
   const html = readFileSync(new URL('../../dashboard/public/jarvis.html', import.meta.url), 'utf8')
     .replace(/^(let|const) D = .*;\s*$/m, () => `let D = ${inlineJson(data)};`)
-    .replace('</head>', `<script>window.__CRUCIX_LOCALE__ ||= ${inlineJson(getLocaleForLanguage('en'))};</script></head>`);
+    .replace('</head>', `<script>window.__CRUCIX_LOCALE__ ||= ${inlineJson(getLocaleForLanguage(fixtureLanguage))};</script></head>`);
   res.setHeader('Content-Type', 'text/html; charset=utf-8'); res.end(html);
 });
 server.listen(Number(process.env.QA_PORT || 3199), '127.0.0.1', () => console.log(`QA fixture http://127.0.0.1:${server.address().port}`));

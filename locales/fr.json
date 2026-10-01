@@ -582,5 +582,26 @@
     "precision_country": "Pays",
     "precision_unknown": "Inconnue",
     "groupNews": "Regrouper les rapports proches"
+  },
+  "pwa": {
+    "menu": "Installer / hors ligne",
+    "title": "Installation et accès hors ligne",
+    "help": "Installation avec Chrome ou Edge sur localhost/HTTPS. L’interface fonctionne hors ligne ; la collecte et la recherche dans l’historique nécessitent le serveur local.",
+    "save": "Conserver le dernier instantané dans ce navigateur",
+    "privacy": "Désactivé par défaut. Les données affichées restent dans ce navigateur jusqu’à leur suppression. La suppression désactive aussi les futures sauvegardes.",
+    "saved": "Instantané enregistré localement",
+    "empty": "Aucun instantané local enregistré.",
+    "clear": "Supprimer l’instantané local",
+    "cleared": "Instantané local supprimé ; futures sauvegardes désactivées.",
+    "install": "Installer l’application",
+    "installHelp": "Utilisez le menu d’installation du navigateur si disponible. Ouvrez d’abord cette adresse en ligne.",
+    "update": "Appliquer la mise à jour téléchargée",
+    "updateReady": "Une mise à jour est téléchargée. Appliquez-la lorsque vous êtes prêt.",
+    "noUpdate": "Aucune mise à jour téléchargée en attente.",
+    "close": "Fermer",
+    "cached": "Instantané enregistré · date de collecte",
+    "unknown": "Date inconnue",
+    "storageError": "Le stockage local de l’instantané est indisponible.",
+    "shellError": "L’installation hors ligne a échoué ; reconnectez-vous et rechargez la page."
   }
 }

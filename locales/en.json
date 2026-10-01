@@ -582,5 +582,26 @@
     "precision_country": "Country",
     "precision_unknown": "Unknown",
     "groupNews": "Group nearby reports"
+  },
+  "pwa": {
+    "menu": "Install / offline",
+    "title": "Install and offline access",
+    "help": "Install from Chrome or Edge on localhost/HTTPS. The interface works offline; fresh collection and history search need the local server.",
+    "save": "Keep the last snapshot on this browser",
+    "privacy": "Off by default. Enabling stores the displayed intelligence on this browser until you clear it. Clearing also disables further saves.",
+    "saved": "Snapshot saved locally",
+    "empty": "No local snapshot saved.",
+    "clear": "Delete local snapshot",
+    "cleared": "Local snapshot deleted; further saves disabled.",
+    "install": "Install app",
+    "installHelp": "Use your browser’s Install app menu when available. First open this address online.",
+    "update": "Apply downloaded update",
+    "updateReady": "An update is downloaded. Apply it when you are ready.",
+    "noUpdate": "No downloaded update is waiting.",
+    "close": "Close",
+    "cached": "Saved snapshot · collection time",
+    "unknown": "Unknown time",
+    "storageError": "Local snapshot storage unavailable.",
+    "shellError": "Offline interface installation failed; reconnect and reload to retry."
   }
 }

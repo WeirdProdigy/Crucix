@@ -48,12 +48,15 @@ else:
     for path, url, licence in ASSETS:
         records.append(record(path, download(url), url, licence))
         print(path, flush=True)
+    world = json.loads((ROOT / 'vendor/countries-110m-2.0.2.json').read_bytes())
+    wrapper = ('window.__CRUCIX_WORLD_GEOMETRY__ = ' + json.dumps(world, separators=(',', ':')).replace('<', '\\u003c') + ';\n').encode()
+    records.append(record('vendor/countries-110m-2.0.2.js', wrapper, ASSETS[4][1] + ' (generated inert JSON wrapper for file:// compatibility)', 'ISC / Natural Earth public domain data'))
     font_url = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap'
     css = download(font_url).decode('utf-8')
     for url in dict.fromkeys(re.findall(r'url\((https://[^)]+)\)', css)):
         path = 'vendor/fonts/' + hashlib.sha256(url.encode()).hexdigest()[:20] + '.' + url.rsplit('.', 1)[-1]
         records.append(record(path, download(url), url, 'SIL OFL 1.1; see font licences'))
-        css = css.replace(url, '/' + path)
+        css = css.replace(url, 'fonts/' + Path(path).name)
     records.append(record('vendor/fonts.css', css.encode(), font_url, 'SIL OFL 1.1; see font licences'))
     LEDGER.write_text(json.dumps({'schema': 1, 'assets': records}, indent=2) + '\n', encoding='utf-8')
     print(f"Stored {len(records)} assets with SHA-256 ledger")

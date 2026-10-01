@@ -1,4 +1,9 @@
 /* Scoped dialog styles keep the existing Jarvis dashboard layout untouched. */
+.ci-dialog.pwa-dialog{color:var(--text,#e8f4f0);padding:24px;gap:8px;margin:auto;overflow:auto;width:min(620px,calc(100% - 32px));max-height:calc(100dvh - 32px)}
+.pwa-dialog::backdrop{background:rgba(4,10,15,.84)}
+.pwa-dialog button{min-height:44px;flex-shrink:0}
+.pwa-dialog button:disabled{opacity:.45;cursor:default}
+.pwa-dialog input{margin-right:8px;accent-color:var(--accent,#64f0c8)}
 .ci-overlay{position:fixed;inset:0;z-index:3000;background:rgba(4,10,15,.84);display:flex;align-items:center;justify-content:center;padding:24px;overscroll-behavior:contain;color:var(--text,#d9e9e5);font-family:var(--sans,Arial,sans-serif)}
 .ci-dialog{width:min(920px,100%);max-height:calc(100dvh - 48px);display:flex;flex-direction:column;border:1px solid var(--border,#354c49);border-radius:10px;background:var(--bg,#091417);box-shadow:0 24px 100px #0009;overflow:hidden;font-size:14px;line-height:1.6;text-align:left}
 .ci-header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;padding:20px 24px;border-bottom:1px solid var(--border,#354c49);flex:none;background:var(--panel,#111f23)}

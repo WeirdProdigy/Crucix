@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import vm from 'node:vm';
+import { verifyAssets } from './verify-assets.mjs';
 let count = 0;
 function check(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -23,4 +24,5 @@ function check(dir) {
   }
 }
 check('.');
+verifyAssets();
 console.log(`Syntax and locale checks passed (${count} JavaScript programs).`);

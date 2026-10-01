@@ -14,4 +14,4 @@ apis/.env
 docs/
 *.md
 !README.md
-LICENSE
+!dashboard/public/vendor/licenses/*.md

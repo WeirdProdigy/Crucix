@@ -46,7 +46,7 @@ Hook it up to an LLM and it becomes a **two-way intelligence assistant** — pus
 
 Try the live demo first at [https://www.crucix.live/](https://www.crucix.live/), then clone the repo when you want the full local stack.
 
-The server and data run on your machine. External feeds and browser map/font libraries need network access; cloud AI and paid APIs are optional. The app has no built-in telemetry. Start with `node server.mjs`.
+The server and data run on your machine. External feeds need network access; browser map/font libraries are pinned local assets. Cloud AI and paid APIs are optional. The app has no built-in telemetry. Start with `node server.mjs`.
 
 ## Token / Asset Warning
 
@@ -136,6 +136,18 @@ Settings share 13 logical layer switches between the flat map and globe, includi
 The settings dialog supports keyboard focus, Escape and focus restoration. Panel order can be changed with Alt+Up/Down and panels can be assigned to a zone. Preferences survive reload when storage is available. Reduced-motion preferences disable automatic globe rotation. Desktop and 390px mobile checks cover layers, saved settings, malicious text, empty data, connection recovery and polling fallback.
 
 Read the [full code audit and improvements](docs/audit/full-review-2026-10-01.md), the [individual assessment of all 104 upstream PRs and 50 issues](docs/audit/upstream-review-2026-10-01.md), and the [operations guide](docs/OPERATIONS.md) for source access, LAN/Docker, local models and troubleshooting. The [bilingual changelog](CHANGELOG.md) links each major release.
+
+### Events, history and workspaces (v2.4–2.6)
+
+Open **Events**, a news item or a supported map marker to inspect its original source, observed/published/collected times, location method, source status and related reports. Missing metadata stays unknown. Traceability checks describe available metadata; related articles and map groups do not establish independent confirmation.
+
+**History** searches retained events by text, kind, source and UTC collection date, with pagination and a timeline. Export filtered results as JSON, CSV, printable HTML or STIX 2.1; use your browser's Print → Save as PDF for PDF. History retains at most 30 days, 10,000 records and 20 MiB in `runs/intelligence/history.json`. Exports cap at 2,000 records and flag truncation. The latest snapshot and new sweeps seed the journal; existing archives are preserved. History search/export requires the local server.
+
+**Profiles** provides Research, Market and Infrastructure workspaces plus up to 12 named custom profiles containing panel layout, layers and region. Your previous configuration remains available as Custom. Blocked browser storage falls back to the current session.
+
+Open `http://localhost:3117` once while the server runs. **PWA** settings and the browser install menu can install the dashboard where supported (Chrome/Edge on Windows); service workers require localhost or HTTPS. The static shell, maps, fonts and textures work after an offline reload. Saving the latest data is a separate **off-by-default** option in PWA settings. Saved data carries its collection time and an offline label; **Clear saved data** also disables further snapshot saving. New feeds, server history and exports still require the server/network. Updates wait for your explicit action. No native Windows wrapper is required.
+
+See the [completed implementation register](docs/audit/intelligence-workspace-implementation.md) and [browser/test evidence](docs/audit/intelligence-workspace-verification.md).
 
 ---
 

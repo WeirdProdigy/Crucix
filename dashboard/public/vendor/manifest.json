@@ -107,6 +107,13 @@
       "sha256": "564ce565c371c5e5bbf286006565a7c9aa55a9f56e7ca58d56e05d649dd61a72"
     },
     {
+      "path": "/vendor/countries-110m-2.0.2.js",
+      "source": "https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json (generated inert JSON wrapper for file:// compatibility)",
+      "licence": "ISC / Natural Earth public domain data",
+      "bytes": 107801,
+      "sha256": "a4ca06e094b69f3da720878cedba008ae4911f88f96bfc5f2ea7123a59c6581d"
+    },
+    {
       "path": "/vendor/fonts/daa80217e8c386f876d7.ttf",
       "source": "https://fonts.gstatic.com/s/ibmplexmono/v20/-F6qfjptAgt5VM-kVkqdyU8n3oQI8lc.ttf",
       "licence": "SIL OFL 1.1; see font licences",
@@ -180,8 +187,8 @@
       "path": "/vendor/fonts.css",
       "source": "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap",
       "licence": "SIL OFL 1.1; see font licences",
-      "bytes": 1820,
-      "sha256": "6ec40479353f3b2b797af0da98e6df35047e681959f2cfd6b87956dcf968fd26"
+      "bytes": 1740,
+      "sha256": "42584139a4957e2f515c6721b2074aa4afb99b95da7383983b643b3f1e4b2f7c"
     }
   ]
 }
