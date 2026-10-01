@@ -33,6 +33,7 @@ Validation uses a deterministic fixture, not live-source/account availability. E
 - Független átnézés után regresszióval javítva: érvénytelen jövőbeli IDB-adat blokkolta a mentést, hibás store tranzakció DB-kapcsolatot hagyott nyitva, eltűnt waiting worker gombja későbbi akaratlan reloadot élesíthetett. Mindhárom javítva; a korábbi napló ID/URL/backup hibáinak tesztjei is megmaradnak.
 - [2.5 kiadás CI](https://github.com/mp3pintyo/Crucix/actions/runs/36919349241): mind a négy Windows/Linux × Node22/24 minőségellenőrzés, non-root írás és multiarch konténerbuild/publikálás sikeres.
 - Új konténerellenőrzés: az image-en belül futó `scripts/verify-assets.mjs` ellenőrzi a licencek/assetek meglétét és eredeti bájtjait; a `.dockerignore` megőrzi ezeket és a projekt licencét.
+- [2.6.0 tag CI](https://github.com/mp3pintyo/Crucix/actions/runs/36922542730), `3214297` commit: mind a négy Windows/Linux × Node22/24 minőségellenőrzés, non-root írás és asset-hash ellenőrzés, valamint linux/amd64 + linux/arm64 konténerbuild és GHCR-publikálás sikeres. A tag után kizárólag ez a dokumentációs eredményrögzítés változott.
 
 Reprodukálás a fenti fixture-rel: Playwright 1.62.1, `node scripts/browser-qa.mjs`; `QA_PHASE=all node scripts/intelligence-ui-qa.mjs`; `node scripts/pwa-qa.mjs`. PowerShellben a változó: `$env:QA_PHASE='all'`. A QA nem hív élő botot/modellt és nem bizonyít szolgáltatói account-hozzáférést. A telepíthetőség manifest/SW ellenőrzése sikeres; natív Windows wrapper vagy kézzel végzett böngésző-installáció nincs állítva.
 

@@ -68,11 +68,11 @@
 - [x] Write failing SW policy/HTTP/opt-in snapshot tests; implement shell-only precache and network-first navigation.
 - [x] Wire install/save/clear/offline/update controls and safe persistence, with APIs always network-only.
 - [x] Prove reload with blocked network, local flat/globe rendering and opt-in data-age label; verify no sensitive API response enters cache.
-- [ ] Profiles + PWA full tests/browser QA + Node/Docker CI; publish 2.6 and update implementation register.
+- [x] Profiles + PWA full tests/browser QA + Node/Docker CI; publish 2.6 and update implementation register.
 
 ### Task 5: Independent review and release handoff
 
 - [x] Read every changed interface and reviewer finding; fix concrete regressions with targeted tests.
 - [x] Verify `npm test`, `npm run check`, `npm audit --omit=dev`, whitespace and browser evidence.
 - [x] Publish each major batch to `fork/master`, release HU/EN notes and dispatch exact tag CI.
-- [ ] Verify final CI/container publication and clean workspace; keep provider/live-feed limitations explicit.
+- [x] Verify final CI/container publication and clean workspace; keep provider/live-feed limitations explicit.
