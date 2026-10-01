@@ -10,7 +10,9 @@ import { openBrowser } from './lib/open-browser.mjs';
 import { inlineJson } from './lib/html.mjs';
 import { installHttpSecurity } from './lib/http-security.mjs';
 import { saveSnapshot } from './lib/snapshots.mjs';
-import { buildEvents } from './lib/intelligence/events.mjs';
+import { buildEvents, clusterEvents } from './lib/intelligence/events.mjs';
+import { HistoryStore } from './lib/intelligence/history.mjs';
+import { installIntelligenceRoutes } from './lib/intelligence/routes.mjs';
 import config from './crucix.config.mjs';
 import { getLocale, currentLanguage, getSupportedLocales } from './lib/i18n.mjs';
 import { fullBriefing } from './apis/briefing.mjs';
@@ -42,6 +44,14 @@ const sseClients = new Set();
 // === Delta/Memory ===
 const memory = new MemoryManager(RUNS_DIR);
 const ideaCadence = new IdeaCadence({ everyNSweeps: config.llm.everyNSweeps });
+const history = new HistoryStore(RUNS_DIR);
+let historyStatus = 'ok';
+function recordSnapshotEvents(snapshot) {
+  snapshot.events = buildEvents(snapshot);
+  snapshot.eventClusters = clusterEvents(snapshot.events);
+  try { history.add(snapshot.events); historyStatus = 'ok'; }
+  catch (error) { historyStatus = 'unavailable'; console.error('[History] Save failed:', error.message); }
+}
 
 // === LLM + Telegram + Discord ===
 const llmProvider = createLLMProvider(config.llm);
@@ -270,12 +280,7 @@ app.get('/api/data', (req, res) => {
   res.json(currentData);
 });
 
-app.get('/api/events/:id', (req, res) => {
-  if (!/^event-[a-f0-9]{32}$/.test(req.params.id)) return res.status(400).json({ error: 'Invalid event ID' });
-  const event = currentData?.events?.find(item => item.id === req.params.id);
-  if (!event) return res.status(404).json({ error: 'Event not found' });
-  res.json(event);
-});
+installIntelligenceRoutes(app, { getSnapshot: () => currentData, history, language: currentLanguage });
 
 // API: health check
 app.get('/api/health', (req, res) => {
@@ -296,6 +301,7 @@ app.get('/api/health', (req, res) => {
     telegramEnabled: !!(config.telegram.botToken && config.telegram.chatId),
     refreshIntervalMinutes: config.refreshIntervalMinutes,
     language: currentLanguage,
+    historyStatus,
   });
 });
 
@@ -388,7 +394,7 @@ async function runSweepCycle() {
     // Prune old alerted signals
     memory.pruneAlertedSignals();
 
-    synthesized.events = buildEvents(synthesized);
+    recordSnapshotEvents(synthesized);
     currentData = synthesized;
 
     // 6. Push to all connected browsers
@@ -448,6 +454,7 @@ async function start() {
     try {
       const existing = JSON.parse(readFileSync(join(RUNS_DIR, 'latest.json'), 'utf8'));
       const data = await synthesize(existing, { news: [] });
+      recordSnapshotEvents(data);
       currentData = data;
       lastSweepTime = data.meta?.timestamp || null;
       console.log('[Crucix] Loaded existing data from runs/latest.json — dashboard ready instantly');

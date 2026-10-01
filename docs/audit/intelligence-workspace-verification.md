@@ -11,3 +11,14 @@
 ![Magyar mobil eseményrészlet](images/intelligence-2.4-mobile-hu.png)
 
 Validation uses a deterministic fixture, not live-source/account availability. Existing map/WebGL/SSE regression checks and the new accessible event flows pass.
+
+## 2.5 — Történet/export/csoportok / History/export/groups
+
+- **219 teszt: 218 pass, 1 explicit skip**; 31 journal/export viselkedési eset, HTTP auth/filter/HTML export, 32 eseménymodell- és 20 DOM-felületteszt.
+- Valódi böngészős JSON/CSV/STIX letöltések, tartalom parse, q/kind/source/from/to szűrők megőrzése. HTML riportból Chromium valódi PDF-et generált; a termék a böngésző nyomtatását használja.
+- Lapozás és ékezetes keresés, találatokhoz tartozó teljes idővonal, szűrők megőrzése részletezés után. Keresés utáni gombnyomást korábban elnyelő duplikált input/change kérés javítva és regresszióval védve.
+- Tényleges síktérképes jelölőkattintás és földgömb canvas-kattintás nyitja a két külön forrású jelentéscsoportot; mindkét nézetben réteg- és csoportkapcsolás ellenőrizve. Ez rendezési funkció, nem automatikus megerősítés.
+- [2.4 kiadás CI](https://github.com/mp3pintyo/Crucix/actions/runs/36916435943): mind a négy OS/Node kombináció, non-root írás és multiarch build/publikálás sikeres.
+
+![Kereshető történet](images/intelligence-2.5-history.png)
+![Térképes jelentéscsoport](images/intelligence-2.5-cluster.png)

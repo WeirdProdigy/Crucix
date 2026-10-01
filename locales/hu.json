@@ -580,6 +580,7 @@
     "precision_city": "Város",
     "precision_region": "Régió",
     "precision_country": "Ország",
-    "precision_unknown": "Ismeretlen"
+    "precision_unknown": "Ismeretlen",
+    "groupNews": "Közeli jelentések csoportosítása"
   }
 }

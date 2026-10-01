@@ -10,8 +10,8 @@
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script src="https://d3js.org/topojson.v3.min.js"></script>
 <script src="https://unpkg.com/globe.gl@2.33.0"></script>
-<link rel="stylesheet" href="/intelligence.css">
-<script src="/intelligence.js"></script>
+<link rel="stylesheet" href="intelligence.css">
+<script src="intelligence.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -534,7 +534,7 @@ function setMapLayer(id,visible){
 }
 function normalizeSnapshot(data){
   const out={...data,meta:{...(data?.meta||{})}};
-  for(const key of ['air','thermal','chokepoints','nuke','who','supplementalHealth','news','newsFeed','tSignals','fred','bls','ideas','health','earthquakes','events'])out[key]=Array.isArray(data?.[key])?data[key]:[];
+  for(const key of ['air','thermal','chokepoints','nuke','who','supplementalHealth','news','newsFeed','tSignals','fred','bls','ideas','health','earthquakes','events','eventClusters'])out[key]=Array.isArray(data?.[key])?data[key]:[];
   out.tg={posts:0,urgent:[],topPosts:[],...(data?.tg||{})};
   for(const key of ['urgent','topPosts'])if(!Array.isArray(out.tg[key]))out.tg[key]=[];
   out.sdr={total:0,online:0,zones:[],...(data?.sdr||{})};if(!Array.isArray(out.sdr.zones))out.sdr.zones=[];
@@ -914,6 +914,8 @@ function renderTopbar(){
       ${D.delta?.summary ? `<span class="meta-pill">${t('dashboard.delta','DELTA')} <span class="v">${D.delta.summary.direction==='risk-off'?'&#x25B2; '+t('dashboard.riskOff','RISK-OFF'):D.delta.summary.direction==='risk-on'?'&#x25BC; '+t('dashboard.riskOn','RISK-ON'):'&#x25C6; '+t('dashboard.mixed','MIXED')}</span></span>` : ''}
       <button class="guide-btn" id="settingsTrigger" onclick="openSettings()" aria-haspopup="dialog">${t('dashboard.settings','Settings')}</button>
       <button class="guide-btn" id="eventsTrigger" onclick="CrucixIntelligence.openEvents()" aria-haspopup="dialog">${t('intelligence.events','Events')}</button>
+      <button class="guide-btn" id="historyTrigger" onclick="CrucixIntelligence.openHistory()" aria-haspopup="dialog">${t('intelligence.history','Event history')}</button>
+      <button class="guide-btn" id="clusterTrigger" onclick="toggleNewsGrouping()" aria-pressed="${groupNews}">${t('intelligence.groupNews','Group nearby reports')}</button>
       <button class="guide-btn" onclick="openGlossary()">${t('dashboard.guideBtn','What Signals Mean')}</button>
       <span class="alert-badge">${D.delta?.summary?.criticalChanges>0?t('dashboard.highAlert','HIGH ALERT'):t('dashboard.monitoring','MONITORING')}</span>
     </div>
@@ -1296,7 +1298,7 @@ function initGlobe(){
     .pointRadius(d => d.size || 0.3)
     .pointColor(d => d.color)
     .pointLabel(d => `<b>${esc(d.popHead)}</b><br><span style="opacity:0.7">${esc(d.popMeta)}</span>`)
-    .onPointClick((pt, ev) => { showPopup(ev, pt.popHead, pt.popText, pt.popMeta, pt.lat, pt.lng, pt.alt); })
+    .onPointClick((pt, ev) => { if(pt.cluster)CrucixIntelligence.openCluster(pt.cluster);else showPopup(ev, pt.popHead, pt.popText, pt.popMeta, pt.lat, pt.lng, pt.alt); })
     .onPointHover(pt => { document.getElementById('globeViz').style.cursor = pt ? 'pointer' : 'grab'; })
     // Arcs layer (flight corridors)
     .arcColor(d => d.color)
@@ -1483,6 +1485,7 @@ function plotMarkers(){
 
   // === News markers (light blue) ===
   (D.news||[]).forEach(n=>{
+    if(isGroupedNews(n))return;
     points.push({
       lat:n.lat, lng:n.lon, size:0.2, alt:0.008,
       color:'rgba(129,212,250,0.7)', type:'news', priority:3,
@@ -1541,6 +1544,7 @@ function plotMarkers(){
   }));
   const conflictEvents=(D.acled?.deadliestEvents||[]).filter(e=>hasCoordinates(e.lat,e.lon));
   conflictEvents.forEach(e=>points.push({lat:e.lat,lng:e.lon,size:0.25,alt:0.01,color:'rgba(255,120,80,0.8)',type:'conflict',priority:1,popHead:e.type||'Conflict',popMeta:'ACLED',popText:`${e.fatalities} fatalities\n${e.location}, ${e.country}`}));
+  if(groupNews)for(const cluster of visibleEventClusters())points.push({lat:cluster.lat,lng:cluster.lon,size:.4,alt:.015,color:'rgba(129,212,250,0.9)',type:'news',priority:1,cluster,popHead:t('intelligence.cluster','Grouped reports'),popMeta:cluster.count+' '+t('badges.items','ITEMS')});
   const visiblePoints=points.filter(point=>hasCoordinates(point.lat,point.lng)&&isMarkerTypeVisible(point.type));
   // Set points on globe
   globe.pointsData(visiblePoints);
@@ -1639,6 +1643,10 @@ function findEvent(item){
   const url=safeExternalUrl(item?.url);const title=String(item?.title||item?.headline||item?.text||'');
   return D.events.find(e=>(url&&e.source.url===url)||(title&&e.title===title));
 }
+let groupNews=readPreference('crucix.newsGrouping.v1')==='true';
+function visibleEventClusters(){return D.eventClusters.filter(c=>hasCoordinates(c.lat,c.lon)&&Array.isArray(c.eventIds)&&c.eventIds.length>1);}
+function isGroupedNews(item){const event=findEvent(item);return groupNews&&event&&visibleEventClusters().some(c=>c.eventIds.includes(event.id));}
+function toggleNewsGrouping(){groupNews=!groupNews;writePreference('crucix.newsGrouping.v1',String(groupNews));reinit();if(flatG)plotFlatMarkers();}
 function showPopup(event,head,text,meta,lat,lng,alt){
   const popup=document.getElementById('mapPopup');
   const container=document.getElementById('mapContainer');
@@ -1822,7 +1830,11 @@ function plotFlatMarkers(){
   (D.ioda?.countries||[]).forEach(c=>{if(c.lat==null||c.lon==null)return;addPt(c.lat,c.lon,3.2+Math.min((c.overallScore||0)/2500,2.2)+(c.activeCount>0?0.8:0),'rgba(77,208,225,0.72)','rgba(77,208,225,0.26)',ev=>showPopup(ev,`${c.country} · ${t('map.internetOutage','Internet Outage')}`,`${t('ioda.events','Events')}: ${c.eventCount}<br>${t('ioda.active','ACTIVE')}: ${c.activeCount}<br>${t('ioda.score','Score')}: ${Math.round(c.overallScore)}`,`IODA · ${c.topDatasource||'overall'}`),2)});
   // News
   flatMarkerType='news';
-  (D.news||[]).forEach(n=>{addPt(n.lat,n.lon,3,'rgba(129,212,250,0.6)','rgba(129,212,250,0.2)',ev=>showPopup(ev,n.source+' NEWS',cleanText(n.title),n.region),3)});
+  (D.news||[]).forEach(n=>{if(!isGroupedNews(n))addPt(n.lat,n.lon,3,'rgba(129,212,250,0.6)','rgba(129,212,250,0.2)',ev=>showPopup(ev,n.source+' NEWS',cleanText(n.title),n.region),3)});
+  if(groupNews)for(const cluster of visibleEventClusters()){
+    const marker=addPt(cluster.lat,cluster.lon,8,'rgba(129,212,250,0.85)','rgba(129,212,250,0.4)',()=>CrucixIntelligence.openCluster(cluster),1);
+    if(marker){marker.attr('data-cluster-id',cluster.id).attr('role','button').attr('tabindex',0).attr('aria-label',t('intelligence.cluster','Grouped reports')+' '+cluster.count).on('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();CrucixIntelligence.openCluster(cluster);}});marker.append('text').attr('text-anchor','middle').attr('dy','.35em').attr('fill','#020408').attr('font-size','9px').text(cluster.count);}
+  }
   // NOAA weather
   flatMarkerType='weather';
   (D.noaa?.alerts||[]).forEach(a=>{addPt(a.lat,a.lon,4,'rgba(255,152,0,0.7)','rgba(255,152,0,0.3)',ev=>showPopup(ev,a.event,a.headline||'','NOAA/NWS'),2)});
@@ -2307,7 +2319,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   window.CrucixIntelligence?.init({getSnapshot:()=>D,getLayout:()=>dashboardLayout,
     applyLayout:value=>{dashboardLayout=normalizeDashboardLayout(value);saveDashboardLayout();reinit();},
     getLayers:()=>mapLayers,applyLayers:value=>{for(const layer of mapLayerRegistry)if(typeof value?.[layer.id]==='boolean')setMapLayer(layer.id,value[layer.id]);},
-    getRegion:()=>currentRegion,applyRegion:setRegion,t,escapeText:esc,historyEnabled:false,profilesEnabled:false});
+    getRegion:()=>currentRegion,applyRegion:setRegion,t,escapeText:esc,historyEnabled:true,profilesEnabled:false});
   init();
   if(location.protocol!=='file:'){
     connectSSE();pollSnapshot();

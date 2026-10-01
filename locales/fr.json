@@ -580,6 +580,7 @@
     "precision_city": "Ville",
     "precision_region": "Région",
     "precision_country": "Pays",
-    "precision_unknown": "Inconnue"
+    "precision_unknown": "Inconnue",
+    "groupNews": "Regrouper les rapports proches"
   }
 }

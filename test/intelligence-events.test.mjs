@@ -310,3 +310,26 @@ behavior('linked delta posts retain known publication while delta timestamp stay
   assert.equal(event.observedAt, null);
   assert.equal(event.collectedAt, collectedAt);
 });
+
+behavior('auth-bearing query parameters never become event detail source links or related origins', () => {
+  const keys = ['api_key', 'api-key', 'APIKEY', 'access_token', 'accessToken', 'refresh-token', 'password', 'token', 'auth', 'authorization', 'signature', 'secret', '%61ccess_%74oken'];
+  const events = model.buildEvents(snapshot({ news: keys.map((key, index) => report({
+    title: `Odessa port explosion closes shipping routes ${index}`,
+    url: `https://publisher${index}.example/story?${key}=synthetic-value`,
+  })) }));
+  assert.equal(events.length, keys.length);
+  for (const event of events) {
+    assert.equal(event.source.url, null);
+    assert.equal(event.source.hostname, null);
+    assert.equal(event.quality.checks.sourceUrl, false);
+    assert.deepEqual(event.relatedSources, []);
+  }
+});
+
+behavior('ordinary source query parameters remain usable after auth-query validation', () => {
+  const url = 'https://first.example/story?article=123&tokenizer=words&author=News&signature_format=plain';
+  const [event] = model.buildEvents(snapshot({ news: [report({ url })] }));
+  assert.equal(event.source.url, url);
+  assert.equal(event.source.hostname, 'first.example');
+  assert.equal(event.quality.checks.sourceUrl, true);
+});

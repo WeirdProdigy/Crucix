@@ -36,7 +36,11 @@
   function button(text, action, className = 'ci-button') { const node = element('button', className, text); node.type = 'button'; if (action) node.addEventListener('click', action); return node; }
   function safeUrl(value) {
     if (typeof value !== 'string' || value.length > 4096 || /[\u0000-\u0020\u007f]/.test(value)) return null;
-    try { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? url.href : null; } catch { return null; }
+    try {
+      const url = new URL(value);
+      if ([...url.searchParams.keys()].some(key => /^(?:access[-_]?token|refresh[-_]?token|api[-_]?key|token|secret|password|authorization|auth|signature)$/i.test(key))) return null;
+      return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? url.href : null;
+    } catch { return null; }
   }
   function validCoordinates(value) { return value && typeof value.lat === 'number' && typeof value.lon === 'number' && Number.isFinite(value.lat) && Number.isFinite(value.lon) && Math.abs(value.lat) <= 90 && Math.abs(value.lon) <= 180; }
   function validTime(value) { return typeof value === 'string' && value.length < 100 && Number.isFinite(Date.parse(value)); }
@@ -146,7 +150,11 @@
   }
   function field(parent, key, node) { const wrapper = element('label', 'ci-field'); wrapper.append(element('span', '', tr(key)), node); parent.appendChild(wrapper); return node; }
   function filterChanged(key, value, delayed) {
-    filters[key] = key === 'limit' ? Math.max(1, Math.min(200, Number.parseInt(value, 10) || 50)) : bounded(value, key === 'q' ? 300 : key === 'source' ? 160 : 80);
+    const normalized = key === 'limit' ? Math.max(1, Math.min(200, Number.parseInt(value, 10) || 50)) : bounded(value, key === 'q' ? 300 : key === 'source' ? 160 : 80);
+    // A search input also commits on blur. Repeating its completed query would
+    // collapse/recenter this dialog between pointer down and pointer up.
+    if (normalized === filters[key] && !historyTimer) return;
+    filters[key] = normalized;
     filters.offset = 0; clearTimeout(historyTimer); historyVersion++; historyController?.abort();
     if (delayed) historyTimer = setTimeout(() => fetchHistory(), 300); else fetchHistory();
   }

@@ -68,6 +68,11 @@ test('event detail keeps payloads inert and refuses credential/javascript source
   await h.api.openEvent(fixture());const link=byId(h,'ci-body').querySelector('a');assert.equal(link.href,'https://example.org/report');assert.equal(link.getAttribute('rel'),'noopener noreferrer');
 });
 
+test('tampered cached events cannot expose auth-bearing source or related-report URLs',async()=>{
+  const h=harness();for(const key of ['ACCESS_TOKEN','refresh-token','api%5Fkey','token','secret','password','authorization','auth','signature']){await h.api.openEvent(fixture({source:{name:'Provider',status:'ok',url:'https://example.org/report?'+key+'=fixture-secret'},relatedSources:[{name:'Related',url:'https://other.example/report?'+key+'=fixture-secret'}]}));assert.equal(byId(h,'ci-body').querySelectorAll('a').length,0,'Auth-bearing URL withheld: '+key);}
+  await h.api.openEvent(fixture({source:{name:'Provider',status:'ok',url:'https://example.org/report?article=123&utm_campaign=public'}}));assert.equal(byId(h,'ci-body').querySelector('a').href,'https://example.org/report?article=123&utm_campaign=public');
+});
+
 test('detail separates unknown provider times from collection and labels inferred geography',async()=>{
   const h=harness();await h.api.openEvent(fixture({location:{lat:47.5,lon:19,method:'inferred',precision:'city',label:'Budapest'}}));
   const text=byId(h,'ci-body').textContent;assert.match(text,/Observed/);assert.match(text,/Unknown/);assert.match(text,/Published/);assert.match(text,/Collected/);assert.match(text,/Inferred/);assert.match(text,/City/);assert.match(text,/metadata/i);assert.doesNotMatch(text,/100%|truth score/i);
@@ -123,6 +128,11 @@ test('history keeps current filters in paginated and export API requests',async(
 test('history ignores older requests even when the fetch boundary ignores abort',async()=>{
   const pending=[];const h=harness({historyEnabled:true,fetch:url=>new Promise(resolve=>pending.push({url,resolve}))});h.api.openHistory();assert.equal(pending.length,1);change(h,'ci-history-kind','health');assert.equal(pending.length,2);
   pending[1].resolve({ok:true,json:async()=>({items:[fixture({title:'Newest request'})],total:1,limit:50,offset:0})});await tick();pending[0].resolve({ok:true,json:async()=>({items:[fixture({title:'Obsolete request'})],total:1,limit:50,offset:0})});await tick();assert.match(byId(h,'ci-body').textContent,/Newest request/);assert.doesNotMatch(byId(h,'ci-body').textContent,/Obsolete request/);
+});
+
+test('committing an unchanged completed search does not clear results during export activation',async()=>{
+  const urls=[];const h=harness({historyEnabled:true,fetch:async url=>{urls.push(String(url));return {ok:true,json:async()=>({items:[fixture()],total:1,limit:50,offset:0,stats:{}})}}});h.api.openHistory();await tick();change(h,'ci-history-q','Report','input');await new Promise(resolve=>setTimeout(resolve,330));assert.equal(urls.length,2);assert.equal(byId(h,'ci-body').querySelectorAll('.ci-event-card').length,1);
+  change(h,'ci-history-q','Report','change');assert.equal(urls.length,2,'Blur does not start a redundant query or shrink the dialog');assert.equal(byId(h,'ci-body').querySelectorAll('.ci-event-card').length,1);click(h,'[data-ci-export="json"]');assert.equal(h.downloads.length,1);
 });
 
 test('history type filter offers only API-supported event categories',async()=>{

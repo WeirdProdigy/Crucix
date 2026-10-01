@@ -1,9 +1,13 @@
 // Deterministic local UI fixture; never loads operator .env or runtime runs.
 import http from 'node:http';
-import { readFileSync, existsSync, statSync } from 'node:fs';
-import { resolve, extname, sep } from 'node:path';
+import { readFileSync, existsSync, statSync, mkdtempSync, rmSync } from 'node:fs';
+import { resolve, extname, sep, join } from 'node:path';
+import { tmpdir } from 'node:os';
+import express from 'express';
 import { inlineJson } from '../../lib/html.mjs';
-import { buildEvents } from '../../lib/intelligence/events.mjs';
+import { buildEvents, clusterEvents } from '../../lib/intelligence/events.mjs';
+import { HistoryStore } from '../../lib/intelligence/history.mjs';
+import { installIntelligenceRoutes } from '../../lib/intelligence/routes.mjs';
 import { getLocaleForLanguage } from '../../lib/i18n.mjs';
 const template = readFileSync(new URL('../../dashboard/public/jarvis.html', import.meta.url), 'utf8');
 const embedded = template.match(/^(?:let|const) D = (.*);\s*$/m);
@@ -20,7 +24,14 @@ data.news.unshift({ title: 'Fixture popup <img src=x onerror="window.__injected=
 data.earthquakes = [{ id: 'fixture-quake', magnitude: 6.2, place: 'Test earthquake', time: data.meta.timestamp, lat: 36, lon: 140, depth: 25, tsunamiFlag: 0, url: 'https://earthquake.usgs.gov/' }];
 data.ideas = [{ type: 'HEDGE', title: 'Fixture idea', rationale: 'Safe text <img src=x onerror="window.__injected=2">', ticker: 'TEST', confidence: 'HIGH', horizon: 'Days', risk: 'Fixture' }];
 data.ideasSource = 'rules';
+const reports = [1,2].map(n=>({title:'Fixture Hungary flood response '+n,headline:'Fixture Hungary flood response '+n,source:'Fixture Report '+n,date:data.meta.timestamp,publishedAt:data.meta.timestamp,url:`https://fixture${n}.example/report`,lat:47.5,lon:19.1,locationMethod:'headline-keyword',locationPrecision:'approximate'}));
+data.news.push(...reports);data.newsFeed.push(...reports);
 data.events = buildEvents(data);
+data.eventClusters = clusterEvents(data.events);
+const historyDir = mkdtempSync(join(tmpdir(),'crucix-fixture-'));
+const history = new HistoryStore(historyDir);history.add(data.events);
+const api=express();installIntelligenceRoutes(api,{getSnapshot:()=>data,history,language:'en'});
+process.on('exit',()=>rmSync(historyDir,{recursive:true,force:true}));
 let online = true;
 const streams = new Set();
 const server = http.createServer((req, res) => {
@@ -46,15 +57,13 @@ const server = http.createServer((req, res) => {
       data.meta.timestamp = new Date().toISOString();
       data.newsFeed[0].headline = 'Fixture SSE updated';
       data.events = buildEvents(data);
+      data.eventClusters = clusterEvents(data.events);history.add(data.events);
       res.write(`data: ${JSON.stringify({ type: 'update', data })}\n\n`);
     }, 3000);
     req.on('close', () => { clearTimeout(timer); streams.delete(res); }); return;
   }
   if (url.pathname === '/favicon.ico') { res.writeHead(204); res.end(); return; }
-  if (url.pathname.startsWith('/api/events/')) {
-    const item = data.events.find(event => event.id === url.pathname.split('/').at(-1));
-    res.writeHead(item ? 200 : 404, {'Content-Type':'application/json'});res.end(JSON.stringify(item || {error:'Not found'}));return;
-  }
+  if (['/api/history','/api/export'].includes(url.pathname)||url.pathname.startsWith('/api/events/')) { api(req,res);return; }
   if (url.pathname !== '/') {
     const root = resolve('dashboard/public');const file = resolve(root, '.' + url.pathname);
     if (file.startsWith(root + sep) && existsSync(file) && statSync(file).isFile()) {
