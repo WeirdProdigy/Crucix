@@ -198,7 +198,7 @@ Az upstream **31 merge-elt PR-jából 29 merge commit már a helyi ef579d1 őse*
 
 **Végső eredmény:** `already_present_retained` — A baseline-ban jelen lévő viselkedés megmaradt; az eredeti PR egész ágának újraimportálása nem szükséges. Kiadás: nincs külön release-igény. Részletes fájl-/teszthivatkozások a JSON `final_integration.evidence` listájában.
 
-### PR #2 — feat: pin Node 22, add npm start/clean scripts, and Jarvis loading page for first run 
+### PR #2 — feat: pin Node 22, add npm start/clean scripts, and Jarvis loading page for first run
 
 [PR és teljes discussion](https://github.com/calesthio/Crucix/pull/2) · [archivált snapshot](../../output/upstream-review/pr-2.json)
 
@@ -1014,7 +1014,7 @@ Az upstream **31 merge-elt PR-jából 29 merge commit már a helyi ef579d1 őse*
 
 **Végső eredmény:** `already_present_retained` — A baseline-ban jelen lévő viselkedés megmaradt; az eredeti PR egész ágának újraimportálása nem szükséges. Kiadás: nincs külön release-igény. Részletes fájl-/teszthivatkozások a JSON `final_integration.evidence` listájában.
 
-### PR #71 — Omega 
+### PR #71 — Omega
 
 [PR és teljes discussion](https://github.com/calesthio/Crucix/pull/71) · [archivált snapshot](../../output/upstream-review/pr-71.json)
 
@@ -1030,7 +1030,7 @@ Az upstream **31 merge-elt PR-jából 29 merge commit már a helyi ef579d1 őse*
 
 **Végső eredmény:** `rejected` — Nem integrált; az egyedi biztonsági, regressziós vagy scope-indok továbbra is érvényes. Kiadás: nincs külön release-igény. Részletes fájl-/teszthivatkozások a JSON `final_integration.evidence` listájában.
 
-### PR #73 — Revert "Add regional RSS feeds for South America, India, and Australia"🇦🇺 
+### PR #73 — Revert "Add regional RSS feeds for South America, India, and Australia"🇦🇺
 
 [PR és teljes discussion](https://github.com/calesthio/Crucix/pull/73) · [archivált snapshot](../../output/upstream-review/pr-73.json)
 
@@ -2291,7 +2291,7 @@ Az upstream **31 merge-elt PR-jából 29 merge commit már a helyi ef579d1 őse*
 
 **Végső eredmény:** `deferred_optional` — Önálló új termék/provider/infrastruktúra igény. Most nem integrált; az egyedi indok és validációs feltétel megmaradt. Kiadás: nincs külön release-igény. Részletes fájl-/teszthivatkozások a JSON `final_integration.evidence` listájában.
 
-### Issue #79 — [Bug] 
+### Issue #79 — [Bug]
 
 [Issue és teljes discussion](https://github.com/calesthio/Crucix/issues/79) · [archivált snapshot](../../output/upstream-review/issue-79.json)
 
@@ -2307,7 +2307,7 @@ Az upstream **31 merge-elt PR-jából 29 merge commit már a helyi ef579d1 őse*
 
 **Végső eredmény:** `no_actionable_code_change` — Nem reprodukálható kódhiba vagy nincs érdemi patch/követelmény; nincs indokolt termékmódosítás. Kiadás: nincs külön release-igény. Részletes fájl-/teszthivatkozások a JSON `final_integration.evidence` listájában.
 
-### Issue #80 — [Feature] 
+### Issue #80 — [Feature]
 
 [Issue és teljes discussion](https://github.com/calesthio/Crucix/issues/80) · [archivált snapshot](../../output/upstream-review/issue-80.json)
 

@@ -66,6 +66,7 @@ flowchart LR
 - 2.1: 58 teszt, 57 pass, 1 skip; 2.2: 132 teszt, 131 pass, 1 skip. Szintaxis/locale, production npm audit és whitespace check sikeres.
 - 2.3: 132 teszt, 131 pass, 1 explicit skip; 97 JavaScript-program szintaxisa és a locale JSON-ok ellenőrizve. Production dependency audit: 0 ismert sérülékenység. A szolgáltatói tesztek éles kulcs nélkül nem igazolják az adott account/modell elérhetőségét.
 - A 2.2 konkrét commitjának [GitHub CI-je](https://github.com/mp3pintyo/Crucix/actions/runs/36904109875) Windows/Linux és Node22/24 kombinációban ellenőrzi a projektet; külön non-root konténerírási smoke check és multiarch build fut.
+- A 2.3.0 tag `9ad10f8` commitjának [végső CI-je](https://github.com/mp3pintyo/Crucix/actions/runs/36909652111) mind a négy Windows/Linux × Node22/24 jobban sikeres; a non-root írási smoke és a linux/amd64 + linux/arm64 konténerbuild/publikálás is sikeres. A kiadás kódja után csak dokumentációs ellenőrzési hivatkozás és whitespace-rendezés változott.
 - Böngésző-QA: determinisztikus [fixture szerver](../../test/fixtures/dashboard-server.mjs), malicious text, rétegek, fókusz, 390px mobil, SSE/offline/reconnect. A végső eredményt a [QA jegyzőkönyv](browser-qa-2026-10-01.md) rögzíti.
 - Éles botokat/modelleket és minden külső szolgáltatást nem terheltünk tesztkulcsokkal. A publikus feed változása, egress, kulcsjog és szolgáltatói korlát továbbra is környezeti tényező.
 - A Codex subscription adapter timeoutot használ, de a jelenlegi endpointadapter nem küld output-token capet. A helyi modellek thinking paramétere modellfüggő.
