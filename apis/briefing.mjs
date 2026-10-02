@@ -62,6 +62,7 @@ import { briefing as portwatch } from './sources/portwatch.mjs';
 import { briefing as emsc } from './sources/emsc.mjs';
 import { briefing as copernicusEms } from './sources/copernicus-ems.mjs';
 import { briefing as sigmet } from './sources/sigmet.mjs';
+import { briefing as adsbMilitary } from './sources/adsb-military.mjs';
 import config from '../crucix.config.mjs';
 
 const SOURCE_TIMEOUT_MS = 30_000; // 30s max per individual source
@@ -160,6 +161,7 @@ export async function fullBriefing() {
     runSource('EMSC', emsc),
     runSource('Copernicus-EMS', copernicusEms),
     runSource('Aviation-SIGMET', sigmet),
+    runSource('ADSB-Military', adsbMilitary, { theaters: config.publicSources.adsbTheaters }),
   ];
 
   console.error(`[Crucix] Starting intelligence sweep — ${allPromises.length} sources...`);

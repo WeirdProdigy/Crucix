@@ -866,7 +866,9 @@
       "depthKm": "Profondeur (km)",
       "countries": "Pays",
       "hazard": "Phénomène",
-      "fir": "Région d’information de vol (FIR)"
+      "fir": "Région d’information de vol (FIR)",
+      "aircraft": "Nombre d’aéronefs militaires",
+      "types": "Types d’aéronefs les plus fréquents"
     }
   }
 }

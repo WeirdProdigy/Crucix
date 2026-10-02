@@ -866,7 +866,9 @@
       "depthKm": "Mélység (km)",
       "countries": "Országok",
       "hazard": "Veszélytípus",
-      "fir": "Repüléstájékoztató körzet (FIR)"
+      "fir": "Repüléstájékoztató körzet (FIR)",
+      "aircraft": "Katonai repülőgépek száma",
+      "types": "Leggyakoribb repülőgéptípusok"
     }
   }
 }

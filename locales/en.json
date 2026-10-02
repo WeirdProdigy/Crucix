@@ -866,7 +866,9 @@
       "depthKm": "Depth (km)",
       "countries": "Countries",
       "hazard": "Hazard",
-      "fir": "Flight information region"
+      "fir": "Flight information region",
+      "aircraft": "Military aircraft",
+      "types": "Most common aircraft types"
     }
   }
 }

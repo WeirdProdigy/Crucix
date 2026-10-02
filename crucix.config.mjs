@@ -66,6 +66,26 @@ export default {
     ooniCountries: ['HU'],
     // Names exactly as the IMF PortWatch layer spells them.
     portwatchChokepoints: ['Strait of Hormuz', 'Bab el-Mandeb Strait', 'Suez Canal', 'Malacca Strait', 'Bosporus Strait', 'Panama Canal', 'Gibraltar Strait', 'Dover Strait'],
+    // Military air activity (adsb.lol, apis/sources/adsb-military.mjs): one aggregate row per theater, never one row per aircraft. A theater is a
+    // box (degrees; edges included; lonMin > lonMax crosses the antimeridian). An aircraft counts in the FIRST box of this list that contains it,
+    // so overlaps and shared borders belong to the earlier box. Two boxes must not give the same map link (centre and zoom): the later one is skipped. At most 12.
+    //   black-sea         Ukraine, Belarus south, Moldova, east Romania, the Black Sea and Azov, Crimea, Russia west of 42 E (Kursk to Rostov).
+    //                     West edge 24 E: eastern Poland, Slovakia, Hungary and Romania west of it are in central-europe (Anatolia, 38-40.5 N, is in no box).
+    //   east-med          Greece south of 38 N and Crete, the Turkish south coast, Cyprus, Syria and Lebanon coast, Israel, Nile delta, east Libya coast.
+    //   middle-east-gulf  Red Sea and Yemen to Iran and the Arabian Sea up to 62 E; the overlap with east-med (34-36.5 E) goes to east-med.
+    //   baltic            Baltic Sea with Denmark's islands, south Sweden, south Finland, Estonia/Latvia/Lithuania, Kaliningrad and Poland's coast (from 53.5 N).
+    //   south-china-sea-taiwan  South China Sea, Taiwan Strait, Hainan, west Philippines, Vietnam coast.
+    //   korea             The Korean Peninsula with the Yellow Sea and the East Sea (Sea of Japan) coast.
+    //   central-europe    Hungary and its neighbours: Germany east of 8 E, Austria, Czechia, Slovakia, Poland (to 53.5 N), Balkans north of 44 N.
+    adsbTheaters: [
+      { id: 'black-sea', label: 'Black Sea and Ukraine', latMin: 40.5, latMax: 52.5, lonMin: 24, lonMax: 42 },
+      { id: 'east-med', label: 'Eastern Mediterranean', latMin: 30, latMax: 38, lonMin: 22, lonMax: 36.5 },
+      { id: 'middle-east-gulf', label: 'Middle East and Gulf', latMin: 12, latMax: 38, lonMin: 34, lonMax: 62 },
+      { id: 'baltic', label: 'Baltic Sea', latMin: 53.5, latMax: 66, lonMin: 9, lonMax: 30 },
+      { id: 'south-china-sea-taiwan', label: 'South China Sea and Taiwan', latMin: 5, latMax: 27, lonMin: 105, lonMax: 124 },
+      { id: 'korea', label: 'Korean Peninsula', latMin: 33, latMax: 43, lonMin: 124, lonMax: 131.5 },
+      { id: 'central-europe', label: 'Central Europe', latMin: 44, latMax: 53.5, lonMin: 8, lonMax: 24 },
+    ],
   },
 
   llm: {
