@@ -178,8 +178,13 @@
     if(browser){paint(dialog,renderBrowser(v,t,now));if(!dialog.open)dialog.showModal();}
     else if(dialog.open)dialog.close();
   }
-  // The docked panel starts below the dashboard top bar while that bar is on screen (it wraps to several rows and scrolls away).
-  function dock(){if(aside&&!aside.hidden)aside.style.setProperty('--ri-top',Math.max(0,Math.round(document.getElementById('topbar')?.getBoundingClientRect().bottom||0))+'px');}
+  // The docked panel starts below the dashboard top bar and the alert strip under it while they are on screen (the bar wraps to
+  // several rows, both scroll away).
+  function dock(){
+    if(!aside||aside.hidden)return;
+    const strip=document.getElementById('alertStrip'),bar=strip&&!strip.hidden?strip:document.getElementById('topbar');
+    aside.style.setProperty('--ri-top',Math.max(0,Math.round(bar?.getBoundingClientRect().bottom||0))+'px');
+  }
   const focusIn=el=>(el.querySelector('.ri-row[tabindex="0"]')||el.querySelector('[data-ri-action="close"]'))?.focus();
   function openFrom(name){
     const state=R.store.get();home=name;
@@ -276,9 +281,10 @@
       document.addEventListener('click',event=>{const button=event.target.closest?.('[data-open-records]');if(button)openFrom(button.dataset.openRecords);});
       window.addEventListener('hashchange',()=>{lastRec=null;set(fromHash());});
       // The dashboard scrolls <body>, whose scroll events do not bubble: listen in the capture phase.
-      // The top bar is filled (and re-wraps) after mount: follow its size as well as the scroll position.
+      // The top bar and the alert strip are filled (and re-wrap) after mount: follow their size as well as the scroll position.
       document.addEventListener('scroll',event=>{if(!aside.contains(event.target))dock();},{capture:true,passive:true});
-      const bar=document.getElementById('topbar');if(bar&&typeof ResizeObserver==='function')new ResizeObserver(dock).observe(bar);else window.addEventListener('resize',dock);
+      const bars=['topbar','alertStrip'].map(id=>document.getElementById(id)).filter(Boolean);
+      if(bars.length&&typeof ResizeObserver==='function'){const observer=new ResizeObserver(dock);for(const bar of bars)observer.observe(bar);}else window.addEventListener('resize',dock);
       R.store.subscribe(render);
       set(fromHash());
     }catch(e){console.error('[inspector]',e);}

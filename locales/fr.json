@@ -395,6 +395,7 @@
     },
     "silent": "Situation initiale",
     "toastNew": "Nouvelle alerte",
+    "strip": "Résumé des alertes",
     "ruleNames": {
       "events-critical": "Événements critiques",
       "events-high": "Événements de gravité forte",

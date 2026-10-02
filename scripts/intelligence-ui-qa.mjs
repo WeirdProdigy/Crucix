@@ -11,7 +11,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const target = new URL(process.env.QA_URL || 'http://127.0.0.1:3199/');
 assert(['127.0.0.1', 'localhost'].includes(target.hostname) && target.pathname === '/' && target.protocol === 'http:', 'Use the local deterministic QA fixture');
 const phase = process.env.QA_PHASE || 'detail';
-assert(['detail', 'history', 'profiles', 'inspector', 'all'].includes(phase), 'QA_PHASE is detail, history, profiles, inspector, or all');
+assert(['detail', 'history', 'profiles', 'inspector', 'alerts', 'all'].includes(phase), 'QA_PHASE is detail, history, profiles, inspector, alerts, or all');
 const artifacts = process.env.QA_ARTIFACT_DIR || path.join(os.tmpdir(), 'crucix-intelligence-qa');
 fs.mkdirSync(artifacts, { recursive: true });
 const vendor = fileURLToPath(new URL('../dashboard/public/vendor/', import.meta.url));
@@ -36,8 +36,8 @@ async function localAssets(context) {
     await route.fulfill({ body, contentType });
   });
 }
-async function prepare(viewport, locale = 'en', blockedStorage = false) {
-  const context = await browser.newContext({ viewport, reducedMotion: 'reduce' }); await localAssets(context);
+async function prepare(viewport, locale = 'en', blockedStorage = false, owner = browser) {
+  const context = await owner.newContext({ viewport, reducedMotion: 'reduce' }); await localAssets(context);
   const messages = JSON.parse(fs.readFileSync(new URL('../locales/' + locale + '.json', import.meta.url), 'utf8'));
   await context.addInitScript(({ messages, blockedStorage }) => {
     window.__CRUCIX_LOCALE__ = messages;
@@ -192,10 +192,11 @@ async function inspectorChecks() {
       await card.scrollIntoViewIfNeeded(); await card.click(); await aside.waitFor({ state: 'visible' });
       assert.equal(await aside.getAttribute('aria-hidden'), 'false'); assert.equal(await aside.getAttribute('aria-labelledby'), 'ri-heading');
       assert(await page.locator('#mapContainer').isVisible(), 'The map stays visible beside the docked inspector');
-      // The dashboard scrolls <body>: at the top the panel starts below the (wrapping) top bar, scrolled past it the panel uses the full height.
+      // The dashboard scrolls <body>: at the top the panel starts below the (wrapping) top bar and the alert strip under it,
+      // scrolled past them the panel uses the full height.
       await page.evaluate(() => { document.body.scrollTop = 0; }); await page.waitForTimeout(100);
-      const bar = await page.locator('#topbar').boundingBox(), docked = await aside.boundingBox();
-      assert(bar.y + bar.height > 0 && Math.abs(docked.y - (bar.y + bar.height)) <= 1 && Math.abs(docked.x + docked.width - 1440) <= 1, 'Docked below the top bar, at the right edge');
+      const bar = await page.locator('#alertStrip').boundingBox(), docked = await aside.boundingBox();
+      assert(bar.y + bar.height > 0 && Math.abs(docked.y - (bar.y + bar.height)) <= 1 && Math.abs(docked.x + docked.width - 1440) <= 1, 'Docked below the alert strip, at the right edge');
       await page.evaluate(() => { document.body.scrollTop = 600; }); await page.waitForTimeout(100);
       assert.equal(Math.round((await aside.boundingBox()).y), 0, 'Scrolled past the top bar, the panel uses the full height');
       await page.evaluate(() => { document.body.scrollTop = 0; }); await page.waitForTimeout(100);
@@ -251,7 +252,7 @@ async function inspectorChecks() {
         await page.goto(target.origin + '/#src=GDACS&sev=high', { waitUntil: 'domcontentloaded' }); await aside.waitFor({ state: 'visible' }); assert.equal(await aside.locator('.ri-row').count(), 1);
         await page.reload({ waitUntil: 'domcontentloaded' }); await page.waitForSelector('#eventsTrigger'); await aside.waitFor({ state: 'visible' }); await page.waitForTimeout(1500);
         assert.equal(await aside.locator('.ri-chip[data-ri-level="high"]').getAttribute('aria-pressed'), 'true'); assert.equal(await aside.locator('.ri-row').count(), 1, 'Reload with the hash reopens the same view');
-        const reloadedBar = await page.locator('#topbar').boundingBox(); assert(Math.abs((await aside.boundingBox()).y - Math.max(0, reloadedBar.y + reloadedBar.height)) <= 1, 'Opened before the top bar was filled, the panel still docks below it');
+        const reloadedBar = await page.locator('#alertStrip').boundingBox(); assert(Math.abs((await aside.boundingBox()).y - Math.max(0, reloadedBar.y + reloadedBar.height)) <= 1, 'Opened before the top bar and the strip were filled, the panel still docks below them');
         for (const hostile of ['#src=__proto__&rec=nope', '#src=__proto__&sev=<script>&win=999&q=%00&rec=nope&view=evil']) {
           await page.goto(target.origin + '/' + hostile, { waitUntil: 'domcontentloaded' }); assert(await aside.isHidden(), 'A hostile hash closes the view');
           await page.reload({ waitUntil: 'domcontentloaded' }); await page.waitForSelector('#eventsTrigger'); await page.waitForTimeout(1500);
@@ -284,11 +285,112 @@ async function inspectorChecks() {
     console.log('INSPECTOR mobile PASS', { sheet: box });
   } finally { await context.close(); await fetch(target.origin + '/control?liveSources=false'); }
 }
+// Alerts: the strip under the top bar, the threat drivers, the tray (tabs, acknowledge, snooze, evidence), toasts, the tab
+// title, Esc and focus return, hostile titles, the phone layout. Its own Chromium shows classic scrollbars (Playwright hides
+// them by default), so a scrollbar artefact in the screenshots is a real one.
+async function alertChecks() {
+  const control = async mode => assert.equal(await (await fetch(target.origin + '/control?alerts=' + mode)).text(), 'ok');
+  const threat = page => page.locator('#alertStrip .as-threat').innerText();
+  const level = (page, n) => page.waitForFunction(n => document.querySelector('#alertStrip .as-threat')?.textContent.includes(n + '/5'), n);
+  const focused = (page, selector) => page.evaluate(selector => !!document.activeElement?.matches(selector), selector);
+  const owner = await chromium.launch({ headless: true, args: ['--enable-unsafe-swiftshader'], ignoreDefaultArgs: ['--hide-scrollbars'] });
+  try {
+    await control('seed');
+    await desktop(await prepare({ width: 1440, height: 1000 }, 'en', false, owner));
+    // Phone: the strip wraps inside the width, the tray is a bottom sheet, the toast spans the width.
+    await control('seed');
+    await phone(await prepare({ width: 390, height: 844 }, 'en', false, owner));
+  } finally { await owner.close(); await control('clear'); }
+  async function desktop({ context, page }) {
+    try {
+      const strip = page.locator('#alertStrip'), tray = page.locator('#alertTray'), bell = page.locator('#alertBell');
+      const ids = await page.evaluate(() => Object.fromEntries(D.alerts.top.map(alert => [alert.severity, alert.id])));
+      assert(ids.critical && ids.high && ids.watch, 'The fixture seeded a firing alert of each level');
+      assert.deepEqual(await strip.evaluate(node => [node.previousElementSibling?.id, node.nextElementSibling?.className, node.getAttribute('role'), !!node.getAttribute('aria-label')]), ['topbar', 'grid', 'region', true], 'The strip is a named region between the top bar and the grid');
+      assert.match(await threat(page), /5\/5/); assert.match(await strip.innerText(), /Fixture critical alert/);
+      assert.match(await page.title(), /^\(2\) /, 'The tab title counts firing critical + high alerts'); assert.match(await bell.innerText(), /3/, 'The bell shows the firing count');
+      await page.evaluate(() => renderTopbar()); assert.equal(await strip.count(), 1); assert.equal(await bell.count(), 1, 'Strip and bell survive a top bar re-render');
+      assert.equal(await page.evaluate(() => window.__alertXss), undefined); assert.equal(await page.locator('#alertStrip img').count(), 0);
+      await page.screenshot({ path: path.join(artifacts, 'alerts-strip-desktop.png') });
+      // The threat badge opens the tray with the alerts that drive the level; a second click hides them again.
+      await strip.locator('.as-threat').click(); await tray.waitFor({ state: 'visible' });
+      assert.deepEqual([await tray.getAttribute('aria-hidden'), await tray.getAttribute('role'), await tray.getAttribute('aria-labelledby')], ['false', 'region', 'at-heading']);
+      assert.equal(await strip.locator('.as-threat').getAttribute('aria-expanded'), 'true'); assert.equal(await tray.locator('.at-drivers li').count(), 3);
+      assert.match(await tray.locator('.at-drivers li').first().innerText(), /Fixture critical alert/);
+      const stripBox = await strip.boundingBox(), trayBox = await tray.boundingBox();
+      assert(Math.abs(trayBox.y - (stripBox.y + stripBox.height)) <= 1 && Math.abs(trayBox.x + trayBox.width - 1440) <= 1, 'The tray docks right, below the strip');
+      await strip.locator('.as-threat').click(); assert.equal(await tray.locator('.at-drivers').count(), 0); assert(await tray.isVisible(), 'The tray stays open without the drivers');
+      await tray.locator('[data-alert-action="close"]').click(); await tray.waitFor({ state: 'hidden' }); assert.equal(await tray.getAttribute('aria-hidden'), 'true');
+      // The bell opens the tray: firing alerts, most severe first; the acknowledged one is under Handled.
+      await bell.click(); await tray.waitFor({ state: 'visible' }); assert.equal(await bell.getAttribute('aria-expanded'), 'true');
+      await page.waitForFunction(() => document.querySelectorAll('#alertTray .at-alert').length === 3);
+      assert.deepEqual(await tray.locator('.at-alert').evaluateAll(rows => rows.map(row => row.dataset.alertId)), [ids.critical, ids.high, ids.watch], 'Sorted by severity');
+      assert.match(await tray.locator('#at-tab-handled').innerText(), /1/); assert(await focused(page, '#alertTray #at-tab-active'), 'Opening moves focus to the active tab');
+      assert.equal(await page.evaluate(() => window.__alertXss), undefined, 'Hostile alert titles stay inert'); assert.equal(await page.locator('#alertTray img').count(), 0);
+      await page.screenshot({ path: path.join(artifacts, 'alerts-tray-desktop.png') });
+      // Acknowledge: the critical moves to Handled, the threat drops to 4 and the title count to 1.
+      await tray.locator(`.at-alert[data-alert-id="${ids.critical}"] [data-alert-action="ack"]`).click(); await level(page, 4);
+      await page.waitForFunction(id => !document.querySelector(`#alertTray #at-panel .at-alert[data-alert-id="${id}"]`), ids.critical);
+      assert.match(await page.title(), /^\(1\) /); assert.match(await bell.innerText(), /2/);
+      await tray.locator('#at-tab-handled').click(); assert.equal(await tray.locator(`.at-alert[data-alert-id="${ids.critical}"] .at-state-acked`).count(), 1);
+      await tray.locator('#at-tab-active').click(); await page.keyboard.press('ArrowRight'); assert(await focused(page, '#at-tab-handled[aria-selected="true"]'), 'Arrow keys move along the tabs');
+      await page.keyboard.press('ArrowLeft'); assert(await focused(page, '#at-tab-active[aria-selected="true"]'));
+      // Snooze ▾ stays open, with the focus, across a live update; Esc closes the menu first, the tray stays.
+      const row = tray.locator(`.at-alert[data-alert-id="${ids.high}"]`), toggle = row.locator('[data-alert-action="snooze-menu"]');
+      await toggle.click(); assert.equal(await toggle.getAttribute('aria-expanded'), 'true'); assert(await row.locator('[data-minutes="60"]').isVisible());
+      await page.evaluate(() => pollSnapshot()); await page.waitForTimeout(800);
+      assert.equal(await toggle.getAttribute('aria-expanded'), 'true', 'An update keeps the snooze menu open'); assert(await focused(page, `[data-alert-action="snooze-menu"][data-alert-id="${ids.high}"]`), 'An update keeps the focus');
+      await page.keyboard.press('Escape'); assert.equal(await toggle.getAttribute('aria-expanded'), 'false'); assert(await tray.isVisible()); assert(await focused(page, `[data-alert-action="snooze-menu"][data-alert-id="${ids.high}"]`));
+      await toggle.click(); await row.locator('[data-alert-action="snooze"][data-minutes="60"]').click(); await level(page, 3);
+      await tray.locator('#at-tab-handled').click(); assert.match(await tray.locator(`.at-alert[data-alert-id="${ids.high}"] .at-state`).innerText(), /Snoozed until/);
+      // Evidence opens the event detail over the tray.
+      const evidence = tray.locator(`.at-alert[data-alert-id="${ids.high}"] [data-alert-action="evidence"]`).first(), eventTitle = await evidence.innerText();
+      await evidence.click(); await page.waitForSelector('#ci-dialog'); assert.equal(await page.locator('#ci-title').innerText(), eventTitle);
+      await page.keyboard.press('Escape'); assert.equal(await page.locator('#ci-overlay').count(), 0); assert(await tray.isVisible(), 'Closing the event detail leaves the tray open');
+      // Esc closes the tray and returns the focus to the bell.
+      await tray.locator('#at-tab-handled').focus(); await page.keyboard.press('Escape'); await tray.waitFor({ state: 'hidden' });
+      assert.equal(await tray.getAttribute('aria-hidden'), 'true'); assert(await focused(page, '#alertBell'), 'Esc returns the focus to the bell');
+      // Open from the strip focuses the alert in the tray; Esc returns to the strip button.
+      await strip.locator('[data-alert-action="open"]').click(); await tray.waitFor({ state: 'visible' });
+      await page.waitForFunction(id => document.activeElement?.closest?.('.at-alert')?.dataset.alertId === id, ids.watch);
+      await page.keyboard.press('Escape'); await tray.waitFor({ state: 'hidden' }); assert(await focused(page, '#alertStrip [data-alert-action="open"]'));
+      // A new critical alert: a toast with role="alert" that no timer removes; the threat is back at 5.
+      await control('newcritical'); const toast = page.locator('#alertToasts .al-toast'); await toast.waitFor();
+      assert.equal(await toast.count(), 1); assert.equal(await toast.getAttribute('role'), 'alert'); assert.match(await toast.innerText(), /Fixture new critical alert/);
+      await level(page, 5); assert.match(await page.title(), /^\(1\) /);
+      await page.screenshot({ path: path.join(artifacts, 'alerts-toast-desktop.png') });
+      await page.waitForTimeout(4000); assert.equal(await toast.count(), 1, 'No timer dismisses a toast');
+      await toast.locator('[data-alert-action="dismiss"]').click(); assert.equal(await toast.count(), 0); assert(await page.locator('#alertToasts').isHidden(), 'The empty stack takes no room');
+      assert.equal(await page.evaluate(() => window.__alertXss), undefined);
+      console.log('ALERTS desktop PASS', { ids });
+    } finally { await context.close(); }
+  }
+  async function phone({ context, page }) {
+    try {
+      const strip = page.locator('#alertStrip'), tray = page.locator('#alertTray');
+      const box = await strip.boundingBox(); assert(box.width <= 390 && box.height > 60, 'The strip wraps to several rows');
+      assert(await strip.evaluate(node => node.scrollWidth <= node.clientWidth + 1), 'Nothing in the strip is clipped');
+      assert(await page.evaluate(() => document.body.scrollWidth <= innerWidth && document.documentElement.scrollWidth <= innerWidth), 'No horizontal page scroll');
+      await strip.scrollIntoViewIfNeeded(); await page.screenshot({ path: path.join(artifacts, 'alerts-strip-mobile.png') });
+      await page.locator('#alertBell').click(); await tray.waitFor({ state: 'visible' }); await page.waitForFunction(() => document.querySelectorAll('#alertTray .at-alert').length === 3); await page.waitForTimeout(300);
+      const sheet = await tray.boundingBox(), panel = await tray.locator('.at-panel').boundingBox();
+      assert(Math.abs(sheet.width - 390) < 1 && Math.abs(sheet.y + sheet.height - 844) < 1 && sheet.height <= 844 * 0.75 + 1, 'Bottom sheet: full width, docked to the bottom, at most 75% high');
+      assert(panel.height >= 96 && await tray.evaluate(node => node.scrollWidth <= node.clientWidth + 1), 'The list stays reachable, nothing clipped sideways');
+      await page.screenshot({ path: path.join(artifacts, 'alerts-tray-mobile.png') });
+      await page.keyboard.press('Escape'); await tray.waitFor({ state: 'hidden' });
+      await control('newcritical'); const toast = page.locator('#alertToasts .al-toast'); await toast.waitFor(); await page.waitForTimeout(300);
+      const card = await toast.boundingBox(); assert(card.x >= 0 && card.x + card.width <= 390 && card.y + card.height <= 844, 'The toast fits the phone screen');
+      await page.screenshot({ path: path.join(artifacts, 'alerts-toast-mobile.png') });
+      console.log('ALERTS mobile PASS', { strip: box, sheet });
+    } finally { await context.close(); }
+  }
+}
 try {
   if (phase === 'detail' || phase === 'all') await detailChecks();
   if (phase === 'history' || phase === 'all') { await historyChecks(); await clusterChecks(); }
   if (phase === 'profiles' || phase === 'all') await profileChecks();
   if (phase === 'inspector' || phase === 'all') await inspectorChecks();
+  if (phase === 'alerts' || phase === 'all') await alertChecks();
   assert.deepEqual(errors, [], 'No browser runtime errors'); assert.deepEqual(external, [], 'No unexpected external requests');
   if (phase === 'profiles' || phase === 'all') assert.deepEqual(legacyAssets, [], 'PWA phase loads all assets locally without legacy CDN routing');
   console.log('Intelligence UI QA passed', { phase, target: target.origin, artifacts, browserPlugin: 'not available; existing Playwright used' });

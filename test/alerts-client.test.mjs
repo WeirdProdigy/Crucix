@@ -274,3 +274,120 @@ test('robustness: garbage summaries, views and translators never throw',()=>{
   }
   assert(A.renderStrip(null,null,now).includes('No active alerts'),'a missing translator falls back to English');
 });
+
+// ===== Controller =====
+// A minimal DOM: elements keep their attributes, listeners and innerHTML; queries find nothing. Enough for mount/update/open
+// and for driving the delegated click listener with a fake button.
+function dom({protocol='http:',topbar=true,fetch,offline=false}={}){
+  const ids=new Map(),errors=[],calls=[],opened=[];
+  const el=tag=>{const node={tag,id:'',hidden:false,className:'',innerHTML:'',textContent:'',attrs:{},handlers:{},isConnected:true,
+    style:{setProperty(k,v){node.style[k]=v;}},classList:{set:new Set(),add(c){this.set.add(c);},remove(c){this.set.delete(c);},toggle(c,on){if(on)this.set.add(c);else this.set.delete(c);},contains(c){return this.set.has(c);}},
+    setAttribute(k,v){node.attrs[k]=String(v);},getAttribute(k){return Object.hasOwn(node.attrs,k)?node.attrs[k]:null;},hasAttribute(k){return Object.hasOwn(node.attrs,k);},removeAttribute(k){delete node.attrs[k];},
+    addEventListener(type,fn){node.handlers[type]=fn;},after(...nodes){nodes.forEach(add);},append(...nodes){nodes.forEach(add);},insertAdjacentHTML(_,html){node.innerHTML+=html;},
+    querySelector(){return null;},querySelectorAll(){return [];},contains(){return false;},closest(){return null;},getBoundingClientRect(){return {top:40,bottom:80};},focus(){}};return node;};
+  const add=node=>{if(node.id)ids.set(node.id,node);};
+  const document={title:'Crucix',activeElement:null,body:el('body'),createElement:el,getElementById:id=>ids.get(id)||null,querySelector(){return null;},addEventListener(){}};
+  if(topbar){const bar=el('div');bar.id='topbar';add(bar);}
+  const spy=fetch||(async(url,init)=>{calls.push([url,init]);return {ok:true,status:200,json:async()=>({alerts:[]})};});
+  const window={addEventListener(){},CrucixIntelligence:{openEvent:id=>opened.push(id)},...(offline?{__CRUCIX_OFFLINE_SHELL__:true}:{})};
+  const context=vm.createContext({window,document,location:{protocol},console:{error:(...args)=>errors.push(args)},fetch:(...args)=>spy(...args),CSS:{escape:value=>String(value)},Date,URL,JSON,setTimeout,clearTimeout,setInterval:()=>0});
+  for(const file of ['record-core.js','alerts-core.js','alerts.js'])vm.runInContext(read(file),context);
+  return {A:window.CrucixAlerts,document,errors,calls,opened,byId:id=>ids.get(id)};
+}
+const button=attrs=>{const node={getAttribute:k=>Object.hasOwn(attrs,k)?attrs[k]:null,hasAttribute:k=>Object.hasOwn(attrs,k),closest:()=>node,focus(){},setAttribute(k,v){attrs[k]=String(v);}};return node;};
+const click=(root,attrs)=>root.handlers.click({currentTarget:root,target:button(attrs),preventDefault(){}});
+const ticks=()=>new Promise(resolve=>setTimeout(resolve,20));
+const firing=()=>[alert({title:'Quake <img src=x onerror=boom>'}),alert({severity:'high'}),alert({severity:'watch'})];
+
+test('controller: mount, update and the bell never throw, whatever the page gives them',()=>{
+  const bare=dom({topbar:false});
+  assert.doesNotThrow(()=>bare.A.mount({getSummary:()=>summaryOf(firing()),t,now:()=>now}));
+  assert.equal(bare.A.bell(),'','no top bar: nothing is mounted, the bell is empty');
+  assert.doesNotThrow(()=>{bare.A.update(summaryOf(firing()));bare.A.open();});
+  const {A,byId,document}=dom();
+  assert.equal(A.bell(),'','the bell is empty before mount');
+  assert.doesNotThrow(()=>A.mount({getSummary:()=>{throw new Error('boom');},t:()=>{throw new Error('boom');},now:()=>NaN}));
+  const strip=byId('alertStrip');
+  assert(strip&&byId('alertTray')&&byId('alertToasts'),'strip, tray and toast stack exist');
+  assert.equal(strip.getAttribute('role'),'region'); assert(strip.getAttribute('aria-label'));
+  assert(strip.innerHTML.includes('No active alerts'),'without a summary the strip shows the calm line');
+  const tray=byId('alertTray');
+  assert.deepEqual([tray.hidden,tray.getAttribute('aria-hidden'),tray.getAttribute('role'),tray.getAttribute('aria-labelledby')],[true,'true','region','at-heading']);
+  assert.equal(byId('alertToasts').innerHTML,'','the toast stack has no text nodes, so :empty hides it');
+  A.mount({});assert.equal(byId('alertStrip'),strip,'mount is idempotent');
+  for(const garbage of [null,5,'x',[],{counts:'x',top:'y',threat:null,generatedAt:'soon'}])assert.doesNotThrow(()=>A.update(garbage));
+  assert.equal(document.title,'Crucix');
+});
+
+test('controller: tab title, bell count and threat follow the summary; an older summary is ignored',()=>{
+  const {A,byId,document}=dom(),alerts=firing();
+  A.mount({getSummary:()=>summaryOf(alerts),t,now:()=>now});
+  assert.equal(document.title,'(2) Crucix'); assert.match(A.bell(),/id="alertBell"/); assert.match(A.bell(),/al-bell-count">3</);
+  assert.match(byId('alertStrip').innerHTML,/Threat 5\/5/);
+  assert(!byId('alertStrip').innerHTML.includes('<img'),'hostile titles are escaped');
+  assert.equal(A.update(summaryOf([],{generatedAt:now-1})),false,'an older summary is ignored');
+  assert.equal(document.title,'(2) Crucix');
+  assert.equal(A.update(summaryOf([],{generatedAt:now+1})),true);
+  assert.equal(document.title,'Crucix','zero firing critical/high restores the title'); assert.match(byId('alertStrip').innerHTML,/No active alerts/);
+});
+
+test('controller: a file: page and the offline shell read the snapshot summary and never fetch',async()=>{
+  for(const options of [{protocol:'file:'},{offline:true}]){
+    const {A,byId,calls}=dom(options),alerts=firing();
+    A.mount({getSummary:()=>summaryOf(alerts),t,now:()=>now});
+    A.open();await ticks();
+    const tray=byId('alertTray');
+    assert.equal(tray.hidden,false); assert.equal(tray.getAttribute('aria-hidden'),'false');
+    assert(tray.innerHTML.includes(alerts[1].id),'the tray lists the summary alerts');
+    for(const id of ['alertStrip','alertTray','alertToasts'])assert(byId(id).classList.contains('al-readonly'),id+' is read-only');
+    click(byId('alertStrip'),{'data-alert-action':'ack','data-alert-id':alerts[0].id});await ticks();
+    assert.equal(calls.length,0,'no request at all');
+  }
+});
+
+test('controller: actions post same-origin JSON, invalid ids and event ids go nowhere',async()=>{
+  const {A,byId,calls,opened}=dom(),alerts=firing(),strip=()=>byId('alertStrip');
+  A.mount({getSummary:()=>summaryOf(alerts),t,now:()=>now});
+  click(strip(),{'data-alert-action':'ack','data-alert-id':alerts[0].id});await ticks();
+  const [url,init]=calls[0];
+  assert.equal(url,'/api/alerts/'+alerts[0].id+'/ack');
+  assert.deepEqual(plain({method:init.method,credentials:init.credentials,type:init.headers['Content-Type'],body:init.body}),{method:'POST',credentials:'same-origin',type:'application/json',body:'{}'});
+  calls.length=0;
+  click(strip(),{'data-alert-action':'snooze','data-alert-id':alerts[1].id,'data-minutes':'480'});await ticks();
+  assert.deepEqual(plain([calls[0][0],JSON.parse(calls[0][1].body)]),['/api/alerts/'+alerts[1].id+'/snooze',{minutes:480}]);
+  calls.length=0;
+  click(strip(),{'data-alert-action':'ack-all','data-severity':'high'});await ticks();
+  assert.deepEqual(plain([calls[0][0],JSON.parse(calls[0][1].body)]),['/api/alerts/ack-all',{severity:'high'}]);
+  calls.length=0;
+  for(const id of ['alert-x','../ack','alert-'+'0'.repeat(31)+'"'])click(strip(),{'data-alert-action':'resolve','data-alert-id':id});
+  await ticks(); assert.equal(calls.length,0,'a malformed alert id is never sent');
+  A.open();await ticks();
+  assert(calls.some(([url,init])=>url==='/api/alerts?state=all&limit=200'&&init.credentials==='same-origin'),'opening the tray loads the list');
+  const tray=byId('alertTray');
+  for(const id of ['event-x','javascript:alert(1)','event-'+'A'.repeat(32)])click(tray,{'data-alert-action':'evidence','data-event-id':id});
+  click(tray,{'data-alert-action':'evidence','data-event-id':EVENT});
+  assert.deepEqual(plain(opened),[EVENT],'only a well-formed event id opens the event detail');
+});
+
+test('controller: a failed action shows the error in the tray, never throws',async()=>{
+  const {A,byId,errors}=dom({fetch:async url=>url.includes('/ack')?{ok:false,status:403,json:async()=>({error:'Forbidden'})}:{ok:true,status:200,json:async()=>({alerts:[]})}}),alerts=firing();
+  A.mount({getSummary:()=>summaryOf(alerts),t,now:()=>now});
+  A.open();await ticks();
+  click(byId('alertTray'),{'data-alert-action':'ack','data-alert-id':alerts[0].id});await ticks();
+  assert.match(byId('alertTray').innerHTML,/role="alert"[^>]*>Action failed</);
+  assert.equal(errors.length,0);
+});
+
+test('controller: toasts only for new critical/high alerts after the first summary, once each',()=>{
+  const {A,byId}=dom(),alerts=firing();
+  A.mount({getSummary:()=>summaryOf(alerts),t,now:()=>now});
+  assert.equal(byId('alertToasts').innerHTML,'','alerts already firing at load do not toast');
+  const fresh=[alert({title:'New one'}),alert({severity:'high',title:'New two'}),alert({severity:'watch',title:'Watch only'}),alert({title:'Silent',silent:true})];
+  A.update(summaryOf([...fresh,...alerts],{generatedAt:now+1}));
+  const html=byId('alertToasts').innerHTML;
+  assert(html.includes('New one')&&html.includes('New two'),'new critical and high alerts toast');
+  assert(!html.includes('Watch only')&&!html.includes('Silent'),'watch and silent alerts never toast');
+  assert.match(html,/role="alert"/); assert(!/>\s+</.test(html)&&!/^\s|\s$/.test(html),'no whitespace text nodes in the stack');
+  A.update(summaryOf([...fresh,...alerts],{generatedAt:now+2}));
+  assert.equal(byId('alertToasts').innerHTML,html,'an alert toasts once per session');
+});

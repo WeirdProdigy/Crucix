@@ -15,8 +15,11 @@
 <script src="record-core.js"></script>
 <script src="live-sources.js"></script>
 <script src="record-inspector.js"></script>
+<script src="alerts-core.js"></script>
+<script src="alerts.js"></script>
 <link rel="stylesheet" href="live-sources.css">
 <link rel="stylesheet" href="record-inspector.css">
+<link rel="stylesheet" href="alerts.css">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#020408">
 <script src="pwa.js"></script>
@@ -930,6 +933,7 @@ function renderTopbar(){
       ${location.protocol==='file:'?'':`<button class="guide-btn" id="pwaTrigger" onclick="CrucixPWA.openSettings()" aria-haspopup="dialog">${t('pwa.menu','Install / offline')}</button>`}
       <button class="guide-btn" id="clusterTrigger" onclick="toggleNewsGrouping()" aria-pressed="${groupNews}">${t('intelligence.groupNews','Group nearby reports')}</button>
       <button class="guide-btn" onclick="openGlossary()">${t('dashboard.guideBtn','What Signals Mean')}</button>
+      ${window.CrucixAlerts?.bell?.()||''}
       <span class="alert-badge">${D.delta?.summary?.criticalChanges>0?t('dashboard.highAlert','HIGH ALERT'):t('dashboard.monitoring','MONITORING')}</span>
     </div>
     <div class="status-strip" role="status" aria-live="polite"><span id="liveStatus"></span><span id="freshnessStatus"></span><span id="airFreshness"></span></div>`;
@@ -2282,6 +2286,7 @@ function syncResponsiveLayout(force=false){
 
 // === REINIT (for live updates without boot sequence) ===
 function reinit(){
+  window.CrucixAlerts?.update(D.alerts);
   window.CrucixIntelligence?.update(currentSnapshot());
   window.CrucixRecordInspector?.refresh();
   rerenderDashboard(true);
@@ -2339,6 +2344,7 @@ function connectSSE(){
     try{
       const message=JSON.parse(event.data);
       if(message.type==='update'){applySnapshot(message.data);connectionState='live';}
+      else if(message.type==='alerts'){if(window.CrucixAlerts?.update(message.data))D.alerts=message.data;}
       else if(message.type==='sweep_start'){const badge=document.querySelector('.alert-badge');if(badge)badge.textContent=t('status.sweeping','SWEEPING…');}
       else if(message.type==='sweep_error'){lastSweepError=String(message.error||message.message||'Sweep failed');}
       updateRuntimeStatus();
@@ -2367,6 +2373,8 @@ document.addEventListener('DOMContentLoaded',()=>{
     applyLayout:value=>{dashboardLayout=normalizeDashboardLayout(value);saveDashboardLayout();reinit();},
     getLayers:()=>mapLayers,applyLayers:value=>{for(const layer of mapLayerRegistry)if(typeof value?.[layer.id]==='boolean')mapLayers[layer.id]=value[layer.id];flightsVisible=mapLayers.air!==false;writePreference(MAP_LAYER_STORAGE_KEY,JSON.stringify(mapLayers));reinit();},
     getRegion:()=>currentRegion,applyRegion:setRegion,t,escapeText:esc,historyEnabled:location.protocol!=='file:',profilesEnabled:true});
+  // Before the inspector: it docks below the alert strip.
+  window.CrucixAlerts?.mount({getSummary:()=>D.alerts,t,now:Date.now});
   window.CrucixRecordInspector?.mount({getSources:()=>D.liveSources,getEvents:()=>currentSnapshot().events,t,now:Date.now});
   init();
   if(location.protocol!=='file:')CrucixPWA.init({getSnapshot:()=>D,applySnapshot:data=>!D.meta.timestamp&&applySnapshot(data,{cached:true}),t});

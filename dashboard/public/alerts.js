@@ -1,7 +1,7 @@
 (function(window){
   'use strict';
   // Needs record-core.js and alerts-core.js (window.CrucixAlertsCore) loaded first.
-  const {LEVELS,GLYPH,esc,safeUrl,ageLabel,sortAlerts,groupByRule}=window.CrucixAlertsCore;
+  const {LEVELS,GLYPH,esc,safeUrl,ageLabel,sortAlerts,groupByRule,titleBadge,newAlertToasts}=window.CrucixAlertsCore;
 
   // ===== Render =====
   // Pure HTML-string builders: no DOM access, no fetch, no timers; time only from `now`. Every dynamic value is escaped (text
@@ -149,5 +149,251 @@
   }
   // ===== End render =====
 
-  window.CrucixAlerts={renderStrip,renderTray,renderToast};
+  // ===== Controller =====
+  // Thin DOM layer: #alertStrip between the top bar and the grid, the bell in the top bar (renderTopbar calls bell()), the
+  // non-modal #alertTray and the #alertToasts stack (body children). The summary comes from snapshots and SSE (update), the
+  // tray's list from GET /api/alerts. File pages and the offline shell are read-only: summary only, no request, no actions.
+  // Every entry point catches its own errors: an alert failure never stops the dashboard.
+  const ALERT_ID=/^alert-[0-9a-f]{32}$/,EVENT_ID=/^event-[0-9a-f]{32}$/,TAB_IDS=TABS.map(([id])=>id),MAX_TOASTS=3,SCROLLERS=['.at-panel','.at-drivers'];
+  const FOCUS_ATTRS=['data-alert-action','data-alert-id','data-minutes','data-severity','data-rule-id','data-event-id'];
+  const BELL='<svg class="al-bell-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false"><path d="M8 1.75a4 4 0 0 0-4 4v2.5l-1.25 2.5h10.5L12 8.25v-2.5a4 4 0 0 0-4-4zM6.5 12.75a1.5 1.5 0 0 0 3 0" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
+  let opts={},strip=null,tray=null,toasts=null,announcer=null,summary={},alerts=[],loaded=false,primed=false,readOnly=false;
+  let tab='active',threatOpen=false,expandedGroups=[],notice=null,opener=null,loadSeq=0,loadTimer=null,lastLevel=0;
+  const seen=new Set(),busy=new Set();
+  const log=error=>{try{console.error('[alerts]',error);}catch{}};
+  const guarded=fn=>(...args)=>{try{return fn(...args);}catch(error){log(error);}};
+  const clock=()=>{let value=NaN;try{value=typeof opts.now==='function'?opts.now():NaN;}catch{}return Number.isFinite(value)?value:Date.now();};
+  // Unescaped text for textContent and attributes set through the DOM.
+  const say=(key,fallback)=>{try{const value=typeof opts.t==='function'?opts.t(key,fallback):fallback;return typeof value==='string'&&value?value:fallback;}catch{return fallback;}};
+  const firingCount=s=>LEVELS.reduce((sum,level)=>sum+count(obj(s.counts)?.[level]),0);
+  const trayOpen=()=>!!tray&&!tray.hidden;
+  const attr=(node,name)=>node?.getAttribute?.(name)||'';
+  const make=(tag,id)=>{const node=document.createElement(tag);node.id=id;return node;};
+
+  // Re-render one container, keeping scroll positions, an open snooze menu and the focused control.
+  function focusKey(node){
+    if(!node)return null;
+    if(node.id)return '#'+CSS.escape(node.id);
+    const parts=FOCUS_ATTRS.filter(name=>node.hasAttribute(name)).map(name=>`[${name}="${CSS.escape(node.getAttribute(name))}"]`);
+    return parts.length?String(node.tagName||'').toLowerCase()+parts.join(''):null;
+  }
+  function setMenu(toggle,open){
+    const menu=toggle?.closest?.('.al-snooze')?.querySelector('.al-snooze-menu');
+    if(!menu)return;
+    toggle.setAttribute('aria-expanded',String(open));menu.hidden=!open;
+  }
+  const openToggles=()=>[strip,tray].flatMap(root=>root?[...root.querySelectorAll('[data-alert-action="snooze-menu"][aria-expanded="true"]')]:[]);
+  function paint(el,html,fallback){
+    const active=el.contains(document.activeElement)?document.activeElement:null,key=focusKey(active);
+    const menu=attr(el.querySelector('[data-alert-action="snooze-menu"][aria-expanded="true"]'),'data-alert-id');
+    const scroll=SCROLLERS.map(selector=>el.querySelector(selector)?.scrollTop||0);
+    el.innerHTML=html;
+    if(menu)setMenu(el.querySelector(`[data-alert-action="snooze-menu"][data-alert-id="${CSS.escape(menu)}"]`),true);
+    SCROLLERS.forEach((selector,i)=>{const node=el.querySelector(selector);if(node&&scroll[i])node.scrollTop=scroll[i];});
+    if(active)((key&&el.querySelector(key))||el.querySelector(fallback))?.focus({preventScroll:true});
+  }
+  const noticeHtml=tag=>notice?`<${tag} class="al-notice" role="alert">${translator(opts.t)(notice.key,notice.fallback)}</${tag}>`:'';
+  function drawStrip(){
+    if(!strip)return;
+    paint(strip,renderStrip(summary,opts.t,clock(),threatOpen&&trayOpen())+(notice?.where==='strip'?noticeHtml('span'):''),'.as-threat');
+  }
+  function drawTray(){
+    if(!trayOpen())return;
+    const html=renderTray({tab,alerts:loaded?alerts:list(summary.top),summary,expandedGroups,threatOpen},opts.t,clock()),cut=html.indexOf('</header>')+9;
+    paint(tray,notice?.where==='tray'?html.slice(0,cut)+noticeHtml('p')+html.slice(cut):html,'#at-panel');
+    dockTray();
+  }
+  // The tray starts below the strip while the strip is on screen (the page scrolls it away), like the record inspector.
+  function dockTray(){if(trayOpen()&&strip)tray.style.setProperty('--at-top',Math.max(0,Math.round(strip.getBoundingClientRect().bottom||0))+'px');}
+  function syncBell(){
+    const node=document.getElementById('alertBell');if(!node)return;
+    node.setAttribute('class','guide-btn al-bell al-bell-'+threatLevel(summary));node.setAttribute('aria-expanded',String(trayOpen()));
+    const n=node.querySelector('.al-bell-count');if(n)n.textContent=String(firingCount(summary));
+  }
+  function syncTitle(){const base=String(document.title).replace(/^\(\d+\) /,''),next=titleBadge(summary)+base;if(document.title!==next)document.title=next;}
+  // The strip's live region: a change of the threat level is spoken once (the strip itself is re-rendered too often to be live).
+  function announce(){const level=threatLevel(summary);if(announcer&&lastLevel&&level!==lastLevel)announcer.textContent=`${say('alerts.threat','Threat')} ${level}/5`;lastLevel=level;}
+
+  // Toasts: firing critical/high alerts not seen in this session; whatever fires at the first summary counts as seen.
+  function toast(){
+    const fresh=primed?newAlertToasts(summary,seen):[];
+    for(const alert of list(summary.top))if(text(alert.id))seen.add(alert.id);
+    primed=true;
+    for(const alert of fresh)toasts.insertAdjacentHTML('beforeend',renderToast(alert,opts.t));
+    const stack=[...toasts.querySelectorAll('.al-toast')];
+    for(const node of stack.slice(0,Math.max(0,stack.length-MAX_TOASTS)))node.remove();
+  }
+  function dropToasts(selector){
+    for(const node of toasts?[...toasts.querySelectorAll(selector)]:[]){
+      if(node.contains(document.activeElement))document.getElementById('alertBell')?.focus();
+      node.remove();
+    }
+  }
+  const dropToast=id=>dropToasts(`.al-toast[data-alert-id="${CSS.escape(id)}"]`);
+
+  // Requests: same origin, JSON both ways (the server refuses any other shape for a change), 10 s deadline.
+  async function request(url,body){
+    const init={method:body===undefined?'GET':'POST',credentials:'same-origin',headers:{Accept:'application/json'}};
+    if(body!==undefined){init.headers['Content-Type']='application/json';init.body=JSON.stringify(body);}
+    if(typeof opts.fetchJson==='function')return opts.fetchJson(url,init);
+    if(typeof AbortSignal!=='undefined'&&typeof AbortSignal.timeout==='function')init.signal=AbortSignal.timeout(10000);
+    const response=await fetch(url,{cache:'no-store',...init});
+    const data=await response.json().catch(()=>null);
+    if(!response.ok)throw new Error('HTTP '+response.status);
+    return data;
+  }
+  // The tray's list: every state in one request (the tab counts are those of the fetched alerts).
+  async function load(){
+    if(readOnly||!trayOpen())return;
+    const seq=++loadSeq;
+    try{
+      const data=await request('/api/alerts?state=all&limit=200');
+      if(seq!==loadSeq)return;
+      alerts=list(data?.alerts);loaded=true;
+      if(notice?.key==='alerts.errorLoad')notice=null;
+      for(const alert of alerts)if(alert.state!=='firing'&&text(alert.id))dropToast(alert.id);
+    }catch(error){
+      if(seq!==loadSeq)return;
+      notice={where:'tray',key:'alerts.errorLoad',fallback:'Could not load alerts'};
+    }
+    drawTray();
+  }
+  function scheduleLoad(){if(readOnly||!trayOpen())return;clearTimeout(loadTimer);loadTimer=setTimeout(guarded(load),150);}
+  // A change: the response carries the summary after it; a failure is shown where the operator is looking.
+  async function act(path,body,drop){
+    if(readOnly||busy.has(path))return;
+    busy.add(path);
+    try{
+      const data=await request('/api/alerts/'+path,body);
+      notice=null;drop?.();
+      if(!update(data?.summary)){drawStrip();drawTray();}
+      scheduleLoad();
+    }catch(error){
+      notice={where:trayOpen()?'tray':'strip',key:'alerts.errorAction',fallback:'Action failed'};
+      drawStrip();drawTray();
+    }finally{busy.delete(path);}
+  }
+
+  function rememberOpener(node){opener=node?{node,key:focusKey(node),inStrip:!!strip?.contains(node)}:null;}
+  function restoreOpener(){
+    const {node,key,inStrip}=opener||{};
+    const target=node?.isConnected?node:(key&&(inStrip?strip:document).querySelector(key))||document.getElementById('alertBell');
+    target?.focus?.();
+  }
+  // The alert's first action (its evidence links come before them in the row), else the selected tab.
+  const focusRow=id=>{const row=id?tray.querySelector(`.at-alert[data-alert-id="${CSS.escape(id)}"]`):null;(row?.querySelector('.at-actions button')||row?.querySelector('button')||tray.querySelector('.at-tab[aria-selected="true"]'))?.focus();};
+  // Opening focuses the alert asked for, else the selected tab; the list is (re)loaded each time.
+  function open({focusId='',threat=false,from=null}={}){
+    if(!tray)return;
+    if(!trayOpen()){rememberOpener(from||document.activeElement);tray.hidden=false;tray.setAttribute('aria-hidden','false');}
+    if(focusId)tab='active';
+    threatOpen=threat;
+    drawTray();drawStrip();syncBell();focusRow(focusId);
+    if(!readOnly)load().then(()=>{if(focusId&&trayOpen()&&attr(document.activeElement?.closest?.('.at-alert'),'data-alert-id')!==focusId)focusRow(focusId);}).catch(log);
+  }
+  function close(returnFocus=true){
+    if(!trayOpen())return;
+    const inside=tray.contains(document.activeElement);
+    tray.hidden=true;tray.setAttribute('aria-hidden','true');threatOpen=false;
+    if(notice?.where==='tray')notice=null;
+    for(const toggle of openToggles())setMenu(toggle,false);
+    drawStrip();syncBell();
+    if(returnFocus||inside)restoreOpener();
+    opener=null;
+  }
+  function selectTab(id,focus){
+    if(!TAB_IDS.includes(id))return;
+    tab=id;drawTray();
+    if(focus)tray.querySelector('#at-tab-'+id)?.focus();
+  }
+
+  function onClick(event){
+    const node=event.target?.closest?.('[data-alert-action],[data-alert-tab]');if(!node)return;
+    const root=event.currentTarget;
+    if(node.hasAttribute('data-alert-tab'))return selectTab(attr(node,'data-alert-tab'));
+    const action=attr(node,'data-alert-action'),id=attr(node,'data-alert-id'),valid=ALERT_ID.test(id);
+    if(action!=='snooze-menu')for(const toggle of openToggles())if(action!=='snooze'||!toggle.closest?.('.al-snooze')?.contains(node))setMenu(toggle,false);
+    if(action==='ack'&&valid)act(id+'/ack',{},()=>dropToast(id));
+    else if(action==='snooze'&&valid)act(id+'/snooze',{minutes:Number(attr(node,'data-minutes'))},()=>dropToast(id));
+    else if(action==='resolve'&&valid)act(id+'/resolve',{},()=>dropToast(id));
+    else if(action==='ack-all'){const severity=attr(node,'data-severity');act('ack-all',LEVELS.includes(severity)?{severity}:{},()=>dropToasts(LEVELS.includes(severity)?'.al-toast-'+severity:'.al-toast'));}
+    else if(action==='snooze-menu'){const opening=attr(node,'aria-expanded')!=='true';for(const toggle of openToggles())setMenu(toggle,false);setMenu(node,opening);}
+    else if(action==='open'&&valid){open({focusId:id,from:root===toasts?null:node});if(root===toasts)dropToast(id);}
+    else if(action==='threat'){if(!trayOpen())open({threat:true,from:node});else{threatOpen=!threatOpen;drawTray();drawStrip();}}
+    else if(action==='group'){const rule=attr(node,'data-rule-id');expandedGroups=expandedGroups.includes(rule)?expandedGroups.filter(item=>item!==rule):[...expandedGroups,rule];drawTray();}
+    else if(action==='evidence'){const eventId=attr(node,'data-event-id');if(EVENT_ID.test(eventId))window.CrucixIntelligence?.openEvent(eventId);}
+    else if(action==='dismiss'&&id)dropToast(id);
+    else if(action==='close')close(true);
+  }
+  // Esc closes an open snooze menu first, then the tray (focus back to the opener); arrows move along the tabs.
+  function onKey(event){
+    if(event.defaultPrevented||event.altKey||event.ctrlKey||event.metaKey)return;
+    const root=event.currentTarget,key=event.key;
+    if(key==='Escape'){
+      const toggle=root.querySelector('[data-alert-action="snooze-menu"][aria-expanded="true"]');
+      if(toggle){event.preventDefault();setMenu(toggle,false);toggle.focus();}
+      else if(root===tray){event.preventDefault();close(true);}
+      return;
+    }
+    const current=event.target?.closest?.('[data-alert-tab]');
+    if(root!==tray||!current||!['ArrowLeft','ArrowRight','Home','End'].includes(key))return;
+    event.preventDefault();
+    const i=TAB_IDS.indexOf(attr(current,'data-alert-tab')),n=TAB_IDS.length;
+    selectTab(TAB_IDS[key==='Home'?0:key==='End'?n-1:(i+(key==='ArrowRight'?1:-1)+n)%n],true);
+  }
+  // A click elsewhere closes an open snooze menu; the bell toggles the tray (it is re-created with the top bar).
+  function onDocumentClick(event){
+    const target=event.target;
+    if(!target?.closest?.('.al-snooze'))for(const toggle of openToggles())setMenu(toggle,false);
+    const bell=target?.closest?.('#alertBell');
+    if(bell){if(trayOpen())close(false);else open({from:bell});}
+  }
+
+  // The bell for the top bar: the firing count, coloured by the threat level. Empty before mount.
+  function bell(){
+    try{
+      if(!strip)return '';
+      return `<button type="button" class="guide-btn al-bell al-bell-${threatLevel(summary)}" id="alertBell" aria-controls="alertTray" aria-expanded="${trayOpen()}">${BELL}${translator(opts.t)('alerts.title','Alerts')} <span class="al-bell-count">${firingCount(summary)}</span></button>`;
+    }catch(error){log(error);return '';}
+  }
+  // A new summary (snapshot, SSE `alerts`, action response). An older one than shown is ignored; true when applied.
+  function update(next){
+    try{
+      const s=obj(next);
+      if(!strip||!s)return false;
+      if(Number.isFinite(summary.generatedAt)&&Number.isFinite(s.generatedAt)&&s.generatedAt<summary.generatedAt)return false;
+      summary=s;
+      toast();drawStrip();syncBell();syncTitle();announce();
+      if(trayOpen()){drawTray();scheduleLoad();}
+      return true;
+    }catch(error){log(error);return false;}
+  }
+  // Once, before the first top bar render: getSummary() -> D.alerts, t(key, fallback), now() -> ms.
+  function mount(options){
+    if(strip)return;
+    try{
+      const bar=document.getElementById('topbar');if(!bar)return;
+      opts=obj(options)||{};
+      readOnly=location.protocol==='file:'||!!window.__CRUCIX_OFFLINE_SHELL__||(typeof fetch!=='function'&&typeof opts.fetchJson!=='function');
+      strip=make('div','alertStrip');strip.setAttribute('role','region');strip.setAttribute('aria-label',say('alerts.strip','Alert summary'));
+      announcer=make('p','alertAnnounce');announcer.className='ri-sr';announcer.setAttribute('role','status');announcer.setAttribute('aria-live','polite');
+      tray=make('aside','alertTray');tray.hidden=true;tray.setAttribute('aria-hidden','true');tray.setAttribute('role','region');tray.setAttribute('aria-labelledby','at-heading');
+      toasts=make('div','alertToasts');
+      for(const node of [strip,tray,toasts]){node.classList.toggle('al-readonly',readOnly);node.addEventListener('click',guarded(onClick));node.addEventListener('keydown',guarded(onKey));}
+      bar.after(strip);document.body.append(tray,toasts,announcer);
+      document.addEventListener('click',guarded(onDocumentClick));
+      // The page scrolls <body>, whose scroll events do not bubble: listen in the capture phase.
+      document.addEventListener('scroll',event=>{if(!tray.contains(event.target))guarded(dockTray)();},{capture:true,passive:true});
+      if(typeof ResizeObserver==='function'){const observer=new ResizeObserver(guarded(dockTray));observer.observe(bar);observer.observe(strip);}
+      window.addEventListener('resize',guarded(dockTray));
+      // Ages ("12m") move on between sweeps.
+      setInterval(guarded(drawStrip),60000);
+      let initial=null;try{initial=obj(opts.getSummary?.());}catch(error){log(error);}
+      if(initial){summary=initial;toast();}
+      drawStrip();syncTitle();lastLevel=threatLevel(summary);
+    }catch(error){log(error);}
+  }
+  // ===== End controller =====
+
+  window.CrucixAlerts={renderStrip,renderTray,renderToast,mount,update,bell,open:guarded(options=>open(obj(options)||{})),close:guarded(()=>close(true))};
 })(window);

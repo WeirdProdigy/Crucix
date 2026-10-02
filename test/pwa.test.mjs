@@ -29,6 +29,14 @@ test('service worker caches only the allowlisted static shell and never API/live
   assert.ok(fetches>0);assert.ok(!stored.has('/'));
 });
 
+test('the alert client is in the shell cache and loads after its dependencies',()=>{
+  const sw=readFileSync(new URL('../dashboard/public/sw.js',import.meta.url),'utf8'),base=JSON.parse(sw.match(/const BASE = (\[[^\]]*\]);/)[1].replace(/'/g,'"'));
+  for(const path of ['/alerts-core.js','/alerts.js','/alerts.css'])assert.ok(base.includes(path),path+' is in BASE');
+  const html=readFileSync(new URL('../dashboard/public/jarvis.html',import.meta.url),'utf8'),at=needle=>{const i=html.indexOf(needle);assert.ok(i>0,needle);return i;};
+  assert.ok(at('<script src="record-core.js">')<at('<script src="alerts-core.js">')&&at('<script src="alerts-core.js">')<at('<script src="alerts.js">'),'record-core -> alerts-core -> alerts');
+  assert.ok(at('href="record-inspector.css"')<at('href="alerts.css"'),'alerts.css overrides after record-inspector.css');
+});
+
 test('offline shell replaces intelligence with an empty snapshot and inert JSON',async()=>{
   const { renderOfflineShell }=await import('../lib/offline-shell.mjs');
   const html=renderOfflineShell('<head></head><script>\nlet D = {"secret":"operator snapshot"};\n</script>',{meta:{code:'hu'},text:'</script>'});

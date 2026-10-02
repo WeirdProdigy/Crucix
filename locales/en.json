@@ -395,6 +395,7 @@
     },
     "silent": "Initial baseline",
     "toastNew": "New alert",
+    "strip": "Alert summary",
     "ruleNames": {
       "events-critical": "Critical events",
       "events-high": "High-severity events",

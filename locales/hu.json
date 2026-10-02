@@ -395,6 +395,7 @@
     },
     "silent": "Kezdeti alapállapot",
     "toastNew": "Új riasztás",
+    "strip": "Riasztási összegzés",
     "ruleNames": {
       "events-critical": "Kritikus események",
       "events-high": "Magas súlyosságú események",

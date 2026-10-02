@@ -3,7 +3,7 @@
    #060e16 ground, so the contrast ratios do not depend on what is behind (all >= 4.5:1, see the Task 7 report). */
 
 /* ===== Strip: one line under the top bar, wraps on narrow screens ===== */
-#alertStrip{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;min-height:36px;padding:5px 12px;background:#060e16;border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:11px;line-height:1.4}
+#alertStrip{display:flex;margin-top:10px;flex-wrap:wrap;align-items:center;gap:6px 10px;min-height:36px;padding:5px 12px;background:#060e16;border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:11px;line-height:1.4}
 #alertStrip[hidden]{display:none}
 .as-threat{flex:none;min-height:26px;padding:0 10px;background:#060e16;border:1px solid currentColor;border-radius:3px;font:inherit;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
 .as-threat-1{color:var(--dim)}.as-threat-2{color:var(--sev-info)}.as-threat-3{color:var(--sev-watch)}.as-threat-4{color:var(--sev-high)}.as-threat-5{color:var(--sev-critical)}
@@ -46,10 +46,10 @@
 .at-tab[aria-selected="true"]{border-bottom-color:var(--accent);color:var(--text);font-weight:600}
 .at-tab-count{font-family:var(--mono);font-variant-numeric:tabular-nums}
 /* Basis auto, not 0: the bottom sheet has no fixed height (it grows to its content up to max-height), so a zero basis would
-   collapse the list to its padding. Flex shrink is shared in proportion to basis: a shrink factor of 100 makes the list give
-   up its height first, so the drivers block keeps all its rows; min-height keeps a few rows reachable on very short screens,
-   where the drivers block scrolls instead. */
-.at-panel{flex:1 100 auto;min-height:96px;padding:8px 0 0;overflow:auto;overscroll-behavior:contain}
+   collapse the list to its padding. Flex shrink is shared in proportion to basis: a shrink factor of 10000 makes the list give
+   up its height first, so the drivers block keeps all its rows (not even one pixel, which would show a scrollbar); min-height
+   keeps a few rows reachable on very short screens, where the drivers block scrolls instead. */
+.at-panel{flex:1 10000 auto;min-height:96px;padding:8px 0 0;overflow:auto;overscroll-behavior:contain}
 .at-bulk{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}
 .at-list,.at-group-list{margin:0;padding:0;list-style:none}
 .at-group-list{padding-left:12px;border-left:1px solid var(--border)}
@@ -85,6 +85,17 @@
 .at-overflow{display:flex;flex-wrap:wrap;gap:4px 10px;padding:6px 8px;border-bottom:1px solid var(--border);font-size:11px}
 .at-empty{margin:12px 0 0;color:var(--dim)}
 .at-rules{min-height:0}
+/* An action or load failure, in the tray under its header or at the end of the strip. */
+.al-notice{margin:8px 0 0;padding:6px 8px;border:1px solid var(--danger,#ff5f63);border-radius:3px;color:#ffd8d9;font-size:11px}
+#alertStrip .al-notice{margin:0;padding:2px 8px}
+/* Read-only (file: page, offline shell): nothing to change, so no change buttons. */
+.al-readonly :is([data-alert-action="ack"],[data-alert-action="resolve"],[data-alert-action="ack-all"],.al-snooze){display:none}
+
+/* ===== Bell in the top bar: the firing count, coloured by the threat level (over the page's .guide-btn, which loads later) ===== */
+.al-bell{display:inline-flex;align-items:center;gap:6px}
+.al-bell-icon{flex:none}
+.al-bell-count{font-variant-numeric:tabular-nums}
+.guide-btn.al-bell-3{border-color:var(--sev-watch);color:var(--sev-watch)}.guide-btn.al-bell-4{border-color:var(--sev-high);color:var(--sev-high)}.guide-btn.al-bell-5{border-color:var(--sev-critical);color:var(--sev-critical)}
 
 /* ===== Toasts: a stack in the bottom-right corner (at most three, kept by the controller), above the tray ===== */
 #alertToasts{position:fixed;right:16px;bottom:16px;z-index:1150;display:flex;flex-direction:column;gap:8px;width:min(380px,calc(100vw - 32px));pointer-events:none}
