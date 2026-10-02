@@ -12,6 +12,9 @@ import { getLocaleForLanguage } from '../../lib/i18n.mjs';
 import { renderOfflineShell } from '../../lib/offline-shell.mjs';
 import { POLICIES } from '../../apis/utils/freshness.mjs';
 import { normalizeLiveSources } from '../../lib/intelligence/live-sources.mjs';
+import { AlertEngine } from '../../lib/alerts/engine.mjs';
+import { installAlertRoutes } from '../../lib/alerts/routes.mjs';
+import { writeJsonAtomic } from '../../lib/atomic-json.mjs';
 const template = readFileSync(new URL('../../dashboard/public/jarvis.html', import.meta.url), 'utf8');
 const embedded = template.match(/^(?:let|const) D = (.*);\s*$/m);
 const data = JSON.parse(embedded[1]);
@@ -38,6 +41,32 @@ process.on('exit',()=>rmSync(historyDir,{recursive:true,force:true}));
 let online = true;
 let fixtureLanguage = 'en';
 const streams = new Set();
+// Alerts: the real engine and API over the fixture's tmp dir; /control?alerts=seed|newcritical|clear writes a fixed set.
+const alertEngine=new AlertEngine(historyDir,{logger:{warn(){},error(){},log(){}}});alertEngine.load();data.alerts=alertEngine.summary();
+const publishAlerts=(summary,newIds)=>{data.alerts=summary;for(const client of streams)client.write(`data: ${JSON.stringify({type:'alerts',data:summary,newIds})}\n\n`);};
+installAlertRoutes(api,{engine:alertEngine,getSnapshot:()=>data,onChange:publishAlerts});
+let fixtureAlerts=0;
+function fixtureAlert(ruleId,ruleName,kind,severity,state,title,extra={}){
+  const n=++fixtureAlerts,at=Date.now()-60000*(10-Math.min(n,9));
+  return {id:'alert-'+String(n).padStart(32,'0'),ruleId,ruleName,dedupKey:`${ruleId}|fixture-${n}`,kind,severity,state,title,summary:'Fixture alert summary '+n,
+    entity:{type:kind,id:'fixture-'+n},evidence:[],firstSeenAt:at,lastSeenAt:at,count:1,notify:true,silent:false,log:[{at,action:'created'}],...extra};
+}
+function seedAlerts(mode){
+  let alerts=[];
+  if(mode==='seed'){
+    fixtureAlerts=0;
+    const evidence=data.events.slice(0,2).map(event=>({type:'event',id:event.id,title:event.title,source:event.source?.name||'',level:'high'}));
+    alerts=[fixtureAlert('events-critical','Critical events','event','critical','firing','Fixture critical alert'),
+      fixtureAlert('events-high','High-severity events','event','high','firing','Fixture high alert',{evidence}),
+      fixtureAlert('hungary-region','Hungary region','event','watch','firing','Fixture watch alert <img src=x onerror="window.__alertXss=1">'),
+      fixtureAlert('vix-spike','VIX spike','threshold','high','acked','Fixture acknowledged alert',{ack:{at:Date.now()-30000}})];
+  } else if(mode==='newcritical') {
+    alerts=[...alertEngine.list({state:'all',limit:1000}),fixtureAlert('events-critical','Critical events','event','critical','firing','Fixture new critical alert',{firstSeenAt:Date.now(),lastSeenAt:Date.now()})];
+  } else fixtureAlerts=0;
+  writeJsonAtomic(join(historyDir,'alerts','alerts.json'),{version:1,alerts,engine:{initialized:true,lastEvaluatedAt:Date.now()}});
+  alertEngine.load();
+  publishAlerts(alertEngine.summary(),mode==='newcritical'?[alerts.at(-1).id]:[]);
+}
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/control') {
@@ -62,6 +91,7 @@ const server = http.createServer((req, res) => {
       if(url.searchParams.get('legacyIds')!=='true')data.liveSources=stampLiveEventIds(data.liveSources);
       data.events=buildEvents(data);data.eventClusters=clusterEvents(data.events);history.add(data.events);
     }
+    if(['seed','newcritical','clear'].includes(url.searchParams.get('alerts')))seedAlerts(url.searchParams.get('alerts'));
     if(['en','hu','fr'].includes(url.searchParams.get('language')))fixtureLanguage=url.searchParams.get('language');
     online = url.searchParams.get('online') !== 'false';
     if (!online) for (const client of streams) client.end();
@@ -92,7 +122,7 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/offline-shell') {
     res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});res.end(renderOfflineShell(readFileSync(new URL('../../dashboard/public/jarvis.html',import.meta.url),'utf8'),getLocaleForLanguage(fixtureLanguage)));return;
   }
-  if (['/api/history','/api/export'].includes(url.pathname)||url.pathname.startsWith('/api/events/')) { api(req,res);return; }
+  if (['/api/history','/api/export','/api/alerts'].includes(url.pathname)||url.pathname.startsWith('/api/events/')||url.pathname.startsWith('/api/alerts/')) { api(req,res);return; }
   if (url.pathname !== '/') {
     const root = resolve('dashboard/public');const file = resolve(root, '.' + url.pathname);
     if (file.startsWith(root + sep) && existsSync(file) && statSync(file).isFile()) {

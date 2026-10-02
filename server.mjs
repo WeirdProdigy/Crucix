@@ -24,6 +24,10 @@ import { createLLMProvider } from './lib/llm/index.mjs';
 import { IdeaCadence } from './lib/llm/cadence.mjs';
 import { TelegramAlerter } from './lib/alerts/telegram.mjs';
 import { DiscordAlerter } from './lib/alerts/discord.mjs';
+import { AlertEngine } from './lib/alerts/engine.mjs';
+import { AlertNotifier } from './lib/alerts/notify.mjs';
+import { installAlertRoutes } from './lib/alerts/routes.mjs';
+import { attachAlertSummary, runAlertStep } from './lib/alerts/sweep.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
@@ -55,11 +59,19 @@ function recordSnapshotEvents(snapshot) {
   try { history.add(snapshot.events); historyStatus = 'ok'; }
   catch (error) { historyStatus = 'unavailable'; console.error('[History] Save failed:', error.message); }
 }
+// Alert state lives in runs/alerts/; a missing or corrupt file starts empty and never stops the server.
+const alertEngine = new AlertEngine(RUNS_DIR, { config: { maxActivePerRule: config.alerts.maxActivePerRule } });
+alertEngine.load();
 
 // === LLM + Telegram + Discord ===
 const llmProvider = createLLMProvider(config.llm);
 const telegramAlerter = new TelegramAlerter(config.telegram);
 const discordAlerter = new DiscordAlerter(config.discord || {});
+const alertNotifier = new AlertNotifier({
+  telegram: telegramAlerter, discord: discordAlerter, ntfy: config.alerts.ntfy, webhook: config.alerts.webhook,
+  minSeverity: config.alerts.notifyMinSeverity, quietHours: config.alerts.quietHours,
+  maxPerSweep: config.alerts.maxNotificationsPerSweep, publicUrl: config.alerts.publicUrl,
+});
 
 if (llmProvider) console.log(`[Crucix] LLM enabled: ${llmProvider.name} (${llmProvider.model})`);
 if (telegramAlerter.isConfigured) {
@@ -287,6 +299,11 @@ app.get('/api/data', (req, res) => {
 });
 
 installIntelligenceRoutes(app, { getSnapshot: () => freshLiveSnapshot(currentData), history, language: currentLanguage });
+// After an operator action the dashboards get the new summary; the next /api/data and page load carry it too.
+installAlertRoutes(app, { engine: alertEngine, getSnapshot: () => currentData, onChange: (summary, newIds) => {
+  if (currentData) currentData.alerts = summary;
+  broadcast({ type: 'alerts', data: summary, newIds });
+} });
 
 // API: health check
 app.get('/api/health', (req, res) => {
@@ -401,6 +418,8 @@ async function runSweepCycle() {
     memory.pruneAlertedSignals();
 
     recordSnapshotEvents(synthesized);
+    // Alert engine: never throws and does not wait for the notifications it sends.
+    runAlertStep(synthesized, { engine: alertEngine, notifier: alertNotifier, delta });
     currentData = synthesized;
 
     // 6. Push to all connected browsers
@@ -461,6 +480,8 @@ async function start() {
       const existing = JSON.parse(readFileSync(join(RUNS_DIR, 'latest.json'), 'utf8'));
       const data = await synthesize(existing, { news: [] });
       recordSnapshotEvents(data);
+      // Stale data without a delta: show the stored alerts, do not evaluate.
+      attachAlertSummary(data, alertEngine);
       currentData = data;
       lastSweepTime = data.meta?.timestamp || null;
       console.log('[Crucix] Loaded existing data from runs/latest.json — dashboard ready instantly');
