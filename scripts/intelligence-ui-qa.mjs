@@ -11,7 +11,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const target = new URL(process.env.QA_URL || 'http://127.0.0.1:3199/');
 assert(['127.0.0.1', 'localhost'].includes(target.hostname) && target.pathname === '/' && target.protocol === 'http:', 'Use the local deterministic QA fixture');
 const phase = process.env.QA_PHASE || 'detail';
-assert(['detail', 'history', 'profiles', 'all'].includes(phase), 'QA_PHASE is detail, history, profiles, or all');
+assert(['detail', 'history', 'profiles', 'inspector', 'all'].includes(phase), 'QA_PHASE is detail, history, profiles, inspector, or all');
 const artifacts = process.env.QA_ARTIFACT_DIR || path.join(os.tmpdir(), 'crucix-intelligence-qa');
 fs.mkdirSync(artifacts, { recursive: true });
 const vendor = fileURLToPath(new URL('../dashboard/public/vendor/', import.meta.url));
@@ -174,10 +174,121 @@ async function profileChecks() {
     } finally { await context.close(); }
   }
 }
+// Record inspector: summary card -> docked inspector -> full-screen browser, hash state, keyboard and refresh behaviour.
+// Runs against 2.9.0 rows (eventId stamped) and 2.8.0 rows (legacyIds=true, no eventId) so record/event pairing is covered both ways.
+async function inspectorChecks() {
+  const hash = page => decodeURIComponent(new URL(page.url()).hash);
+  const focused = (page, selector) => page.evaluate(selector => !!document.activeElement?.matches(selector), selector);
+  for (const legacy of [false, true]) {
+    const mode = legacy ? 'legacy' : 'stamped', control = target.origin + '/control?liveSources=true' + (legacy ? '&legacyIds=true' : '');
+    assert.equal(await (await fetch(control)).text(), 'ok');
+    const { context, page } = await prepare({ width: 1440, height: 1000 });
+    try {
+      assert.equal(await page.evaluate(() => D.liveSources.some(source => source.observations?.some(row => row.eventId))), !legacy, 'Fixture rows have the ' + mode + ' shape');
+      const title = await page.evaluate(() => D.liveSources.find(source => source.source === 'GDACS').observations.find(row => row.severity === 'Orange').title);
+      assert.equal(await page.locator('.live-sources-panel details').count(), 0, 'Summary cards carry no inline <details>');
+      const card = page.locator('button.live-open[data-open-records="GDACS"]'), aside = page.locator('#record-inspector');
+      assert.equal(await aside.getAttribute('aria-hidden'), 'true'); assert(await aside.isHidden());
+      await card.scrollIntoViewIfNeeded(); await card.click(); await aside.waitFor({ state: 'visible' });
+      assert.equal(await aside.getAttribute('aria-hidden'), 'false'); assert.equal(await aside.getAttribute('aria-labelledby'), 'ri-heading');
+      assert(await page.locator('#mapContainer').isVisible(), 'The map stays visible beside the docked inspector');
+      // The dashboard scrolls <body>: at the top the panel starts below the (wrapping) top bar, scrolled past it the panel uses the full height.
+      await page.evaluate(() => { document.body.scrollTop = 0; }); await page.waitForTimeout(100);
+      const bar = await page.locator('#topbar').boundingBox(), docked = await aside.boundingBox();
+      assert(bar.y + bar.height > 0 && Math.abs(docked.y - (bar.y + bar.height)) <= 1 && Math.abs(docked.x + docked.width - 1440) <= 1, 'Docked below the top bar, at the right edge');
+      await page.evaluate(() => { document.body.scrollTop = 600; }); await page.waitForTimeout(100);
+      assert.equal(Math.round((await aside.boundingBox()).y), 0, 'Scrolled past the top bar, the panel uses the full height');
+      await page.evaluate(() => { document.body.scrollTop = 0; }); await page.waitForTimeout(100);
+      assert.match(hash(page), /src=GDACS/); assert.equal(await page.locator('.live-source[data-live-source="GDACS"]').getAttribute('data-selected'), 'true');
+      assert(await focused(page, '#record-inspector .ri-row'), 'Opening moves focus into the inspector list');
+      assert.equal(await aside.locator('.ri-row').count(), 2);
+      await aside.locator('.ri-chip[data-ri-level="high"]').click();
+      assert.equal(await aside.locator('.ri-row').count(), 1, 'A severity chip filters the rows'); assert.equal(await aside.locator('.ri-chip[data-ri-level="high"]').getAttribute('aria-pressed'), 'true'); assert.match(hash(page), /sev=high/);
+      await aside.locator('.ri-chip[data-ri-level="high"]').click(); assert.equal(await aside.locator('.ri-row').count(), 2);
+      // Keyboard: j/k move the selection, '/' focuses search, typing (including 'e') stays in the field.
+      await aside.locator('.ri-row').first().focus(); await page.keyboard.press('j');
+      assert.equal(await aside.locator('.ri-row').nth(1).getAttribute('aria-selected'), 'true'); assert(await focused(page, '#record-inspector .ri-row[aria-selected="true"]'));
+      await page.keyboard.press('k'); assert.equal(await aside.locator('.ri-row').first().getAttribute('aria-selected'), 'true');
+      await page.keyboard.press('/'); assert(await focused(page, '#ri-search')); await page.keyboard.type('green');
+      assert.equal(await page.locator('#ri-search').inputValue(), 'green'); assert(await focused(page, '#ri-search'), 'Search keeps focus across re-renders');
+      assert.equal(await aside.locator('.ri-row').count(), 1); assert.equal(await page.locator('#record-browser[open]').count(), 0, 'Typing e in search does not expand');
+      await page.locator('#ri-search').fill(''); assert.equal(await aside.locator('.ri-row').count(), 2);
+      // Event details: the stamped row pairs by eventId, the legacy row by source + title + observedAt.
+      await aside.locator('.ri-row', { hasText: 'Fixture current GDACS' }).click();
+      assert.equal(await aside.locator('.ri-detail').isVisible(), true); assert.match(await aside.locator('.ri-detail').innerText(), /Public data: safe text only/);
+      await aside.locator('[data-ri-action="details"]').click(); await page.waitForSelector('#ci-dialog');
+      assert.equal(await page.locator('#ci-title').innerText(), title); await page.keyboard.press('Escape');
+      assert.equal(await page.locator('#ci-overlay').count(), 0); assert(await aside.isVisible(), 'Closing the event detail leaves the inspector open');
+      await page.screenshot({ path: path.join(artifacts, 'inspector-desktop-' + mode + '.png') });
+      // Refresh keeps the selection and the focused row; a record that leaves the fresh set stays visible, marked outdated.
+      await aside.locator('.ri-row[aria-selected="true"]').focus(); await page.evaluate(() => pollSnapshot());
+      assert(await focused(page, '#record-inspector .ri-row[aria-selected="true"]'), 'Refresh keeps the focused, selected row');
+      await page.evaluate(() => { D.liveSources.find(source => source.source === 'GDACS').observations = []; reinit(); });
+      assert(await aside.locator('.ri-detail.ri-outdated .ri-badge').isVisible(), 'The selected record stays visible, marked no longer current');
+      assert.equal(await aside.locator('.ri-row').count(), 0);
+      await page.evaluate(() => pollSnapshot()); assert.equal(await aside.locator('.ri-outdated').count(), 0); assert.equal(await aside.locator('.ri-row[aria-selected="true"]').count(), 1);
+      // Escape closes and returns focus to the card; a refresh keeps it closed.
+      await aside.locator('.ri-row').first().focus(); await page.keyboard.press('Escape'); await aside.waitFor({ state: 'hidden' });
+      assert.equal(await aside.getAttribute('aria-hidden'), 'true'); assert(await focused(page, '[data-open-records="GDACS"]'), 'Focus returns to the opener card');
+      assert.equal(hash(page), ''); assert.equal(await page.locator('.live-source[data-selected]').count(), 0);
+      await fetch(control); await page.evaluate(() => pollSnapshot()); assert(await aside.isHidden(), 'A refresh never reopens a closed inspector');
+      // Map marker of the live row opens the paired event (both row shapes).
+      if (!await page.evaluate(() => isFlat)) await page.locator('#projToggle').click();
+      const marker = page.locator('.markers [aria-label="' + title.replace(/"/g, '\\"') + '"]'); await marker.waitFor({ state: 'attached' });
+      await marker.click({ force: true }); await page.waitForSelector('#ci-dialog'); assert.equal(await page.locator('#ci-title').innerText(), title); await page.keyboard.press('Escape');
+      if (!legacy) {
+        // Expand with 'e', switch to all sources, collapse back with Escape, close with Escape.
+        await card.click(); await aside.waitFor({ state: 'visible' }); await page.keyboard.press('e');
+        const browserDialog = page.locator('#record-browser[open]'); await browserDialog.waitFor();
+        assert.equal(await page.locator('#record-browser').getAttribute('aria-labelledby'), 'rb-heading'); assert.match(hash(page), /view=browser/); assert(await aside.isHidden());
+        await browserDialog.locator('[data-ri-source="all"]').click(); assert.match(hash(page), /src=all/);
+        const events = await page.evaluate(() => currentSnapshot().events.length); assert(await browserDialog.locator('.ri-row').count() === Math.min(25, events), 'All sources lists the snapshot events');
+        await browserDialog.locator('.ri-row').first().click(); assert.equal(await browserDialog.locator('.rb-detail .ri-detail').isVisible(), true);
+        await page.screenshot({ path: path.join(artifacts, 'browser-desktop.png') });
+        await page.keyboard.press('Escape'); await aside.waitFor({ state: 'visible' }); assert.equal(await page.locator('#record-browser[open]').count(), 0); assert.match(hash(page), /src=GDACS/);
+        await page.keyboard.press('Escape'); await aside.waitFor({ state: 'hidden' }); assert(await focused(page, '[data-open-records="GDACS"]'));
+        // The hash restores the view on hashchange and on reload; a hostile hash opens nothing and throws nothing.
+        await page.goto(target.origin + '/#src=GDACS&sev=high', { waitUntil: 'domcontentloaded' }); await aside.waitFor({ state: 'visible' }); assert.equal(await aside.locator('.ri-row').count(), 1);
+        await page.reload({ waitUntil: 'domcontentloaded' }); await page.waitForSelector('#eventsTrigger'); await aside.waitFor({ state: 'visible' }); await page.waitForTimeout(1500);
+        assert.equal(await aside.locator('.ri-chip[data-ri-level="high"]').getAttribute('aria-pressed'), 'true'); assert.equal(await aside.locator('.ri-row').count(), 1, 'Reload with the hash reopens the same view');
+        const reloadedBar = await page.locator('#topbar').boundingBox(); assert(Math.abs((await aside.boundingBox()).y - Math.max(0, reloadedBar.y + reloadedBar.height)) <= 1, 'Opened before the top bar was filled, the panel still docks below it');
+        for (const hostile of ['#src=__proto__&rec=nope', '#src=__proto__&sev=<script>&win=999&q=%00&rec=nope&view=evil']) {
+          await page.goto(target.origin + '/' + hostile, { waitUntil: 'domcontentloaded' }); assert(await aside.isHidden(), 'A hostile hash closes the view');
+          await page.reload({ waitUntil: 'domcontentloaded' }); await page.waitForSelector('#eventsTrigger'); await page.waitForTimeout(1500);
+          assert(await aside.isHidden()); assert.equal(await page.locator('#record-browser[open]').count(), 0, 'A hostile hash opens nothing');
+        }
+      }
+      assert.equal(await page.evaluate(() => window.__liveXss), undefined, 'Hostile live titles stay inert');
+      console.log('INSPECTOR desktop PASS', { mode });
+    } finally { await context.close(); }
+  }
+  // Narrow screens: the inspector is a bottom sheet, the browser is full screen.
+  await fetch(target.origin + '/control?liveSources=true');
+  const { context, page } = await prepare({ width: 390, height: 844 });
+  try {
+    const card = page.locator('button.live-open[data-open-records="GDACS"]'), aside = page.locator('#record-inspector');
+    await card.scrollIntoViewIfNeeded(); await card.click(); await aside.waitFor({ state: 'visible' });
+    await aside.locator('.ri-row').first().click(); await page.waitForTimeout(300);
+    const box = await aside.boundingBox(), detail = await aside.locator('.ri-detail').boundingBox();
+    assert(box && Math.abs(box.width - 390) < 1 && Math.abs(box.y + box.height - 844) < 1 && box.height <= 844 * 0.75 + 1, 'Bottom sheet: full width, docked to the bottom, at most 75% high');
+    assert(detail && detail.y >= box.y && detail.y + detail.height <= box.y + box.height + 1, 'The detail stays inside the sheet');
+    assert(await aside.evaluate(node => node.scrollWidth <= node.clientWidth + 1), 'No horizontal clipping');
+    await page.screenshot({ path: path.join(artifacts, 'inspector-mobile.png') });
+    await aside.locator('[data-ri-action="expand"]').click(); await page.locator('#record-browser[open]').waitFor();
+    const sheet = await page.locator('#record-browser').boundingBox(); assert(sheet && sheet.width <= 390 && sheet.height <= 844);
+    await page.locator('#record-browser .ri-row').last().click(); const shown = await page.locator('#record-browser .rb-detail .ri-detail').boundingBox();
+    assert(shown && shown.y >= 0 && shown.y < 844 && await page.locator('#rb-heading').isVisible(), 'A tap in the stacked browser brings the detail into view, the header stays');
+    await page.screenshot({ path: path.join(artifacts, 'browser-mobile.png') });
+    await page.locator('#record-browser [data-ri-action="close"]').click(); assert.equal(await page.locator('#record-browser[open]').count(), 0); assert(await aside.isHidden());
+    assert.equal(await page.evaluate(() => window.__liveXss), undefined);
+    console.log('INSPECTOR mobile PASS', { sheet: box });
+  } finally { await context.close(); await fetch(target.origin + '/control?liveSources=false'); }
+}
 try {
   if (phase === 'detail' || phase === 'all') await detailChecks();
   if (phase === 'history' || phase === 'all') { await historyChecks(); await clusterChecks(); }
   if (phase === 'profiles' || phase === 'all') await profileChecks();
+  if (phase === 'inspector' || phase === 'all') await inspectorChecks();
   assert.deepEqual(errors, [], 'No browser runtime errors'); assert.deepEqual(external, [], 'No unexpected external requests');
   if (phase === 'profiles' || phase === 'all') assert.deepEqual(legacyAssets, [], 'PWA phase loads all assets locally without legacy CDN routing');
   console.log('Intelligence UI QA passed', { phase, target: target.origin, artifacts, browserPlugin: 'not available; existing Playwright used' });

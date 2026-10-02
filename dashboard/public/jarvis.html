@@ -12,8 +12,11 @@
 <script src="vendor/countries-110m-2.0.2.js"></script>
 <link rel="stylesheet" href="intelligence.css">
 <script src="intelligence.js"></script>
+<script src="record-core.js"></script>
 <script src="live-sources.js"></script>
+<script src="record-inspector.js"></script>
 <link rel="stylesheet" href="live-sources.css">
+<link rel="stylesheet" href="record-inspector.css">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#020408">
 <script src="pwa.js"></script>
@@ -1655,8 +1658,9 @@ function plotMarkers(){
 
 function currentSnapshot(){
   const rows=CrucixLiveSources.observations(D.liveSources);
-  const names=new Set(Object.keys(CrucixLiveSources.policies));
-  return {...D,events:D.events.filter(event=>event&&typeof event==='object'&&(!names.has(event.source?.name)||rows.some(row=>row.source===event.source.name&&row.title===event.title&&row.observedAt===event.observedAt)))};
+  const names=new Set(Object.keys(CrucixLiveSources.policies)),ids=new Set(rows.map(row=>row.eventId).filter(Boolean));
+  // Live events stay while their row is fresh: by eventId (2.9.0 rows) or by source + title + observedAt (2.8.0 rows).
+  return {...D,events:D.events.filter(event=>event&&typeof event==='object'&&(!names.has(event.source?.name)||ids.has(event.id)||rows.some(row=>row.source===event.source.name&&row.title===event.title&&row.observedAt===event.observedAt)))};
 }
 let liveExpirySignature='';
 function refreshLiveFreshness(){
@@ -1664,6 +1668,7 @@ function refreshLiveFreshness(){
   if(signature===liveExpirySignature)return;
   liveExpirySignature=signature;
   window.CrucixIntelligence?.update(currentSnapshot());
+  window.CrucixRecordInspector?.refresh();
   const panel=document.querySelector('.live-sources-panel');
   if(panel)panel.outerHTML=CrucixLiveSources.renderPanel(D.liveSources,t,currentSnapshot().events);
   const healthPanel=document.querySelector('[data-source-state]')?.closest('.g-panel');
@@ -1867,9 +1872,10 @@ function plotFlatMarkers(){
     if(marker){marker.attr('data-cluster-id',cluster.id).attr('role','button').attr('tabindex',0).attr('aria-label',t('intelligence.cluster','Grouped reports')+' '+cluster.count).on('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();CrucixIntelligence.openCluster(cluster);}});marker.append('text').attr('text-anchor','middle').attr('dy','.35em').attr('fill','#020408').attr('font-size','9px').text(cluster.count);}
   }
   // NOAA weather
+  const snapshotEvents=currentSnapshot().events,eventsById=CrucixRecords.indexEvents(snapshotEvents);
   for(const row of CrucixLiveSources.observations(D.liveSources).filter(row=>hasCoordinates(row.lat,row.lon))){
     flatMarkerType=row.kind==='disaster'?'disaster':row.kind==='forecast'?'forecast':'weather';
-    const event=currentSnapshot().events.find(event=>event.source.name===row.source&&event.title===row.title&&event.observedAt===row.observedAt);
+    const event=CrucixRecords.eventForRow(row,eventsById,snapshotEvents);
     const marker=addPt(row.lat,row.lon,4,'rgba(100,200,255,.8)','rgba(100,200,255,.3)',ev=>event?CrucixIntelligence.openEvent(event.id):showPopup(ev,row.title,row.summary,row.source),2);
     if(marker&&event)marker.attr('role','button').attr('tabindex',0).attr('aria-label',row.title).on('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();CrucixIntelligence.openEvent(event.id);}});
   }
@@ -2276,6 +2282,7 @@ function syncResponsiveLayout(force=false){
 // === REINIT (for live updates without boot sequence) ===
 function reinit(){
   window.CrucixIntelligence?.update(currentSnapshot());
+  window.CrucixRecordInspector?.refresh();
   rerenderDashboard(true);
   plotMarkers();
   if(document.getElementById('settingsOverlay')?.classList.contains('show')) renderSettingsBoard();
@@ -2354,13 +2361,12 @@ function init(){
   syncResponsiveLayout(true);
 }
 document.addEventListener('DOMContentLoaded',()=>{
-  document.addEventListener('toggle',ev=>{const article=ev.target.closest?.('.live-source');if(article&&ev.target.tagName==='DETAILS')CrucixLiveSources.setExpanded(article.dataset.liveSource,ev.target.open);},true);
-  document.addEventListener('click',ev=>{const button=ev.target.closest?.('.live-detail[data-event-id]');if(button)CrucixIntelligence.openEvent(button.dataset.eventId);});
   document.documentElement.lang=L.meta?.code||'en';document.title=t('dashboard.title',document.title);
   window.CrucixIntelligence?.init({getSnapshot:currentSnapshot,getLayout:()=>dashboardLayout,
     applyLayout:value=>{dashboardLayout=normalizeDashboardLayout(value);saveDashboardLayout();reinit();},
     getLayers:()=>mapLayers,applyLayers:value=>{for(const layer of mapLayerRegistry)if(typeof value?.[layer.id]==='boolean')mapLayers[layer.id]=value[layer.id];flightsVisible=mapLayers.air!==false;writePreference(MAP_LAYER_STORAGE_KEY,JSON.stringify(mapLayers));reinit();},
     getRegion:()=>currentRegion,applyRegion:setRegion,t,escapeText:esc,historyEnabled:location.protocol!=='file:',profilesEnabled:true});
+  window.CrucixRecordInspector?.mount({getSources:()=>D.liveSources,getEvents:()=>currentSnapshot().events,t,now:Date.now});
   init();
   if(location.protocol!=='file:')CrucixPWA.init({getSnapshot:()=>D,applySnapshot:data=>!D.meta.timestamp&&applySnapshot(data,{cached:true}),t});
   if(location.protocol!=='file:'){

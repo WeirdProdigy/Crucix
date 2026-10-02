@@ -101,5 +101,187 @@
   }
   // ===== End render =====
 
-  window.CrucixRecordInspector={renderInspector,renderBrowser};
+  // ===== Controller =====
+  // Thin DOM layer: CrucixRecords.store is the single state, mirrored to location.hash (replaceState only, never storage).
+  // The docked <aside> and the modal <dialog> are body children; the live panel is never re-rendered for selection state.
+  const R=window.CrucixRecords,SCROLLERS=['.ri-list','.ri-detail','.rb-cols','.rb-sources','.rb-list','.rb-detail'];
+  let opts={},aside=null,dialog=null,lastRec=null,home=null;
+  const live=()=>window.CrucixLiveSources;
+  const clock=()=>{const value=typeof opts.now==='function'?opts.now():NaN;return Number.isFinite(value)?value:Date.now();};
+  const arrayOf=fn=>{try{const value=fn?.();return Array.isArray(value)?value:[];}catch{return [];}};
+  const sources=()=>arrayOf(opts.getSources).filter(source=>obj(source)&&Object.hasOwn(live().policies,source.source));
+  const set=state=>R.store.set(state);
+  const card=name=>name?document.querySelector(`[data-open-records="${CSS.escape(name)}"]`):null;
+
+  // Records of one live source (fresh rows only) or of every snapshot event (`all`).
+  // 2.8.0 rows have no eventId: they are paired to their event by source + title + observedAt, so "Event details" still works.
+  function recordsOf(name,now,events,byId){
+    if(name==='all')return R.toRecords(events);
+    const source=sources().find(item=>item.source===name);if(!source)return [];
+    const rows=live().observations([source],now).map(row=>{if(row.eventId)return row;const event=R.eventForRow(row,byId,events);return event?{...row,eventId:event.id}:row;});
+    return R.toRecords(rows,name);
+  }
+  const info=(source,now)=>source&&{...source,name:source.source,state:live().state(source,now)};
+  // view.total is the count before filters; the selection survives as outdated while lastRec still matches its key.
+  function view(state,now,browser){
+    const events=arrayOf(opts.getEvents),byId=R.indexEvents(events),recs=recordsOf(state.source,now,events,byId),f=state.filters,picked=R.reconcileSelection(state.record,lastRec,recs);
+    if(picked.record&&!picked.outdated)lastRec=picked.record;
+    const out={source:info(sources().find(item=>item.source===state.source),now),all:state.source==='all',records:R.sortRecords(R.filterRecords(recs,f,now),f.sort),total:recs.length,filters:f,limit:state.limit,selected:picked.record?picked:null};
+    if(browser)out.sources=sources().map(source=>{const rows=source.source===state.source?recs:recordsOf(source.source,now,events,byId);return {name:source.source,state:live().state(source,now),count:rows.length,levels:R.countByLevel(rows)};});
+    return out;
+  }
+
+  // Re-render one container, keeping its scroll positions and the focused control (rows by key, controls by id or data attribute).
+  function focusSelector(node){
+    if(!node)return null;
+    if(node.classList.contains('ri-row'))return `.ri-row[data-key="${CSS.escape(node.dataset.key||'')}"]`;
+    if(node.id)return '#'+CSS.escape(node.id);
+    const attr=['data-ri-action','data-ri-level','data-ri-source'].find(name=>node.hasAttribute(name));
+    return attr?`[${attr}="${CSS.escape(node.getAttribute(attr))}"]`:null;
+  }
+  function paint(el,html){
+    const active=el.contains(document.activeElement)?document.activeElement:null,selector=focusSelector(active),caret=active?.tagName==='INPUT'?active.selectionStart:null;
+    const scroll=SCROLLERS.map(selector=>el.querySelector(selector)?.scrollTop||0);
+    el.innerHTML=html;
+    SCROLLERS.forEach((selector,i)=>{const node=el.querySelector(selector);if(node&&scroll[i])node.scrollTop=scroll[i];});
+    if(!active)return;
+    const target=(selector&&el.querySelector(selector))||el.querySelector('.ri-row[tabindex="0"]')||el.querySelector('[data-ri-action="close"]');
+    target?.focus({preventScroll:true});
+    if(caret!==null&&target?.tagName==='INPUT')try{target.setSelectionRange(caret,caret);}catch{}
+  }
+  // A closed state clears only a hash this controller wrote; any other hash is left alone.
+  function writeHash(state){
+    const hash=R.serializeHash(state),allowed=Object.keys(live().policies);
+    if(hash===location.hash.replace(/^#/,'')||(!hash&&!R.parseHash(location.hash,allowed).source))return;
+    try{history.replaceState(null,'',hash?'#'+hash:location.pathname+location.search);}catch{}
+  }
+  function fromHash(){
+    const parsed=R.parseHash(location.hash,Object.keys(live().policies));
+    if(!parsed.source)return R.closeAll();
+    let state=R.openSource(R.closeAll(),parsed.source);
+    if(parsed.filters)state=R.setFilters(state,parsed.filters);
+    if(parsed.record)state=R.selectRecord(state,parsed.record);
+    if(parsed.source!=='all')home=parsed.source;
+    return parsed.browserOpen?R.openBrowser(state):state;
+  }
+
+  function render(){
+    if(!aside)return;
+    const state=R.store.get(),now=clock(),open=!!state.source,browser=open&&(state.browserOpen||state.source==='all');
+    writeHash(state);
+    for(const node of document.querySelectorAll('.live-source[data-live-source]'))if(open&&node.dataset.liveSource===state.source)node.setAttribute('data-selected','true');else node.removeAttribute('data-selected');
+    if(!open)lastRec=null;
+    const v=open?view(state,now,browser):null,t=opts.t;
+    aside.hidden=!open||browser;aside.setAttribute('aria-hidden',String(aside.hidden));
+    if(!aside.hidden){paint(aside,renderInspector(v,t,now));dock();}
+    if(browser){paint(dialog,renderBrowser(v,t,now));if(!dialog.open)dialog.showModal();}
+    else if(dialog.open)dialog.close();
+  }
+  // The docked panel starts below the dashboard top bar while that bar is on screen (it wraps to several rows and scrolls away).
+  function dock(){if(aside&&!aside.hidden)aside.style.setProperty('--ri-top',Math.max(0,Math.round(document.getElementById('topbar')?.getBoundingClientRect().bottom||0))+'px');}
+  const focusIn=el=>(el.querySelector('.ri-row[tabindex="0"]')||el.querySelector('[data-ri-action="close"]'))?.focus();
+  function openFrom(name){
+    const state=R.store.get();home=name;
+    if(state.source!==name){lastRec=null;set(R.openSource(state,name));}
+    focusIn(aside);
+  }
+  function close(){
+    const name=R.store.get().source;
+    set(R.closeAll());
+    card(name)?.focus();
+  }
+  // Back from the browser: to the inspector of the source, or (from `all`) of the last opened source, else closed.
+  function collapse(){
+    const state=R.store.get();
+    if(state.source!=='all')set(R.closeBrowser(state));
+    else if(home){lastRec=null;set(R.openSource(state,home));}
+    else return close();
+    aside.querySelector('[data-ri-action="expand"]')?.focus();
+  }
+  // The event detail overlay cannot sit above a modal dialog, so the browser collapses first.
+  function details(id){
+    if(!id)return;
+    if(dialog.open)collapse();
+    window.CrucixIntelligence?.openEvent(id);
+  }
+  // Select and focus a row, keeping it in view once the detail has taken its share of the panel.
+  function select(key,root){
+    if(!key)return;
+    set(R.selectRecord(R.store.get(),key));
+    const row=root.querySelector(`.ri-row[data-key="${CSS.escape(key)}"]`),list=row?.closest('.ri-list');
+    if(!row)return;
+    // Only the docked list scrolls itself; in the browser the column scrolls and focus() brings the row into view.
+    if(!list||list.scrollHeight<=list.clientHeight)return row.focus();
+    row.focus({preventScroll:true});
+    const top=row.offsetTop-list.offsetTop,bottom=top+row.offsetHeight;
+    if(top<list.scrollTop)list.scrollTop=top;else if(bottom>list.scrollTop+list.clientHeight)list.scrollTop=bottom-list.clientHeight;
+  }
+
+  function onClick(event){
+    const node=event.target.closest?.('[data-ri-action],.ri-row,.ri-chip,[data-ri-source]');if(!node)return;
+    const state=R.store.get(),root=event.currentTarget;
+    // In the stacked (narrow) browser the detail sits below the list: bring it into view after a tap.
+    if(node.classList.contains('ri-row')){
+      select(node.dataset.key,root);
+      const cols=root.querySelector('.rb-cols'),detail=root.querySelector('.rb-detail');
+      if(cols&&detail&&getComputedStyle(cols).display==='block')cols.scrollTop+=detail.getBoundingClientRect().top-cols.getBoundingClientRect().top;
+      return;
+    }
+    if(node.classList.contains('ri-chip')){const level=node.dataset.riLevel,levels=state.filters.levels;return set(R.setFilters(state,{levels:levels.includes(level)?levels.filter(item=>item!==level):[...levels,level]}));}
+    if(node.hasAttribute('data-ri-source')){const name=node.dataset.riSource;if(name!=='all')home=name;lastRec=null;return set(R.openBrowser(R.openSource(state,name)));}
+    const action=node.dataset.riAction;
+    if(action==='close')close();
+    else if(action==='expand')set(R.openBrowser(state));
+    else if(action==='collapse')collapse();
+    else if(action==='more')set(R.showMore(state));
+    else if(action==='details')details(node.dataset.eventId);
+  }
+  // Selects commit on change, the search box on every input (not mid-composition).
+  function onFilter(event){
+    const node=event.target.closest?.('[data-ri-filter]'),kind=node?.dataset.riFilter;
+    if(!node||event.isComposing||(kind==='search')!==(event.type==='input'))return;
+    set(R.setFilters(R.store.get(),kind==='window'?{windowHours:Number(node.value)}:kind==='sort'?{sort:node.value}:{text:node.value}));
+  }
+  // Keys only act while focus is inside the inspector or the browser; form fields keep their typing.
+  function onKey(event){
+    if(event.defaultPrevented||event.altKey||event.ctrlKey||event.metaKey)return;
+    const root=event.currentTarget,target=event.target,key=event.key,row=target.closest?.('.ri-row');
+    if(key==='Escape'){event.preventDefault();return root===dialog?collapse():close();}
+    if(target.matches?.('input,select,textarea'))return;
+    const step=key==='j'||row&&key==='ArrowDown'?1:key==='k'||row&&key==='ArrowUp'?-1:0;
+    if(step){
+      event.preventDefault();
+      const rows=[...root.querySelectorAll('.ri-row')],from=rows.indexOf(row||root.querySelector('.ri-row[aria-selected="true"]'));
+      const next=rows[from<0?0:Math.min(rows.length-1,Math.max(0,from+step))];
+      if(next)select(next.dataset.key,root);
+    }
+    else if(key==='Enter'&&row){event.preventDefault();if(row.getAttribute('aria-selected')!=='true')select(row.dataset.key,root);else details(root.querySelector('[data-ri-action="details"]')?.dataset.eventId);}
+    else if(key==='/'){event.preventDefault();root.querySelector('[data-ri-filter="search"]')?.focus();}
+    else if(key==='e'&&root===aside){event.preventDefault();set(R.openBrowser(R.store.get()));}
+  }
+
+  // Once, after the dashboard has its data accessors: getSources() -> live source rows, getEvents() -> snapshot events.
+  function mount(options){
+    if(aside)return;
+    opts=obj(options)||{};
+    aside=document.createElement('aside');aside.id='record-inspector';aside.hidden=true;aside.setAttribute('aria-hidden','true');aside.setAttribute('aria-labelledby','ri-heading');
+    dialog=document.createElement('dialog');dialog.id='record-browser';dialog.setAttribute('aria-labelledby','rb-heading');
+    document.body.append(aside,dialog);
+    for(const el of [aside,dialog]){el.addEventListener('click',onClick);el.addEventListener('change',onFilter);el.addEventListener('input',onFilter);el.addEventListener('keydown',onKey);}
+    // A dialog closed by the browser itself (e.g. a close request) collapses the state too; our own close() finds it already collapsed.
+    dialog.addEventListener('close',()=>{const state=R.store.get();if(state.source&&(state.browserOpen||state.source==='all'))collapse();});
+    document.addEventListener('click',event=>{const button=event.target.closest?.('[data-open-records]');if(button)openFrom(button.dataset.openRecords);});
+    window.addEventListener('hashchange',()=>{lastRec=null;set(fromHash());});
+    // The dashboard scrolls <body>, whose scroll events do not bubble: listen in the capture phase.
+    // The top bar is filled (and re-wraps) after mount: follow its size as well as the scroll position.
+    document.addEventListener('scroll',event=>{if(!aside.contains(event.target))dock();},{capture:true,passive:true});
+    const bar=document.getElementById('topbar');if(bar&&typeof ResizeObserver==='function')new ResizeObserver(dock).observe(bar);else window.addEventListener('resize',dock);
+    R.store.subscribe(render);
+    set(fromHash());
+  }
+  // After new data: re-render in place (scroll, focused row and selection kept); never reopens a closed view.
+  function refresh(){if(aside&&R.store.get().source)render();}
+  // ===== End controller =====
+
+  window.CrucixRecordInspector={renderInspector,renderBrowser,mount,refresh};
 })(window);

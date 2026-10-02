@@ -5,7 +5,7 @@ import { resolve, extname, sep, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import express from 'express';
 import { inlineJson } from '../../lib/html.mjs';
-import { buildEvents, clusterEvents } from '../../lib/intelligence/events.mjs';
+import { buildEvents, clusterEvents, stampLiveEventIds } from '../../lib/intelligence/events.mjs';
 import { HistoryStore } from '../../lib/intelligence/history.mjs';
 import { installIntelligenceRoutes } from '../../lib/intelligence/routes.mjs';
 import { getLocaleForLanguage } from '../../lib/i18n.mjs';
@@ -52,9 +52,14 @@ const server = http.createServer((req, res) => {
           title:'Fixture current '+source+' <img onerror="window.__liveXss=1">',summary:'Public data: safe text only',url:'https://example.org/public/'+index,observedAt:new Date(now-600000).toISOString(),
           ...(source==='MET-Norway'?{forecastAt:new Date(now+3600000).toISOString(),validUntil:new Date(now+7200000).toISOString()}:{}),
           ...(['MET-Norway','GDACS','NASA-EONET'].includes(source)?{lat:47.5+index,lon:19+index,locationMethod:'provider',locationPrecision:'approximate'}:{}),
-        }]
+          ...(source==='GDACS'?{severity:'Orange'}:{}),
+        },
+        // A second GDACS record at another level, so the inspector's severity chips have something to filter.
+        ...(source==='GDACS'?[{providerId:'live-'+index+'-b',source,kind:'disaster',title:'Fixture GDACS green alert',summary:'Public data: second record',severity:'Green',observedAt:new Date(now-1200000).toISOString()}]:[])]
       }]))):[];
       if(enabled&&url.searchParams.get('expired')==='true')data.liveSources[0].observedAt='2025-01-01T00:00:00Z';
+      // Rows carry eventId as in 2.9.0 snapshots; legacyIds=true keeps the 2.8.0 shape without it.
+      if(url.searchParams.get('legacyIds')!=='true')data.liveSources=stampLiveEventIds(data.liveSources);
       data.events=buildEvents(data);data.eventClusters=clusterEvents(data.events);history.add(data.events);
     }
     if(['en','hu','fr'].includes(url.searchParams.get('language')))fixtureLanguage=url.searchParams.get('language');

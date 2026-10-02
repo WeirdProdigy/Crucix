@@ -4,8 +4,8 @@
 .ri-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .ri-glyph{flex:none;width:1.2em;text-align:center;line-height:1}
 
-/* Docked inspector: 480 px from the right edge, below the top bar; the map and the sidebar stay visible. */
-#record-inspector{position:fixed;top:76px;right:0;bottom:0;z-index:900;width:480px;max-width:100%;display:flex;flex-direction:column;overflow:hidden;padding:14px 16px 10px;background:#060e16;border-left:1px solid var(--border-bright,rgba(100,240,200,.3));box-shadow:-12px 0 40px rgba(0,0,0,.5);color:var(--text);font-family:var(--sans);font-size:12px;line-height:1.5;animation:ri-slide-left .22s ease-out}
+/* Docked inspector: 480 px from the right edge, below the top bar (--ri-top is set by the controller from #topbar); the map and the sidebar stay visible. */
+#record-inspector{position:fixed;top:var(--ri-top,76px);right:0;bottom:0;z-index:900;width:480px;max-width:100%;display:flex;flex-direction:column;overflow:hidden;padding:14px 16px 10px;background:#060e16;border-left:1px solid var(--border-bright,rgba(100,240,200,.3));box-shadow:-12px 0 40px rgba(0,0,0,.5);color:var(--text);font-family:var(--sans);font-size:12px;line-height:1.5;animation:ri-slide-left .22s ease-out}
 #record-inspector[hidden]{display:none}
 @keyframes ri-slide-left{from{transform:translateX(100%)}to{transform:none}}
 @keyframes ri-slide-up{from{transform:translateY(100%)}to{transform:none}}
@@ -31,7 +31,8 @@
 .ri-field-search{flex:1 1 140px}
 .ri-field select,.ri-field input{min-height:30px;padding:0 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font:inherit;font-size:12px;letter-spacing:normal;text-transform:none}
 
-.ri-list{flex:1 1 auto;min-height:96px;margin:0;padding:0;list-style:none;overflow:auto;overscroll-behavior:contain}
+/* Basis 0: the list takes the space left after the detail (at least 96 px), so a selected record stays readable. */
+.ri-list{flex:1 1 0;min-height:96px;margin:0;padding:0;list-style:none;overflow:auto;overscroll-behavior:contain}
 .ri-row{display:flex;align-items:center;gap:8px;min-height:44px;padding:6px 8px;border-bottom:1px solid var(--border);cursor:pointer;content-visibility:auto;contain-intrinsic-size:auto 56px}
 .ri-row:hover{background:rgba(100,240,200,.05)}
 .ri-row[aria-selected="true"]{background:rgba(100,240,200,.1);box-shadow:inset 3px 0 0 var(--accent)}
@@ -97,4 +98,6 @@
   .ri-chip,.ri-more,.ri-details,.rb-collapse,.rb-source,.ri-field select,.ri-field input{min-height:44px}
   .ri-row{min-height:48px}
 }
+/* Keyboard hints are noise on touch-only devices and cost the bottom sheet a line. */
+@media(hover:none) and (pointer:coarse){.ri-keys{display:none}}
 @media(prefers-reduced-motion:reduce){#record-inspector{animation:none}}
