@@ -1,8 +1,6 @@
 (function(window){
   'use strict';
   const HOUR=3600000;
-  const expanded=new Set();
-  function setExpanded(source,value){if(Object.hasOwn(policies,source)){if(value)expanded.add(source);else expanded.delete(source);}}
   const policies={Meteoalarm:{maxAgeMs:3*HOUR,observationMaxAgeMs:48*HOUR},GDACS:{maxAgeMs:6*HOUR,observationMaxAgeMs:72*HOUR},'NOAA-SWPC':{maxAgeMs:HOUR},ECB:{maxAgeMs:120*HOUR},'NASA-EONET':{maxAgeMs:72*HOUR},RIPEstat:{maxAgeMs:8*HOUR},'FIRST-EPSS':{maxAgeMs:48*HOUR},'MET-Norway':{maxAgeMs:8*HOUR},OONI:{maxAgeMs:24*HOUR}};
   const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   function time(value){
@@ -43,18 +41,28 @@
     function walk(value,path='',depth=0){if(depth>3||!value||typeof value!=='object')return;for(const [key,item] of Object.entries(value).slice(0,40)){const label=path?path+' / '+key:key;if(typeof item==='string'||typeof item==='number'||typeof item==='boolean')rows.push(label+': '+item);else walk(item,label,depth+1);if(rows.length>=8)return;}}
     walk(metrics);return rows.slice(0,8).join(' · ');
   }
-  function renderPanel(sources,t,events=[],now=Date.now()){
-    const tr=(key,fallback)=>esc(t('liveSources.'+key,fallback));
+  // One badge per known level that has records: glyph and count, so colour is never the only signal.
+  function badges(R,recs,t){
+    const counts=R.countByLevel(recs);
+    return R.LEVELS.filter(level=>level!=='unknown'&&counts[level]).map(level=>`<span class="sev sev-${level}" title="${esc(t('inspector.level.'+level,level[0].toUpperCase()+level.slice(1)))}"><i aria-hidden="true">${R.GLYPH[level]}</i>${counts[level]}</span>`).join('');
+  }
+  // `events` is unused (the inspector pairs records by eventId); it stays so `now` keeps its position.
+  function renderPanel(sources,t,events,now=Date.now()){
+    const R=window.CrucixRecords,tr=(key,fallback)=>esc(t('liveSources.'+key,fallback));
     const providers=(Array.isArray(sources)?sources:[]).slice(0,9).filter(source=>source&&Object.hasOwn(policies,source.source));
     const cards=providers.map(source=>{
       const status=state(source,now),rows=observations([source],now),url=safeUrl(source.url);
       const partialForecast=source.source==='MET-Norway'&&rows.length!==(source.observations||[]).length;
-      const content=status==='ok'?`<p class="live-summary">${esc((partialForecast?'':source.summary)|| (partialForecast?'':metricText(source.metrics))|| (rows.length?rows.length+' '+t('liveSources.records','current records'):t('liveSources.noRecords','No current records in the watched scope')))}</p>`:`<p class="live-summary">${status==='error'?tr('unavailable','Source unavailable'):tr('expired','Provider data expired or its timestamp is unknown. Live records are hidden.')}</p>`;
-      const entries=rows.map(row=>{const event=events.find(event=>event.source?.name===source.source&&event.title===row.title&&event.observedAt===row.observedAt);const link=safeUrl(row.url);return `<div class="live-record">${event?`<button type="button" class="live-detail" data-event-id="${esc(event.id)}">${esc(row.title)}</button>`:`<strong>${esc(row.title)}</strong>`}<p>${esc(row.summary)}</p><small>${tr('providerTime','Provider time')}: ${esc(stamp(row.observedAt||row.publishedAt))}${row.forecastAt?'<br>'+tr('forecastFor','Forecast for')+': '+esc(stamp(row.forecastAt)):''}${row.startsAt?'<br>'+tr('startsAt','Starts at')+': '+esc(stamp(row.startsAt)):''}${row.validUntil?'<br>'+tr('validUntil','Valid until')+': '+esc(stamp(row.validUntil)):''}</small>${!event&&link?`<a href="${esc(link)}" target="_blank" rel="noopener noreferrer">${tr('original','Original source')} ↗</a>`:''}</div>`;}).join('');
+      const recs=R?R.toRecords(rows,source.source):[],count=R?recs.length:rows.length;
+      const detail=status==='ok'?(partialForecast?'':source.summary||metricText(source.metrics))||(count?'':t('liveSources.noRecords','No current records in the watched scope')):'';
+      const content=status==='ok'?(detail?`<p class="live-summary">${esc(detail)}</p>`:''):`<p class="live-summary">${status==='error'?tr('unavailable','Source unavailable'):tr('expired','Provider data expired or its timestamp is unknown. Live records are hidden.')}</p>`;
+      const top=R?R.sortRecords(recs,'severity').slice(0,3).map(rec=>`<li>${esc(rec.title)}</li>`).join(''):'';
+      const overview=count?`<div class="live-meta"><span>${count} ${tr('records','current records')}</span>${R?badges(R,recs,t):''}</div>${top?`<ul class="live-top" aria-label="${tr('topRecords','Top records')}">${top}</ul>`:''}`:'';
+      const open=status==='ok'?`<button type="button" class="live-open" data-open-records="${esc(source.source)}" aria-controls="record-inspector">${tr('openRecords','Open records')}</button>`:'';
       const licenseUrl=safeUrl(source.licenseUrl);
-      return `<article class="live-source" data-live-source="${esc(source.source)}" data-live-state="${status}"><div class="live-source-head"><h4>${url?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(source.source)} ↗</a>`:esc(source.source)}</h4><span class="source-state ${status}">${tr(status,status==='ok'?'Current':status==='error'?'Unavailable':'Expired')}</span></div><small>${tr('providerTime','Provider time')}: ${esc(stamp(source.observedAt))}</small>${content}${rows.length?`<details${expanded.has(source.source)?' open':''}><summary>${tr('showRecords','Show records')} (${rows.length})</summary>${entries}</details>`:''}${source.attribution||source.rights?`<small class="live-attribution">${esc(source.attribution)} ${esc(source.rights)}</small>`:''}${source.license?`<small>${licenseUrl?'<a href="'+esc(licenseUrl)+'" target="_blank" rel="noopener noreferrer">'+esc(source.license)+'</a>':esc(source.license)}</small>`:''}</article>`;
+      return `<article class="live-source" data-live-source="${esc(source.source)}" data-live-state="${status}"${R?.store.get().source===source.source?' data-selected="true"':''}><div class="live-source-head"><h4>${url?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(source.source)} ↗</a>`:esc(source.source)}</h4><span class="source-state ${status}">${tr(status,status==='ok'?'Current':status==='error'?'Unavailable':'Expired')}</span></div><small>${tr('providerTime','Provider time')}: ${esc(stamp(source.observedAt))}</small>${content}${overview}${open}${source.attribution||source.rights?`<small class="live-attribution">${esc(source.attribution)} ${esc(source.rights)}</small>`:''}${source.license?`<small>${licenseUrl?'<a href="'+esc(licenseUrl)+'" target="_blank" rel="noopener noreferrer">'+esc(source.license)+'</a>':esc(source.license)}</small>`:''}</article>`;
     }).join('');
     return `<div class="g-panel live-sources-panel"><div class="sec-head"><h3>${tr('title','Current public data')}</h3><span class="badge">${providers.filter(row=>state(row,now)==='ok').length}/${providers.length}</span></div><p class="live-help">${tr('help','Only records within each provider’s freshness window are shown. Forecasts and model estimates are labelled.')}</p><div class="live-source-list">${cards||'<div class="empty-state">'+tr('waiting','Waiting for the first collection')+'</div>'}</div></div>`;
   }
-  window.CrucixLiveSources={policies,state,observations,renderPanel,setExpanded};
+  window.CrucixLiveSources={policies,state,observations,renderPanel};
 })(window);
