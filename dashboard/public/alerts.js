@@ -158,7 +158,7 @@
   const FOCUS_ATTRS=['data-alert-action','data-alert-id','data-minutes','data-severity','data-rule-id','data-event-id'];
   const BELL='<svg class="al-bell-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false"><path d="M8 1.75a4 4 0 0 0-4 4v2.5l-1.25 2.5h10.5L12 8.25v-2.5a4 4 0 0 0-4-4zM6.5 12.75a1.5 1.5 0 0 0 3 0" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
   let opts={},strip=null,tray=null,toasts=null,announcer=null,errorLive=null,summary={},alerts=[],loaded=false,primed=false,readOnly=false;
-  let tab='active',threatOpen=false,expandedGroups=[],notice=null,opener=null,loadSeq=0,loadTimer=null,lastLevel=0;
+  let tab='active',threatOpen=false,expandedGroups=[],notice=null,opener=null,loadSeq=0,loadTimer=null,speakTimer=0,lastLevel=0;
   const seen=new Set(),busy=new Set();
   const log=error=>{try{console.error('[alerts]',error);}catch{}};
   const guarded=fn=>(...args)=>{try{return fn(...args);}catch(error){log(error);}};
@@ -201,9 +201,11 @@
     notice={where,key,fallback};
     if(!errorLive||(repeat&&!always))return;
     // Emptied first, so the same message twice in a row is spoken twice.
-    const message=say(key,fallback);errorLive.textContent='';
-    setTimeout(()=>{errorLive.textContent=message;},50);
+    const message=say(key,fallback);errorLive.textContent='';clearTimeout(speakTimer);
+    speakTimer=setTimeout(()=>{errorLive.textContent=message;},50);
   }
+  // Every place a notice goes away: the visible text, the persistent live region and an announcement still pending.
+  function clearNotice(){notice=null;clearTimeout(speakTimer);if(errorLive)errorLive.textContent='';}
   function drawStrip(){
     if(!strip)return;
     paint(strip,renderStrip(summary,opts.t,clock(),threatOpen&&trayOpen())+(notice?.where==='strip'?noticeHtml('span'):''),'.as-threat');
@@ -248,6 +250,12 @@
   // Requests: same origin, JSON both ways, 10 s deadline. Every method but GET sends Content-Type: application/json, DELETE
   // too (the server refuses any other shape for a change); the body is optional. The answer must be a JSON object: an HTML
   // login page or other garbage behind a 2xx is a failure. Also CrucixAlerts.request(url, body, method) for the rule editor.
+  // A refused request keeps what the server said ({error, code, field}: plain text, never markup) for the caller.
+  function httpError(status,data){
+    const failure=new Error('HTTP '+status),body=obj(data)||{};
+    failure.status=status;failure.code=text(body.code);failure.field=text(body.field);failure.detail=text(body.error);
+    return failure;
+  }
   async function request(url,body,method){
     if(readOnly)throw new Error('Read-only');
     const verb=typeof method==='string'?method.toUpperCase():body===undefined?'GET':'POST';
@@ -260,7 +268,7 @@
       if(typeof AbortSignal!=='undefined'&&typeof AbortSignal.timeout==='function')init.signal=AbortSignal.timeout(10000);
       const response=await fetch(url,{cache:'no-store',...init});
       data=await response.json().catch(()=>null);
-      if(!response.ok)throw new Error('HTTP '+response.status);
+      if(!response.ok)throw httpError(response.status,data);
     }
     if(!obj(data))throw new Error('Not a JSON object');
     return data;
@@ -274,7 +282,7 @@
       if(!Array.isArray(data.alerts))throw new Error('No alert list');
       if(seq!==loadSeq)return;
       alerts=list(data.alerts);loaded=true;
-      if(notice?.key==='alerts.errorLoad')notice=null;
+      if(notice?.key==='alerts.errorLoad')clearNotice();
       for(const alert of alerts){if(!text(alert.id))continue;seen.add(alert.id);if(alert.state!=='firing')dropToast(alert.id);}
     }catch(error){
       if(seq!==loadSeq)return;
@@ -289,7 +297,7 @@
     busy.add(path);
     try{
       const data=await request('/api/alerts/'+path,body);
-      notice=null;drop?.();
+      clearNotice();drop?.();
       if(!update(data.summary)){drawStrip();drawTray();}
       scheduleLoad();
     }catch(error){
@@ -321,7 +329,7 @@
     if(!trayOpen())return;
     const inside=tray.contains(document.activeElement);
     tray.hidden=true;tray.setAttribute('aria-hidden','true');threatOpen=false;
-    if(notice?.where==='tray')notice=null;
+    if(notice?.where==='tray')clearNotice();
     for(const toggle of openToggles())setMenu(toggle,false);
     drawStrip();syncBell();
     if(focus==='return'||(focus==='inside'&&inside))restoreOpener();
@@ -334,10 +342,11 @@
   }
 
   function onClick(event){
-    const node=event.target?.closest?.('[data-alert-action],[data-alert-tab]');if(!node)return;
+    let node=event.target?.closest?.('[data-alert-action],[data-alert-tab]');if(!node)return;
     const root=event.currentTarget;
-    // The next click in the alert UI clears an action failure (a load failure stays until a load succeeds).
-    if(notice&&notice.key!=='alerts.errorLoad'){const where=notice.where;notice=null;if(where==='strip')drawStrip();else drawTray();}
+    // The next click in the alert UI clears an action failure (a load failure stays until a load succeeds). The redraw replaces
+    // the clicked node: the handlers below act on the one that took its place.
+    if(notice&&notice.key!=='alerts.errorLoad'){const where=notice.where,key=focusKey(node);clearNotice();if(where==='strip')drawStrip();else drawTray();node=(key&&root.querySelector?.(key))||node;}
     if(node.hasAttribute('data-alert-tab'))return selectTab(attr(node,'data-alert-tab'));
     const action=attr(node,'data-alert-action'),id=attr(node,'data-alert-id'),valid=ALERT_ID.test(id);
     if(action!=='snooze-menu')for(const toggle of openToggles())if(action!=='snooze'||!toggle.closest?.('.al-snooze')?.contains(node))setMenu(toggle,false);
@@ -393,7 +402,7 @@
       if(Number.isFinite(summary.generatedAt)&&Number.isFinite(s.generatedAt)&&s.generatedAt<summary.generatedAt)return false;
       const since=summary.generatedAt;
       summary=s;
-      if(notice?.where==='strip')notice=null;
+      if(notice?.where==='strip')clearNotice();
       toast(since);drawStrip();syncBell();syncTitle();announce();
       if(trayOpen()){drawTray();scheduleLoad();}
       return true;

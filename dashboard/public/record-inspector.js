@@ -175,10 +175,13 @@
     const v=open?view(state,now,browser):null,t=opts.t;
     const wasHidden=aside.hidden;
     aside.hidden=!open||browser;aside.setAttribute('aria-hidden',String(aside.hidden));
-    // The alert tray docks in the same place, above this panel: an inspector that opens closes it (the inspector places the
-    // focus itself). A tray opened while the inspector is shown stays on top, as asked.
-    if(wasHidden&&!aside.hidden)window.CrucixAlerts?.close?.({focus:false});
-    if(!aside.hidden){paint(aside,renderInspector(v,t,now));dock();}
+    // The alert tray docks in the same place, above this panel: an inspector that opens closes it (a records card does the
+    // same through openFrom). A tray that held the focus (a hash link followed from inside it) hands it to the inspector
+    // instead of dropping it to the page; otherwise the focus stays where it is. A tray opened while the inspector is shown
+    // stays on top, as asked.
+    let held=false;
+    if(wasHidden&&!aside.hidden){const tray=document.getElementById('alertTray');held=!!tray&&!tray.hidden&&tray.contains(document.activeElement);window.CrucixAlerts?.close?.({focus:false});}
+    if(!aside.hidden){paint(aside,renderInspector(v,t,now));dock();if(held)focusIn(aside);}
     if(browser){paint(dialog,renderBrowser(v,t,now));if(!dialog.open)dialog.showModal();}
     else if(dialog.open)dialog.close();
   }
@@ -192,6 +195,8 @@
   const focusIn=el=>(el.querySelector('.ri-row[tabindex="0"]')||el.querySelector('[data-ri-action="close"]'))?.focus();
   function openFrom(name){
     const state=R.store.get();home=name;
+    // The inspector takes the tray's place whether it was closed or already open (render only sees closed -> open).
+    window.CrucixAlerts?.close?.({focus:false});
     if(state.source!==name){lastRec=null;set(R.openSource(state,name));}
     focusIn(aside);
   }

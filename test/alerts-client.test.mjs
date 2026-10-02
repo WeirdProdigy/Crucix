@@ -280,8 +280,8 @@ test('robustness: garbage summaries, views and translators never throw',()=>{
 // insertAdjacentHTML adds (one per call, matched by class, level class or data-alert-id). Enough for mount/update/open, the
 // toast stack and for driving the delegated click listener with a fake button.
 const TOAST_SELECTOR=/^\.al-toast(-[a-z]+)?(?:\[data-alert-id="([^"]*)"\])?$/;
-function dom({protocol='http:',topbar=true,fetch,offline=false}={}){
-  const ids=new Map(),errors=[],calls=[],opened=[];
+function dom({protocol='http:',topbar=true,fetch,offline=false,files=['record-core.js','alerts-core.js','alerts.js'],hash=''}={}){
+  const ids=new Map(),errors=[],calls=[],opened=[],listeners={document:{},window:{}},on=(table,type,fn)=>{(table[type]??=[]).push(fn);};
   const el=tag=>{const node={tag,id:'',hidden:false,className:'',innerHTML:'',textContent:'',attrs:{},handlers:{},kids:[],isConnected:true,focused:0,
     style:{setProperty(k,v){node.style[k]=v;}},classList:{set:new Set(),add(c){this.set.add(c);},remove(c){this.set.delete(c);},toggle(c,on){if(on)this.set.add(c);else this.set.delete(c);},contains(c){return this.set.has(c);}},
     setAttribute(k,v){node.attrs[k]=String(v);},getAttribute(k){return Object.hasOwn(node.attrs,k)?node.attrs[k]:null;},hasAttribute(k){return Object.hasOwn(node.attrs,k);},removeAttribute(k){delete node.attrs[k];},
@@ -290,13 +290,14 @@ function dom({protocol='http:',topbar=true,fetch,offline=false}={}){
     querySelector(){return null;},querySelectorAll(selector){const m=TOAST_SELECTOR.exec(selector);return m?node.kids.filter(kid=>(!m[1]||kid.html.includes('al-toast'+m[1]+'"'))&&(m[2]===undefined||kid.html.includes(`data-alert-id="${m[2]}"`))):[];},
     contains(){return false;},closest(){return null;},getBoundingClientRect(){return {top:40,bottom:80};},focus(){node.focused++;}};return node;};
   const add=node=>{if(node.id)ids.set(node.id,node);};
-  const document={title:'Crucix',activeElement:null,body:el('body'),createElement:el,getElementById:id=>ids.get(id)||null,querySelector(){return null;},addEventListener(){}};
+  const document={title:'Crucix',activeElement:null,body:el('body'),createElement:el,getElementById:id=>ids.get(id)||null,querySelector(){return null;},querySelectorAll(){return [];},addEventListener:(type,fn)=>on(listeners.document,type,fn)};
   if(topbar){const bar=el('div');bar.id='topbar';add(bar);const bell=el('button');bell.id='alertBell';add(bell);}
   const spy=fetch||(async(url,init)=>{calls.push([url,init]);return {ok:true,status:200,json:async()=>({alerts:[]})};});
-  const window={addEventListener(){},CrucixIntelligence:{openEvent:id=>opened.push(id)},...(offline?{__CRUCIX_OFFLINE_SHELL__:true}:{})};
-  const context=vm.createContext({window,document,location:{protocol},console:{error:(...args)=>errors.push(args)},fetch:(...args)=>spy(...args),CSS:{escape:value=>String(value)},Date,URL,JSON,setTimeout,clearTimeout,setInterval:()=>0});
-  for(const file of ['record-core.js','alerts-core.js','alerts.js'])vm.runInContext(read(file),context);
-  return {A:window.CrucixAlerts,document,errors,calls,opened,byId:id=>ids.get(id)};
+  const window={addEventListener:(type,fn)=>on(listeners.window,type,fn),CrucixIntelligence:{openEvent:id=>opened.push(id)},...(offline?{__CRUCIX_OFFLINE_SHELL__:true}:{})};
+  const location={protocol,hash,pathname:'/',search:''};
+  const context=vm.createContext({window,document,location,history:{replaceState(){}},console:{error:(...args)=>errors.push(args)},fetch:(...args)=>spy(...args),CSS:{escape:value=>String(value)},Date,URL,JSON,setTimeout,clearTimeout,setInterval:()=>0});
+  for(const file of files)vm.runInContext(read(file),context);
+  return {A:window.CrucixAlerts,window,document,location,listeners,errors,calls,opened,byId:id=>ids.get(id)};
 }
 const button=attrs=>{const node={getAttribute:k=>Object.hasOwn(attrs,k)?attrs[k]:null,hasAttribute:k=>Object.hasOwn(attrs,k),closest:()=>node,focus(){},setAttribute(k,v){attrs[k]=String(v);}};return node;};
 const click=(root,attrs)=>root.handlers.click({currentTarget:root,target:button(attrs),preventDefault(){}});
@@ -450,4 +451,77 @@ test('controller: toasts only for new critical/high alerts after the first summa
   assert.match(html,/role="alert"/); assert(!/>\s+</.test(html)&&!/^\s|\s$/.test(html),'no whitespace text nodes in the stack');
   A.update(summaryOf([...fresh,...alerts],{generatedAt:now+2}));
   assert.equal(byId('alertToasts').innerHTML,html,'an alert toasts once per session');
+});
+
+// ===== Task 9 controller fixes =====
+// A toggle as the redraw leaves it: closest('.al-snooze') is its own group with one menu.
+const toggleNode=(id,menu)=>{const n=button({'data-alert-action':'snooze-menu','data-alert-id':id,'aria-expanded':'false'});n.closest=selector=>selector==='.al-snooze'?{querySelector:()=>menu,contains:()=>true}:n;return n;};
+test('controller: the first click on a Snooze toggle after a failed action opens the menu (the click redraws the tray)',async()=>{
+  const {A,byId}=dom({fetch:forbidden}),alerts=firing(),id=alerts[0].id;
+  A.mount({getSummary:()=>summaryOf(alerts),t,now:()=>now});const tray=byId('alertTray');A.open();await ticks();
+  click(tray,{'data-alert-action':'ack','data-alert-id':id});await ticks();
+  assert.match(tray.innerHTML,/Action failed/,'a failure notice is drawn');
+  // Clearing the notice redraws the tray: the node that was clicked is detached, the toggle that replaced it is the live one.
+  const clicked=toggleNode(id,{hidden:true}),menuAfter={hidden:true},live=toggleNode(id,menuAfter);
+  tray.querySelector=selector=>selector.startsWith('[data-alert-action="snooze-menu"][data-alert-id=')?live:null;
+  tray.handlers.click({currentTarget:tray,target:clicked,preventDefault(){}});
+  assert.equal(live.getAttribute('aria-expanded'),'true','the toggle on the page is expanded');
+  assert.equal(menuAfter.hidden,false,'and its menu is shown');
+  assert(!tray.innerHTML.includes('Action failed'),'the notice is gone');
+});
+
+test('controller: #alertError is emptied wherever the notice goes away, and a pending announcement is cancelled',async()=>{
+  const {A,byId}=dom({fetch:forbidden}),alerts=firing(),ack={'data-alert-action':'ack','data-alert-id':alerts[0].id};
+  A.mount({getSummary:()=>summaryOf(alerts),t,now:()=>now});const tray=byId('alertTray'),strip=byId('alertStrip'),live=byId('alertError');A.open();await ticks();
+  // The next click clears the notice, before and after it was spoken.
+  click(tray,ack);await speech(); assert.equal(live.textContent,'Action failed');
+  click(tray,{'data-alert-tab':'handled'}); assert.equal(live.textContent,'','a spoken notice leaves no text behind');
+  click(tray,ack);await ticks(); // failed, the announcement (50 ms) is still pending
+  click(tray,{'data-alert-tab':'active'});await speech(); assert.equal(live.textContent,'','a pending announcement of a cleared notice is never made');
+  // A notice that goes with the closing tray.
+  click(tray,ack);await speech(); assert.equal(live.textContent,'Action failed'); A.close(); assert.equal(live.textContent,'','closing the tray clears it');
+  // A notice in the strip goes with the next summary.
+  click(strip,ack);await speech(); assert.equal(live.textContent,'Action failed'); A.update(summaryOf(alerts,{generatedAt:now+5})); assert.equal(live.textContent,'','a new summary clears it');
+  // A load failure goes when a load succeeds.
+  let loads=0;const flaky=dom({fetch:async()=>{loads++;return loads===1?{ok:false,status:503,json:async()=>({})}:{ok:true,status:200,json:async()=>({alerts:[]})};}});
+  flaky.A.mount({getSummary:()=>summaryOf(alerts),t,now:()=>now});flaky.A.open();await speech(); assert.equal(flaky.byId('alertError').textContent,'Could not load alerts');
+  flaky.A.update(summaryOf(alerts,{generatedAt:now+5}));await new Promise(resolve=>setTimeout(resolve,260)); // the reload is debounced (150 ms)
+  assert.equal(flaky.byId('alertError').textContent,'','a successful load clears the load failure');
+});
+
+// The record inspector and the alert tray in one page: the inspector places the focus itself once the tray steps aside.
+const inspectorOptions={getSources:()=>[{source:'GDACS',status:'ok',observedAt:new Date(now-600000).toISOString(),observations:[]}],getEvents:()=>[],t,now:()=>now};
+const both=hash=>{
+  const env=dom({files:['record-core.js','live-sources.js','record-inspector.js','alerts-core.js','alerts.js'],hash});
+  env.A.mount({getSummary:()=>summaryOf(firing()),t,now:()=>now});env.window.CrucixRecordInspector.mount(inspectorOptions);
+  const tray=env.byId('alertTray'),aside=env.byId('record-inspector'),card=source=>({closest:selector=>selector==='[data-open-records]'?{dataset:{openRecords:source}}:null});
+  const probe={n:0,focus(){probe.n++;}};aside.querySelector=selector=>selector.includes('ri-row')||selector.includes('data-ri-action="close"')?probe:null;
+  return {...env,tray,aside,probe,openCard:source=>{for(const fn of env.listeners.document.click)fn({target:card(source)});}};
+};
+test('inspector: a records card opens the inspector and closes an alert tray opened over it, without moving the focus away',()=>{
+  const env=both(''),{A,tray,aside,probe,openCard,byId}=env;
+  openCard('GDACS'); assert.equal(aside.hidden,false,'the inspector is open'); assert.equal(probe.n,1,'the card puts the focus into the inspector');
+  A.open(); assert.equal(tray.hidden,false,'a tray opened over the inspector stays (as asked)');
+  openCard('GDACS'); assert.equal(aside.hidden,false); assert.equal(tray.hidden,true,'activating a records card while the inspector is open closes the tray');
+  assert.equal(byId('alertBell').focused,0,'the tray did not take the focus back to the bell'); assert.equal(probe.n,2,'the inspector holds the focus');
+  A.open(); openCard('NASA-EONET'); assert.equal(tray.hidden,true,'a card of another source does too');
+});
+test('inspector: a hash that opens the inspector keeps the focus that was in the tray, and never takes one that was not',()=>{
+  for(const held of [true,false]){
+    const {A,tray,aside,probe,location,listeners,document}=both('');
+    A.open(); const inside={};if(held){document.activeElement=inside;tray.contains=node=>node===inside;}
+    location.hash='#src=GDACS';for(const fn of listeners.window.hashchange)fn();
+    assert.equal(aside.hidden,false,'the hash opened the inspector'); assert.equal(tray.hidden,true,'and the tray stepped aside');
+    assert.equal(probe.n,held?1:0,held?'the focus went into the inspector instead of dropping to the page':'a focus elsewhere is left alone');
+  }
+});
+
+test('controller: a failed request keeps the status and the server error for the caller',async()=>{
+  const bad=status=>dom({fetch:async()=>({ok:false,status,json:async()=>status===400?{error:'must be an integer from 1 to 10',code:'INVALID_RULE',field:'forSweeps'}:status===500?'<html>':null})});
+  for(const [status,expected] of [[400,{status:400,code:'INVALID_RULE',field:'forSweeps',detail:'must be an integer from 1 to 10'}],[500,{status:500,code:'',field:'',detail:''}],[403,{status:403,code:'',field:'',detail:''}]]){
+    const {A}=bad(status);A.mount({getSummary:()=>summaryOf([]),t,now:()=>now});
+    const error=await A.request('/api/alerts/rules/x',{},'PUT').then(()=>null,failure=>failure);
+    assert(error&&typeof error.message==='string','an Error',String(status)); assert.match(error.message,new RegExp('HTTP '+status));
+    assert.deepEqual(plain({status:error.status,code:error.code,field:error.field,detail:error.detail}),expected,String(status));
+  }
 });
