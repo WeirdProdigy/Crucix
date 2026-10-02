@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { AlertNotifier, parseQuietHours } from '../lib/alerts/notify.mjs';
 import { TelegramAlerter } from '../lib/alerts/telegram.mjs';
 import { DiscordAlerter } from '../lib/alerts/discord.mjs';
@@ -550,6 +552,21 @@ test('a hanging alerter is given up on at its deadline and the other channels st
   const stuckDiscord = Object.assign(fakeDiscord(), { sendMessage: () => new Promise(() => {}) });
   const other = setup({ discord: stuckDiscord, deadlineMs: 20 });
   assert.deepEqual((await other.notifier.dispatch(batch([alert()]))).sent[0].channels, ['telegram', 'ntfy', 'webhook']);
+});
+
+// The scenario above runs inside the test runner, whose own handles can keep the event loop alive. A child process with a
+// never-answering alerter and nothing else running proves the deadline timer itself holds the loop until it fires.
+test('a hung send is given up on even when nothing else keeps the event loop alive', async () => {
+  const fixture = fileURLToPath(new URL('./fixtures/hung-alerter.mjs', import.meta.url));
+  const child = await new Promise(resolve => {
+    execFile(process.execPath, [fixture], { timeout: 15000, windowsHide: true }, (error, stdout, stderr) => {
+      resolve({ code: error === null ? 0 : error.code ?? error.signal ?? 'failed', stdout, stderr });
+    });
+  });
+  assert.equal(child.code, 0, `the child exited with ${child.code}: ${child.stderr}`);
+  const outcome = JSON.parse(child.stdout);
+  assert.deepEqual(outcome.channels, [['discord']], 'the other channel still reports');
+  assert.match(outcome.log.join('\n'), /telegram failed: TimeoutError/);
 });
 
 test('an alerter that fails after its deadline is not an unhandled rejection', async t => {
