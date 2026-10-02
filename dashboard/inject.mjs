@@ -15,7 +15,7 @@ import { safeFetch } from '../apis/utils/fetch.mjs';
 import config from '../crucix.config.mjs';
 import { createLLMProvider } from '../lib/llm/index.mjs';
 import { generateRuleBasedIdeas, resolveIdeas } from '../lib/llm/rule-ideas.mjs';
-import { buildEvents } from '../lib/intelligence/events.mjs';
+import { buildEvents, stampLiveEventIds } from '../lib/intelligence/events.mjs';
 import { normalizeLiveSources } from '../lib/intelligence/live-sources.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -783,6 +783,7 @@ export async function synthesize(data, options = {}) {
   };
 
   V2.ideas = generateIdeas(V2);
+  V2.liveSources = stampLiveEventIds(V2.liveSources);
   V2.events = buildEvents(V2, { now: options.now ?? Date.now() });
   return V2;
 }

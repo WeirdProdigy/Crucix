@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { normalizeLiveSources, freshLiveSnapshot, FACT_FIELDS } from '../lib/intelligence/live-sources.mjs';
-import { buildEvents } from '../lib/intelligence/events.mjs';
+import { buildEvents, liveEventId, stampLiveEventIds } from '../lib/intelligence/events.mjs';
+import { synthesize } from '../dashboard/inject.mjs';
 import { normalizeHistoryEvent, validateHistoryFilters } from '../lib/intelligence/history.mjs';
 import { POLICIES } from '../apis/utils/freshness.mjs';
 const now = Date.parse('2026-10-01T21:00:00Z');
@@ -98,4 +101,54 @@ test('MET-Norway units are appended',()=>{
   const facts=Object.fromEntries(out.observations[0].facts.map(f=>[f.label,f.value]));
   assert.equal(facts.temperature,'15 celsius'); assert.equal(facts.windSpeed,'3.2 m/s'); assert.equal(facts.precipitation,.4);
   assert.strictEqual(facts.precipitationHours,1); assert.equal(facts.symbol,'cloudy'); assert.equal(out.observations[0].units,undefined);
+});
+const gdacs = {source:'GDACS',status:'ok',observedAt:'2026-10-01T20:30:00Z',timestamp:'2026-10-01T20:30:00Z',observations:[
+  {kind:'disaster',title:'Flood alert with a report link',url:'https://www.gdacs.org/report.aspx?eventid=1001',observedAt:'2026-10-01T20:30:00Z',lat:36.2,lon:28.1},
+  {kind:'disaster',title:'Volcano alert without id or link',observedAt:'2026-10-01T20:20:00Z',lat:37.7,lon:15}]};
+test('stamped eventId equals the id buildEvents assigns',()=>{
+  const before=normalizeLiveSources({'MET-Norway':source,GDACS:gdacs},now);
+  const before1=JSON.stringify(before);
+  const stamped=stampLiveEventIds(before);
+  assert.equal(JSON.stringify(before),before1);
+  const rows=stamped.flatMap(row=>row.observations);
+  assert.equal(rows.length,3); assert(rows.every(row=>/^event-[0-9a-f]{32}$/.test(row.eventId)));
+  assert.equal(new Set(rows.map(row=>row.eventId)).size,3);
+  assert(before.flatMap(row=>row.observations).every(row=>!Object.hasOwn(row,'eventId')));
+  const events=buildEvents({meta:{timestamp:new Date(now).toISOString()},liveSources:stamped},{now});
+  assert.equal(events.length,3);
+  for (const row of rows) assert(events.some(event=>event.id===row.eventId),row.title);
+  assert.deepEqual(stampLiveEventIds(stamped),stamped);
+  const withFacts=stampLiveEventIds(normalizeLiveSources({'FIRST-EPSS':epss},now))[0].observations[0];
+  assert.equal(withFacts.facts.length,2); assert.equal(liveEventId(withFacts),withFacts.eventId);
+});
+test('stampLiveEventIds tolerates input that is not a source list',()=>{
+  for (const input of [null,undefined,'x',{}]) assert.strictEqual(stampLiveEventIds(input),input);
+  const odd=[null,{source:'GDACS'},{source:'GDACS',observations:[null,'x',{kind:'disaster'}]}];
+  const out=stampLiveEventIds(odd);
+  assert.strictEqual(out[0],null); assert.deepEqual(out[1],{source:'GDACS'}); assert.deepEqual(out[2].observations,[null,'x',{kind:'disaster'}]);
+});
+test('eventId survives freshLiveSnapshot and forged values are dropped',()=>{
+  const stamped=stampLiveEventIds(normalizeLiveSources({'MET-Norway':source},now));
+  const kept=freshLiveSnapshot({liveSources:stamped},now).liveSources[0].observations[0];
+  assert.equal(kept.eventId,stamped[0].observations[0].eventId); assert.match(kept.eventId,/^event-[0-9a-f]{32}$/);
+  for (const forged of ['x','event-'+'z'.repeat(32),'event-'+'a'.repeat(31),'event-'+'a'.repeat(33),['event-'+'a'.repeat(32)],{}]) {
+    const [out]=normalizeLiveSources({'MET-Norway':{...source,observations:[{...source.observations[0],eventId:forged}]}},now);
+    assert.equal(out.observations.length,1); assert(!Object.hasOwn(out.observations[0],'eventId'),String(forged));
+  }
+});
+test('rows of unsupported kind get no eventId',()=>{
+  const [out]=normalizeLiveSources({GDACS:{...gdacs,observations:[{...gdacs.observations[0],kind:'banana'},gdacs.observations[1]]}},now);
+  assert.equal(out.observations[0].kind,'signal');
+  const [stamped]=stampLiveEventIds([out]);
+  assert(!Object.hasOwn(stamped.observations[0],'eventId')); assert.match(stamped.observations[1].eventId,/^event-[0-9a-f]{32}$/);
+  assert.equal(liveEventId(out.observations[0]),null); assert.equal(liveEventId({...out.observations[1],title:''}),null);
+  assert.equal(liveEventId(null),null); assert.equal(liveEventId({kind:'disaster',source:'GDACS'}),null);
+  assert(!Object.hasOwn(stampLiveEventIds([{...out,observations:[{...out.observations[0],eventId:'event-'+'a'.repeat(32)}]}])[0].observations[0],'eventId'));
+});
+test('synthesize stamps the snapshot it builds events from',async t=>{
+  const dir=mkdtempSync(join(tmpdir(),'crucix-live-ids-')); t.after(()=>rmSync(dir,{recursive:true,force:true}));
+  const data=await synthesize({crucix:{timestamp:new Date(now).toISOString()},sources:{'MET-Norway':source,GDACS:gdacs}},{news:[],runsDir:dir,now});
+  const rows=data.liveSources.flatMap(row=>row.observations);
+  assert.equal(rows.length,3);
+  for (const row of rows) assert(data.events.some(event=>event.id===row.eventId),row.title);
 });

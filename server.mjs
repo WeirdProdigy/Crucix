@@ -10,7 +10,7 @@ import { openBrowser } from './lib/open-browser.mjs';
 import { inlineJson } from './lib/html.mjs';
 import { installHttpSecurity } from './lib/http-security.mjs';
 import { saveSnapshot } from './lib/snapshots.mjs';
-import { buildEvents, clusterEvents } from './lib/intelligence/events.mjs';
+import { buildEvents, clusterEvents, stampLiveEventIds } from './lib/intelligence/events.mjs';
 import { freshLiveSnapshot } from './lib/intelligence/live-sources.mjs';
 import { HistoryStore } from './lib/intelligence/history.mjs';
 import { installIntelligenceRoutes } from './lib/intelligence/routes.mjs';
@@ -49,6 +49,7 @@ const ideaCadence = new IdeaCadence({ everyNSweeps: config.llm.everyNSweeps });
 const history = new HistoryStore(RUNS_DIR);
 let historyStatus = 'ok';
 function recordSnapshotEvents(snapshot) {
+  if (Array.isArray(snapshot.liveSources)) snapshot.liveSources = stampLiveEventIds(snapshot.liveSources);
   snapshot.events = buildEvents(snapshot);
   snapshot.eventClusters = clusterEvents(snapshot.events);
   try { history.add(snapshot.events); historyStatus = 'ok'; }
