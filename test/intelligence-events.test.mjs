@@ -333,3 +333,10 @@ behavior('ordinary source query parameters remain usable after auth-query valida
   assert.equal(event.source.hostname, 'first.example');
   assert.equal(event.quality.checks.sourceUrl, true);
 });
+
+behavior('provider severity words map onto the event scale', () => {
+  const cases = { Red:'critical', Extreme:'critical', Severe:'critical', Orange:'high', High:'high', Elevated:'elevated',
+    Yellow:'moderate', Medium:'moderate', Moderate:'moderate', Minor:'low', Info:'low', Green:'low', Low:'low', Monitor:'monitor', unknown:'unknown' };
+  for (const [word, level] of Object.entries(cases)) assert.equal(model.normalizeSeverity(word), level, word);
+  for (const bad of ['', 'banana', null, 7, {}, 'x'.repeat(400)]) assert.equal(model.normalizeSeverity(bad), null);
+});

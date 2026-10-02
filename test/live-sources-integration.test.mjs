@@ -61,3 +61,10 @@ test('public metrics have a total item budget and provider licence links survive
   let entries=0;const visit=value=>{if(value&&typeof value==='object')for(const child of Object.values(value)){entries++;visit(child);}};visit(out.metrics);
   assert(entries<=50);assert.equal(out.license,'CC BY 4.0');assert.equal(out.licenseUrl,'https://creativecommons.org/licenses/by/4.0/');
 });
+test('provider severity words reach the event scale and urgent Telegram keeps its fallback',()=>{
+  const gdacs={source:'GDACS',status:'ok',observedAt:'2026-10-01T20:30:00Z',timestamp:'2026-10-01T20:30:00Z',observations:[{providerId:'gdacs-eq-1',kind:'disaster',title:'Orange earthquake alert',severity:'Orange',observedAt:'2026-10-01T20:30:00Z',startsAt:'2026-10-01T20:00:00Z',lat:36.2,lon:28.1}]};
+  const events=buildEvents({meta:{timestamp:new Date(now).toISOString()},liveSources:normalizeLiveSources({GDACS:gdacs},now)},{now});
+  assert.equal(events.length,1); assert.equal(events[0].severity,'high');
+  const urgent=buildEvents({meta:{timestamp:new Date(now).toISOString()},tg:{urgent:[{channel:'channel',text:'Local report',severity:'banana',date:'2026-10-01T20:30:00Z',url:'https://t.me/channel/1'}]}},{now});
+  assert.equal(urgent.length,1); assert.equal(urgent[0].severity,'high');
+});
