@@ -870,7 +870,7 @@
       "aircraft": "Military aircraft",
       "types": "Most common aircraft types",
       "thingCount": "Listed entries (people, companies, vessels)",
-      "deltaSinceLast": "Change in entries since the previous sweep",
+      "deltaSinceLast": "Change in entries with the last change",
       "docType": "Document type",
       "agency": "Agency"
     }

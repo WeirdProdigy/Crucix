@@ -2,8 +2,9 @@
 // Department's Bureau of Industry and Security (BIS), from the public documents API (no key):
 // https://www.federalregister.gov/developers/documentation/api/v1 - one request per agency, 15 documents each, newest first.
 // `publication_date` is a plain day (YYYY-MM-DD) and is read as UTC midnight, so a document published today is at most a day old.
-// The API has no feed time: the newest publication day of the answer stands in for it, and OFAC and BIS together publish
-// nothing for several days in a row now and then (a few days over a weekend, 22 days during the October 2025 shutdown).
+// The API has no feed time: the newest publication day of the answer stands in for it. OFAC and BIS together publish nothing for
+// several days in a row now and then (a feed limit of 96 hours would have read expired about a fifth of the last year; the longest
+// gap was 22 days, during the October 2025 shutdown), so the feed limit equals the 14 day row window.
 // The `agencies` field of a document names every agency it belongs to; it decides the `agency` fact, so a joint document
 // shows both. A document number can carry a prefix (C1-2026-16628 is a correction of 2026-16628: a separate document).
 // Every regex below runs on text that was cut to a fixed length first: unbounded input never reaches one.
@@ -66,12 +67,12 @@ function codesOf(raw, requested) {
   return own.length ? own : [requested];
 }
 
-function document(raw, requested, now) {
+function document(raw, requested) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const number = typeof raw.document_number === 'string' && raw.document_number.length <= 30 && NUMBER.test(raw.document_number) ? raw.document_number : null;
   const day = typeof raw.publication_date === 'string' && raw.publication_date.length === 10 && DAY.test(raw.publication_date) ? providerTime(raw.publication_date) : null;
   const title = clean(raw.title, 300);
-  if (!number || !day || !title || Date.parse(day) - now > FUTURE_SKEW_MS) return null;
+  if (!number || !day || !title) return null;
   const type = typeof raw.type === 'string' && raw.type.length <= 40 && TYPE.test(raw.type.trim()) ? raw.type.trim() : '';
   return { providerId: number, title, observedAt: day, type, url: linkOf(raw.html_url, number), codes: new Set(codesOf(raw, requested)) };
 }
@@ -81,7 +82,7 @@ function observation(doc) {
   const moderate = doc.type === 'Rule' && MODERATE_TITLE.test(doc.title);
   const day = doc.observedAt.slice(0, 10);
   return { kind: 'sanctions', providerId: doc.providerId, title: doc.title,
-    summary: `${doc.type || 'Document'} from the ${names.map(agency => agency.name).join(' and the ')}, published in the Federal Register on ${day}: ${doc.title}.${moderate ? ' Rated moderate because the title of this rule mentions the Entity List or designations.' : ''}`,
+    summary: `Document ${doc.providerId}${doc.type ? ` (${doc.type})` : ''} from the ${names.map(agency => agency.name).join(' and the ')}, published in the Federal Register on ${day}: ${doc.title}.${moderate ? ' Rated moderate because the title of this rule mentions the Entity List or designations.' : ''}`,
     // Every document has its own page, so every row has its own link.
     source: SOURCE, url: doc.url, observedAt: doc.observedAt, publishedAt: doc.observedAt, severity: moderate ? 'moderate' : 'info',
     ...(doc.type ? { docType: doc.type } : {}), agency: names.map(agency => agency.code).join(', ') };
@@ -90,24 +91,30 @@ function observation(doc) {
 // `answers` holds one API answer per agency code ({ OFAC, BIS }). An agency whose answer failed is left out and named in the summary.
 export function parseFederalRegister(answers, { now = Date.now() } = {}) {
   const input = answers && typeof answers === 'object' ? answers : {};
-  const docs = new Map(), failed = [];
-  let examined = 0, truncated = 0;
+  const docs = new Map(), failed = [], unreadable = [];
+  let examined = 0, truncated = 0, readable = 0;
   for (const agency of AGENCIES) {
     const answer = Object.hasOwn(input, agency.code) ? input[agency.code] : undefined;
     if (!answer || typeof answer !== 'object' || answer.error || !Array.isArray(answer.results)) { failed.push({ agency, error: answer?.error }); continue; }
     const results = answer.results.slice(0, MAX_EXAMINED);
     examined += results.length; truncated += answer.results.length - results.length;
+    let bad = 0;
     for (const raw of results) {
-      const doc = document(raw, agency.code, now);
-      if (!doc) continue;
+      const doc = document(raw, agency.code);
+      if (!doc) { bad++; continue; }
+      readable++;
+      if (Date.parse(doc.observedAt) - now > FUTURE_SKEW_MS) continue;
       const known = docs.get(doc.providerId);
       if (known) doc.codes.forEach(code => known.codes.add(code)); else docs.set(doc.providerId, doc);
     }
+    if (bad) unreadable.push({ agency, bad, total: results.length });
   }
   if (failed.length === AGENCIES.length) {
     const reason = failed.find(entry => typeof entry.error === 'string')?.error;
     return unavailableResult(SOURCE, reason === undefined ? 'The Federal Register returned an unexpected response' : failure(reason), EXTRAS, now);
   }
+  // Documents that all lack a readable number, date or title mean the API changed shape: never a quiet feed.
+  if (!readable && unreadable.length) return unavailableResult(SOURCE, 'The Federal Register returned documents in an unexpected shape', EXTRAS, now);
   const all = [...docs.values()];
   // The newest publication day, old or not: an old list is expired rather than undated.
   const newest = all.map(doc => doc.observedAt).sort().at(-1) ?? null;
@@ -115,7 +122,8 @@ export function parseFederalRegister(answers, { now = Date.now() } = {}) {
     .sort((a, b) => (a.observedAt < b.observedAt ? 1 : a.observedAt > b.observedAt ? -1 : 0) || (a.providerId < b.providerId ? 1 : -1));
   const rows = ranked.slice(0, MAX_ROWS).map(observation);
   const note = failed.length ? ` Warning: the ${failed.map(entry => entry.agency.code).join(' and ')} request failed, so only ${AGENCIES.filter(agency => !failed.some(entry => entry.agency === agency)).map(agency => agency.code).join(' and ')} documents are listed.` : '';
-  return freshResult(SOURCE, newest, rows, { ...EXTRAS, summary: EXTRAS.summary + note, examinedRecords: examined, truncatedRecords: truncated + Math.max(0, ranked.length - MAX_ROWS) }, now);
+  const unread = unreadable.length ? ` Warning: ${unreadable.map(entry => `${entry.bad} of the ${entry.total} ${entry.agency.code} documents`).join(' and ')} could not be read (number, date or title missing or unusable) and ${unreadable.reduce((sum, entry) => sum + entry.bad, 0) === 1 ? 'was' : 'were'} left out.` : '';
+  return freshResult(SOURCE, newest, rows, { ...EXTRAS, summary: EXTRAS.summary + note + unread, examinedRecords: examined, truncatedRecords: truncated + Math.max(0, ranked.length - MAX_ROWS) }, now);
 }
 
 async function load(agency, { fetcher, useCache, now, request }) {

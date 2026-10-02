@@ -4,7 +4,7 @@
 // and `thing_count` (the listed people, companies, vessels and other things; `entity_count` is about twice as large because it also
 // counts relationship and helper records). The index
 // is regenerated several times a day, so its `run_time` is the feed time; a list that has not changed for a week is still current.
-// The index is 2,097,762 bytes (checked 2026-10-02), 610 bytes over the 2 MiB request limit of the other sources, so this adapter
+// The index is about 2,097,763 bytes (checked 2026-10-02), a few hundred bytes over the 2 MiB request limit of the other sources, so this adapter
 // asks for up to 3 MiB (50% headroom for new datasets). One request, never more.
 // `last_change` is OpenSanctions' view of the list (their crawl of the original), not the moment the issuer published it.
 // Every regex below runs on text that was cut to a fixed length first: unbounded input never reaches one.
@@ -34,10 +34,10 @@ const cache = new Map();
 const lastSeen = new Map();
 const EXTRAS = {
   attribution: 'Data: OpenSanctions (opensanctions.org); the lists themselves belong to their issuers',
-  rights: 'OpenSanctions data is licensed under Creative Commons Attribution-NonCommercial 4.0 (OpenSanctions licensing page, checked 2026-10-02): free for non-commercial use with attribution, commercial use needs an OpenSanctions licence. Change times and counts are OpenSanctions\' processed view of the original lists, not the issuers\' own publication times.',
+  rights: 'OpenSanctions says (opensanctions.org, checked 2026-10-02): "The data is licensed under the terms of Creative Commons 4.0 Attribution NonCommercial" and "OpenSanctions is free for non-commercial users. Businesses must acquire a data license to use the dataset." Change times and counts are OpenSanctions\' processed view of the original lists, not the issuers\' own publication times.',
   license: 'CC BY-NC 4.0',
   licenseUrl: 'https://creativecommons.org/licenses/by-nc/4.0/',
-  summary: 'Sanctions lists (OFAC SDN, EU, UN Security Council, UK, US BIS Denied Persons, US Trade CSL) that changed in the last 14 days according to the OpenSanctions dataset index, newest change first. The change in the entry count is measured between this server\'s own sweeps, so it is missing after a restart.',
+  summary: 'Sanctions lists (OFAC SDN, EU, UN Security Council, UK, US BIS Denied Persons, US Trade CSL) that changed in the last 14 days according to the OpenSanctions dataset index, newest change first. The entry-count change that came with a list change is measured between this server\'s own sweeps, so it is missing after a restart.',
 };
 
 // Provider text becomes inert plain text: markup, control, bidi and zero-width characters go, whitespace collapses.
@@ -86,13 +86,14 @@ function observation(entry, now, previous) {
   const name = entry.name;
   const change = when(entry.last_change);
   const count = Number.isInteger(entry.thing_count) && entry.thing_count >= 0 && entry.thing_count <= 1e8 ? entry.thing_count : null;
-  if (!change || count === null || Date.parse(change) - now > FUTURE_SKEW_MS) return null;
+  // No readable change time or count (a renamed field, a changed format, a future change time) is unusable, not merely old.
+  if (!change || count === null || Date.parse(change) - now > FUTURE_SKEW_MS) return { unusable: true };
   // The baseline moves for every watched list, also for those that did not change recently.
   const delta = deltaOf(previous, name, count, change);
   if (!freshness(change, POLICIES[SOURCE].observationMaxAgeMs, now).fresh) return { newest: change };
   const label = clean(entry.title, 120) || name;
   const stamp = stampOf(change);
-  const trend = delta === undefined ? '' : delta === 0 ? '; the entry count has not changed since the previous sweep' : `; ${delta > 0 ? '+' : ''}${delta} ${Math.abs(delta) === 1 ? 'entry' : 'entries'} since the previous sweep`;
+  const trend = delta === undefined ? '' : delta === 0 ? '; the entry count did not change with it' : `; ${delta > 0 ? '+' : ''}${delta} ${Math.abs(delta) === 1 ? 'entry' : 'entries'} with this change`;
   return { newest: change, row: { kind: 'sanctions', providerId: `os:${name}:${stamp}`, title: `${label}: list updated`,
     summary: `${label} last changed on ${text(change)} according to OpenSanctions and now lists ${count} entries (people, companies, vessels and other entities)${trend}. The change time is OpenSanctions' view of the list, not the issuer's publication time.`,
     // The change time in the link keeps every change of a list a separate history record (history merges rows with the same kind and URL).
@@ -108,14 +109,20 @@ export function parseOpensanctionsIndex(payload, { now = Date.now(), datasets, p
   if (!payload || typeof payload !== 'object' || !Array.isArray(payload.datasets)) return unavailableResult(SOURCE, 'OpenSanctions returned an unexpected response', EXTRAS, now);
   const found = pick(payload, new Set(names));
   if (!found.size) return unavailableResult(SOURCE, 'The OpenSanctions index lists none of the watched datasets', EXTRAS, now);
-  const results = names.filter(name => found.has(name)).map(name => observation(found.get(name), now, tracker)).filter(Boolean);
+  const all = names.filter(name => found.has(name)).map(name => observation(found.get(name), now, tracker));
+  // Every watched dataset without a usable change time or count means the index changed shape: never a quiet feed.
+  const unusable = all.filter(result => result.unusable).length;
+  if (unusable === all.length) return unavailableResult(SOURCE, 'The OpenSanctions index has an unexpected dataset shape', EXTRAS, now);
+  const results = all.filter(result => !result.unusable);
   // Moderate rows first, then the newest change; the id breaks a tie.
   const rows = results.flatMap(result => result.row ? [result.row] : [])
     .sort((a, b) => RANK[a.severity] - RANK[b.severity] || (a.observedAt < b.observedAt ? 1 : a.observedAt > b.observedAt ? -1 : 0) || (a.providerId < b.providerId ? -1 : 1));
   // The index's own generation time is the feed time; without it the newest watched change stands in.
   const feed = when(payload.run_time) ?? results.map(result => result.newest).sort().at(-1) ?? null;
   const missing = names.length - found.size;
-  const summary = missing ? `${EXTRAS.summary} ${missing} watched dataset${missing === 1 ? ' is' : 's are'} not in the index.` : EXTRAS.summary;
+  const notes = [missing ? `${missing} watched dataset${missing === 1 ? ' is' : 's are'} not in the index.` : '',
+    unusable ? `${unusable} watched dataset${unusable === 1 ? ' has' : 's have'} no usable change time or entry count and ${unusable === 1 ? 'is' : 'are'} left out.` : ''].filter(Boolean);
+  const summary = [EXTRAS.summary, ...notes].join(' ');
   return freshResult(SOURCE, feed, rows.slice(0, MAX_ROWS), { ...EXTRAS, summary, examinedRecords: Math.min(payload.datasets.length, MAX_EXAMINED),
     truncatedRecords: Math.max(0, payload.datasets.length - MAX_EXAMINED) }, now);
 }

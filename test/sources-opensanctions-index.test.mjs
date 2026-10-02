@@ -59,7 +59,7 @@ test('parse turns the live index into one observation per watched list that chan
   assert.equal(row.observedAt, '2026-10-02T16:10:04.000Z', 'the change time is read as UTC');
   assert.equal(row.severity, 'info'); assert.equal(row.thingCount, 38426); assert.equal('deltaSinceLast' in row, false, 'the first sweep has no change count');
   assert.equal(row.url, 'https://www.opensanctions.org/datasets/us_ofac_sdn/?change=20261002T161004Z');
-  assert.match(row.summary, /2026-10-02 16:10 UTC/); assert.match(row.summary, /38426 entries/); assert.match(row.summary, /OpenSanctions/); assert.doesNotMatch(row.summary, /since the previous sweep/);
+  assert.match(row.summary, /2026-10-02 16:10 UTC/); assert.match(row.summary, /38426 entries/); assert.match(row.summary, /OpenSanctions/); assert.doesNotMatch(row.summary, /with this change|did not change/);
   assert.equal(new Set(result.observations.map(r => r.url)).size, 6, 'every list has its own link');
   assert.equal(new Set(result.observations.map(r => r.providerId)).size, 6);
   assert.match(result.summary, /14 days/); assert.match(result.summary, /OpenSanctions/);
@@ -69,7 +69,8 @@ test('parse turns the live index into one observation per watched list that chan
 test('licence, rights and attribution come from the OpenSanctions terms and survive every state', () => {
   const result = parse(LIVE);
   assert.match(result.attribution, /OpenSanctions/); assert.equal(result.license, 'CC BY-NC 4.0'); assert.equal(result.licenseUrl, 'https://creativecommons.org/licenses/by-nc/4.0/');
-  assert.match(result.rights, /Attribution-NonCommercial/); assert.match(result.rights, /commercial use needs/i); assert.match(result.rights, /not the issuers/i);
+  assert.match(result.rights, /"The data is licensed under the terms of Creative Commons 4\.0 Attribution NonCommercial"/);
+  assert.match(result.rights, /"OpenSanctions is free for non-commercial users\. Businesses must acquire a data license to use the dataset\."/); assert.match(result.rights, /not the issuers/i);
   for (const state of [parse(null), parse({ datasets: [] }), parse({ run_time: '2026-09-01T00:00:00', datasets: WATCHED }), parse({ error: 'HTTP 503' }), parse(LIVE, { datasets: [] })]) {
     assert.equal(state.license, 'CC BY-NC 4.0'); assert.equal(state.licenseUrl, 'https://creativecommons.org/licenses/by-nc/4.0/'); assert.match(state.attribution, /OpenSanctions/);
   }
@@ -79,14 +80,14 @@ test('the change count comes from the previous sweep: it is 10 or more for moder
   const previous = new Map([['us_ofac_sdn', 38426 - 12], ['us_trade_csl', 24328 - 9], ['gb_fcdo_sanctions', 7007 + 3], ['un_sc_sanctions', 1407], ['eu_fsf', 8264 - 10]]);
   const result = parse(LIVE, { previous });
   const by = name => result.observations.find(row => row.providerId.includes(name));
-  assert.equal(by('us_ofac_sdn').deltaSinceLast, 12); assert.equal(by('us_ofac_sdn').severity, 'moderate'); assert.match(by('us_ofac_sdn').summary, /\+12 entries since the previous sweep/);
+  assert.equal(by('us_ofac_sdn').deltaSinceLast, 12); assert.equal(by('us_ofac_sdn').severity, 'moderate'); assert.match(by('us_ofac_sdn').summary, /\+12 entries with this change/);
   assert.equal(by('eu_fsf').deltaSinceLast, 10); assert.equal(by('eu_fsf').severity, 'moderate', 'exactly 10 is moderate');
   assert.equal(by('us_trade_csl').deltaSinceLast, 9); assert.equal(by('us_trade_csl').severity, 'info', '9 is not');
-  assert.equal(by('gb_fcdo_sanctions').deltaSinceLast, -3); assert.equal(by('gb_fcdo_sanctions').severity, 'info'); assert.match(by('gb_fcdo_sanctions').summary, /-3 entries since the previous sweep/);
-  assert.equal(by('un_sc_sanctions').deltaSinceLast, 0); assert.match(by('un_sc_sanctions').summary, /has not changed since the previous sweep/);
+  assert.equal(by('gb_fcdo_sanctions').deltaSinceLast, -3); assert.equal(by('gb_fcdo_sanctions').severity, 'info'); assert.match(by('gb_fcdo_sanctions').summary, /-3 entries with this change/);
+  assert.equal(by('un_sc_sanctions').deltaSinceLast, 0); assert.match(by('un_sc_sanctions').summary, /entry count did not change with it/);
   assert.equal('deltaSinceLast' in by('us_bis_denied'), false, 'no previous count, no change count');
   assert.deepEqual(ids(result), ['us_ofac_sdn', 'eu_fsf', 'us_trade_csl', 'gb_fcdo_sanctions', 'un_sc_sanctions', 'us_bis_denied'], 'moderate rows first, then the newest change');
-  assert.match(parse(LIVE, { previous: new Map([['us_ofac_sdn', 38425]]) }).observations.find(row => row.providerId.includes('us_ofac_sdn')).summary, /\+1 entry since/);
+  assert.match(parse(LIVE, { previous: new Map([['us_ofac_sdn', 38425]]) }).observations.find(row => row.providerId.includes('us_ofac_sdn')).summary, /\+1 entry with this change/);
   assert.equal(parse(LIVE, { previous: new Map([['us_ofac_sdn', -5], ['us_trade_csl', 'x'], ['eu_fsf', {}], ['un_sc_sanctions', null]]) }).observations.length, 6, 'a bad seed is no reason to fail');
 });
 
@@ -175,14 +176,14 @@ test('the feed time is the index generation time, with the newest watched change
   assert.equal(noRun.status, 'ok'); assert.equal(noRun.observedAt, '2026-10-02T18:53:06.000Z', 'the newest watched change');
   assert.equal(parse(index(WATCHED, { run_time: 'soon' })).observedAt, '2026-10-02T18:53:06.000Z');
   const futureChange = parse({ datasets: [US_BIS_DENIED, copy(US_OFAC_SDN, { last_change: bare(now + HOUR) })] });
-  assert.equal(futureChange.observedAt, '2026-09-28T12:53:59.000Z', 'a future change never sets the feed time');
+  assert.equal(futureChange.observedAt, '2026-09-28T12:53:59.000Z', 'a future change never sets the feed time'); assert.match(futureChange.summary, /1 watched dataset has no usable change time or entry count and is left out/);
   const future = parse(index(WATCHED, { run_time: bare(now + HOUR) }));
   assert.equal(future.status, 'stale'); assert.equal(future.freshness.reason, 'future-provider-time'); assert.deepEqual(future.observations, []);
   assert.equal(parse(index(WATCHED, { run_time: bare(now - 48 * HOUR) })).status, 'ok', 'the index may be 48 hours old');
   const old = parse(index(WATCHED, { run_time: bare(now - 48 * HOUR - 1000) }));
   assert.equal(old.status, 'stale'); assert.equal(old.freshness.reason, 'expired-provider-time'); assert.deepEqual(old.observations, []);
   const undated = parse({ datasets: [copy(US_OFAC_SDN, { last_change: 'x' })] });
-  assert.equal(undated.status, 'stale'); assert.equal(undated.observedAt, null); assert.equal(undated.freshness.reason, 'unknown-provider-time');
+  assert.equal(undated.status, 'error', 'a list without a readable change time is a shape problem, not an undated feed'); assert.equal(undated.observedAt, null);
   const oldOnly = parse({ datasets: [copy(US_OFAC_SDN, { last_change: bare(now - 3 * DAY) })] });
   assert.equal(oldOnly.status, 'stale', 'without a run_time the newest change is the feed time: 3 days is expired');
 });
@@ -198,6 +199,34 @@ test('wrong shapes and provider errors never throw and give an error result', ()
   assert.equal(parse({ error: { code: 1 } }).status, 'error');
   const skipped = parse(index([null, 'x', 7, [], { name: 5 }, { name: ['us_ofac_sdn'] }, {}, US_OFAC_SDN]));
   assert.equal(skipped.status, 'ok'); assert.deepEqual(ids(skipped), ['us_ofac_sdn']);
+});
+
+test('a changed field shape is an error or a noted gap, never a quiet feed', () => {
+  const rename = (payload, field, to, names) => ({ ...payload, datasets: payload.datasets.map(entry => {
+    if (names && !names.includes(entry.name)) return entry;
+    const { [field]: value, ...rest } = entry;
+    return { ...rest, [to]: value };
+  }) });
+  for (const [field, to] of [['last_change', 'lastChange'], ['thing_count', 'thingCount']]) {
+    const drifted = parse(rename(LIVE, field, to));
+    assert.equal(drifted.status, 'error', field); assert.match(drifted.error, /unexpected dataset shape/); assert.deepEqual(drifted.observations, []); assert.equal(drifted.observedAt, null);
+    assert.doesNotMatch(drifted.error, /https?:/); assert.equal(drifted.license, 'CC BY-NC 4.0');
+    const previous = new Map();
+    const some = parse(rename(LIVE, field, to, ['us_ofac_sdn', 'eu_fsf']), { previous });
+    assert.equal(some.status, 'ok', field); assert.deepEqual(ids(some), ['us_trade_csl', 'gb_fcdo_sanctions', 'un_sc_sanctions', 'us_bis_denied']);
+    assert.match(some.summary, /2 watched datasets have no usable change time or entry count and are left out/); assert.equal(previous.size, 4, 'an unusable list never moves the baseline');
+    const one = parse(rename(LIVE, field, to, ['us_ofac_sdn']));
+    assert.match(one.summary, /1 watched dataset has no usable change time or entry count and is left out/); assert.equal(one.observations.length, 5);
+  }
+  const mixed = parse(index(WATCHED.map(entry => { const { last_change, thing_count, ...rest } = entry; return entry.name === 'us_ofac_sdn' ? { ...rest, thing_count } : { ...rest, last_change }; })));
+  assert.equal(mixed.status, 'error', 'every list unusable, each in its own way');
+  assert.equal(parse(rename(LIVE, 'last_change', 'lastChange', ['us_ofac_cons', 'us_bis_mieu', 'ext_us_ofac_press_releases'])).observations.length, 6, 'unwatched datasets may look any way');
+  assert.doesNotMatch(parse(rename(LIVE, 'last_change', 'lastChange', ['us_ofac_cons'])).summary, /no usable/);
+  const both = parse(rename(LIVE, 'last_change', 'lastChange', ['us_ofac_sdn']), { datasets: ['us_ofac_sdn', 'us_trade_csl', 'does_not_exist'] });
+  assert.match(both.summary, /1 watched dataset is not in the index\. 1 watched dataset has no usable/);
+  assert.equal(parse({ run_time: RUN_TIME, entries: LIVE.datasets }).status, 'error', 'a renamed list of datasets');
+  assert.equal(parse(rename(LIVE, 'name', 'id')).status, 'error', 'a renamed name field');
+  assert.equal(parse({ runTime: RUN_TIME, datasets: LIVE.datasets }).observedAt, '2026-10-02T18:53:06.000Z', 'a renamed run_time falls back to the newest change');
 });
 
 test('hostile provider text is cleaned to inert plain text and capped', () => {
@@ -313,7 +342,7 @@ test('briefing asks for the index once, with a 3 MiB limit, and returns the pars
   assert.equal((await brief({ datasets: ['Bad Name'], fetcher: async () => { throw new Error('must not be asked'); } })).status, 'error');
 });
 
-test('the live index is 610 bytes over 2 MiB, so a 2 MiB limit would fail and the 3 MiB limit holds', async () => {
+test('the live index is slightly over 2 MiB, so a 2 MiB limit would fail and the 3 MiB limit holds', async () => {
   const padded = bytes => { const base = JSON.stringify({ run_time: RUN_TIME, datasets: [...WATCHED, { name: 'zz_pad', description: '' }] }); return base.replace('"description":""', `"description":"${'x'.repeat(bytes - Buffer.byteLength(base))}"`); };
   const live = padded(2 * MIB + 610);
   assert.equal(Buffer.byteLength(live), 2 * MIB + 610);

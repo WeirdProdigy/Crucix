@@ -870,7 +870,7 @@
       "aircraft": "Nombre d’aéronefs militaires",
       "types": "Types d’aéronefs les plus fréquents",
       "thingCount": "Entrées listées (personnes, sociétés, navires)",
-      "deltaSinceLast": "Variation du nombre d’entrées depuis le scan précédent",
+      "deltaSinceLast": "Variation du nombre d’entrées lors du dernier changement",
       "docType": "Type de document",
       "agency": "Agence"
     }

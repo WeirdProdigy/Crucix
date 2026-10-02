@@ -70,7 +70,7 @@ test('parse turns the live documents of both agencies into sanctions observation
   assert.equal(rule.observedAt, '2026-09-30T00:00:00.000Z'); assert.equal(rule.publishedAt, '2026-09-30T00:00:00.000Z');
   assert.equal(rule.url, 'https://www.federalregister.gov/documents/2026/09/30/2026-20014/publication-of-russian-harmful-foreign-activities-sanctions-regulations-web-general-licenses-131e');
   assert.equal(rule.docType, 'Rule'); assert.equal(rule.agency, 'OFAC'); assert.equal(rule.severity, 'info');
-  assert.match(rule.summary, /Rule from the Office of Foreign Assets Control \(OFAC\)/); assert.match(rule.summary, /Federal Register on 2026-09-30/);
+  assert.match(rule.summary, /^Document 2026-20014 \(Rule\) from the Office of Foreign Assets Control \(OFAC\)/); assert.match(rule.summary, /Federal Register on 2026-09-30/);
   const denial = result.observations.find(row => row.providerId === '2026-19927');
   assert.equal(denial.docType, 'Notice'); assert.equal(denial.agency, 'BIS'); assert.equal(denial.severity, 'info'); assert.match(denial.title, /Order Renewing Temporary Denial of Export Privileges$/);
   assert.equal(new Set(result.observations.map(r => r.url)).size, 8, 'every document has its own link, also the two with one title');
@@ -143,9 +143,11 @@ test('future, old and undated documents are excluded and a future one never sets
   assert.equal(futureOnly.status, 'stale'); assert.equal(futureOnly.observedAt, null); assert.equal(futureOnly.freshness.reason, 'unknown-provider-time');
   const withFuture = parse(answers([entry(1, { publication_date: '2026-10-09' }), entry(2, { publication_date: '2026-09-30' })], []));
   assert.equal(withFuture.observedAt, '2026-09-30T00:00:00.000Z'); assert.deepEqual(ids(withFuture), ['2026-90002']);
-  // The feed limit is 96 hours of the newest publication day; the newest day counts even when the row itself is old.
-  assert.equal(parse(answers([entry(1, { publication_date: '2026-09-28' })], []), { now: Date.parse('2026-10-02T00:00:00Z') }).status, 'ok', 'exactly 96 hours');
-  const expired = parse(answers([entry(1, { publication_date: '2026-09-28' })], []), { now: Date.parse('2026-10-02T00:00:01Z') });
+  // The feed limit is the row window, 14 days of the newest publication day (OFAC and BIS can be silent for days, 22 once); the newest day counts even when the row itself is old.
+  const onTheEdge = parse(answers([entry(1, { publication_date: '2026-09-18' })], []), { now: Date.parse('2026-10-02T00:00:00Z') });
+  assert.equal(onTheEdge.status, 'ok', 'exactly 14 days'); assert.equal(onTheEdge.observations.length, 1);
+  assert.equal(parse(answers([entry(1, { publication_date: '2026-09-28' })], [])).status, 'ok', 'a gap of four days (96 hours and more) is not expiry any more');
+  const expired = parse(answers([entry(1, { publication_date: '2026-09-18' })], []), { now: Date.parse('2026-10-02T00:00:01Z') });
   assert.equal(expired.status, 'stale'); assert.equal(expired.freshness.reason, 'expired-provider-time'); assert.deepEqual(expired.observations, []);
   const onlyOld = parse(answers([entry(1, { publication_date: '2026-08-01' })], []));
   assert.equal(onlyOld.status, 'stale'); assert.equal(onlyOld.observedAt, '2026-08-01T00:00:00.000Z');
@@ -169,6 +171,36 @@ test('wrong shapes and provider errors never throw and give an error result', ()
   const bad = [null, 'x', 7, [], {}, { title: 'x' }, entry(1, { title: 5 }), entry(2, { title: '<b></b>' }), entry(3, { document_number: undefined }), entry(4, { document_number: '../../x' }), entry(5, { document_number: 'a b' }), entry(6, { document_number: 'x'.repeat(100) }), entry(7, { document_number: '2026' }), entry(8, { document_number: 'a-b-c-d-e' }), entry(9, { document_number: 'ABCDEF-1234567890-1234567890-1234567890' })];
   const skipped = parse(answers([...bad, OFAC_DOCS[0]], []));
   assert.equal(skipped.status, 'ok'); assert.deepEqual(ids(skipped), ['2026-20215']);
+});
+
+test('documents that cannot be read are counted and noted, and an answer with none readable is an error, never a quiet feed', () => {
+  const drift = (docs, field, to) => docs.map(doc => { const { [field]: value, ...rest } = doc; return { ...rest, [to]: value }; });
+  const drifted = parse(answers(drift(OFAC_DOCS, 'document_number', 'documentNumber'), BIS_DOCS));
+  assert.equal(drifted.status, 'ok'); assert.deepEqual(ids(drifted), ['2026-20058', '2026-19927', '2026-19537']);
+  assert.match(drifted.summary, /Warning: 5 of the 5 OFAC documents could not be read \(number, date or title missing or unusable\) and were left out\./);
+  assert.doesNotMatch(drifted.summary, /request failed/); assert.equal(drifted.examinedRecords, 12);
+  assert.match(parse(answers(OFAC_DOCS, drift(BIS_DOCS, 'publication_date', 'publicationDate'))).summary, /Warning: 7 of the 7 BIS documents could not be read/);
+  assert.match(parse(answers(OFAC_DOCS, drift(BIS_DOCS, 'title', 'name'))).summary, /Warning: 7 of the 7 BIS documents/);
+  for (const [field, to] of [['document_number', 'documentNumber'], ['publication_date', 'publicationDate'], ['title', 'name']]) {
+    const none = parse(answers(drift(OFAC_DOCS, field, to), drift(BIS_DOCS, field, to)));
+    assert.equal(none.status, 'error', field); assert.match(none.error, /unexpected shape/); assert.deepEqual(none.observations, []); assert.equal(none.observedAt, null); assert.equal(none.license, 'Public domain (1 CFR 2.6)');
+  }
+  assert.equal(parse({ OFAC: { error: 'HTTP 503' }, BIS: page(drift(BIS_DOCS, 'document_number', 'documentNumber')) }).status, 'error', 'one agency down and the other unreadable');
+  const some = parse(answers([entry(1, { publication_date: undefined }), entry(2), entry(3, { title: '' })], [entry(4, {}, 'BIS'), null]));
+  assert.equal(some.status, 'ok'); assert.deepEqual(ids(some), ['2026-90004', '2026-90002']);
+  assert.match(some.summary, /Warning: 2 of the 3 OFAC documents and 1 of the 2 BIS documents could not be read/);
+  assert.match(parse(answers([entry(1), entry(2, { title: 5 })], [])).summary, /Warning: 1 of the 2 OFAC documents could not be read .* and was left out\./);
+  // A document dated in the future or older than the window is readable: no warning, and a list of only those is not a shape problem.
+  assert.doesNotMatch(parse(answers([entry(1, { publication_date: '2026-10-09' }), entry(2, { publication_date: '2026-01-01' })], [])).summary, /could not be read/);
+  assert.equal(parse(answers([entry(1, { publication_date: '2026-10-09' })], [])).status, 'stale');
+  assert.doesNotMatch(parse(LIVE).summary, /could not be read/);
+  assert.equal(parse(answers([], [])).status, 'stale', 'an empty list has nothing unreadable in it');
+});
+
+test('two notices of one day with one title are told apart by their document numbers in the summary', () => {
+  const [first, second] = rows([entry(1, { title: 'Notice of OFAC Sanctions Action', publication_date: '2026-10-02' }), entry(2, { title: 'Notice of OFAC Sanctions Action', publication_date: '2026-10-02' })]);
+  assert.equal(first.title, second.title); assert.notEqual(first.summary, second.summary);
+  assert.match(first.summary, /^Document 2026-90002 \(Notice\)/); assert.match(second.summary, /^Document 2026-90001 \(Notice\)/);
 });
 
 test('one agency failing leaves the other in place and says so in the summary', () => {
@@ -202,10 +234,10 @@ test('severity is moderate for a rule whose title mentions the Entity List or de
 
 test('the document type is a short plain label or absent and never decides anything else', () => {
   assert.equal(one({ type: 'Proposed Rule' }).docType, 'Proposed Rule'); assert.equal(one({ type: 'Presidential Document' }).docType, 'Presidential Document');
-  assert.match(one({ type: 'Proposed Rule' }).summary, /^Proposed Rule from the /);
+  assert.match(one({ type: 'Proposed Rule' }).summary, /^Document 2026-90001 \(Proposed Rule\) from the /);
   for (const type of [undefined, null, 5, {}, [], '', '<b>Rule</b>', 'x'.repeat(100000), 'Rule; DROP', '1Rule', `Rule${zero}`]) {
     const row = one({ type });
-    assert.equal('docType' in row, false, String(type).slice(0, 30)); assert.match(row.summary, /^Document from the /);
+    assert.equal('docType' in row, false, String(type).slice(0, 30)); assert.match(row.summary, /^Document 2026-90001 from the /);
   }
   assert.equal(one({ type: ' Rule ', title: 'Revisions to the Entity List' }).docType, 'Rule', 'plain whitespace around the label is trimmed');
 });
@@ -284,7 +316,7 @@ test('history keeps every document apart because every row has its own link, and
 test('observations survive the server normalization with facts, severity and the registered home and policy', () => {
   assert.deepEqual(FACT_FIELDS['Federal-Register'], ['docType', 'agency']);
   assert.equal(HOME['Federal-Register'], 'https://www.federalregister.gov/');
-  assert.deepEqual(POLICIES['Federal-Register'], { maxAgeMs: 96 * HOUR, observationMaxAgeMs: 336 * HOUR });
+  assert.deepEqual(POLICIES['Federal-Register'], { maxAgeMs: 336 * HOUR, observationMaxAgeMs: 336 * HOUR });
   const clock = Date.parse('2026-08-29T12:00:00Z');
   const [out] = normalizeLiveSources({ 'Federal-Register': parse(LIVE, { now: clock }) }, clock);
   assert.equal(out.status, 'ok'); assert.equal(out.url, 'https://www.federalregister.gov/'); assert.equal(out.observations.length, 3);

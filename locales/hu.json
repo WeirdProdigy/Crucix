@@ -870,7 +870,7 @@
       "aircraft": "Katonai repülőgépek száma",
       "types": "Leggyakoribb repülőgéptípusok",
       "thingCount": "Listázott tételek (személyek, cégek, hajók)",
-      "deltaSinceLast": "Tételszám változása az előző lekérdezés óta",
+      "deltaSinceLast": "Tételszám változása az utolsó változással",
       "docType": "Dokumentumtípus",
       "agency": "Hatóság"
     }
