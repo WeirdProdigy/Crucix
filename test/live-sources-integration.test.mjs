@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
-import { normalizeLiveSources, freshLiveSnapshot } from '../lib/intelligence/live-sources.mjs';
+import { normalizeLiveSources, freshLiveSnapshot, FACT_FIELDS } from '../lib/intelligence/live-sources.mjs';
 import { buildEvents } from '../lib/intelligence/events.mjs';
 import { normalizeHistoryEvent, validateHistoryFilters } from '../lib/intelligence/history.mjs';
 import { POLICIES } from '../apis/utils/freshness.mjs';
@@ -67,4 +67,35 @@ test('provider severity words reach the event scale and urgent Telegram keeps it
   assert.equal(events.length,1); assert.equal(events[0].severity,'high');
   const urgent=buildEvents({meta:{timestamp:new Date(now).toISOString()},tg:{urgent:[{channel:'channel',text:'Local report',severity:'banana',date:'2026-10-01T20:30:00Z',url:'https://t.me/channel/1'}]}},{now});
   assert.equal(urgent.length,1); assert.equal(urgent[0].severity,'high');
+});
+const epss = {source:'FIRST-EPSS',status:'ok',observedAt:'2026-10-01T19:00:00Z',timestamp:'2026-10-01T20:00:00Z',observations:[{providerId:'CVE-2026-0001',kind:'cyber',title:'CVE-2026-0001',observedAt:'2026-10-01T19:00:00Z',epss:.12345,percentile:.9,secret:'x',nested:{a:1}}]};
+test('facts come only from the per-source whitelist',()=>{
+  const [out]=normalizeLiveSources({'FIRST-EPSS':epss},now);
+  assert.deepEqual(out.observations[0].facts,[{label:'epss',value:.12345},{label:'percentile',value:.9}]);
+  const dump=JSON.stringify(out); assert(!dump.includes('secret')); assert(!dump.includes('nested'));
+  assert.deepEqual(Object.keys(FACT_FIELDS).sort(),Object.keys(POLICIES).sort());
+  const [swpc]=normalizeLiveSources({'NOAA-SWPC':{...epss,source:'NOAA-SWPC',observedAt:'2026-10-01T20:30:00Z',observations:[{...epss.observations[0],observedAt:'2026-10-01T20:30:00Z',epss:1}]}},now);
+  assert.equal(swpc.observations[0].facts,undefined);
+});
+test('facts are bounded',()=>{
+  const pairs=Array.from({length:20},(_,i)=>({label:'k'+i,value:i}));
+  const facts=[...pairs.slice(0,2),{label:'L'.repeat(41),value:'ok'},{label:'long',value:'v'.repeat(200)},{label:'object',value:{a:1}},{label:'missing',value:null},...pairs.slice(2)];
+  const [out]=normalizeLiveSources({'FIRST-EPSS':{...epss,observations:[{...epss.observations[0],facts}]}},now);
+  const kept=out.observations[0].facts;
+  assert(kept.length>0&&kept.length<=8); assert(kept.every(f=>f.label.length<=40&&(typeof f.value!=='string'||f.value.length<=120)));
+  assert(!kept.some(f=>f.label==='object'||f.label==='missing'));
+  const [small]=normalizeLiveSources({'FIRST-EPSS':{...epss,observations:[{...epss.observations[0],facts:[facts[2],facts[3],facts[4],facts[5]]}]}},now);
+  assert.deepEqual(small.observations[0].facts,[{label:'L'.repeat(40),value:'ok'},{label:'long',value:'v'.repeat(120)}]);
+});
+test('facts survive re-normalization',()=>{
+  const first=normalizeLiveSources({'FIRST-EPSS':epss},now);
+  const again=normalizeLiveSources([first[0]],now);
+  assert.deepEqual(again[0].observations[0].facts,first[0].observations[0].facts); assert.equal(again[0].observations[0].facts.length,2);
+});
+test('MET-Norway units are appended',()=>{
+  const row={...source.observations[0],temperature:15,windSpeed:3.2,precipitation:.4,precipitationHours:1,symbol:'cloudy',units:{temperature:'celsius',windSpeed:'m/s',precipitation:'u'.repeat(21)}};
+  const [out]=normalizeLiveSources({'MET-Norway':{...source,observations:[row]}},now);
+  const facts=Object.fromEntries(out.observations[0].facts.map(f=>[f.label,f.value]));
+  assert.equal(facts.temperature,'15 celsius'); assert.equal(facts.windSpeed,'3.2 m/s'); assert.equal(facts.precipitation,.4);
+  assert.strictEqual(facts.precipitationHours,1); assert.equal(facts.symbol,'cloudy'); assert.equal(out.observations[0].units,undefined);
 });
