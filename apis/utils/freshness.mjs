@@ -13,6 +13,8 @@ export const POLICIES = Object.freeze({
   'ADSB-Military': { maxAgeMs: 25*60000, observationMaxAgeMs: 25*60000 },
   'OpenSanctions-Index': { maxAgeMs: 48*HOUR, observationMaxAgeMs: 336*HOUR },
   'Federal-Register': { maxAgeMs: 336*HOUR, observationMaxAgeMs: 336*HOUR },
+  'Energy-Charts-HU': { maxAgeMs: 6*HOUR, observationMaxAgeMs: 6*HOUR },
+  'ENTSOG-HU': { maxAgeMs: 72*HOUR, observationMaxAgeMs: 72*HOUR },
 });
 
 // Never use collection time as a replacement for a missing provider date.

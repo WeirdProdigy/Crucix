@@ -872,7 +872,12 @@
       "thingCount": "Listázott tételek (személyek, cégek, hajók)",
       "deltaSinceLast": "Tételszám változása az utolsó változással",
       "docType": "Dokumentumtípus",
-      "agency": "Hatóság"
+      "agency": "Hatóság",
+      "pricePerMwh": "Másnapi áramár (EUR/MWh)",
+      "frequencyHz": "Hálózati frekvencia (Hz)",
+      "renewableSharePct": "Megújuló részarány a termelésből (%)",
+      "physicalFlow": "Fizikai gázáramlás",
+      "unit": "Mértékegység"
     }
   }
 }

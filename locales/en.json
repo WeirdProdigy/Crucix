@@ -872,7 +872,12 @@
       "thingCount": "Listed entries (people, companies, vessels)",
       "deltaSinceLast": "Change in entries with the last change",
       "docType": "Document type",
-      "agency": "Agency"
+      "agency": "Agency",
+      "pricePerMwh": "Day-ahead price (EUR/MWh)",
+      "frequencyHz": "Grid frequency (Hz)",
+      "renewableSharePct": "Renewable share of generation (%)",
+      "physicalFlow": "Physical gas flow",
+      "unit": "Unit"
     }
   }
 }
