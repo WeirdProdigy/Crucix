@@ -151,7 +151,17 @@ See the [completed implementation register](docs/audit/intelligence-workspace-im
 
 ### Record Inspector (v2.9)
 
-The **Current public data** cards are summaries: state, provider time, record count, severity badges and the top three titles. **Open records** docks the Inspector on the right (a bottom sheet on phones): filter by severity, time window and text, sort, page through 25 records at a time and read each record's times, location, facts and original link; **Event details** opens the event dialog. Expand it into the full-screen record browser, whose **All sources** view covers every event (news, USGS, NOAA, WHO and more). Keys (while focus is inside the panel or the browser; **Open records** moves it there): `j`/`k` move, `Enter` details, `/` search, `e` expand, `Esc` close; the view is a shareable link such as `#src=GDACS&sev=high`. Severity is always a glyph plus a colour: ◆ critical, ▲ high, ● watch, ○ info, – unknown; provider words such as Red/Orange/Green are mapped onto these levels.
+The **Current public data** cards are summaries: state, provider time, record count, severity badges and the top three titles. **Open records** docks the Inspector on the right (a bottom sheet on phones): filter by severity, time window and text, sort, page through 25 records at a time and read each record's times, location, facts and original link; **Event details** opens the event dialog. Expand it into the full-screen record browser, whose **All sources** view covers every event (news, USGS, NOAA, WHO and more). Keys (while focus is inside the panel or the browser; **Open records** moves it there): `j`/`k` move, `Enter` details, `/` search, `e` expand, `Esc` close; the view is a shareable link such as `#src=GDACS&sev=high`. Severity is always a glyph plus a colour: ◆ critical, ▲ high, ● watch, ○ info, – unknown; provider words such as Red/Orange/Green are mapped onto these levels. CAP "Severe" is **high** (since v2.10; "Extreme" and "Red" stay critical).
+
+### Alert engine (v2.10)
+
+After every sweep the server evaluates alert rules. There are six kinds: **event** (a level range plus kinds, sources, plain-substring keywords and a radius), **threshold** (with an optional `clearValue` hysteresis), **change** (percent move between sweeps), **absence** (a source failing or stale), **convergence** (several kinds of event in one grid cell and time window) and **delta** (signals of the delta engine). Eight built-in rules (`events-critical`, `events-high`, `convergence-default`, `source-stale`, `vix-spike`, `hy-spread-wide`, `delta-critical`, `hungary-region`) are on from the start, and you can add up to 50 of your own. A hit must repeat for `forSweeps` consecutive sweeps before it opens an alert; an alert resolves after 2 sweeps without a hit, then the rule waits `cooldownMinutes`. An alert is **firing**, **acknowledged**, **snoozed** (15 minutes to 7 days) or **resolved**, and a more severe hit escalates it. The **first evaluation is a silent baseline**: alerts for events that already exist are marked "Initial baseline" and never notify or toast.
+
+The dashboard shows an **alert strip** under the top bar (threat level 1–5 from firing alerts only, counts per level, the top alert with **Acknowledge**, **Snooze** and **Open**), a **bell** with the firing count (and an `(n)` prefix in the tab title for critical + high), a **tray** with the tabs Active, Handled, Resolved and Rules (grouped by rule, evidence links, **Acknowledge all**), **toasts** for new critical and high alerts, and a **rules editor** with a form per kind. A built-in rule is changed through an override that **Reset to default** removes. Alerts and rules live in `runs/alerts/` (`alerts.json`, `rules.json`, each with a `.bak` copy): at most 1000 alerts, resolved ones for 30 days. The threat level is the level of the most severe firing alert (info 2, watch 3, high 4, critical 5; none 1).
+
+**Notifications.** Alerts always show in the dashboard. They are also sent when the rule's `notify` flag is on and the alert reaches `ALERT_NOTIFY_MIN_SEVERITY` (default `high`): to ntfy (`ALERT_NTFY_URL`) and a JSON webhook (`ALERT_WEBHOOK_URL`) when set, and to **Telegram and Discord only if you opt in** with `ALERT_NOTIFY_CHANNELS=telegram,discord` (default empty; existing installs must set it to get engine alerts there). The bots' `/mute` silences engine messages too; it does not affect ntfy or the webhook. Delta-derived alerts are not sent again to Telegram/Discord (the existing delta alerter does that; `delta-critical` has `notify` off). Per sweep at most `ALERT_MAX_NOTIFICATIONS_PER_SWEEP` messages go out individually (default 5), the rest as one "+N more alerts" summary; each alert notifies once per channel, again on escalation. `ALERT_QUIET_HOURS` lets only critical alerts through and reports the rest in one summary afterwards (held alerts are lost on a restart). Messages are plain text; failed sends are logged and not retried; channel URLs must be http(s) without credentials and are used as given (a trailing slash is removed, redirects count as failures). A rule you create or re-enable later notifies for everything it matches at once (events already in the baseline stay silent).
+
+**Access, proxies and hosts.** The alert API sits behind your Basic auth. Changing requests (`POST`, `PUT`, `DELETE`) must send `Content-Type: application/json`, come from the page's own origin and stay under 8 KB. **Without `AUTH_USER`/`AUTH_PASSWORD`** they are accepted only through an IP address, `localhost`, the host of `ALERT_PUBLIC_URL` or a name in `ALERT_ALLOWED_HOSTS` (a guard against DNS rebinding), so an instance opened by a LAN host name needs one of those two variables (IP access works as before). Behind an HTTPS reverse proxy, preserve the `Host` header (nginx: `proxy_set_header Host $host;`) or set `ALERT_PUBLIC_URL`, whose origin is accepted. Known limits: no sound, a single operator, `source-stale` keeps showing a permanently failing source until you acknowledge it. Rule parameters and all limits are in the [release notes](docs/releases/v2.10.0.md); the Hungarian [operations guide](docs/OPERATIONS.md) covers day-to-day use.
 
 ---
 
@@ -196,7 +206,8 @@ The server runs a sweep cycle every 15 minutes (configurable). Each cycle:
 3. Computes delta from previous run (what changed, escalated, de-escalated) — visible in the **Sweep Delta** panel on the dashboard
 4. Generates LLM trade ideas (if configured)
 5. Evaluates breaking news alerts — multi-tier (FLASH / PRIORITY / ROUTINE) with semantic dedup. Sends to Telegram and/or Discord if configured. Works with LLM evaluation or falls back to rule-based alerting when LLM is unavailable.
-6. Pushes update to all connected browsers via SSE
+6. Evaluates the [alert engine](#alert-engine-v210) rules: alerts for the dashboard and, if configured, ntfy/webhook (Telegram/Discord by opt-in)
+7. Pushes update to all connected browsers via SSE
 
 ### Telegram Bot (Two-Way)
 Crucix doubles as an interactive Telegram bot. Beyond sending alerts, it responds to commands directly from your chat:
@@ -313,7 +324,7 @@ For Codex, run `npx @openai/codex login` to authenticate via your ChatGPT subscr
 5. Copy the generated URL and open it in your browser to invite the bot to your server
 6. Install the dependency: `npm install discord.js`
 
-Alerts work with or without an LLM on both Telegram and Discord. With an LLM configured, signal evaluation is richer and more context-aware. Without one, a deterministic rule engine evaluates signals based on severity, cross-domain correlation, and signal counts.
+Alerts work with or without an LLM on both Telegram and Discord. With an LLM configured, signal evaluation is richer and more context-aware. Without one, a deterministic rule engine evaluates signals based on severity, cross-domain correlation, and signal counts. Messages of the v2.10 [alert engine](#alert-engine-v210) reach Telegram and Discord only when `ALERT_NOTIFY_CHANNELS` lists them.
 
 ### Without Any Keys
 
@@ -511,6 +522,16 @@ All settings are in `.env` with sensible defaults:
 | `LLM_BASE_URL` | — | Separate OpenAI-compatible endpoint |
 | `LLM_IDEAS_EVERY_N_SWEEPS` | `1` | First sweep, then every Nth sweep; delta alerts run every sweep |
 | `TELEGRAM_OSINT_ENABLED` | `false` | Opt-in public preview source |
+| `ALERT_NOTIFY_CHANNELS` | — | `telegram` and/or `discord` (comma-separated): also send alert engine messages there (opt-in; their `/mute` applies) |
+| `ALERT_NOTIFY_MIN_SEVERITY` | `high` | Lowest severity that is sent out: `critical`, `high`, `watch`, `info` |
+| `ALERT_QUIET_HOURS` | — | `HH:MM-HH:MM` in server local time; only critical goes out, the rest follows as one summary |
+| `ALERT_MAX_NOTIFICATIONS_PER_SWEEP` | `5` | Individual messages per sweep (1–50); the rest is one "+N more alerts" summary |
+| `ALERT_PUBLIC_URL` | — | Dashboard link added to alert messages (separate from `PUBLIC_URL`); its origin is accepted for alert changes behind a reverse proxy |
+| `ALERT_ALLOWED_HOSTS` | — | Host names (comma-separated) that may change alerts when `AUTH_USER`/`AUTH_PASSWORD` are not set |
+| `ALERT_NTFY_URL` | — | ntfy topic URL, http(s) without credentials |
+| `ALERT_NTFY_TOKEN` | — | Optional ntfy access token (Bearer header) |
+| `ALERT_WEBHOOK_URL` | — | Webhook that receives each alert as a JSON POST |
+| `ALERT_MAX_ACTIVE_PER_RULE` | `50` | Open alerts per rule (1–500); further hits are counted, not opened |
 
 Delta engine thresholds (how sensitive the system is to changes between sweeps) can be customized in `crucix.config.mjs` under the `delta.thresholds` section. The defaults are tuned to filter out noise while catching meaningful moves.
 
@@ -526,7 +547,15 @@ When running `npm run dev`:
 | `GET /api/data` | Current synthesized intelligence data (JSON) |
 | `GET /api/health` | Server status, uptime, source count, LLM status |
 | `GET /healthz` | Minimal unauthenticated liveness status |
-| `GET /events` | SSE stream for live push updates |
+| `GET /events` | SSE stream for live push updates; after an operator action it also sends an `alerts` message |
+| `GET /api/alerts` | Alerts with counts and threat level (`state` active, all or resolved; `severity`, `rule`, `limit` 1–200) |
+| `GET /api/alerts/summary` | Counts, threat level, the top firing alerts and the "+N more" per rule |
+| `POST /api/alerts/:id/ack`, `/snooze`, `/resolve` | Acknowledge, snooze (15 minutes to 7 days) or resolve one alert |
+| `POST /api/alerts/ack-all` | Acknowledge all firing alerts (optional `severity`) |
+| `GET /api/alerts/rules` | Effective rules, the metric catalogue and the rule kinds |
+| `PUT /api/alerts/rules/:id`, `DELETE /api/alerts/rules/:id` | Create or replace a user rule, or override a built-in one; delete a user rule or reset an override |
+
+The alert routes sit behind the Basic auth when it is configured. `POST`, `PUT` and `DELETE` need `Content-Type: application/json`, the page's own origin and a body of at most 8 KB; errors are `{error, code, field}`. Without Basic auth see the host rules in the [Alert engine](#alert-engine-v210) section.
 
 ---
 
