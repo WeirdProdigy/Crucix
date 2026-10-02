@@ -32,7 +32,7 @@ const EXTRAS = {
 };
 
 // label, severity and the rank of the hazard: volcanic ash, severe turbulence and icing, cyclones, then the rest (so a cap cuts thunderstorms first).
-const HAZARDS = { VA: ['Volcanic ash', 'high', 0], TURB: ['Severe turbulence', 'moderate', 1], ICE: ['Severe icing', 'moderate', 1], TC: ['Tropical cyclone', 'low', 2],
+const HAZARDS = { VA: ['Volcanic ash', 'high', 0], TURB: ['Severe turbulence', 'moderate', 1], ICE: ['Severe icing', 'moderate', 1], TC: ['Tropical cyclone', 'moderate', 2],
   TS: ['Thunderstorm', 'low', 3], MTW: ['Mountain wave', 'low', 3], DS: ['Duststorm', 'low', 3], SS: ['Sandstorm', 'low', 3] };
 const CHANGES = { WKN: 'weakening', INTSF: 'intensifying', NC: 'no change in intensity' };
 
@@ -81,8 +81,11 @@ function rings(coords) {
 }
 const round3 = value => (Math.round(value * 1000) || 0) / 1000;
 
-// The centre of the area: the area centroid of a polygon, the mean of the points of a line or a flat polygon. Longitudes are unwrapped
-// along the ring first, so an area across the antimeridian is not averaged through the Greenwich side of the globe.
+// The centre of the area: the area centroid of a polygon, else the mean of its points (a line, a flat polygon, one or two points). Longitudes
+// are unwrapped along the ring first, so an area across the antimeridian is not averaged through the Greenwich side of the globe. The
+// shoelace sums are meaningless for a ring that crosses itself (a swapped vertex pair, seen in live data): the centroid of such a ring can
+// lie far outside it, even beyond the globe. A centroid outside the bounding box of the points therefore falls back to the vertex mean,
+// which cannot. `averaged` says that the mean was used.
 function centre(points, area) {
   const unwrapped = [points[0]];
   for (let i = 1; i < points.length; i++) {
@@ -94,10 +97,8 @@ function centre(points, area) {
   }
   const ring = unwrapped.length > 1 && unwrapped[0][0] === unwrapped.at(-1)[0] && unwrapped[0][1] === unwrapped.at(-1)[1] ? unwrapped.slice(0, -1) : unwrapped;
   const [x0, y0] = ring[0];
-  const mean = () => [ring.reduce((sum, point) => sum + point[0], 0) / ring.length, ring.reduce((sum, point) => sum + point[1], 0) / ring.length];
-  let lon, lat;
-  if (!area || ring.length < 3) [lon, lat] = mean();
-  else {
+  let centroid = null;
+  if (area && ring.length >= 3) {
     // Shoelace sums, relative to the first point so that large coordinates do not cost precision.
     let twiceArea = 0, sumX = 0, sumY = 0;
     for (let i = 0; i < ring.length; i++) {
@@ -105,15 +106,22 @@ function centre(points, area) {
       const cross = ax * by - bx * ay;
       twiceArea += cross; sumX += (ax + bx) * cross; sumY += (ay + by) * cross;
     }
-    if (Math.abs(twiceArea) < 1e-9) [lon, lat] = mean();
-    else { lon = x0 + sumX / (3 * twiceArea); lat = y0 + sumY / (3 * twiceArea); }
+    if (Math.abs(twiceArea) >= 1e-9) centroid = [x0 + sumX / (3 * twiceArea), y0 + sumY / (3 * twiceArea)];
   }
-  if (lon > 180) lon -= 360; else if (lon < -180) lon += 360;
-  return { lat: round3(lat), lon: round3(lon) };
+  const xs = ring.map(point => point[0]), ys = ring.map(point => point[1]);
+  const inside = Boolean(centroid) && centroid[0] >= Math.min(...xs) - 1e-9 && centroid[0] <= Math.max(...xs) + 1e-9 && centroid[1] >= Math.min(...ys) - 1e-9 && centroid[1] <= Math.max(...ys) + 1e-9; // false for NaN too
+  let [lon, lat] = inside ? centroid : [xs.reduce((sum, x) => sum + x, 0) / xs.length, ys.reduce((sum, y) => sum + y, 0) / ys.length];
+  while (lon > 180) lon -= 360;
+  while (lon < -180) lon += 360;
+  return { lat: round3(lat), lon: round3(lon), averaged: !inside };
 }
 
-// Rows of one SIGMET are told apart by their area: the points at the provider's precision, hashed.
-const areaHash = lists => createHash('sha1').update(lists.map(list => list.map(([lon, lat]) => `${round3(lon).toFixed(3)},${round3(lat).toFixed(3)}`).join(';')).join('|')).digest('hex').slice(0, 8);
+// Rows of one message are told apart by FIR and area (the points at the provider's precision), hashed; a row without a usable point by
+// its FIR name and end time instead, so rows without an area do not all collapse into one.
+const areaHash = (lists, firId, fallback) => {
+  const area = lists.filter(list => list.length).map(list => list.map(([lon, lat]) => `${round3(lon).toFixed(3)},${round3(lat).toFixed(3)}`).join(';')).join('|');
+  return createHash('sha1').update(`${firId}~${area || fallback}`).digest('hex').slice(0, 8);
+};
 
 // One provider row; whether it is current (started, not ended) is decided when rows are selected, below.
 function decode(row, now) {
@@ -127,9 +135,11 @@ function decode(row, now) {
   const [label, severity, priority] = Object.hasOwn(HAZARDS, code) ? HAZARDS[code] : [code, 'low', 4];
   const lists = rings(row.coords);
   const located = lists.find(list => list.length > 0);
-  const place = located ? { ...centre(located, row.geom !== 'LINE'), locationMethod: located.length === 1 ? 'provider' : 'polygon-centroid', locationPrecision: 'approximate' } : null;
-  const providerId = `${icao}:${base.replace(/ /g, '_')}:${code}:${from}:${areaHash(lists)}`;
-  const fir = clean(row.firName, 60) || clean(row.firId, 20) || icao;
+  const centred = located ? centre(located, row.geom !== 'LINE') : null;
+  const place = centred ? { lat: centred.lat, lon: centred.lon, locationMethod: located.length === 1 ? 'provider' : centred.averaged ? 'polygon-vertex-mean' : 'polygon-centroid', locationPrecision: 'approximate' } : null;
+  const firName = clean(row.firName, 60), firId = clean(row.firId, 20);
+  const providerId = `${icao}:${base.replace(/ /g, '_')}:${code}:${from}:${areaHash(lists, firId, `${firName}~${to}`)}`;
+  const fir = firName || firId || icao;
   const qualifier = clean(row.qualifier, 40);
   const observedAt = new Date(from * 1000).toISOString(), validUntil = new Date(to * 1000).toISOString();
   // The time the provider received the bulletin, unless that lies in the future.

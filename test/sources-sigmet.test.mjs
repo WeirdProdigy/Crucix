@@ -61,7 +61,7 @@ test('parse turns the live list into weather observations, one per SIGMET, ranke
   assert.equal(result.observedAt, '2026-10-02T19:47:16.700Z', 'the feed time is the newest receipt time');
   // 15 rows in, 12 SIGMETs out: two forecast-area twins and one repeated bulletin are gone.
   assert.deepEqual(result.observations.map(shortId), ['WAAA:13:VA', 'MHTG:1:VA', 'NZKL:29:TURB', 'SAVC:E1:ICE', 'NZKL:32:ICE', 'EGRR:02:TURB', 'EGRR:02:TURB', 'NZKL:29:TURB', 'PHFO:TANGO_9:TC', 'FCBB:N1:TS', 'MHTG:G1:TS', 'UBBB:2:TS']);
-  assert.deepEqual(result.observations.map(row => row.severity), ['high', 'high', 'moderate', 'moderate', 'moderate', 'moderate', 'moderate', 'moderate', 'low', 'low', 'low', 'low']);
+  assert.deepEqual(result.observations.map(row => row.severity), ['high', 'high', 'moderate', 'moderate', 'moderate', 'moderate', 'moderate', 'moderate', 'moderate', 'low', 'low', 'low']);
   const row = result.observations[0];
   assert.equal(row.kind, 'weather'); assert.equal(row.source, 'Aviation-SIGMET');
   assert.match(row.providerId, /^WAAA:13:VA:1790955000:[0-9a-f]{8}$/);
@@ -86,8 +86,8 @@ test('licence, rights and attribution come from the NOAA/NWS terms', () => {
   for (const failed of [parseSigmet(null, { now }), parseSigmet([], { now })]) assert.equal(failed.licenseUrl, 'https://www.weather.gov/disclaimer');
 });
 
-test('every hazard code has a label and the severity the brief gives it; an unknown plain code is low and shown as is', () => {
-  const cases = [['VA', 'Volcanic ash', 'high'], ['TURB', 'Severe turbulence', 'moderate'], ['ICE', 'Severe icing', 'moderate'], ['TC', 'Tropical cyclone', 'low'], ['TS', 'Thunderstorm', 'low'],
+test('every hazard code has a label and its severity (cyclones are moderate); an unknown plain code is low and shown as is', () => {
+  const cases = [['VA', 'Volcanic ash', 'high'], ['TURB', 'Severe turbulence', 'moderate'], ['ICE', 'Severe icing', 'moderate'], ['TC', 'Tropical cyclone', 'moderate'], ['TS', 'Thunderstorm', 'low'],
     ['MTW', 'Mountain wave', 'low'], ['DS', 'Duststorm', 'low'], ['SS', 'Sandstorm', 'low'], ['RDOACT', 'RDOACT', 'low'], ['va', 'Volcanic ash', 'high']];
   for (const [code, label, severity] of cases) {
     const row = first([sig(1, { hazard: code })]);
@@ -107,7 +107,8 @@ test('138 SIGMETs are ranked volcanic ash first, then severe turbulence and icin
   const hazardOf = row => row.hazard;
   assert.deepEqual(result.observations.slice(0, 10).map(hazardOf), Array(10).fill('Volcanic ash'));
   assert.deepEqual(result.observations.slice(10, 50).map(row => row.severity), Array(40).fill('moderate'));
-  assert.deepEqual(result.observations.slice(50, 58).map(hazardOf), Array(8).fill('Tropical cyclone'), 'cyclones come before thunderstorms, so the cap cuts thunderstorms first');
+  assert.deepEqual(result.observations.slice(50, 58).map(hazardOf), Array(8).fill('Tropical cyclone'), 'cyclones come after turbulence and icing and before thunderstorms, so the cap cuts thunderstorms first');
+  assert.deepEqual(result.observations.slice(50, 58).map(row => row.severity), Array(8).fill('moderate'));
   assert.ok(result.observations.slice(58).every(row => row.hazard === 'Thunderstorm')); assert.equal(result.observations.filter(row => row.hazard === 'Thunderstorm').length, 42);
   const tiers = [[0, 10], [10, 50], [50, 58], [58, 100]];
   for (const [from, to] of tiers) {
@@ -227,7 +228,10 @@ test('a SIGMET is current from its start until its valid-to time, not after', ()
   const listed = clock => parseSigmet([TURB_NZ_A, filler], { now: clock }).observations.some(row => row.providerId.startsWith('NZKL:29:TURB:1790957100'));
   assert.equal(listed(Date.parse('2026-10-02T20:04:59Z')), true); assert.equal(listed(Date.parse('2026-10-02T20:05:00Z')), false);
   for (const validTimeTo of [undefined, null, 'later', NaN, Infinity, -1, 0, to - 3600, secs(now - HOUR), 1790984820000, 4102444801, '1790984820']) assert.equal(at(validTimeTo).observations.length, 0, String(validTimeTo));
-  const invalid = sig(1, { validTimeTo: sig(1).validTimeFrom }); assert.equal(parseSigmet([invalid], { now }).observations.length, 0, 'valid-to must come after valid-from');
+  // Starts two minutes from now (inside the clock skew) and ends in the future: only the order of the two times can reject these.
+  const starts = secs(now + 2 * MINUTE);
+  assert.equal(parseSigmet([sig(1, { validTimeFrom: starts, validTimeTo: starts + 3600 })], { now }).observations.length, 1, 'the same row with a sane end is current');
+  for (const validTimeTo of [starts, starts - 1]) assert.equal(parseSigmet([sig(1, { validTimeFrom: starts, validTimeTo })], { now }).observations.length, 0, `valid-to ${validTimeTo - starts} s after valid-from`);
 });
 
 test('a SIGMET that has not started, started a day ago or has no usable start is never current', () => {
@@ -367,7 +371,7 @@ test('the SIGMET location is the area centroid, the one point of a point SIGMET,
   const point = first([TS_BAKU]);
   assert.equal(point.lat, 39.2); assert.equal(point.lon, 45.417); assert.equal(point.locationMethod, 'provider'); assert.equal(point.locationPrecision, 'approximate');
   const line = first([TS_G1]);
-  near(line.lat, 10.9835); near(line.lon, -83.225); assert.equal(line.locationMethod, 'polygon-centroid');
+  near(line.lat, 10.9835); near(line.lon, -83.225); assert.equal(line.locationMethod, 'polygon-vertex-mean', 'the mean of two points is no area centroid');
   // A first-ring centroid for several areas (FCBB N1 has three), a plain mean for a line and for collinear or repeated points.
   const areas = first([AREAS_BRAZZAVILLE]);
   near(areas.lat, 8.309); near(areas.lon, 24.159);
@@ -393,6 +397,59 @@ test('the SIGMET location is the area centroid, the one point of a point SIGMET,
   const noGeom = { ...sig(1) }; delete noGeom.coords; delete noGeom.geom;
   assert.ok(first([noGeom]), 'a row without a coords field at all is still a SIGMET'); assert.equal('lat' in first([noGeom]), false);
   assert.equal(at(square(10, 20), { geom: undefined }).lat, 21); assert.equal(at(square(10, 20), { geom: 'WEIRD' }).lat, 21);
+});
+
+test('a ring that crosses itself never puts the centre outside the area or off the globe', () => {
+  // A swapped vertex pair (the live data has such rings, GOOY B03 and B05). Its shoelace centroid is lon 14.667 for the tip at 2.1 and lon 13332974.688 at 2.0000001.
+  const bowTie = tip => [[0, 0], [2, tip], [2, 0], [0, 2], [0, 0]].map(([lon, lat]) => ({ lon, lat }));
+  const inside = (row, lonRange, latRange, eps = 0.001) => Number.isFinite(row.lat) && Number.isFinite(row.lon) && Math.abs(row.lat) <= 90 && Math.abs(row.lon) <= 180
+    && row.lon >= lonRange[0] - eps && row.lon <= lonRange[1] + eps && row.lat >= latRange[0] - eps && row.lat <= latRange[1] + eps;
+  for (const tip of [2.1, 2.0000001, 2.00001, 3, 1.99999999, 2]) {
+    const row = first([sig(1, { coords: bowTie(tip) })]);
+    assert.ok(inside(row, [0, 2], [0, Math.max(2, tip)]), `tip ${tip}: ${row.lat}, ${row.lon}`);
+    assert.equal(new URL(row.url).searchParams.get('center'), `${row.lat},${row.lon}`, 'the link is centred on the same point');
+  }
+  for (const tip of [2.1, 2.0000001]) {
+    const row = first([sig(1, { coords: bowTie(tip) })]);
+    near(row.lon, 1); near(row.lat, (tip + 2) / 4, 'the mean of the four corner points'); assert.equal(row.locationMethod, 'polygon-vertex-mean', 'the label says what the point is'); assert.equal(row.locationPrecision, 'approximate');
+  }
+  // A proper polygon keeps its area centroid and its label; so does a flat one, which has no area, as a mean of points.
+  assert.equal(first([sig(1, { coords: square(10, 20) })]).locationMethod, 'polygon-centroid');
+  assert.equal(first([sig(1, { coords: [{ lon: 0, lat: 0 }, { lon: 2, lat: 2 }, { lon: 4, lat: 4 }] })]).locationMethod, 'polygon-vertex-mean');
+  assert.equal(first([sig(1, { coords: [{ lon: 10, lat: 20 }] })]).locationMethod, 'provider');
+  // A coordinate on the row always comes with its label, and survives the server normalization.
+  const [out] = normalizeLiveSources({ 'Aviation-SIGMET': parseSigmet([sig(1, { coords: bowTie(2.0000001) })], { now }) }, now);
+  assert.ok(Number.isFinite(out.observations[0].lat) && Number.isFinite(out.observations[0].lon)); assert.equal(out.observations[0].locationMethod, 'polygon-vertex-mean');
+  // 300 random rings, each with one swapped pair of neighbouring vertices: the centre is always inside the bounding box of the points.
+  let seed = 12345;
+  const random = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+  let averaged = 0;
+  for (let n = 0; n < 300; n++) {
+    const count = 4 + Math.floor(random() * 5);
+    const points = Array.from({ length: count }, (_, i) => ({ lon: 10 + 8 * Math.cos(i / count * 2 * Math.PI) * (0.5 + random()), lat: 20 + 5 * Math.sin(i / count * 2 * Math.PI) * (0.5 + random()) }));
+    const a = Math.floor(random() * count), b = (a + 1) % count;
+    [points[a], points[b]] = [points[b], points[a]];
+    const row = first([sig(1, { coords: [...points, points[0]] })]);
+    const lons = points.map(p => p.lon), lats = points.map(p => p.lat);
+    assert.ok(inside(row, [Math.min(...lons), Math.max(...lons)], [Math.min(...lats), Math.max(...lats)]), `ring ${n}: ${row.lat}, ${row.lon}`);
+    if (row.locationMethod === 'polygon-vertex-mean') averaged++;
+  }
+  assert.ok(averaged > 0, 'the guard was needed for some of the random rings');
+});
+
+test('rows of one message in two FIRs, or without any area, stay apart', () => {
+  const polygon = square(10, 20);
+  const two = [sig(1, { firId: 'AAAA', firName: 'AAAA ONE', coords: polygon }), sig(1, { firId: 'BBBB', firName: 'BBBB TWO', coords: polygon })];
+  const rows = parseSigmet(two, { now }).observations;
+  assert.equal(rows.length, 2, 'the same polygon in two FIRs'); assert.notEqual(rows[0].providerId, rows[1].providerId); assert.notEqual(rows[0].url, rows[1].url);
+  assert.equal(rows[0].providerId.split(':').slice(0, 4).join(':'), rows[1].providerId.split(':').slice(0, 4).join(':'), 'only the FIR tells them apart');
+  assert.equal(parseSigmet([two[0], clone(two[0])], { now }).observations.length, 1, 'the same FIR and polygon is one SIGMET');
+  const bare = props => sig(1, { coords: [], ...props });
+  assert.equal(parseSigmet([bare({ firId: 'AAAA', firName: 'AAAA ONE' }), bare({ firId: 'BBBB', firName: 'BBBB TWO' })], { now }).observations.length, 2, 'rows without a polygon in two FIRs');
+  assert.equal(parseSigmet([bare({}), bare({ validTimeTo: sig(1).validTimeTo + 600 })], { now }).observations.length, 2, 'rows without a polygon that end at different times');
+  assert.equal(parseSigmet([bare({}), bare({})], { now }).observations.length, 1, 'indistinguishable rows are one');
+  for (const coords of [[], null, [[]], [[], []], 'x']) assert.notEqual(ids([sig(1, { coords })])[0].split(':').at(-1), 'da39a3ee', 'not the hash of an empty string');
+  assert.deepEqual(ids([bare({}), bare({ firId: 'AAAA' })]).length, 2);
 });
 
 test('observations survive the server normalization with facts, location, validity and the registered home and policy', () => {

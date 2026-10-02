@@ -2,8 +2,10 @@
 // dashboard, https://mapping.emergency.copernicus.eu/ . The JSON endpoint is the one the site itself uses and is not documented.
 // The older rapidmapping.emergency.copernicus.eu host answers the same endpoint but redirects every page to the host used here.
 // Facts about the list that shape this adapter (checked on 2026-10-02 over all 265 activations): every listed activation was closed,
-// so entries lag the disaster by days; times are UTC but carry no zone designator; the event time can be later than the activation
-// time (anticipated events), so the activation time is the observation; the list carries no severity or priority field.
+// so entries lag the disaster by days, and the gap between two activations reached 37.8 days (so the feed policy is 45 days, while a
+// row stays current for 30); times carry no zone designator: the activation time is UTC (the service's own viewer prints it with
+// "(UTC)"), the event time is entered by the operator and its zone is not stated, and it can be later than the activation time
+// (anticipated events), so the activation time is the observation; the list carries no severity or priority field.
 // Every regex below runs on text that was cut to a fixed length first: unbounded input never reaches one.
 import { safeFetch } from '../utils/fetch.mjs';
 import { providerTime, freshness, freshResult, unavailableResult, POLICIES } from '../utils/freshness.mjs';
@@ -69,7 +71,7 @@ function activation(row, now) {
   const title = clean(row.name, 140) || `Copernicus EMS activation ${code}`;
   const mapping = [areas === null ? '' : plural(areas, 'area of interest', 'areas of interest'), products === null ? '' : plural(products, 'product', 'products')].filter(Boolean).join(' and ');
   const summary = [`Copernicus EMS rapid mapping activation ${code}${category ? ` (${category})` : ''}${countries ? ` for ${countries}` : ''}.`,
-    `Activated ${text(observedAt)}${eventAt ? `; event time ${text(eventAt)} as given by the provider` : ''}.`,
+    `Activated ${text(observedAt)}${eventAt ? `; operator-entered event time ${eventAt.slice(0, 10)} ${eventAt.slice(11, 16)} (zone not stated)` : ''}.`,
     mapping ? `Mapping: ${mapping}.` : '', row.closed === true ? 'Activation closed.' : row.closed === false ? 'Activation still open.' : '',
     'The service publishes no severity rating; moderate is the default for an activation.'].filter(Boolean).join(' ');
   return { kind: 'disaster', providerId: code, title, summary, source: SOURCE, url: `${ACTIVATION_PAGE}${code}`, observedAt, ...(publishedAt ? { publishedAt } : {}),

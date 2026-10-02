@@ -59,7 +59,7 @@ test('parse turns the live list into disaster observations, newest activation fi
   assert.equal(row.severity, 'moderate'); assert.equal(row.category, 'Wildfire'); assert.equal(row.countries, 'Spain'); assert.equal(row.region, 'Spain');
   assert.equal(row.url, 'https://mapping.emergency.copernicus.eu/activations/EMSR932');
   assert.match(row.summary, /EMSR932/); assert.match(row.summary, /Wildfire/); assert.match(row.summary, /Spain/);
-  assert.match(row.summary, /activated 2026-09-15 16:58 UTC/i); assert.match(row.summary, /event time 2026-09-15 13:00 UTC/i);
+  assert.match(row.summary, /activated 2026-09-15 16:58 UTC/i); assert.match(row.summary, /operator-entered event time 2026-09-15 13:00 \(zone not stated\)/i); assert.doesNotMatch(row.summary, /event time[^.]*UTC/i, 'the event time is not claimed to be UTC');
   assert.match(row.summary, /1 area of interest/); assert.match(row.summary, /1 product\b/); assert.match(row.summary, /no severity/i);
   assert.equal(new Set(result.observations.map(r => r.url)).size, 4, 'every row has its own activation page');
   assert.match(result.summary, /30 days/); assert.match(result.summary, /closed/i); assert.match(result.summary, /no severity/i);
@@ -77,11 +77,11 @@ test('the rows are ordered by activation time, not by the order or the code of t
   assert.equal(parseCopernicus(page([older, newest, newer]), { now }).observedAt, iso(now - HOUR));
 });
 
-test('times without a zone are UTC on any machine, fractions are cut to milliseconds and an event may follow the activation', () => {
+test('the activation time is read as UTC on any machine, fractions are cut to milliseconds and an event may follow the activation', () => {
   const row = first(page([act(1, { eventTime: '2026-06-11T12:00:00', activationTime: naive(now - 5 * DAY), lastUpdate: naive(now - 4 * DAY) + '.123456' })]));
   assert.equal(row.observedAt, iso(now - 5 * DAY)); assert.equal(row.publishedAt, iso(now - 4 * DAY + 123));
   // Real data has 36 activations whose event time is later than their activation time (anticipated events); the activation time stays the observation.
-  assert.match(row.summary, /event time 2026-06-11 12:00 UTC/i); assert.equal(row.observedAt < '2026-06-11', false);
+  assert.match(row.summary, /event time 2026-06-11 12:00 \(zone not stated\)/i); assert.equal(row.observedAt < '2026-06-11', false);
   for (const eventTime of [undefined, null, 'soon', '2026-13-40T00:00:00', 12345, '2026-09-15']) {
     const bare = first(page([act(2, { eventTime })]));
     assert.doesNotMatch(bare.summary, /event time/i, String(eventTime)); assert.equal(bare.observedAt, '2026-09-15T16:58:00.000Z');
@@ -98,20 +98,27 @@ test('licence, rights and attribution come from the Copernicus EMS terms', () =>
   for (const failed of [parseCopernicus(null, { now }), parseCopernicus({ results: [] }, { now })]) assert.equal(failed.licenseUrl, 'https://mapping.emergency.copernicus.eu/terms-and-conditions/');
 });
 
-test('an empty list has no provider time, and an expired newest activation expires the feed at exactly 30 days', () => {
+test('an empty list has no provider time; rows last 30 days after the activation and the feed expires after 45 days', () => {
   const empty = parseCopernicus(page([]), { now });
   assert.equal(empty.status, 'stale'); assert.equal(empty.observedAt, null); assert.deepEqual(empty.observations, []); assert.equal(empty.freshness.reason, 'unknown-provider-time');
   for (const age of [29 * DAY, 30 * DAY]) {
     const ok = parseCopernicus(page([act(1, { activationTime: naive(now - age) })]), { now });
     assert.equal(ok.status, 'ok', `${age / DAY} days`); assert.equal(ok.observations.length, 1);
   }
-  for (const age of [30 * DAY + 1000, 40 * DAY]) {
+  // 31 to 45 days after the newest activation the provider is still current (activations came up to 37.8 days apart) but no row is: ok with nothing to show.
+  for (const age of [30 * DAY + 1000, 40 * DAY, 45 * DAY]) {
+    const quiet = parseCopernicus(page([act(1, { activationTime: naive(now - age) })]), { now });
+    assert.equal(quiet.status, 'ok', `${age / DAY} days`); assert.deepEqual(quiet.observations, []); assert.equal(quiet.freshness.reason, null); assert.equal(quiet.observedAt, iso(now - age)); assert.equal(quiet.rejectedObservations, 0);
+  }
+  for (const age of [45 * DAY + 1000, 50 * DAY]) {
     const stale = parseCopernicus(page([act(1, { activationTime: naive(now - age) })]), { now });
     assert.equal(stale.status, 'stale', `${age / DAY} days`); assert.deepEqual(stale.observations, []); assert.equal(stale.freshness.reason, 'expired-provider-time'); assert.equal(stale.observedAt, iso(now - age));
   }
-  // The real list: on 2026-10-02 the newest activation is 17 days old; 13 days later the feed has expired and shows no rows.
-  assert.equal(parseCopernicus(LIVE, { now: now + 12 * DAY }).status, 'ok');
-  assert.equal(parseCopernicus(LIVE, { now: now + 14 * DAY }).status, 'stale');
+  // The real list: on 2026-10-02 the newest activation is 17 days old. 12 days later it is the last row left, 14 days later no row is current
+  // but the feed is, and from 28 days later (more than 45 days after it) the feed has expired.
+  assert.equal(parseCopernicus(LIVE, { now: now + 12 * DAY }).status, 'ok'); assert.equal(parseCopernicus(LIVE, { now: now + 12 * DAY }).observations.length, 1);
+  assert.equal(parseCopernicus(LIVE, { now: now + 14 * DAY }).status, 'ok'); assert.deepEqual(parseCopernicus(LIVE, { now: now + 14 * DAY }).observations, []);
+  assert.equal(parseCopernicus(LIVE, { now: now + 27 * DAY }).status, 'ok'); assert.equal(parseCopernicus(LIVE, { now: now + 28 * DAY }).status, 'stale');
 });
 
 test('wrong shapes and provider errors never throw and give an error result', () => {
@@ -268,7 +275,7 @@ test('a row without a location still survives the server normalization and reach
 test('observations survive the server normalization with facts, location, severity and the registered home and policy', () => {
   assert.deepEqual(FACT_FIELDS['Copernicus-EMS'], ['category', 'countries']);
   assert.equal(HOME['Copernicus-EMS'], 'https://mapping.emergency.copernicus.eu/');
-  assert.deepEqual(POLICIES['Copernicus-EMS'], { maxAgeMs: 720 * HOUR, observationMaxAgeMs: 720 * HOUR });
+  assert.deepEqual(POLICIES['Copernicus-EMS'], { maxAgeMs: 1080 * HOUR, observationMaxAgeMs: 720 * HOUR }, 'the feed lasts 45 days, a row 30');
   const keys = Object.keys(POLICIES); assert.equal(keys.indexOf('Copernicus-EMS'), keys.indexOf('EMSC') + 1, 'registered in the fixed order, EMSC then Copernicus-EMS');
   const [out] = normalizeLiveSources({ 'Copernicus-EMS': parseCopernicus(LIVE, { now }) }, now);
   assert.equal(out.status, 'ok'); assert.equal(out.url, 'https://mapping.emergency.copernicus.eu/'); assert.equal(out.observations.length, 4);
@@ -320,9 +327,9 @@ test('the cache serves a result for one hour, refreshes after, keeps only ok res
   assert.equal(requests, 3, 'a different fetcher never shares the entry'); assert.equal(other.observations.length, 0, 'EMSR932 is far older than 30 days at that clock'); assert.equal(other.status, 'stale');
   const clockBack = await briefing({ now: base + 30 * 60000, fetcher: lively, useCache: true });
   assert.equal(requests, 4, 'an entry from the future is never served'); assert.equal(clockBack.status, 'ok');
-  // The age is checked again at every read: a cached payload whose newest activation has meanwhile passed 30 days is stale, not served as current.
+  // The age is checked again at every read: a cached payload whose newest activation has meanwhile passed 45 days is stale, not served as current.
   const lateStart = base + 200 * DAY;
-  const old = async () => { requests++; return page([act(1, { activationTime: naive(lateStart - 30 * DAY + 20 * 60000) })]); };
+  const old = async () => { requests++; return page([act(1, { activationTime: naive(lateStart - 45 * DAY + 20 * 60000) })]); };
   assert.equal((await briefing({ now: lateStart, fetcher: old, useCache: true })).status, 'ok');
   const before = requests;
   assert.equal((await briefing({ now: lateStart + 30 * 60000, fetcher: old, useCache: true })).status, 'stale', 'the cache does not keep an expired feed alive'); assert.equal(requests, before);
@@ -334,7 +341,7 @@ test('failures, stale and empty answers are not cached, and an injected fetcher 
   const base = now + 300 * DAY;
   assert.equal((await briefing({ now: base, fetcher, useCache: true })).status, 'error');
   body = page([]); assert.equal((await briefing({ now: base, fetcher, useCache: true })).status, 'stale');
-  body = page([act(1, { activationTime: naive(base - 40 * DAY) })]); assert.equal((await briefing({ now: base, fetcher, useCache: true })).status, 'stale');
+  body = page([act(1, { activationTime: naive(base - 50 * DAY) })]); assert.equal((await briefing({ now: base, fetcher, useCache: true })).status, 'stale');
   assert.equal(calls, 3, 'a failure, an empty list and an expired list each left nothing behind');
   body = page([act(1, { activationTime: naive(base - DAY) })]); assert.equal((await briefing({ now: base, fetcher, useCache: true })).status, 'ok');
   assert.equal(calls, 4); assert.equal((await briefing({ now: base + 1000, fetcher, useCache: true })).status, 'ok'); assert.equal(calls, 4, 'now it is cached');
