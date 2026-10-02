@@ -327,7 +327,11 @@
     try{window.CrucixAlerts?.update?.(data.summary);}catch(error){log(error);}
   }
   const withRule=rule=>{const next=rules.slice(),index=next.findIndex(item=>item.id===rule.id);if(index<0)next.push(rule);else next[index]=rule;return next;};
-  const reason=error=>({field:text(error?.field),message:text(error?.detail)});
+  // A refusal of the origin check (the page is open at an address the server takes no changes from) names the fix instead.
+  const ORIGIN_CODES=['CROSS_ORIGIN','HOST_NOT_ALLOWED'];
+  const reason=error=>ORIGIN_CODES.includes(text(error?.code))
+    ?{field:'',message:say('alerts.errorOrigin','Refused at this address: open the dashboard at its ALERT_PUBLIC_URL address, or set ALERT_PUBLIC_URL or ALERT_ALLOWED_HOSTS on the server')}
+    :{field:text(error?.field),message:text(error?.detail)};
 
   async function load(){
     if(readOnly)return;
@@ -458,9 +462,12 @@
     event.preventDefault?.();
     save();
   }
-  // Esc closes an open form (or the delete question) first; the tray's own Esc comes after (this listener runs first).
+  // Esc closes an open form (or the delete question) first; the tray's own Esc comes after (this listener runs first). While a
+  // request runs Esc is taken and does nothing: the form, the question and the tray wait for the answer.
   function onKey(event){
-    if(event.key!=='Escape'||event.defaultPrevented||event.altKey||event.ctrlKey||event.metaKey||busy||!inRules(event.target)||(!editing&&!confirming))return;
+    if(event.key!=='Escape'||event.defaultPrevented||event.altKey||event.ctrlKey||event.metaKey||!inRules(event.target))return;
+    if(busy){event.preventDefault();return;}
+    if(!editing&&!confirming)return;
     event.preventDefault();
     cancel();
   }

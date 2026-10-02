@@ -273,7 +273,8 @@ test('robustness: garbage summaries, views and translators never throw',()=>{
     assert.equal(typeof A.renderToast({id:'a',severity:'critical',evidence:null},tr),'string');
     assert.equal(typeof C.titleBadge(summary),'string'); assert(Array.isArray(plain(C.newAlertToasts(summary,new Set()))));
   }
-  assert(A.renderStrip(null,null,now).includes('No active alerts'),'a missing translator falls back to English');
+  assert(A.renderStrip(null,null,now).includes('Alerts unavailable'),'a missing translator falls back to English');
+  assert(A.renderStrip(summaryOf([]),null,now).includes('No active alerts'),'a missing translator falls back to English');
 });
 
 // ===== Controller =====
@@ -294,7 +295,7 @@ test('controller: mount, update and the bell never throw, whatever the page give
   const strip=byId('alertStrip');
   assert(strip&&byId('alertTray')&&byId('alertToasts'),'strip, tray and toast stack exist');
   assert.equal(strip.getAttribute('role'),'region'); assert(strip.getAttribute('aria-label'));
-  assert(strip.innerHTML.includes('No active alerts'),'without a summary the strip shows the calm line');
+  assert(strip.innerHTML.includes('Alerts unavailable')&&!strip.innerHTML.includes('No active alerts'),'without a summary the strip says alerts are unavailable');
   const tray=byId('alertTray');
   assert.deepEqual([tray.hidden,tray.getAttribute('aria-hidden'),tray.getAttribute('role'),tray.getAttribute('aria-labelledby')],[true,'true','region','at-heading']);
   assert.equal(byId('alertToasts').innerHTML,'','the toast stack has no text nodes, so :empty hides it');
@@ -374,6 +375,57 @@ test('controller: a failed action is shown without a role and spoken once; redra
   A.update(summaryOf(alerts,{generatedAt:now+3}));
   assert(!byId('alertStrip').innerHTML.includes('Action failed'),'a new summary clears the strip notice');
   assert.equal(errors.length,0);
+});
+
+test('controller: a change refused for its origin or host name says how to reach the dashboard',async()=>{
+  for(const code of ['CROSS_ORIGIN','HOST_NOT_ALLOWED']){
+    const refusing=async url=>url.includes('/ack')?{ok:false,status:403,json:async()=>({error:'Cross-origin request refused',code,field:null})}:{ok:true,status:200,json:async()=>({alerts:[]})};
+    const {A,byId}=dom({fetch:refusing}),alerts=firing();
+    A.mount({getSummary:()=>summaryOf(alerts),t,now:()=>now});A.open();await ticks();
+    click(byId('alertTray'),{'data-alert-action':'ack','data-alert-id':alerts[0].id});await speech();
+    assert.match(byId('alertTray').innerHTML,/class="al-notice">Refused at this address: open the dashboard at its ALERT_PUBLIC_URL address/,code);
+    assert.match(byId('alertError').textContent,/ALERT_ALLOWED_HOSTS/,code);
+    assert(!byId('alertTray').innerHTML.includes('Action failed'),code);
+  }
+});
+
+test('renderStrip and the drivers block: no summary at all is "unavailable", never a calm threat level 1',()=>{
+  const A=load().CrucixAlerts;
+  for(const missing of [null,undefined,{},{generatedAt:now},{counts:{critical:0},threat:null},{threat:{level:1}}]){
+    const html=A.renderStrip(missing,t,now);
+    assert(html.includes('Alerts unavailable'),JSON.stringify(missing)); assert(!html.includes('No active alerts')&&!html.includes('1/5'),JSON.stringify(missing));
+    assert.match(html,/<button type="button" class="as-threat as-threat-0" data-alert-action="threat"[^>]*>Threat –\/5<\/button>/,'a neutral threat badge');
+    const drivers=A.renderTray({tab:'active',alerts:[],summary:missing,threatOpen:true},t,now);
+    assert(drivers.includes('Threat –/5')&&drivers.includes('Alerts unavailable')&&!drivers.includes('No active alerts'),JSON.stringify(missing));
+  }
+  assert(A.renderStrip(summaryOf([]),t,now).includes('No active alerts'),'a real calm summary is still calm');
+  assert(A.renderStrip({},(key,fallback)=>key==='alerts.unavailable'?'A riasztások nem érhetők el':fallback,now).includes('A riasztások nem érhetők el'),'localised');
+});
+
+test('controller: a page without a summary (offline shell, old snapshot) shows "unavailable" and a neutral bell',()=>{
+  for(const options of [{offline:true},{protocol:'file:'},{}]){
+    const {A,byId}=dom(options);
+    A.mount({getSummary:()=>undefined,t,now:()=>now});
+    assert(byId('alertStrip').innerHTML.includes('Alerts unavailable'),JSON.stringify(options)); assert(!byId('alertStrip').innerHTML.includes('1/5'));
+    assert.match(A.bell(),/al-bell-count">–</,'no count without a summary');
+    A.update(summaryOf(firing(),{generatedAt:now+1}));
+    assert.match(byId('alertStrip').innerHTML,/Threat 5\/5/,'the first summary replaces it'); assert.match(A.bell(),/al-bell-count">3</);
+  }
+});
+
+test('controller: a server clock that went back more than 5 minutes is a reset, not an old summary',()=>{
+  const {A,byId}=dom(),alerts=firing();
+  A.mount({getSummary:()=>summaryOf(alerts),t,now:()=>now});
+  assert.equal(A.update(summaryOf([],{generatedAt:now-MIN})),false,'a little older: ignored');
+  assert.equal(A.update(summaryOf([],{generatedAt:now-5*MIN})),false,'up to 5 minutes older: ignored');
+  const back=now-HOUR,old=alert({title:'Already firing',firstSeenAt:back-MIN});
+  assert.equal(A.update(summaryOf([old],{generatedAt:back})),true,'more than 5 minutes older: applied');
+  assert.match(byId('alertStrip').innerHTML,/Already firing/); assert.equal(byId('alertToasts').innerHTML,'','what fires at the reset is the new baseline, it does not toast');
+  // The next summaries are measured from the reset one, not from the old (now future) time.
+  const fresh=alert({title:'After the reset',firstSeenAt:back+MIN});
+  assert.equal(A.update(summaryOf([fresh,old],{generatedAt:back+15*MIN})),true);
+  assert(byId('alertToasts').innerHTML.includes('After the reset'),'a new alert after the reset toasts');
+  assert.equal(A.update(summaryOf([],{generatedAt:back+10*MIN})),false,'and an older one than that is ignored again');
 });
 
 test('controller: a non-object or list-less answer is a failure, a summary without counts and threat is ignored',async()=>{

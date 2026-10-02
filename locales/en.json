@@ -387,6 +387,8 @@
     "more": "more alerts",
     "errorLoad": "Could not load alerts",
     "errorAction": "Action failed",
+    "errorOrigin": "Refused at this address: open the dashboard at its ALERT_PUBLIC_URL address, or set ALERT_PUBLIC_URL or ALERT_ALLOWED_HOSTS on the server",
+    "unavailable": "Alerts unavailable",
     "level": {
       "critical": "Critical",
       "high": "High",

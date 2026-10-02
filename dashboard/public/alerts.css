@@ -6,7 +6,7 @@
 #alertStrip{display:flex;margin-top:10px;flex-wrap:wrap;align-items:center;gap:6px 10px;min-height:36px;padding:5px 12px;background:#060e16;border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:11px;line-height:1.4}
 #alertStrip[hidden]{display:none}
 .as-threat{flex:none;min-height:26px;padding:0 10px;background:#060e16;border:1px solid currentColor;border-radius:3px;font:inherit;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
-.as-threat-1{color:var(--dim)}.as-threat-2{color:var(--sev-info)}.as-threat-3{color:var(--sev-watch)}.as-threat-4{color:var(--sev-high)}.as-threat-5{color:var(--sev-critical)}
+.as-threat-0,.as-threat-1{color:var(--dim)}.as-threat-2{color:var(--sev-info)}.as-threat-3{color:var(--sev-watch)}.as-threat-4{color:var(--sev-high)}.as-threat-5{color:var(--sev-critical)}
 .as-threat[aria-expanded="true"]{box-shadow:inset 0 -2px 0 currentColor}
 .as-counts{display:inline-flex;flex-wrap:wrap;gap:4px}
 .as-count{background:#060e16}
@@ -137,9 +137,11 @@
 .al-bell-count{font-variant-numeric:tabular-nums}
 #alertBell.al-bell-3{border-color:var(--sev-watch);color:var(--sev-watch)}#alertBell.al-bell-4{border-color:var(--sev-high);color:var(--sev-high)}#alertBell.al-bell-5{border-color:var(--sev-critical);color:var(--sev-critical)}
 
-/* ===== Toasts: a stack in the bottom-right corner (at most three, kept by the controller), above the tray ===== */
+/* ===== Toasts: a stack in the bottom-right corner (at most three, kept by the controller), above the page ===== */
 #alertToasts{position:fixed;right:16px;bottom:16px;z-index:1150;display:flex;flex-direction:column;gap:8px;width:min(380px,calc(100vw - 32px));pointer-events:none}
-#alertToasts:empty{display:none}
+/* The open tray lists the same alerts, so the toasts step aside instead of covering its buttons (the tray comes first in
+   <body>); they are back when it closes. */
+#alertToasts:empty,#alertTray:not([hidden])~#alertToasts{display:none}
 .al-toast{position:relative;display:flex;align-items:flex-start;gap:8px;padding:10px 10px 10px 12px;background:#060e16;border:1px solid var(--border-bright,rgba(100,240,200,.3));border-left:4px solid var(--sev-unknown);border-radius:4px;box-shadow:0 12px 32px rgba(0,0,0,.6);color:var(--text);font-family:var(--sans);font-size:12px;line-height:1.45;pointer-events:auto;animation:al-fade-in .2s ease-out}
 .al-toast-critical{border-left-color:var(--sev-critical)}.al-toast-high{border-left-color:var(--sev-high)}.al-toast-watch{border-left-color:var(--sev-watch)}.al-toast-info{border-left-color:var(--sev-info)}
 .al-toast-body{flex:1;min-width:0;overflow-wrap:anywhere}

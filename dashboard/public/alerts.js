@@ -29,6 +29,10 @@
   // "constructor") falls back to the stored name in the translator.
   const ruleLabel=(tx,ruleId,ruleName)=>{const id=text(ruleId),name=text(ruleName)||id;return RULE_ID.test(id)?tx('alerts.ruleNames.'+id,name):esc(name);};
   const threatLevel=summary=>{const level=obj(summary.threat)?.level;return Number.isInteger(level)&&level>=1&&level<=5?level:1;};
+  // No summary from the server (offline shell, file: page, a snapshot older than the alert engine): nothing is known, so the
+  // strip says "unavailable" with a neutral badge instead of a calm level 1.
+  const known=summary=>!!obj(summary)&&!!obj(summary.counts)&&!!obj(summary.threat);
+  const unknownThreat=tx=>`${tx('alerts.threat','Threat')} –/5`;
   const pad=n=>String(n).padStart(2,'0');
   // Local HH:MM, with the date in front when it is not the day of `now`.
   function when(ms,now){
@@ -49,6 +53,7 @@
   // Inner HTML of #alertStrip. `threatOpen` mirrors the tray's drivers block in aria-expanded.
   function renderStrip(summary,t,now,threatOpen=false){
     const s=obj(summary)||{},tx=translator(t),counts=obj(s.counts)||{},level=threatLevel(s);
+    if(!known(s))return `<button type="button" class="as-threat as-threat-0" data-alert-action="threat" aria-expanded="${threatOpen===true}" aria-controls="alertTray">${unknownThreat(tx)}</button><span class="as-calm">${tx('alerts.unavailable','Alerts unavailable')}</span>`;
     const threat=`<button type="button" class="as-threat as-threat-${level}" data-alert-action="threat" aria-expanded="${threatOpen===true}" aria-controls="alertTray">${tx('alerts.threat','Threat')} ${level}/5</button>`;
     const firing=LEVELS.reduce((sum,name)=>sum+count(counts[name]),0),top=sortAlerts(s.top).find(alert=>alert.state==='firing'&&text(alert.id));
     if(!firing&&!top)return `${threat}<span class="as-calm">${tx('alerts.calm','No active alerts')} · ${tx('alerts.lastEval','Last evaluation')} ${when(s.lastEvaluatedAt,now)}</span>`;
@@ -118,8 +123,9 @@
     const level=threatLevel(s),names=new Map();
     for(const alert of [...alerts,...list(s.top)])if(text(alert.id)&&text(alert.ruleName)&&!names.has(alert.id))names.set(alert.id,alert.ruleName);
     const rows=list(obj(s.threat)?.drivers).map(driver=>`<li data-driver-id="${esc(driver.alertId)}">${glyph(tx,levelOf(driver.severity))}<span class="at-driver-title">${esc(driver.title)}</span><span class="at-rule">${ruleLabel(tx,driver.ruleId,names.get(driver.alertId))}</span></li>`).join('');
-    return `<section class="at-drivers" aria-labelledby="at-drivers-heading"><h3 id="at-drivers-heading">${tx('alerts.drivers','Driving this level')} · ${tx('alerts.threat','Threat')} ${level}/5</h3>`
-      +(rows?`<ul>${rows}</ul>`:`<p class="at-empty">${tx('alerts.calm','No active alerts')}</p>`)+'</section>';
+    const ok=known(s);
+    return `<section class="at-drivers" aria-labelledby="at-drivers-heading"><h3 id="at-drivers-heading">${tx('alerts.drivers','Driving this level')} · ${ok?`${tx('alerts.threat','Threat')} ${level}/5`:unknownThreat(tx)}</h3>`
+      +(rows?`<ul>${rows}</ul>`:`<p class="at-empty">${ok?tx('alerts.calm','No active alerts'):tx('alerts.unavailable','Alerts unavailable')}</p>`)+'</section>';
   }
 
   // The Rules tab's content comes from the rule editor (alert-rules.js, loaded after this file): without it, or without a view
@@ -162,6 +168,10 @@
   // tray's list from GET /api/alerts. File pages and the offline shell are read-only: summary only, no request, no actions.
   // Every entry point catches its own errors: an alert failure never stops the dashboard.
   const ALERT_ID=/^alert-[0-9a-f]{32}$/,EVENT_ID=/^event-[0-9a-f]{32}$/,TAB_IDS=TABS.map(([id])=>id),MAX_TOASTS=3,SCROLLERS=['.at-panel','.at-drivers'];
+  // A summary this much older than the one shown means the server clock went back (not a late, stale answer).
+  const CLOCK_RESET_MS=5*60000;
+  // Refusals of the origin check (http-security.mjs): the page is open at an address the server does not take changes from.
+  const ORIGIN_CODES=['CROSS_ORIGIN','HOST_NOT_ALLOWED'],ORIGIN_TEXT='Refused at this address: open the dashboard at its ALERT_PUBLIC_URL address, or set ALERT_PUBLIC_URL or ALERT_ALLOWED_HOSTS on the server';
   const FOCUS_ATTRS=['data-alert-action','data-alert-id','data-minutes','data-severity','data-rule-id','data-event-id','data-rule-action','data-rule-toggle'];
   const BELL='<svg class="al-bell-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false"><path d="M8 1.75a4 4 0 0 0-4 4v2.5l-1.25 2.5h10.5L12 8.25v-2.5a4 4 0 0 0-4-4zM6.5 12.75a1.5 1.5 0 0 0 3 0" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
   let opts={},strip=null,tray=null,toasts=null,announcer=null,errorLive=null,summary={},alerts=[],loaded=false,primed=false,readOnly=false;
@@ -173,6 +183,7 @@
   // Unescaped text for textContent and attributes set through the DOM.
   const say=(key,fallback)=>{try{const value=typeof opts.t==='function'?opts.t(key,fallback):fallback;return typeof value==='string'&&value?value:fallback;}catch{return fallback;}};
   const firingCount=s=>LEVELS.reduce((sum,level)=>sum+count(obj(s.counts)?.[level]),0);
+  const bellCount=()=>known(summary)?String(firingCount(summary)):'–';
   // A summary as the server builds it: anything else never replaces the one shown.
   const validSummary=value=>{const s=obj(value);return s&&obj(s.counts)&&obj(s.threat)?s:null;};
   const trayOpen=()=>!!tray&&!tray.hidden;
@@ -234,7 +245,7 @@
   function syncBell(){
     const node=document.getElementById('alertBell');if(!node)return;
     node.setAttribute('class','guide-btn al-bell al-bell-'+threatLevel(summary));node.setAttribute('aria-expanded',String(trayOpen()));
-    const n=node.querySelector('.al-bell-count');if(n)n.textContent=String(firingCount(summary));
+    const n=node.querySelector('.al-bell-count');if(n)n.textContent=bellCount();
   }
   function syncTitle(){const base=String(document.title).replace(/^\(\d+\) /,''),next=titleBadge(summary)+base;if(document.title!==next)document.title=next;}
   // The strip's live region: a change of the threat level is spoken once (the strip itself is re-rendered too often to be live).
@@ -242,9 +253,10 @@
 
   // Toasts: firing critical/high alerts not seen in this session that were first seen after the summary shown before
   // (`since`). summary.top holds only five alerts, so an old alert that moves up into it (another one was acknowledged, a
-  // snooze ran out) is not new. Whatever fires at the first summary counts as seen. At most three, the oldest leaves first.
+  // snooze ran out) is not new. Whatever fires at the first summary (or at a clock reset: since Infinity) counts as seen. At
+  // most three, the oldest leaves first.
   function toast(since){
-    const after=Number.isFinite(since)?since:-Infinity;
+    const after=Number.isFinite(since)||since===Infinity?since:-Infinity;
     const fresh=primed?newAlertToasts(summary,seen).filter(alert=>Number.isFinite(alert.firstSeenAt)&&alert.firstSeenAt>after):[];
     for(const alert of list(summary.top))if(text(alert.id))seen.add(alert.id);
     primed=true;
@@ -314,7 +326,8 @@
       if(!update(data.summary)){drawStrip();drawTray();}
       scheduleLoad();
     }catch(error){
-      fail(trayOpen()?'tray':'strip','alerts.errorAction','Action failed',true);
+      const origin=ORIGIN_CODES.includes(error?.code);
+      fail(trayOpen()?'tray':'strip',origin?'alerts.errorOrigin':'alerts.errorAction',origin?ORIGIN_TEXT:'Action failed',true);
       drawStrip();drawTray();
     }finally{busy.delete(path);}
   }
@@ -406,17 +419,20 @@
   function bell(){
     try{
       if(!strip)return '';
-      return `<button type="button" class="guide-btn al-bell al-bell-${threatLevel(summary)}" id="alertBell" aria-controls="alertTray" aria-expanded="${trayOpen()}">${BELL}${translator(opts.t)('alerts.title','Alerts')} <span class="al-bell-count">${firingCount(summary)}</span></button>`;
+      return `<button type="button" class="guide-btn al-bell al-bell-${threatLevel(summary)}" id="alertBell" aria-controls="alertTray" aria-expanded="${trayOpen()}">${BELL}${translator(opts.t)('alerts.title','Alerts')} <span class="al-bell-count">${bellCount()}</span></button>`;
     }catch(error){log(error);return '';}
   }
-  // A new summary (snapshot, SSE `alerts`, action response). An older one than shown, or one without counts and threat, is
-  // ignored; true when applied. It also clears a failure shown in the strip.
+  // A new summary (snapshot, SSE `alerts`, action response). An older one than shown (by up to 5 minutes), or one without
+  // counts and threat, is ignored; true when applied. One more than 5 minutes older means the server clock went back: it is
+  // applied, and like the first summary it is the new baseline (what fires in it does not toast). It also clears a failure
+  // shown in the strip.
   function update(next){
     try{
       const s=validSummary(next);
       if(!strip||!s)return false;
-      if(Number.isFinite(summary.generatedAt)&&Number.isFinite(s.generatedAt)&&s.generatedAt<summary.generatedAt)return false;
-      const since=summary.generatedAt;
+      const age=Number.isFinite(summary.generatedAt)&&Number.isFinite(s.generatedAt)?summary.generatedAt-s.generatedAt:0;
+      if(age>0&&age<=CLOCK_RESET_MS)return false;
+      const since=age>CLOCK_RESET_MS?Infinity:summary.generatedAt;
       summary=s;
       if(notice?.where==='strip')clearNotice();
       toast(since);drawStrip();syncBell();syncTitle();announce();

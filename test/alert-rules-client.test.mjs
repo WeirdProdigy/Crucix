@@ -352,7 +352,7 @@ async function harness(t,{seed=[],page={},snapshot={markets:{vix:{value:22.5}}}}
     requests.push({path,method:init.method,type:init.headers['Content-Type'],credentials:init.credentials,body:init.body===undefined?undefined:JSON.parse(init.body)});
     if(init.method!=='GET'&&control.fail)throw new TypeError('network down');
     if(init.method!=='GET'&&control.hold)await control.hold;
-    return fetch(base+path,{method:init.method,headers:{...init.headers,Origin:base},body:init.body});
+    return fetch(base+path,{method:init.method,headers:{...init.headers,Origin:control.origin??base},body:init.body});
   };
   const env=dom({fetch:fetchFn,files:['record-core.js','alerts-core.js','alerts.js','alert-rules.js'],...page});
   env.A.mount({getSummary:()=>engine.summary(),t,now:()=>NOW});
@@ -501,6 +501,32 @@ test('one request at a time: the controls are disabled and other clicks do nothi
   assert(!h.html().includes('<form')&&h.puts().length===1,'a second request or form is not started');
   release(); await h.until(()=>h.html().includes('aria-busy="false"')&&!/<(?:input|button)[^>]* disabled/.test(panel()));
   assert.equal(h.focused.at(-1),'[data-rule-toggle="notify"][data-rule-id="vix-spike"]');
+});
+
+test('Esc while a rule request runs is taken: the form, the tray and the request stay',async t=>{
+  const h=await harness(t); await h.openRules();
+  let release;h.control.hold=new Promise(resolve=>{release=resolve;});
+  h.press({'data-rule-action':'new'}); h.type('name','Pending rule'); h.submit();
+  assert(h.html().includes('aria-busy="true"'));
+  const during=h.esc();
+  assert(during.defaultPrevented,'Esc is taken'); assert.equal(h.tray.hidden,false,'the tray stays open'); assert(h.html().includes('<form')&&h.html().includes('value="Pending rule"'),'the form stays');
+  release(); await h.until(()=>h.html().includes('data-rule-id="pending-rule"')&&h.html().includes('aria-busy="false"'),'the save');
+  // A delete that runs: the question is answered, the request is in flight.
+  h.control.hold=new Promise(resolve=>{release=resolve;});
+  h.press({'data-rule-action':'delete','data-rule-id':'pending-rule'}); h.press({'data-rule-action':'delete-confirm','data-rule-id':'pending-rule'});
+  assert(h.esc().defaultPrevented); assert.equal(h.tray.hidden,false);
+  release(); await h.until(()=>!h.html().includes('data-rule-id="pending-rule"')&&h.html().includes('aria-busy="false"'),'the delete');
+  const after=h.esc(); assert(after.defaultPrevented&&h.tray.hidden===true,'with nothing running and nothing open, Esc closes the tray (alerts.js)');
+});
+
+test('a change refused for its origin or host name names the fix instead of the server text',async t=>{
+  const h=await harness(t); await h.openRules(); h.control.origin='http://evil.example';
+  h.flip('notify','vix-spike',false); await h.until(()=>h.html().includes('Could not save the rule')&&h.html().includes('aria-busy="false"'));
+  assert(h.html().includes('ALERT_PUBLIC_URL')&&!h.html().includes('Cross-origin request refused'),'the toggle failure');
+  h.press({'data-rule-action':'new'}); h.type('name','Refused'); h.submit(); await h.until(()=>h.puts().length===2&&h.html().includes('<form')&&h.html().includes('aria-busy="false"'));
+  assert(h.html().includes('Could not save the rule: Refused at this address')&&!h.html().includes('Cross-origin request refused'),'the form failure, at the top of the form');
+  assert.equal(h.focused.at(-1),'.ar-notice');
+  assert.equal(h.engine.rules().length,DEFAULT_RULES.length,'nothing was saved');
 });
 
 test('a form survives a live update of the tray, Esc closes the form before the tray, and a failure keeps what was typed',async t=>{

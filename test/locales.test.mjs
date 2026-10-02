@@ -12,7 +12,7 @@ const flat = lang => { const data = locale(lang); return new Map([...flatten(dat
 const factKeys = [...new Set(Object.values(FACT_FIELDS).flat())];
 const BUILTIN_RULES = DEFAULT_RULES.map(rule => rule.id);
 const ALERT_UI_KEYS = ['title', 'threat', 'calm', 'lastEval', 'ack', 'snooze', 'resolve', 'open', 'close', 'ackAll', 'tabActive', 'tabHandled', 'tabResolved', 'tabRules', 'empty',
-  'firing', 'acked', 'snoozedUntil', 'resolvedAt', 'count', 'rule', 'evidence', 'drivers', 'snooze1h', 'snooze8h', 'snooze24h', 'more', 'errorLoad', 'errorAction', 'silent', 'toastNew'];
+  'firing', 'acked', 'snoozedUntil', 'resolvedAt', 'count', 'rule', 'evidence', 'drivers', 'snooze1h', 'snooze8h', 'snooze24h', 'more', 'errorLoad', 'errorAction', 'errorOrigin', 'unavailable', 'silent', 'toastNew'];
 
 test('liveSources, inspector and alerts strings have identical keys, in the same order, in en, hu and fr', () => {
   const [en, ...others] = LANGS.map(lang => [...flat(lang).keys()]);

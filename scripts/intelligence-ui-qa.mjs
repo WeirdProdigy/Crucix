@@ -382,9 +382,37 @@ async function alertChecks() {
       await page.waitForTimeout(4000); assert.equal(await toast.count(), 1, 'No timer dismisses a toast');
       await toast.locator('[data-alert-action="dismiss"]').click(); assert.equal(await toast.count(), 0); assert(await page.locator('#alertToasts').isHidden(), 'The empty stack takes no room');
       assert.equal(await page.evaluate(() => window.__alertXss), undefined);
+      await trayOverToasts(page, 'desktop');
       await rulesChecks(page, false);
       console.log('ALERTS desktop PASS', { ids });
     } finally { await context.close(); }
+  }
+  // Toasts never cover the open tray: three new critical alerts toast, then the tray opens over them; every tray button on screen
+  // (inside its scroll area) must take its own clicks (elementFromPoint at its centre). Closing the tray brings the toasts back.
+  async function trayOverToasts(page, size) {
+    const toasts = page.locator('#alertToasts .al-toast'), tray = page.locator('#alertTray');
+    for (let n = 1; n <= 3; n++) { await control('newcritical'); await page.waitForFunction(n => document.querySelectorAll('#alertToasts .al-toast').length === n, n); }
+    await page.waitForTimeout(300); await page.screenshot({ path: path.join(artifacts, `alerts-toasts-${size}.png`) });
+    await page.locator('#alertBell').click(); await tray.waitFor({ state: 'visible' }); await page.waitForFunction(() => document.querySelectorAll('#alertTray .at-alert').length >= 4); await page.waitForTimeout(300);
+    assert(await page.locator('#alertToasts').isHidden(), 'The toasts step aside while the tray is open'); assert.equal(await toasts.count(), 3, 'They are kept, not dropped');
+    const hits = await page.evaluate(() => {
+      const trayBox = document.getElementById('alertTray').getBoundingClientRect(), checked = [], covered = [];
+      for (const node of document.querySelectorAll('#alertTray button')) {
+        const r = node.getBoundingClientRect(), area = node.closest('.at-panel, .at-drivers')?.getBoundingClientRect() ?? trayBox, x = r.left + r.width / 2, y = r.top + r.height / 2;
+        if (!r.width || !r.height || x < area.left || x > area.right || y < area.top || y > area.bottom || y > innerHeight) continue;
+        checked.push(node.textContent.trim().slice(0, 20));
+        if (!node.contains(document.elementFromPoint(x, y))) covered.push(node.textContent.trim().slice(0, 20));
+      }
+      const first = document.querySelector('#alertTray .at-alert .at-actions button'), box = first.getBoundingClientRect();
+      return { checked: checked.length, covered, firstFree: first.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)) };
+    });
+    assert(hits.firstFree, 'The first action button of the tray is not covered'); assert(hits.checked >= 8, 'Enough tray buttons on screen to check: ' + hits.checked);
+    assert.deepEqual(hits.covered, [], 'No tray button on screen is under a toast');
+    await page.screenshot({ path: path.join(artifacts, `alerts-tray-toasts-${size}.png`) });
+    await page.keyboard.press('Escape'); await tray.waitFor({ state: 'hidden' });
+    assert(await page.locator('#alertToasts').isVisible(), 'The toasts come back when the tray closes'); assert.equal(await toasts.count(), 3);
+    while (await toasts.count()) await toasts.first().locator('[data-alert-action="dismiss"]').click();
+    console.log('ALERTS tray over toasts PASS', { size, ...hits });
   }
   // The Rules tab: the list, a toggle, an override and its reset, the form for two kinds, a rejected rule (the server's message at the
   // field), a new threshold rule on the VIX, editing and Esc, a hostile name, the delete question. Everything it creates it deletes.
@@ -472,6 +500,7 @@ async function alertChecks() {
       const card = await toast.boundingBox(); assert(card.x >= 0 && card.x + card.width <= 390 && card.y + card.height <= 844, 'The toast fits the phone screen');
       await page.screenshot({ path: path.join(artifacts, 'alerts-toast-mobile.png') });
       await toast.locator('[data-alert-action="dismiss"]').click();
+      await trayOverToasts(page, 'mobile');
       await rulesChecks(page, true);
       console.log('ALERTS mobile PASS', { strip: box, sheet });
     } finally { await context.close(); }
