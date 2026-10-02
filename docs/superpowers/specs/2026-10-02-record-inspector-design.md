@@ -34,9 +34,9 @@ Nem része az A-nak: riasztások (B), új források (C), lensek, Ctrl+K és viss
 
 A `renderPanel` forrásonként összegző kártyát ad: forrásnév (linkkel), állapot, életkor, rekordszám, súlyosság szerinti jelvények (alakzat, szám), a három legfontosabb rekord címe és egy „Megnyitás" gomb (`data-open-records`). Az inline `<details>` és a `setExpanded` megszűnik. Hibás vagy lejárt forrásnál a kártya az okot mutatja, rekordot nem.
 
-### Új modul: `record-inspector.js` és `record-inspector.css`
+### Új modulok: `record-core.js`, `record-inspector.js` és `record-inspector.css`
 
-Globális `window.CrucixRecordInspector`. A tiszta függvényei külön tesztelhetők vm-kontextusban:
+A tiszta logika a `record-core.js`-ben él (`window.CrucixRecords`), a HTML-sztringet előállító megjelenítés és a vékony DOM-vezérlő a `record-inspector.js`-ben (`window.CrucixRecordInspector`). Így a logika és a megjelenítés külön, vm-kontextusban tesztelhető. A tiszta függvények:
 
 - `severityLevel(value)`: a hétfokú eseményskálát négy megjelenített szintre képezi (lásd lent).
 - `filterRecords(records, filters)` és `sortRecords(records, key)`: súlyosság, időablak (1 ó, 6 ó, 24 ó, mind), szöveg (ékezetfüggetlen, legfeljebb 80 karakter) szerint; rendezés alapból súlyosság csökkenő, majd idő csökkenő, alternatíva idő vagy cím.
@@ -61,20 +61,23 @@ Natív `<dialog>` `showModal()`-lal, három oszlop: források (rekordszámmal é
 ### Adat
 
 - **Rekord és esemény összekötése:** a szintézis után minden élő rekord `eventId` mezőt kap, ugyanabból az azonosítási logikából, amelyet az `events.mjs` használ (provider-azonosító, URL, vagy cím és idő). A kliens az azonosítóval indexel, a cím és idő szerinti keresés megszűnik. Az azonosítók stabilak maradnak az újraindulás után.
-- **`facts`:** a `normalizeLiveSources` rekordonként legfeljebb 8 `{label, value}` párt fogad (címke legfeljebb 40, érték legfeljebb 120 karakter vagy véges szám), a többi mezővel azonos szűréssel. A meglévő adapterek, amelyek ma is kiszámolják ezeket az értékeket (EPSS, ECB, MET-Norway, GDACS, EONET, SWPC és a többi), átadják őket. Amit az adapter nem számol, azt nem találunk ki.
+- **`facts`:** a `normalizeLiveSources` rekordonként legfeljebb 8 `{label, value}` párt állít elő (címke legfeljebb 40 karakter, érték legfeljebb 120 karakteres szöveg, véges szám vagy logikai érték), a többi mezővel azonos szűréssel. Az adapterek ezeket a mezőket (EPSS, ECB, MET-Norway, GDACS, EONET, OONI, RIPEstat, Meteoalarm) ma is rekordszinten adják át, csak a normalizálás dobja el őket. Ezért adapter nem változik: a `normalizeLiveSources` forrásonkénti engedélylistából emeli át a már kiszámolt mezőket, és a már normalizált `facts` listát újranormalizáláskor is megtartja. Amit az adapter nem ad, azt nem találjuk ki.
+- **Súlyosság az eseménymodellben:** az `events.mjs` ma csak a `critical`, `high`, `moderate`, `low`, `elevated`, `monitor` szavakat és az `extreme`, `severe`, `minor` álneveket ismeri, minden mást `unknown`-ra képez. Így a GDACS `Red/Orange/Green` és az OONI `medium/info` szintje elvész. Az A kiegészíti az álneveket (lásd lent), hogy a súlyosság valóban használható legyen.
 - A rekordok korlátja a mai szint marad: forrásonként legfeljebb 100.
 
 ### Közös súlyossági nyelv
 
-Az eseményskála (`unknown, monitor, low, moderate, elevated, high, critical`) négy megjelenített szintre képződik, CSS-tokenekben, alakzattal és színnel együtt:
+Az eseményskála (`unknown < monitor < low < moderate < elevated < high < critical`) négy megjelenített szintre képződik, CSS-tokenekben, alakzattal és színnel együtt. A szolgáltatók saját szavait (`Red/Orange/Green`, `Extreme/Severe/Moderate/Minor`, `medium`, `info`) az `events.mjs` álnevei és a böngészőoldali `severityLevel` ugyanazzal a táblával kezeli, ezt teszt őrzi:
 
-| Megjelenített | Eseményskála | Jel | Szín (Okabe-Ito alapú) |
-| --- | --- | --- | --- |
-| CRITICAL | critical | ◆ | `#D55E00` |
-| HIGH | high, elevated | ▲ | `#E69F00` |
-| WATCH | moderate, monitor | ● | `#F0E442` (sötét témán olvasható) |
-| INFO | low | ○ | `#56B4E9` |
-| (nincs jel) | unknown | – | halvány szürke |
+| Megjelenített | Eseményskála | Szolgáltatói álnevek | Jel | Szín (Okabe-Ito alapú) |
+| --- | --- | --- | --- | --- |
+| CRITICAL | critical | extreme, severe, red | ◆ | `#D55E00` |
+| HIGH | high, elevated | orange | ▲ | `#E69F00` |
+| WATCH | moderate | medium, yellow | ● | `#F0E442` (sötét témán olvasható) |
+| INFO | monitor, low | minor, info, green | ○ | `#56B4E9` |
+| (nincs jel) | unknown | minden más | – | halvány szürke |
+
+A `monitor` a skála legalsó ismert szintje, ezért INFO: az ECB-árfolyamok és az előrejelzések nem jelenhetnek meg figyelmeztetésként.
 
 A szín soha nem az egyedüli jelzés. A tokenek a `live-sources.css`-től független helyen, a `record-inspector.css` elején élnek, hogy a B riasztásai ugyanazokat használják.
 
