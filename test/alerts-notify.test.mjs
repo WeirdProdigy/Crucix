@@ -280,6 +280,74 @@ test('the Discord link line is left unescaped so the URL still works', async () 
   assert.equal(env.discord.calls[0][0].split('\n').at(-1), 'https://dash.example.test/a_b_c');
 });
 
+// Escaping can double the text, and Discord rejects content over 2000 characters, so the Discord message has its own budget.
+const ALL_SPECIAL = '*_[]()`~|#>-@<\\';
+const MIXED_SPECIAL = '*_[]()`@everyone<@123>~|#>-\\';
+const repeatTo = (unit, length) => unit.repeat(Math.ceil(length / unit.length)).slice(0, length);
+const LONG_LINK = `https://dash.example.test/${'p'.repeat(470)}`;
+
+// Every markdown or mention character of a Discord line is escaped by a backslash that is not itself cut off.
+function assertEscaped(line) {
+  const bare = line.replace(/\\./g, '');
+  assert.ok(!/[*_~`|>#[\]()<@\\-]/.test(bare), `unescaped syntax in: ${line.slice(0, 80)}`);
+}
+
+test('a worst-case all-special alert stays within 2000 characters on Discord with nothing left unescaped', async () => {
+  const env = setup({ publicUrl: LONG_LINK });
+  const hostile = alert({
+    severity: 'critical', title: repeatTo(ALL_SPECIAL, 400), summary: `@everyone <@123> ${repeatTo(ALL_SPECIAL, 5000)}`,
+    evidence: Array.from({ length: 8 }, () => ({ title: repeatTo(MIXED_SPECIAL, 400) })),
+  });
+  const plainLength = env.notifier.formatText(hostile).length;
+  await env.notifier.dispatch(batch([hostile]));
+
+  const content = env.discord.calls[0][0];
+  assert.ok(plainLength < 2000 && plainLength > 1000, `the plain text fits ${plainLength}`);
+  assert.ok(content.length <= 2000, `Discord content is ${content.length} characters`);
+  const lines = content.split('\n');
+  assert.ok(lines[0].startsWith('[CRITICAL] '));
+  assert.equal(lines.at(-1), LONG_LINK, 'the link survives whole');
+  for (const line of [lines[0].slice(11), ...lines.slice(1, -1).map(line => line.replace(/^- /, ''))]) assertEscaped(line);
+  assert.ok(lines[1].startsWith('\\@everyone \\<\\@123\\> '), 'mentions stay inert');
+  assert.ok(!lines.some(line => line.startsWith('- ')), 'the evidence lines are the first to go');
+  assert.ok(lines[1].endsWith('…'), 'the summary is cut with an ellipsis');
+  // The other channels keep the full, unescaped text.
+  assert.equal(env.telegram.calls[0][0], env.notifier.formatText(hostile));
+});
+
+test('Discord drops evidence lines from the end first and keeps the whole summary when that is enough', async () => {
+  const env = setup();
+  const evidence = ['a', 'b', 'c'].map(letter => ({ title: `${letter}${'('.repeat(159)}` }));
+  await env.notifier.dispatch(batch([alert({ title: 'x', summary: '('.repeat(600), evidence })]));
+  const lines = env.discord.calls[0][0].split('\n');
+  assert.equal(lines.length, 4);
+  assert.equal(lines[1], '\\('.repeat(600), 'the summary is untouched');
+  assert.deepEqual(lines.slice(2).map(line => line[2]), ['a', 'b']);
+  assert.ok(env.discord.calls[0][0].length <= 2000);
+});
+
+test('Discord cuts the summary on a character boundary, never between a backslash and its character', async () => {
+  const env = setup({ publicUrl: LONG_LINK });
+  await env.notifier.dispatch(batch([alert({ title: '('.repeat(160), summary: '('.repeat(600) })]));
+  const lines = env.discord.calls[0][0].split('\n');
+  assert.equal(lines.length, 3);
+  assert.ok(env.discord.calls[0][0].length <= 2000);
+  assert.match(lines[1], /^(\\\()+…$/);
+  assert.ok(lines[1].length > 1000);
+});
+
+test('Discord digests stay within 2000 characters, a release digest included', async () => {
+  const env = setup({ publicUrl: LONG_LINK, maxPerSweep: 1, quietHours: '22:00-07:00' });
+  env.clock.now = at(23, 0);
+  await env.notifier.dispatch(batch(Array.from({ length: 30 }, () => alert())));
+  env.clock.now = at(8, 0, 3);
+  const result = await env.notifier.dispatch(batch(Array.from({ length: 40 }, () => alert())));
+  assert.equal(result.digest.count, 69);
+  const content = env.discord.calls.at(-1)[0];
+  assert.equal(content, `+39 more alerts\n30 alerts held during quiet hours\n${LONG_LINK}`);
+  assert.ok(content.length <= 2000);
+});
+
 // ─── webhook ───────────────────────────────────────────────────────────────────
 
 test('the webhook gets valid JSON with the hostile title intact as data', async () => {
@@ -296,6 +364,7 @@ test('the webhook gets valid JSON with the hostile title intact as data', async 
   assert.equal(body.event, 'alert');
   assert.equal(body.escalated, false);
   assert.equal(body.alert.id, hostile.id);
+  assert.equal(body.alert.kind, 'event');
   assert.equal(body.alert.title, title);
   assert.equal(body.alert.summary, '{"event":"x"}');
   assert.equal(body.alert.severity, 'critical');
@@ -355,6 +424,15 @@ test('ntfy tags carry the severity and the rule id', async () => {
   assert.equal(env.ntfyCalls()[0].init.headers.Tags, 'rotating_light,crucix,vix-spike');
 });
 
+test('ntfy tags carry no rule tag unless the rule id is a string of the tag pattern', async () => {
+  const env = setup({ minSeverity: 'info', maxPerSweep: 20 });
+  const odd = { toString: () => 'sneaky' };
+  const ruleIds = [undefined, null, 42, ['vix-spike'], odd, '', 'UPPER', 'a'.repeat(41), 'has space'];
+  await env.notifier.dispatch(batch(ruleIds.map(ruleId => alert({ severity: 'info', ruleId }))));
+  assert.equal(env.ntfyCalls().length, ruleIds.length);
+  for (const { init } of env.ntfyCalls()) assert.equal(init.headers.Tags, 'information_source,crucix');
+});
+
 test('network calls use a 10 s abort signal, refuse redirects and never read the response body', async () => {
   let bodyRead = false;
   const fetch = fakeFetch(() => ({ ok: true, status: 200, text() { bodyRead = true; return ''; }, json() { bodyRead = true; return {}; }, arrayBuffer() { bodyRead = true; return new ArrayBuffer(0); } }));
@@ -390,6 +468,53 @@ test('a throwing or failing channel does not stop the others and no log line lea
   assert.match(log, /telegram/);
   assert.match(log, /ntfy.*TypeError/);
   assert.match(log, /webhook.*HTTP 500/);
+});
+
+test('a hanging alerter is given up on at its deadline and the other channels still report', async () => {
+  const hanging = Object.assign(fakeTelegram(), { sendMessage: () => new Promise(() => {}) });
+  const env = setup({ telegram: hanging, deadlineMs: 20 });
+  const result = await env.notifier.dispatch(batch([alert(), alert()]));
+  assert.deepEqual(result.sent.map(entry => entry.channels), [['discord', 'ntfy', 'webhook'], ['discord', 'ntfy', 'webhook']]);
+  assert.match(env.logger.lines.join('\n'), /telegram failed: TimeoutError/);
+  assert.deepEqual([env.discord.calls.length, env.ntfyCalls().length, env.hookCalls().length], [2, 2, 2]);
+
+  const stuckDiscord = Object.assign(fakeDiscord(), { sendMessage: () => new Promise(() => {}) });
+  const other = setup({ discord: stuckDiscord, deadlineMs: 20 });
+  assert.deepEqual((await other.notifier.dispatch(batch([alert()]))).sent[0].channels, ['telegram', 'ntfy', 'webhook']);
+});
+
+test('an alerter that fails after its deadline is not an unhandled rejection', async t => {
+  const unhandled = [];
+  const onUnhandled = reason => unhandled.push(reason);
+  process.on('unhandledRejection', onUnhandled);
+  t.after(() => process.off('unhandledRejection', onUnhandled));
+  const late = Object.assign(fakeTelegram(), { sendMessage: () => new Promise((_, reject) => setTimeout(() => reject(new Error('late failure')), 40)) });
+  const env = setup({ telegram: late, deadlineMs: 10 });
+  await env.notifier.dispatch(batch([alert()]));
+  await new Promise(resolve => setTimeout(resolve, 100));
+  assert.deepEqual(unhandled, []);
+});
+
+test('the deadline timer is cleared as soon as the alerter answers or fails', async t => {
+  const open = new Set();
+  const { setTimeout: realSet, clearTimeout: realClear } = globalThis;
+  globalThis.setTimeout = (...args) => { const handle = realSet(...args); open.add(handle); return handle; };
+  globalThis.clearTimeout = handle => { open.delete(handle); return realClear(handle); };
+  t.after(() => { globalThis.setTimeout = realSet; globalThis.clearTimeout = realClear; });
+
+  const failing = fakeTelegram({ throws: true });
+  const env = setup({ telegram: failing, deadlineMs: 60000 });
+  await env.notifier.dispatch(batch([alert(), alert()]));
+  assert.equal(env.discord.calls.length, 2);
+  assert.equal(failing.calls.length, 2);
+  assert.equal(open.size, 0, 'no deadline timer is left running');
+});
+
+test('an invalid deadline falls back to the default with a warning', () => {
+  for (const deadlineMs of [0, -5, 1.5, '20', 999999]) {
+    const { logger } = setup({ deadlineMs });
+    assert.ok(logger.lines.some(line => /deadline/.test(line)), String(deadlineMs));
+  }
 });
 
 test('a channel that answers not-ok is not reported as sent', async () => {
