@@ -38,10 +38,10 @@ test('paging',()=>{
   const window=load(),I=window.CrucixRecordInspector,rows=Array.from({length:60},(_,i)=>row(i));
   const first=I.renderInspector(view(window,rows),t,now);
   assert.equal(count(first,'class="ri-row"'),25); assert.equal(count(first,'data-ri-action="more"'),1);
-  assert.match(first,/class="ri-count">25 \/ 60 shown</);
+  assert.match(first,/class="ri-count" role="status">25 \/ 60 shown</,'the shown/total line is a live region');
   const rest=I.renderInspector(view(window,rows,{limit:100}),t,now);
   assert.equal(count(rest,'class="ri-row"'),60); assert.equal(count(rest,'data-ri-action="more"'),0);
-  assert.match(rest,/class="ri-count">60 \/ 60 shown</);
+  assert.match(rest,/class="ri-count" role="status">60 \/ 60 shown</);
   assert.equal(count(first,'tabindex="0"'),1,'roving tabindex: one row is focusable');
   assert(first.includes('<span class="ri-glyph sev-high" aria-hidden="true">▲</span><span class="ri-sr">High</span>'),'glyph is hidden, level is spoken');
 });
@@ -104,6 +104,10 @@ test('browser',()=>{
   const one=I.renderBrowser({...compose({}),all:false,source:{...gdacs,name:'OONI',state:'error'},records:[],total:0},t,now);
   assert(one.includes('data-ri-source="OONI" aria-current="true"')); assert(one.includes('Source unavailable')); assert(!one.includes('data-ri-source="all" aria-current'));
   assert(!html.includes('id="ri-window"'),'browser controls do not reuse the inspector ids'); assert(html.includes('id="rb-window"'));
+  assert(html.includes('<p class="ri-keys">j/k move · Enter details · / search · Esc back to panel</p>'),'the browser hint lists only the keys it has');
+  assert(!html.includes('e expand'),'the browser has no e key');
+  assert(html.includes('class="ri-count" role="status">2 / 2 shown<'),'the browser count is a live region too');
+  assert(I.renderInspector(view(window,[row(1)]),t,now).includes('<p class="ri-keys">j/k move · Enter details · / search · e expand · Esc close</p>'),'the panel hint keeps e and Esc close');
 });
 
 test('robustness',()=>{
@@ -114,4 +118,30 @@ test('robustness',()=>{
     assert.doesNotThrow(()=>fn({source:gdacs,records:[],total:0},undefined,NaN));
   }
   assert.equal(count(I.renderInspector({source:gdacs,records:[null,5,{}],total:3},t,now),'class="ri-row"'),1);
+});
+
+// A minimal DOM: just enough for mount/refresh to run; dialog.showModal throws like a browser that refuses a modal.
+function dom(hash,files=['record-core.js','live-sources.js','record-inspector.js']){
+  const errors=[],window={addEventListener(){}},el=tag=>({tag,hidden:false,open:false,dataset:{},style:{setProperty(){}},attrs:{},
+    setAttribute(k,v){this.attrs[k]=v;},removeAttribute(){},hasAttribute(){return false;},addEventListener(){},append(){},contains(){return false;},querySelector(){return null;},
+    showModal(){throw new Error('showModal refused');},close(){}});
+  const document={body:el('body'),createElement:el,getElementById(){return null;},querySelectorAll(){return [];},addEventListener(){},activeElement:null};
+  const context=vm.createContext({window,document,location:{hash,pathname:'/',search:''},history:{replaceState(){}},console:{error:(...args)=>errors.push(args)},Date,URL});
+  for(const file of files)vm.runInContext(read(file),context);
+  return {window,errors};
+}
+const options={getSources:()=>[{...gdacs,source:'GDACS',status:'ok',observations:[]}],getEvents:()=>[],t,now:()=>now};
+
+test('an inspector error never escapes mount or refresh',()=>{
+  const {window,errors}=dom('#src=GDACS&view=browser'),I=window.CrucixRecordInspector;
+  assert.doesNotThrow(()=>I.mount(options),'a hash that opens the browser must not stop the dashboard start-up');
+  assert(errors.length>0&&errors[0][0]==='[inspector]','the error is logged, not swallowed');
+  const before=errors.length;
+  assert.doesNotThrow(()=>I.refresh(),'a failing re-render must not abort the SSE update'); assert(errors.length>before);
+  assert.doesNotThrow(()=>dom('').window.CrucixRecordInspector.refresh(),'refresh before mount is a no-op');
+});
+
+test('mount does nothing without the live source module',()=>{
+  const {window,errors}=dom('#src=GDACS',['record-core.js','record-inspector.js']);
+  assert.doesNotThrow(()=>window.CrucixRecordInspector.mount(options)); assert.equal(errors.length,0);
 });

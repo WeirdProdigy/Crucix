@@ -34,3 +34,17 @@ test('inspector.fact has a label for every fact key a live source can emit', () 
     for (const key of factKeys) assert.ok(strings.has(`inspector.fact.${key}`), `${lang}: inspector.fact.${key}`);
   }
 });
+
+test('the French outdated badge reads as a negation, not as "more up to date"', () => {
+  assert.equal(flat('fr').get('inspector.outdated'), 'N’est plus à jour');
+});
+
+test('the browser key hint lists only keys the browser has (no e, Esc goes back)', () => {
+  for (const lang of LANGS) {
+    const strings = flat(lang), panel = strings.get('inspector.keys'), browser = strings.get('inspector.keysBrowser');
+    assert.ok(browser && browser !== panel, `${lang}: inspector.keysBrowser`);
+    for (const key of ['j/k', 'Enter', '/', 'Esc']) assert.ok(browser.includes(key), `${lang}: ${key}`);
+    assert.ok(!/(^| )e /.test(browser), `${lang}: the browser has no e key`);
+  }
+  assert.ok(/(^| )e /.test(flat('en').get('inspector.keys')), 'the panel keeps e expand');
+});

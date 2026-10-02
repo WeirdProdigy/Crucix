@@ -41,10 +41,10 @@
     function walk(value,path='',depth=0){if(depth>3||!value||typeof value!=='object')return;for(const [key,item] of Object.entries(value).slice(0,40)){const label=path?path+' / '+key:key;if(typeof item==='string'||typeof item==='number'||typeof item==='boolean')rows.push(label+': '+item);else walk(item,label,depth+1);if(rows.length>=8)return;}}
     walk(metrics);return rows.slice(0,8).join(' · ');
   }
-  // One badge per known level that has records: glyph and count, so colour is never the only signal.
+  // One badge per known level that has records: glyph and count, so colour is never the only signal; the level name is spoken (.ri-sr) and shown as a tooltip.
   function badges(R,recs,t){
     const counts=R.countByLevel(recs);
-    return R.LEVELS.filter(level=>level!=='unknown'&&counts[level]).map(level=>`<span class="sev sev-${level}" title="${esc(t('inspector.level.'+level,level[0].toUpperCase()+level.slice(1)))}"><i aria-hidden="true">${R.GLYPH[level]}</i>${counts[level]}</span>`).join('');
+    return R.LEVELS.filter(level=>level!=='unknown'&&counts[level]).map(level=>{const name=esc(t('inspector.level.'+level,level[0].toUpperCase()+level.slice(1)));return `<span class="sev sev-${level}" title="${name}"><i aria-hidden="true">${R.GLYPH[level]}</i>${counts[level]}<span class="ri-sr"> ${name}</span></span>`;}).join('');
   }
   // `events` is unused (the inspector pairs records by eventId); it stays so `now` keeps its position.
   function renderPanel(sources,t,events,now=Date.now()){

@@ -8,7 +8,8 @@
   const EVENT_ID=/^event-[0-9a-f]{32}$/;
   // The event scale and provider aliases of lib/intelligence/events.mjs, folded onto the four displayed levels.
   const SEVERITY={critical:'critical',extreme:'critical',severe:'critical',red:'critical',high:'high',elevated:'high',orange:'high',moderate:'watch',medium:'watch',yellow:'watch',monitor:'info',low:'info',minor:'info',info:'info',green:'info'};
-  const LONE_SURROGATE=/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+  // No lookbehind (a parse error on Safari before 16.4): an intact pair matches first and is kept, any other half is dropped.
+  const SURROGATE=/[\uD800-\uDBFF][\uDC00-\uDFFF]|[\uD800-\uDFFF]/g;
 
   // Same rules as the helpers in live-sources.js.
   const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -21,7 +22,7 @@
   const coord=value=>Number.isFinite(value)?value:null;
   const timeOf=value=>{const ms=typeof value==='string'?Date.parse(value):NaN;return Number.isFinite(ms)?ms:null;};
   // Search text: no control characters, at most 80 UTF-16 units, never a half surrogate pair (encodeURIComponent would throw).
-  const cleanText=value=>str(value).replace(/[\u0000-\u001F\u007F-\u009F]/g,'').slice(0,MAX_TEXT).replace(LONE_SURROGATE,'');
+  const cleanText=value=>str(value).replace(/[\u0000-\u001F\u007F-\u009F]/g,'').slice(0,MAX_TEXT).replace(SURROGATE,half=>half.length===2?half:'');
 
   function severityLevel(value){
     const word=typeof value==='string'?value.slice(0,30).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g,'').trim().toLowerCase():'';

@@ -22,7 +22,8 @@
   const glyph=(tx,level)=>`<span class="ri-glyph sev-${level}" aria-hidden="true">${GLYPH[level]}</span><span class="ri-sr">${levelName(tx,level)}</span>`;
   const link=(url,label,cls='')=>{const href=safeUrl(url);return href?`<a${cls?` class="${cls}"`:''} href="${esc(href)}" target="_blank" rel="noopener noreferrer">${label} ↗</a>`:label;};
   const place=rec=>[rec.place,rec.country].map(text).filter(Boolean).map(esc).join(', ');
-  const keys=tx=>`<p class="ri-keys">${tx('inspector.keys','j/k move · Enter details · / search · e expand · Esc close')}</p>`;
+  // The full-screen browser has no e key and Esc goes back to the panel: it gets its own hint.
+  const keys=(tx,browser)=>`<p class="ri-keys">${browser?tx('inspector.keysBrowser','j/k move · Enter details · / search · Esc back to panel'):tx('inspector.keys','j/k move · Enter details · / search · e expand · Esc close')}</p>`;
 
   function sourceInfo(source,tx,now,tag,id){
     const state=stateOf(source),rights=[source.attribution,source.rights].map(text).filter(Boolean).map(esc).join(' ');
@@ -55,7 +56,7 @@
     const list=rows?`<ul class="ri-list" role="listbox" aria-label="${tx('inspector.title','Record inspector')}">${rows}</ul>`
       :`<p class="ri-empty">${total?tx('inspector.noMatch','No records match the filters'):tx('liveSources.noRecords','No current records in the watched scope')}</p>`;
     const more=recs.length>limit?`<button type="button" class="ri-more" data-ri-action="more">${tx('inspector.showMore','Show 25 more')}</button>`:'';
-    return list+more+(total?`<p class="ri-count">${page.length} / ${total} ${tx('inspector.shown','shown')}</p>`:'');
+    return list+more+(total?`<p class="ri-count" role="status">${page.length} / ${total} ${tx('inspector.shown','shown')}</p>`:'');
   }
   // `outdated` comes from reconcileSelection; rec.current is not consulted.
   function detail(selected,tx){
@@ -97,7 +98,7 @@
     const sources=(Array.isArray(v.sources)?v.sources:[]).filter(item=>obj(item)&&text(item.name)).map(item=>{const state=stateOf(item);return pick(item.name,`<span class="rb-name">${esc(item.name)}</span><span class="rb-count">${Number.isFinite(item.count)?item.count:0}</span>${state==='ok'?'':`<span class="rb-state">${tx('liveSources.'+state,STATE_TEXT[state])}</span>`}${badges(obj(item.levels))}`,source?.name===item.name);}).join('');
     const head=`<header class="rb-head"><h2 id="rb-heading">${tx('inspector.browserTitle','Record browser')}</h2><div class="ri-actions"><button type="button" class="rb-collapse" data-ri-action="collapse">${tx('inspector.collapse','Back to panel')}</button><button type="button" class="ri-icon" data-ri-action="close" aria-label="${tx('inspector.close','Close')}" title="${tx('inspector.close','Close')}"><span aria-hidden="true">×</span></button></div></header>`;
     const nav=`<nav class="rb-sources" aria-label="${tx('inspector.sourceLabel','Source')}"><ul>${pick('all',`<span class="rb-name">${tx('inspector.allSources','All sources')}</span>`,all)}${sources}</ul></nav>`;
-    return `${head}<div class="rb-cols">${nav}<div class="rb-list">${source?sourceInfo(source,tx,now,'h3',''):''}${body({...v,all},source,tx,now,'rb')}</div><div class="rb-detail">${detail(v.selected,tx)}</div></div>${keys(tx)}`;
+    return `${head}<div class="rb-cols">${nav}<div class="rb-list">${source?sourceInfo(source,tx,now,'h3',''):''}${body({...v,all},source,tx,now,'rb')}</div><div class="rb-detail">${detail(v.selected,tx)}</div></div>${keys(tx,true)}`;
   }
   // ===== End render =====
 
@@ -262,25 +263,28 @@
 
   // Once, after the dashboard has its data accessors: getSources() -> live source rows, getEvents() -> snapshot events.
   function mount(options){
-    if(aside)return;
-    opts=obj(options)||{};
-    aside=document.createElement('aside');aside.id='record-inspector';aside.hidden=true;aside.setAttribute('aria-hidden','true');aside.setAttribute('aria-labelledby','ri-heading');
-    dialog=document.createElement('dialog');dialog.id='record-browser';dialog.setAttribute('aria-labelledby','rb-heading');
-    document.body.append(aside,dialog);
-    for(const el of [aside,dialog]){el.addEventListener('click',onClick);el.addEventListener('change',onFilter);el.addEventListener('input',onFilter);el.addEventListener('keydown',onKey);}
-    // A dialog closed by the browser itself (e.g. a close request) collapses the state too; our own close() finds it already collapsed.
-    dialog.addEventListener('close',()=>{const state=R.store.get();if(state.source&&(state.browserOpen||state.source==='all'))collapse();});
-    document.addEventListener('click',event=>{const button=event.target.closest?.('[data-open-records]');if(button)openFrom(button.dataset.openRecords);});
-    window.addEventListener('hashchange',()=>{lastRec=null;set(fromHash());});
-    // The dashboard scrolls <body>, whose scroll events do not bubble: listen in the capture phase.
-    // The top bar is filled (and re-wraps) after mount: follow its size as well as the scroll position.
-    document.addEventListener('scroll',event=>{if(!aside.contains(event.target))dock();},{capture:true,passive:true});
-    const bar=document.getElementById('topbar');if(bar&&typeof ResizeObserver==='function')new ResizeObserver(dock).observe(bar);else window.addEventListener('resize',dock);
-    R.store.subscribe(render);
-    set(fromHash());
+    if(aside||!window.CrucixRecords||!live())return;
+    // A failing inspector must never stop the dashboard: mount runs before init(), refresh before the map and panels redraw.
+    try{
+      opts=obj(options)||{};
+      aside=document.createElement('aside');aside.id='record-inspector';aside.hidden=true;aside.setAttribute('aria-hidden','true');aside.setAttribute('aria-labelledby','ri-heading');
+      dialog=document.createElement('dialog');dialog.id='record-browser';dialog.setAttribute('aria-labelledby','rb-heading');
+      document.body.append(aside,dialog);
+      for(const el of [aside,dialog]){el.addEventListener('click',onClick);el.addEventListener('change',onFilter);el.addEventListener('input',onFilter);el.addEventListener('keydown',onKey);}
+      // A dialog closed by the browser itself (e.g. a close request) collapses the state too; our own close() finds it already collapsed.
+      dialog.addEventListener('close',()=>{const state=R.store.get();if(state.source&&(state.browserOpen||state.source==='all'))collapse();});
+      document.addEventListener('click',event=>{const button=event.target.closest?.('[data-open-records]');if(button)openFrom(button.dataset.openRecords);});
+      window.addEventListener('hashchange',()=>{lastRec=null;set(fromHash());});
+      // The dashboard scrolls <body>, whose scroll events do not bubble: listen in the capture phase.
+      // The top bar is filled (and re-wraps) after mount: follow its size as well as the scroll position.
+      document.addEventListener('scroll',event=>{if(!aside.contains(event.target))dock();},{capture:true,passive:true});
+      const bar=document.getElementById('topbar');if(bar&&typeof ResizeObserver==='function')new ResizeObserver(dock).observe(bar);else window.addEventListener('resize',dock);
+      R.store.subscribe(render);
+      set(fromHash());
+    }catch(e){console.error('[inspector]',e);}
   }
   // After new data: re-render in place (scroll, focused row and selection kept); never reopens a closed view.
-  function refresh(){if(aside&&R.store.get().source)render();}
+  function refresh(){try{if(aside&&R.store.get().source)render();}catch(e){console.error('[inspector]',e);}}
   // ===== End controller =====
 
   window.CrucixRecordInspector={renderInspector,renderBrowser,mount,refresh};

@@ -664,6 +664,7 @@
     "yes": "Yes",
     "no": "No",
     "keys": "j/k move · Enter details · / search · e expand · Esc close",
+    "keysBrowser": "j/k move · Enter details · / search · Esc back to panel",
     "level": {
       "critical": "Critical",
       "high": "High",

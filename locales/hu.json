@@ -664,6 +664,7 @@
     "yes": "Igen",
     "no": "Nem",
     "keys": "j/k mozgás · Enter részletek · / keresés · e kibontás · Esc bezárás",
+    "keysBrowser": "j/k mozgás · Enter részletek · / keresés · Esc vissza a panelhez",
     "level": {
       "critical": "Kritikus",
       "high": "Magas",

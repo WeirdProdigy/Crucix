@@ -134,3 +134,12 @@ test('shared helpers follow the live-sources rules',()=>{
   assert.equal(R.ageLabel(now-12*60000,now),'12m'); assert.equal(R.ageLabel(now-3*HOUR,now),'3h');
   assert.equal(R.ageLabel(now-50*HOUR,now),'2d'); assert.equal(R.ageLabel(null,now),'—');
 });
+test('search text never keeps a half surrogate pair',()=>{
+  const R=load(),clean=text=>R.setFilters({},{text}).filters.text;
+  assert.equal(clean('x'.repeat(79)+'😀'),'x'.repeat(79),'high half cut off by the length cap');
+  assert.equal(clean('\uDE00abc'),'abc','leading low half');
+  assert.equal(clean('a\uD83Db'),'ab','high half in the middle');
+  assert.equal(clean('\uDE00\uD83D'),'','reversed pair: both halves are lone');
+  assert.equal(clean('😀 árvíz 😀'),'😀 árvíz 😀','intact pairs stay');
+  for (const text of ['x'.repeat(79)+'😀','\uDE00abc','a\uD83Db','\uDE00\uD83D'])assert.doesNotThrow(()=>encodeURIComponent(clean(text)),JSON.stringify(text));
+});

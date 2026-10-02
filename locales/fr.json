@@ -655,7 +655,7 @@
     "showMore": "Afficher 25 de plus",
     "shown": "affichées",
     "noMatch": "Aucune donnée ne correspond aux filtres",
-    "outdated": "Plus à jour",
+    "outdated": "N’est plus à jour",
     "lastSuccess": "Dernière mise à jour réussie",
     "details": "Détails de l’événement",
     "facts": "Informations clés",
@@ -664,6 +664,7 @@
     "yes": "Oui",
     "no": "Non",
     "keys": "j/k naviguer · Enter détails · / recherche · e agrandir · Esc fermer",
+    "keysBrowser": "j/k naviguer · Enter détails · / recherche · Esc retour au panneau",
     "level": {
       "critical": "Critique",
       "high": "Forte",

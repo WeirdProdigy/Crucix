@@ -58,7 +58,7 @@ test('browser policy matches backend and expired PWA data is suppressed without 
   const mixed={...big,observations:[alert(1,'Green','Calm'),alert(2,'Red','Worst <b>one</b>'),alert(3,'Orange','Second'),alert(4,'Red','Also red'),alert(5,undefined,'Unrated')]};
   const sorted=api.renderPanel([mixed],t,[],now);
   assert.deepEqual([...sorted.matchAll(/<li>(.*?)<\/li>/g)].map(m=>m[1]),['Also red','Worst &lt;b&gt;one&lt;/b&gt;','Second']);
-  assert(sorted.includes('<span class="sev sev-critical" title="Critical"><i aria-hidden="true">◆</i>2</span>')); assert(sorted.includes('sev sev-high')); assert(sorted.includes('sev sev-info')); assert(!sorted.includes('sev-watch')); assert(!sorted.includes('sev-unknown'));
+  assert(sorted.includes('<span class="sev sev-critical" title="Critical"><i aria-hidden="true">◆</i>2<span class="ri-sr"> Critical</span></span>')); assert(sorted.includes('sev sev-high')); assert(sorted.includes('sev sev-info')); assert(!sorted.includes('sev-watch')); assert(!sorted.includes('sev-unknown'));
   const bare=load('live-sources.js').CrucixLiveSources.renderPanel([mixed],t,[],now);
   assert(bare.includes('data-open-records="GDACS"')); assert(!bare.includes('class="sev')); assert(!bare.includes('<li>')); assert(bare.includes('5 current records'));
 });

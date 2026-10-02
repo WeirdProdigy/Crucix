@@ -10,4 +10,4 @@
 .live-open:focus-visible,.live-source a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .live-source[data-selected="true"]{outline:2px solid var(--accent);outline-offset:4px;border-radius:2px}
 .live-attribution{margin-top:8px;opacity:.75}.live-source[data-live-state="stale"]{opacity:.8}
-@media(max-width:640px){.live-open{min-height:44px}}
+@media(max-width:700px){.live-open{min-height:44px}}
