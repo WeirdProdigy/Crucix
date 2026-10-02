@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync } from 'node:fs';
+import fs, { mkdtempSync, mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync } from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as deltaEngine from '../lib/delta/engine.mjs';
@@ -141,6 +142,37 @@ test('a failed write throws, leaves the old primary intact and removes its tempo
   mkdirSync(target);
   assert.throws(() => atomic.writeJsonAtomic(target, { n: 2 }), 'a directory cannot be replaced by a file');
   assert.deepEqual(strays(dir), []);
+});
+
+// Replace node:fs functions for one test: the module's named imports follow after syncBuiltinESMExports().
+function failFs(t, failures) {
+  const saved = Object.fromEntries(Object.keys(failures).map(name => [name, fs[name]]));
+  for (const [name, message] of Object.entries(failures)) fs[name] = () => { throw Object.assign(new Error(message), { code: 'EIO' }); };
+  syncBuiltinESMExports();
+  t.after(() => { Object.assign(fs, saved); syncBuiltinESMExports(); });
+}
+
+test('a failing cleanup never hides the error that stopped the write', t => {
+  const dir = workdir(t);
+  const path = join(dir, 'store.json');
+  atomic.writeJsonAtomic(path, { n: 1 });
+  failFs(t, { renameSync: 'rename failed', unlinkSync: 'unlink failed' });
+  assert.throws(() => atomic.writeJsonAtomic(path, { n: 2 }), /rename failed/, 'the rename error, not the unlink error');
+});
+
+test('a failing close in the cleanup never hides the write error either', t => {
+  const dir = workdir(t);
+  failFs(t, { fsyncSync: 'fsync failed', closeSync: 'close failed' });
+  assert.throws(() => atomic.writeJsonAtomic(join(dir, 'store.json'), { n: 1 }), /fsync failed/);
+});
+
+test('readJsonWithBackup takes null options like none', t => {
+  const dir = workdir(t);
+  const path = join(dir, 'store.json');
+  atomic.writeJsonAtomic(path, { n: 1 });
+  let read;
+  assert.doesNotThrow(() => { read = atomic.readJsonWithBackup(path, null); });
+  assert.deepEqual(read, { value: { n: 1 }, source: 'primary' });
 });
 
 // ─── levels ──────────────────────────────────────────────────────────────────
