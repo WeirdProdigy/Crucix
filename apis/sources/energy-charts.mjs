@@ -12,9 +12,10 @@
 //     the synchronous area Continental Europe (which Hungary belongs to), about 90 seconds behind. The documented parameter is `region`, not
 //     `country`. A default query returns the whole day so far (1.5 MB), so a 20 minute window is asked for. A window beyond the data is a
 //     series of nulls.
-// Hungarian day-ahead prices run high: over the 14 days to 2026-10-02 (1,344 slots) 72% were at or above 150 EUR/MWh, 3.9% at or above 300, the
-// median was around 180 and the maximum 574 (31 slots were slightly negative). The ratings below (moderate from 300, high from 400) therefore
-// mark the evening peaks only; 150 and 300 would have rated most of the day.
+// Hungarian day-ahead prices run high. Measured over the 14 days to 2026-10-02 (2026-09-19 to 2026-10-02, 1,344 slots): median about 194 EUR/MWh,
+// mean 176.5, minimum -3.08, maximum 574.32 (31 slots slightly negative); 72% of the slots were at or above 150, 3.9% at or above 300 and 0.6% at
+// or above 400. The ratings (moderate from 300, high from 400) therefore mark only the peaks (44 of the 52 slots at or above 300 fell between 15:00
+// and 19:00 UTC, 8 between 04:00 and 05:00 UTC: the evening and morning peaks); thresholds of 150 and 300 would have rated most of the day.
 // The API allows 2 requests per minute per endpoint (price: a burst of 2) and answers HTTP 429 beyond that, so every answer is cached for
 // two minutes (a manual sweep next to a scheduled one stays under the limit). Times are unix SECONDS: anything else (milliseconds, ISO
 // text, small numbers) is another shape of the answer and reads as an error, never as a healthy feed. Provider text is never shown as
@@ -120,7 +121,7 @@ function readMix(payload, now) {
 function priceRow(sample) {
   const value = round(sample.value, 2);
   return { kind: 'energy', providerId: 'hu-price', title: `Hungary day-ahead power price: ${value.toFixed(2)} EUR/MWh`,
-    summary: `Day-ahead spot price for the Hungarian bidding zone (HU) for the period starting ${stamp(sample.ms)} UTC: ${value.toFixed(2)} EUR/MWh.${value < 0 ? ' A negative price means that supply exceeds demand in the day-ahead auction: producers pay to sell.' : ''} Day-ahead auction result as published by Energy-Charts (data from Bundesnetzagentur | SMARD.de); it is fixed a day ahead and is not a real-time price. Hungarian day-ahead prices run high (median around 180 EUR/MWh): rated moderate from 300 EUR/MWh and high from 400 EUR/MWh.`,
+    summary: `Day-ahead spot price for the Hungarian bidding zone (HU) for the period starting ${stamp(sample.ms)} UTC: ${value.toFixed(2)} EUR/MWh.${value < 0 ? ' A negative price means that supply exceeds demand in the day-ahead auction: producers pay to sell.' : ''} Day-ahead auction result as published by Energy-Charts (data from Bundesnetzagentur | SMARD.de); it is fixed a day ahead and is not a real-time price. Hungarian day-ahead prices run high: rated moderate from 300 and high from 400 EUR/MWh.`,
     source: SOURCE, url: `${CHARTS}price_spot_market/chart.htm?l=en&c=HU`, observedAt: new Date(sample.ms).toISOString(),
     severity: value >= 400 ? 'high' : value >= 300 ? 'moderate' : 'info', pricePerMwh: value };
 }

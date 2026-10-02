@@ -56,7 +56,9 @@ test('parse turns the real answers into a price, a frequency and a generation mi
   assert.deepEqual(ids(result), ['hu-price', 'hu-frequency', 'hu-mix']);
   assert.equal(result.observedAt, '2026-10-02T22:49:53.000Z', 'the feed time is the newest sample time');
   const [price, frequency, mix] = result.observations;
-  assert.equal(price.kind, 'energy'); assert.equal(price.source, 'Energy-Charts-HU'); assert.equal(price.severity, 'info', '182.36 EUR/MWh is the usual Hungarian level (median around 180): below the moderate threshold of 300');
+  assert.equal(price.kind, 'energy'); assert.equal(price.source, 'Energy-Charts-HU'); assert.equal(price.severity, 'info', '182.36 EUR/MWh is an ordinary Hungarian level (measured median about 194 over 14 days): below the moderate threshold of 300');
+  assert.match(price.summary, /moderate from 300 and high from 400 EUR\/MWh/); assert.doesNotMatch(price.summary, /median/, 'no measured figure in the row text: it would go stale');
+  assert.match(result.summary, /rated moderate from 300 and high from 400\)/);
   assert.equal(price.title, 'Hungary day-ahead power price: 182.36 EUR/MWh'); assert.equal(price.pricePerMwh, 182.36);
   assert.equal(price.observedAt, '2026-10-02T22:45:00.000Z', 'the latest slot start, in UTC');
   assert.match(price.summary, /day-ahead/i); assert.match(price.summary, /2026-10-02 22:45 UTC/); assert.match(price.summary, /not a real-time price/i);
@@ -189,6 +191,9 @@ test('seconds are the time unit: milliseconds read as a changed shape and never 
   assert.equal(ids(parse(PRICE, POWER, micro)).includes('hu-frequency'), false);
   const iso8601 = { ...copy(PRICE), unix_seconds: PRICE.unix_seconds.map(value => iso(value * 1000)) };
   assert.equal(ids(parse(iso8601)).includes('hu-price'), false, 'v2 style timestamps are another shape'); assert.match(parse(iso8601).summary, /price: unexpected timestamps or values/);
+  const textual = { ...copy(PRICE), unix_seconds: PRICE.unix_seconds.map(String) };
+  assert.equal(ids(parse(textual)).includes('hu-price'), false, 'numbers in text are no unix seconds'); assert.match(parse(textual).summary, /price: unexpected timestamps or values/);
+  assert.match(parse({ ...copy(PRICE), unix_seconds: ['1790981100'], price: [182.36] }).summary, /price: unexpected timestamps or values/);
   const isoText = payload => ({ ...copy(payload), unix_seconds: payload.unix_seconds.map(value => iso(value * 1000)) });
   const allIso = parse(isoText(PRICE), isoText(POWER), isoText(FREQUENCY));
   assert.equal(allIso.status, 'error', 'ISO text everywhere is a changed shape, not a quiet feed'); assert.deepEqual(allIso.observations, []); assert.equal(allIso.observedAt, null); assert.match(allIso.error, /unexpected/i);
