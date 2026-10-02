@@ -23,7 +23,7 @@ Hat szabálytípus (`kind`):
 
 | kind | params | Mikor teljesül | Dedupe-kulcs |
 | --- | --- | --- | --- |
-| `event` | `minLevel` (`info\|watch\|high\|critical`) | `snapshot.events` egy eleme (a `signal` típus kivételével) legalább `minLevel` szintű és illeszkedik a scope-ra | `szabály\|event.id` |
+| `event` | `minLevel` (`info\|watch\|high\|critical`), `maxLevel?` (ugyanez, alap `critical`; nem lehet `minLevel` alatt) | `snapshot.events` egy eleme (a `signal` típus kivételével) legalább `minLevel` és legfeljebb `maxLevel` szintű és illeszkedik a scope-ra | `szabály\|event.id` |
 | `threshold` | `metric`, `op` (`>`, `>=`, `<`, `<=`), `value`, `clearValue?` | a mutató értéke átlépi a küszöböt; a lezáráshoz `clearValue` (vagy a küszöb) másik oldalán kell lennie | `szabály\|metric` |
 | `change` | `metric`, `pct` (0,1–100) | az előző sweephez képest legalább `pct` százalékos abszolút változás | `szabály\|metric` |
 | `absence` | `source` (név vagy `any`), `minFailSweeps` (1–50), `maxAgeMinutes?` | a forrás `err` vagy `stale` egymás utáni `minFailSweeps` sweepen át, vagy az adata `maxAgeMinutes` percnél öregebb; letiltott forrást kihagy | `szabály\|forrás` |
@@ -32,7 +32,7 @@ Hat szabálytípus (`kind`):
 
 **Mutatóregiszter** (`lib/alerts/metrics.mjs`): kulcs, címke, egység, kinyerő. Számszerű: `vix`, `hy_spread`, `t10y2y`, `wti`, `brent`, `natgas`, `gold`, `silver`, `y10`, `usd_index`, `mortgage`, `fed_funds`, `unemployment`, `btc`, `eth`, `eurhuf`; darabszám: `urgent_posts`, `who_alerts`, `conflict_events`, `conflict_fatalities`, `sources_ok`, `sources_failed`, `sources_stale`. A delta-motor kinyerőit újrahasznosítja (exportálni kell), a hiányzókat (`btc`, `eth`, `eurhuf` = ECB `metrics.HUF`) hozzáadja. A korábbi értékeket a riasztási motor maga őrzi (a `memory.mjs` tömörítése eldobja a piaci adatot).
 
-**Beépített szabálycsomag** (a felhasználó felülírhatja vagy letilthatja azonos `id`-val): `events-critical` (event, critical, `auto`, notify), `events-high` (event, high, `auto`, notify, `forSweeps` 1), `convergence-default` (high, notify), `source-stale` (absence, any, 3 sweep, watch, nem notify), `vix-spike` (threshold `vix > 30`, high, notify), `hy-spread-wide` (threshold `hy_spread > 5`, watch), `delta-critical` (delta, critical, nem notify: a meglévő Telegram/Discord már értesít), `hungary-region` (event, radius 47,5; 19,0; 500 km, `minLevel` watch, `auto`, nem notify).
+**Beépített szabálycsomag** (a felhasználó felülírhatja vagy letilthatja azonos `id`-val): `events-critical` (event, critical, `auto`, notify), `events-high` (event, high, `maxLevel` high, `auto`, notify, `forSweeps` 1; így egy kritikus esemény csak az `events-critical` riasztását nyitja, nem egy másodikat), `convergence-default` (high, notify), `source-stale` (absence, any, 3 sweep, watch, nem notify), `vix-spike` (threshold `vix > 30`, high, notify), `hy-spread-wide` (threshold `hy_spread > 5`, watch), `delta-critical` (delta, critical, nem notify: a meglévő Telegram/Discord már értesít), `hungary-region` (event, radius 47,5; 19,0; 500 km, `minLevel` watch, `auto`, nem notify).
 
 Felhasználói szabály legfeljebb 50 lehet (`runs/alerts/rules.json`). A szabályszerkesztés szigorú validációval megy (engedélylista, tartományok, hossz, ismeretlen mező elutasítva); a `metric` a regiszterből való.
 

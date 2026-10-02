@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { RULE_KINDS, DEFAULT_RULES, MAX_USER_RULES, validateRule, mergeRules, describeRule } from '../lib/alerts/rules.mjs';
-import { LEVELS } from '../lib/alerts/levels.mjs';
+import { LEVELS, levelRank } from '../lib/alerts/levels.mjs';
 import { METRIC_KEYS } from '../lib/alerts/metrics.mjs';
 
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -73,7 +73,8 @@ test('the built-in parameters match the spec', () => {
   const byId = Object.fromEntries(DEFAULT_RULES.map(rule => [rule.id, rule]));
   const pick = (id, ...fields) => Object.fromEntries(fields.map(field => [field, clone(byId[id][field])]));
   assert.deepEqual(pick('events-critical', 'kind', 'severity', 'notify', 'enabled', 'params', 'scope'), { kind: 'event', severity: 'auto', notify: true, enabled: true, params: { minLevel: 'critical' }, scope: {} });
-  assert.deepEqual(pick('events-high', 'kind', 'severity', 'notify', 'forSweeps', 'params'), { kind: 'event', severity: 'auto', notify: true, forSweeps: 1, params: { minLevel: 'high' } });
+  // events-high is capped at high so a critical event raises one alert (events-critical), not two.
+  assert.deepEqual(pick('events-high', 'kind', 'severity', 'notify', 'forSweeps', 'params'), { kind: 'event', severity: 'auto', notify: true, forSweeps: 1, params: { minLevel: 'high', maxLevel: 'high' } });
   assert.deepEqual(pick('convergence-default', 'kind', 'severity', 'notify', 'params'), { kind: 'convergence', severity: 'high', notify: true, params: { cellDegrees: 2, windowHours: 24, minKinds: 3, minLevel: 'watch' } });
   assert.deepEqual(pick('source-stale', 'kind', 'severity', 'notify', 'params'), { kind: 'absence', severity: 'watch', notify: false, params: { source: 'any', minFailSweeps: 3 } });
   assert.deepEqual(pick('vix-spike', 'kind', 'severity', 'notify', 'forSweeps', 'params'), { kind: 'threshold', severity: 'high', notify: true, forSweeps: 2, params: { metric: 'vix', op: '>', value: 30 } });
@@ -131,6 +132,51 @@ test('boundary values are accepted', () => {
   accepted(minimal('absence', { params: { maxAgeMinutes: 43200 } }));
   accepted(minimal('event', { scope: { radius: { lat: 90, lon: -180, km: 1 } } }));
   accepted(minimal('event', { scope: { keywords: Array.from({ length: 10 }, (_, index) => `${index}`.padEnd(40, 'x')) } }));
+});
+
+test('convergence boundary values are accepted', () => {
+  assert.equal(accepted(minimal('convergence', { params: { minKinds: 6 } })).params.minKinds, 6);
+  assert.equal(accepted(minimal('convergence', { params: { windowHours: 6 } })).params.windowHours, 6);
+  assert.equal(accepted(minimal('convergence', { params: { cellDegrees: 1 } })).params.cellDegrees, 1);
+  assert.equal(accepted(minimal('convergence', { params: { minKinds: 6, kinds: ['a', 'b', 'c', 'd', 'e', 'f'] } })).params.minKinds, 6);
+  rejected(minimal('convergence', { params: { minKinds: 6, kinds: ['a', 'b', 'c', 'd', 'e'] } }), 'params.minKinds');
+});
+
+test('regex-looking keywords are plain text and are stored verbatim', () => {
+  assert.deepEqual(accepted(minimal('event', { scope: { keywords: ['.*', '(a+)+$', '['] } })).scope.keywords, ['.*', '(a+)+$', '[']);
+});
+
+// ─── maxLevel ────────────────────────────────────────────────────────────────
+
+test('an event rule may cap its level with maxLevel; without it nothing is stored', () => {
+  assert.deepEqual(accepted(MINIMAL.event).params, { minLevel: 'high' });
+  assert.deepEqual(accepted(minimal('event', { params: { minLevel: 'high', maxLevel: undefined } })).params, { minLevel: 'high' });
+  assert.deepEqual(accepted(minimal('event', { params: { minLevel: 'high', maxLevel: 'high' } })).params, { minLevel: 'high', maxLevel: 'high' });
+  assert.deepEqual(accepted(minimal('event', { params: { minLevel: 'watch', maxLevel: 'critical' } })).params, { minLevel: 'watch', maxLevel: 'critical' });
+});
+
+test('maxLevel must be a level that is not below minLevel', () => {
+  for (const minLevel of LEVELS) {
+    for (const maxLevel of LEVELS) {
+      const input = minimal('event', { params: { minLevel, maxLevel } });
+      if (levelRank(maxLevel) >= levelRank(minLevel)) assert.equal(accepted(input).params.maxLevel, maxLevel, `${minLevel}..${maxLevel}`);
+      else rejected(input, 'params.maxLevel');
+    }
+  }
+  for (const maxLevel of ['auto', 'urgent', 'HIGH', 5, null, {}, ['high']]) rejected(minimal('event', { params: { maxLevel } }), 'params.maxLevel');
+});
+
+test('maxLevel exists on event rules only', () => {
+  for (const kind of RULE_KINDS.filter(item => item !== 'event')) rejected(minimal(kind, { params: { maxLevel: 'high' } }), 'params.maxLevel');
+});
+
+test('an override can set maxLevel, but not below minLevel', () => {
+  const rule = mergeRules(DEFAULT_RULES, [{ id: 'hungary-region', override: { params: { minLevel: 'watch', maxLevel: 'high' } } }]).find(item => item.id === 'hungary-region');
+  assert.equal(rule.source, 'override');
+  assert.deepEqual(rule.params, { minLevel: 'watch', maxLevel: 'high' });
+  const invalid = mergeRules(DEFAULT_RULES, [{ id: 'hungary-region', override: { params: { minLevel: 'high', maxLevel: 'watch' } } }]).find(item => item.id === 'hungary-region');
+  assert.equal(invalid.source, 'builtin');
+  assert.deepEqual(invalid.params, { minLevel: 'watch' });
 });
 
 // ─── validateRule: rejections ────────────────────────────────────────────────
@@ -322,6 +368,70 @@ test('oversized and hostile strings are rejected or echoed truncated', () => {
   assert.ok(error.message.length < 200);
   rejected(minimal('event', { scope: { keywords: ['a\u0000b'] } }), 'scope.keywords[0]');
   rejected(minimal('event', { name: 'a' + String.fromCharCode(0x202e) + 'b\u0007' }), 'name');
+});
+
+test('every control, separator and bidi character is rejected on its own and inside text, in every text field', () => {
+  // U+202E and U+2067 are bidi overrides/isolates, U+2028 a line separator, U+0085 a C1 control.
+  for (const char of ['\u202e', '\u2067', '\u2028', '\u0085', '\u202a', '\u2066', '\u2069', '\u2029', '\u007f', '\u009f', '\t']) {
+    for (const text of [char, `a${char}b`]) {
+      rejected(minimal('event', { name: text }), 'name');
+      rejected(minimal('event', { scope: { keywords: ['ok', text] } }), 'scope.keywords[1]');
+      rejected(minimal('event', { scope: { sources: [text] } }), 'scope.sources[0]');
+      rejected(minimal('absence', { params: { source: text } }), 'params.source');
+    }
+  }
+});
+
+test('the field echoed for an unknown key only contains path characters', () => {
+  assert.equal(rejected({ ...minimal('event'), ['bad key<script>\n\u202e']: 1 }, 'bad?key?script???').message, 'is not a known field');
+  rejected(minimal('threshold', { params: { 'x"y': 1 } }), 'params.x?y');
+  rejected(minimal('event', { scope: { radius: { lat: 1, lon: 1, km: 1, '\u0000\u2028': 1 } } }), 'scope.radius.??');
+  rejected({ ...minimal('event'), 'a[0]-b.c_d': 1 }, 'a[0]-b.c_d');
+  rejected({ ...minimal('event'), [`${'k'.repeat(39)}<${'k'.repeat(20)}`]: 1 }, `${'k'.repeat(39)}?…`);
+});
+
+// ─── validateRule: a polluted Object.prototype ───────────────────────────────
+
+// Properties are non-enumerable so nothing else in the process reacts to them; they are removed before the caller asserts.
+function withPolluted(props, run) {
+  for (const [key, value] of Object.entries(props)) Object.defineProperty(Object.prototype, key, { value, configurable: true, writable: true, enumerable: false });
+  try { return run(); } finally { for (const key of Object.keys(props)) delete Object.prototype[key]; }
+}
+
+test('validateRule ignores id, scope and params inherited from a polluted Object.prototype', () => {
+  const { id, params, ...noIdNoParams } = minimal('event');
+  // Built before the pollution: minimal() itself destructures `scope` from an empty object.
+  const withoutScope = minimal('threshold');
+  const eventInput = minimal('event');
+  const [noId, noParams, scopeOnThreshold, eventScope, optsId] = withPolluted(
+    { id: 'polluted-id', params: { minLevel: 'info' }, scope: { keywords: ['leak'] } },
+    () => [
+      validateRule({ ...noIdNoParams, params: { minLevel: 'high' } }),
+      validateRule({ id: 'e', name: 'E', kind: 'event' }),
+      validateRule(withoutScope),
+      validateRule(eventInput),
+      validateRule({ name: 'E', kind: 'event', params: { minLevel: 'high' } }, {}),
+    ],
+  );
+  assert.equal(noId.ok, false);
+  assert.equal(noId.error.field, 'id');
+  assert.equal(noParams.ok, false);
+  assert.equal(noParams.error.field, 'params');
+  assert.equal(scopeOnThreshold.ok, true, 'an inherited scope is not a scope on a threshold rule');
+  assert.equal('scope' in scopeOnThreshold.rule, false);
+  assert.deepEqual(eventScope.rule.scope, {});
+  assert.equal(optsId.ok, false);
+  assert.equal(optsId.error.field, 'id', 'an inherited id never fills in the opts id');
+});
+
+test('mergeRules ignores id, override and rule inherited from a polluted Object.prototype', () => {
+  const merged = withPolluted(
+    { id: 'polluted-id', override: { enabled: false }, rule: userRule('polluted-id') },
+    () => mergeRules(DEFAULT_RULES, [{ id: 'vix-spike' }, {}, { id: 'polluted-id' }, { rule: userRule('polluted-id') }]),
+  );
+  assert.deepEqual(merged.map(rule => rule.id), DEFAULT_RULES.map(rule => rule.id));
+  assert.ok(merged.every(rule => rule.source === 'builtin'));
+  assert.equal(merged.find(rule => rule.id === 'vix-spike').enabled, true);
 });
 
 test('accessor properties are not read', () => {
@@ -525,6 +635,19 @@ test('describeRule gives a short one-line English summary of each kind', () => {
   assert.equal(describeRule(minimal('absence', { params: { source: 'GDACS', minFailSweeps: 1, maxAgeMinutes: 90 } })), 'GDACS failing or stale for 1 sweep, or older than 90 min');
   assert.equal(describeRule(minimal('event', { scope: { kinds: ['conflict', 'outage'], sources: ['GDACS'], keywords: ['flood', 'quake'] } })), 'Events at high or above, kinds conflict, outage, sources GDACS, keywords flood, quake');
   assert.equal(describeRule(minimal('convergence', { params: { kinds: ['conflict', 'outage'], minKinds: 2, cellDegrees: 1, windowHours: 6, minLevel: 'high' } })), '2+ event kinds (conflict, outage) within one 1° cell in 6 h at high or above');
+});
+
+test('describeRule says when an event rule is capped by maxLevel', () => {
+  assert.equal(describeRule(DEFAULT_RULES.find(rule => rule.id === 'events-high')), 'Events at exactly high');
+  assert.equal(describeRule(minimal('event', { params: { minLevel: 'watch', maxLevel: 'high' } })), 'Events from watch up to high');
+  assert.equal(describeRule(minimal('event', { params: { minLevel: 'high', maxLevel: 'critical' } })), 'Events at high or above');
+  assert.equal(describeRule(minimal('event', { params: { minLevel: 'critical', maxLevel: 'critical' } })), 'Events at critical or above');
+});
+
+test('describeRule truncates every echoed string to 80 characters', () => {
+  const text = describeRule({ kind: 'absence', params: { source: 'x'.repeat(200), minFailSweeps: 1 } });
+  assert.equal(text, `${'x'.repeat(80)} failing or stale for 1 sweep`);
+  assert.equal(describeRule({ kind: 'threshold', params: { metric: 'm'.repeat(81), op: '>', value: 1 } }), `${'m'.repeat(80)} > 1`);
 });
 
 test('describeRule tolerates incomplete or hostile rules without throwing', () => {
