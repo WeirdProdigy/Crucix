@@ -27,8 +27,9 @@
     const policy=policies[source?.source];
     return policy && source?.status==='ok' && !source.stale && fresh(source.observedAt,policy.maxAgeMs,now) && (source.source!=='MET-Norway'||(Array.isArray(source.observations)&&source.observations.slice(0,100).some(row=>validRow(row,policy,now,source.source))))?'ok':'stale';
   }
+  const limit=()=>Object.keys(policies).length;
   function observations(sources,now=Date.now()){
-    return (Array.isArray(sources)?sources:[]).slice(0,9).flatMap(source=>{
+    return (Array.isArray(sources)?sources:[]).slice(0,limit()).flatMap(source=>{
       if(state(source,now)!=='ok')return [];
       const policy=policies[source.source];
       return (Array.isArray(source.observations)?source.observations:[]).slice(0,100).filter(row=>validRow(row,policy,now,source.source));
@@ -49,7 +50,7 @@
   // `events` is unused (the inspector pairs records by eventId); it stays so `now` keeps its position.
   function renderPanel(sources,t,events,now=Date.now()){
     const R=window.CrucixRecords,tr=(key,fallback)=>esc(t('liveSources.'+key,fallback));
-    const providers=(Array.isArray(sources)?sources:[]).slice(0,9).filter(source=>source&&Object.hasOwn(policies,source.source));
+    const providers=(Array.isArray(sources)?sources:[]).slice(0,limit()).filter(source=>source&&Object.hasOwn(policies,source.source));
     const cards=providers.map(source=>{
       const status=state(source,now),rows=observations([source],now),url=safeUrl(source.url);
       const partialForecast=source.source==='MET-Norway'&&rows.length!==(source.observations||[]).length;
