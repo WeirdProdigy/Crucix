@@ -356,8 +356,110 @@ test('bootstrap at scale: with several broad rules over many events, every later
   sweep({ events: [brandNew] });
   const opened = sweep({ events: [brandNew] }).created;
   assert.deepEqual(opened.map(alert => [alert.entity.id, alert.silent]), Array.from({ length: 4 }, () => [brandNew.id, false]));
+  for (let n = 0; n < 6; n += 1) sweep({ events: [brandNew] });
   const left = Object.keys(JSON.parse(readFileSync(join(dir, 'alerts', 'alerts.json'), 'utf8')).engine.baseline);
   assert.deepEqual(left, [], 'subjects no rule hits any more leave the baseline');
+});
+
+const baselineOf = dir => JSON.parse(readFileSync(join(dir, 'alerts', 'alerts.json'), 'utf8')).engine.baseline;
+
+const HICCUPS = {
+  'an empty event list': engine => engine.evaluate({ events: [] }),
+  'no event list at all': engine => engine.evaluate({}),
+  // The half that would open next is missing for one sweep.
+  'half of the events missing': (engine, events) => engine.evaluate({ events: events.slice(0, 10) }),
+};
+for (const [name, hiccup] of Object.entries(HICCUPS)) {
+  test(`a feed hiccup after the bootstrap (${name}) does not turn bootstrap events into notifications`, t => {
+    const { engine, sweep, clock } = setup(t, { warm: false, config: { maxActivePerRule: 5 } });
+    const events = Array.from({ length: 20 }, () => ev());
+    const bootstrap = engine.evaluate({ events });
+    assert.equal(bootstrap.created.length, 5, name);
+    clock.now += SWEEP;
+    hiccup(engine, events);
+    // The five open alerts are gone from the feed: their slots go to the next bootstrap events.
+    // Then the first half is gone for good: the five open alerts resolve and their slots go to bootstrap events.
+    const later = [...sweep({ events: events.slice(10) }).created, ...sweep({ events: events.slice(10) }).created];
+    assert.equal(later.length, 5, name);
+    assert.ok(later.every(alert => alert.silent), `${name}: ${later.map(alert => alert.silent)}`);
+  });
+}
+
+test('a hit resets the miss count of a baseline subject: only consecutive quiet sweeps count', t => {
+  const { engine, sweep } = setup(t, { warm: false });
+  engine.evaluate({ events: [], ...vix(35) });
+  for (let n = 0; n < 4; n += 1) sweep();
+  sweep(vix(35));
+  for (let n = 0; n < 4; n += 1) sweep();
+  sweep(vix(35));
+  assert.deepEqual(sweep(vix(35)).created.map(alert => alert.silent), [true], 'eight quiet sweeps, never six in a row');
+});
+
+test('stored miss counters of subjects that are not in the baseline are dropped', t => {
+  const first = setup(t);
+  const file = join(first.dir, 'alerts', 'alerts.json');
+  const saved = JSON.parse(readFileSync(file, 'utf8'));
+  saved.engine.baseline = { 'event|kept': T0 };
+  saved.engine.baselineMisses = { 'event|kept': 2, 'event|orphan': 3 };
+  writeFileSync(file, JSON.stringify(saved));
+  const second = setup(t, { warm: false, dir: first.dir });
+  second.sweep();
+  assert.deepEqual(baselineOf(first.dir), { 'event|kept': T0 });
+  assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')).engine.baselineMisses, { 'event|kept': 3 });
+});
+
+test('a subject that is really gone leaves the baseline after 6 complete quiet sweeps; incomplete ones do not count', t => {
+  const { engine, sweep, clock, dir } = setup(t, { warm: false, config: { maxActivePerRule: 5 } });
+  engine.evaluate({ events: Array.from({ length: 20 }, () => ev()) });
+  assert.equal(Object.keys(baselineOf(dir)).length, 15);
+  for (let n = 0; n < 5; n += 1) sweep();
+  clock.now += SWEEP;
+  engine.evaluate({});
+  engine.evaluate({ get events() { throw new Error('feed down'); } });
+  assert.equal(Object.keys(baselineOf(dir)).length, 15, 'five complete quiet sweeps and two incomplete ones');
+  sweep();
+  assert.deepEqual(baselineOf(dir), {}, 'the sixth complete quiet sweep');
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, 'alerts', 'alerts.json'), 'utf8')).engine.baselineMisses, {});
+});
+
+test('a hit in its cooldown takes no rank: the other hits and a new event open during the cooldown', t => {
+  const cases = [
+    { name: 'events-critical (30 min)', setupRule: () => {}, ruleId: 'events-critical', make: () => ev() },
+    { name: 'user rule with a 1440 min cooldown', setupRule: engine => { engine.putRule('events-critical', { enabled: false }); engine.putRule('long', { ...watchRule, cooldownMinutes: 1440 }); }, ruleId: 'long', make: () => ev({ severity: 'moderate' }) },
+  ];
+  for (const { name, setupRule, ruleId, make } of cases) {
+    const { engine, sweep, dir } = setup(t, { config: { maxActivePerRule: 5 } });
+    setupRule(engine);
+    const events = Array.from({ length: 8 }, make);
+    const first = sweep({ events }).created;
+    assert.equal(first.length, 5, name);
+    sweep();
+    assert.equal(sweep().resolved.length, 5, `${name}: all five resolve and start their cooldown`);
+    const fresh = make();
+    const back = sweep({ events: [...events, fresh] });
+    assert.equal(back.created.length, 4, `${name}: the three held hits and the new event open`);
+    assert.ok(back.created.some(alert => alert.entity.id === fresh.id), name);
+    assert.equal(ofRule(engine, ruleId, 'active').length, 4);
+    const pending = JSON.parse(readFileSync(join(dir, 'alerts', 'alerts.json'), 'utf8')).engine.pending;
+    assert.ok(first.every(alert => !Object.hasOwn(pending, alert.dedupKey)), `${name}: no streak builds during a cooldown`);
+  }
+});
+
+test('a displacement during the bootstrap puts the displaced subject into the baseline', t => {
+  const { engine, sweep, clock } = setup(t, { warm: false, config: { maxAlerts: 5 } });
+  engine.putRule('events-critical', { enabled: false });
+  engine.putRule('watch-only', { ...watchRule, params: { minLevel: 'watch', maxLevel: 'watch' } });
+  engine.putRule('crit-late', { ...watchRule, params: { minLevel: 'critical' } });
+  const watch = Array.from({ length: 5 }, () => ev({ severity: 'moderate' }));
+  const critical = ev();
+  const bootstrap = engine.evaluate({ events: [...watch, critical] });
+  assert.equal(bootstrap.resolved.length, 1, 'one watch alert displaced by the critical one');
+  const displaced = bootstrap.resolved[0];
+  assert.equal(clock.now, T0);
+  sweep({ events: watch });
+  sweep({ events: watch });
+  const reopened = sweep({ events: watch }).created;
+  assert.deepEqual(reopened.map(alert => [alert.dedupKey, alert.silent]), [[displaced.dedupKey, true]]);
 });
 
 test('bootstrap at real scale: 2000 events and 3 broad rules, half the events go, every new open is silent', t => {
@@ -444,12 +546,14 @@ test('bootstrap with a threshold that needs two sweeps: the condition present at
   assert.deepEqual(second.created.map(alert => [alert.ruleId, alert.silent]), [['vix-spike', true]]);
 });
 
-test('a baseline key that stops matching is no longer the baseline', t => {
-  const { engine, sweep } = setup(t, { warm: false });
-  engine.evaluate({ events: [], ...vix(35) });
-  sweep();
-  sweep(vix(35));
-  assert.deepEqual(sweep(vix(35)).created.map(alert => alert.silent), [false]);
+test('a baseline subject survives 5 quiet sweeps but not 6 (miss hysteresis)', t => {
+  for (const [quiet, silent] of [[5, true], [6, false]]) {
+    const { engine, sweep } = setup(t, { warm: false });
+    engine.evaluate({ events: [], ...vix(35) });
+    for (let n = 0; n < quiet; n += 1) sweep();
+    sweep(vix(35));
+    assert.deepEqual(sweep(vix(35)).created.map(alert => alert.silent), [silent], `${quiet} quiet sweeps`);
+  }
 });
 
 test('the bootstrap ends only when an evaluation could read the event list', t => {

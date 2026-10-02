@@ -208,6 +208,20 @@ test('the emergency pending cut drops the shortest streaks first, never the adva
   assert.equal(kept.filter(key => key.startsWith('rule|old-')).length, 1000);
 });
 
+test('baseline miss counters: absent in older files, hostile values dropped', t => {
+  const dir = tmp(t);
+  mkdirSync(join(dir, 'alerts'), { recursive: true });
+  writeFileSync(alertsFile(dir), '{"version":1,"alerts":[],"engine":{"baseline":{"event|a":1,"event|b":2}}}');
+  const old = store(dir);
+  old.load();
+  assert.deepEqual(Object.keys(old.state.engine.baseline), ['event|a', 'event|b']);
+  assert.deepEqual(Object.keys(old.state.engine.baselineMisses), []);
+  writeFileSync(alertsFile(dir), '{"version":1,"alerts":[],"engine":{"baseline":{"event|a":1},"baselineMisses":{"event|a":2,"event|b":"x","event|c":-1,"__proto__":1}}}');
+  const hostile = store(dir);
+  hostile.load();
+  assert.deepEqual({ ...hostile.state.engine.baselineMisses }, { 'event|a': 2 });
+});
+
 test('stored overflow keys must be rule ids', t => {
   const dir = tmp(t);
   mkdirSync(join(dir, 'alerts'), { recursive: true });
