@@ -205,16 +205,20 @@ test('one bad day does not rate a chokepoint: the window mean does', () => {
   assert.equal(week.transitCalls, 0); assert.equal(week.mean7d, 28.6); assert.equal(week.severity, 'high');
 });
 
-test('no severity is rated when the baseline is below 3 transits a day', () => {
-  const low = [[3, 1, -66.7, 'high'], [2.5, 0, -100, 'info'], [2, 0, -100, 'info'], [1, 0, -100, 'info']];
-  for (const [baseline, mean, pct, severity] of low) {
-    const base = baseline === 2.5 ? [...flat(2, 14), ...flat(3, 14)] : flat(baseline, 28);
+test('no severity is rated when the baseline is below 10 transits a day', () => {
+  // [baseline, 7-day mean, expected change, expected severity]; the median is a half value when an even sample straddles two numbers.
+  const cases = [[10, 4, -60, 'high'], [10, 7, -30, 'moderate'], [10, 8, -20, 'info'], [9.5, 0, -100, 'info'], [9, 0, -100, 'info'], [9, 4, -55.6, 'info'], [3, 1, -66.7, 'info'], [1, 0, -100, 'info']];
+  for (const [baseline, mean, pct, severity] of cases) {
+    const base = baseline === 9.5 ? [...flat(9, 14), ...flat(10, 14)] : flat(baseline, 28);
     const row = parseOne([...base, ...flat(mean, 7)]).observations[0];
-    assert.equal(row.baseline28d, baseline); assert.equal(row.changePct, pct, `baseline ${baseline}`); assert.equal(row.severity, severity, `baseline ${baseline}`);
-    if (severity === 'info') assert.match(row.summary, /baseline is below 3 transits a day, too low to rate a change/);
-    else assert.doesNotMatch(row.summary, /too low to rate/);
+    assert.equal(row.baseline28d, baseline); assert.equal(row.changePct, pct, `baseline ${baseline}`); assert.equal(row.severity, severity, `baseline ${baseline} mean ${mean}`);
+    if (baseline < 10) assert.match(row.summary, /; baseline below 10 transits a day: not rated\. /, `baseline ${baseline}`);
+    else assert.doesNotMatch(row.summary, /not rated/);
   }
-  assert.equal(parseOne([...flat(3, 28), ...flat(2, 7)]).observations[0].severity, 'moderate', 'a baseline of exactly 3 is rated');
+  assert.match(parsePortwatch(daily(), { now, chokepoints: ['Strait of Hormuz'] }).summary, /below 10 transits a day are not rated/, 'the feed summary says so too');
+  const hormuzCollapse = parseOne([...flat(4, 28), ...flat(0, 7)]).observations[0];
+  assert.equal(hormuzCollapse.severity, 'info'); assert.equal(hormuzCollapse.mean7d, 0);
+  assert.deepEqual(parsePortwatch(one([...flat(4, 28), ...flat(0, 7)]), { now, chokepoints: ['Suez Canal'] }).metrics, { suez_transits: 0 }, 'a low-traffic collapse stays visible through the metric');
 });
 
 test('the window is the last 7 calendar days and the baseline the 28 days before it', () => {

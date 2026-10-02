@@ -18,7 +18,7 @@ const WINDOW_DAYS = 7;
 const MIN_WINDOW_DAYS = 5;
 const BASELINE_DAYS = 28;
 const MIN_BASELINE_DAYS = 14;
-const MIN_RATED_BASELINE = 3; // below 3 transits a day the percentages are noise, so no severity is rated
+const MIN_RATED_BASELINE = 10; // below 10 transits a day a strait is too low-traffic to rate by percentage: always info
 const MAX_CHOKEPOINTS = 12;
 const MAX_EXAMINED = 2000;
 const FUTURE_SKEW_MS = 300000;
@@ -32,7 +32,7 @@ const DEFAULTS = [['Strait of Hormuz', 'hormuz'], ['Bab el-Mandeb Strait', 'bab_
 const SLUGS = new Map(DEFAULTS.map(([name, slug]) => [name.toLowerCase(), slug]));
 const NAME = /^[A-Za-z][A-Za-z .-]{1,59}$/;
 const RANK = { high: 0, moderate: 1, info: 2 };
-const SUMMARY = 'Daily ship transit counts at the watched maritime chokepoints for the latest day the IMF has published (weekly refresh, a delay of several days), rated by the 7-day mean against the previous 28-day median. Counts are AIS-visible transits only: dark or AIS-off ships are not counted. These are estimates, not live positions.';
+const SUMMARY = 'Daily ship transit counts at the watched maritime chokepoints for the latest day the IMF has published (weekly refresh, a delay of several days), rated by the 7-day mean against the previous 28-day median (straits below 10 transits a day are not rated). Counts are AIS-visible transits only: dark or AIS-off ships are not counted. These are estimates, not live positions.';
 const EXTRAS = {
   attribution: 'Sources: UN Global Platform; IMF PortWatch (portwatch.imf.org)',
   rights: 'IMF terms of use: personal, noncommercial usage only, without any right to resell or redistribute. Transit counts are AIS-based estimates provided "as is", without warranty.',
@@ -121,7 +121,7 @@ function observation(group, places) {
   const dayLabel = latest.slice(0, 10), plural = count === 1 ? '' : 's';
   const comparison = mean7d === null ? 'fewer than 5 of the last 7 days are available, so no change is computed'
     : baseline === null ? 'fewer than 14 baseline days are available, so no change is computed'
-    : `the 7-day mean is ${mean7d} against a median of ${baseline} over the previous 28 days${change === null ? '' : ` (${change > 0 ? '+' : ''}${change}%)`}${baseline < MIN_RATED_BASELINE ? '; the baseline is below 3 transits a day, too low to rate a change' : ''}`;
+    : `the 7-day mean is ${mean7d} against a median of ${baseline} over the previous 28 days${change === null ? '' : ` (${change > 0 ? '+' : ''}${change}%)`}${baseline < MIN_RATED_BASELINE ? '; baseline below 10 transits a day: not rated' : ''}`;
   const place = Object.hasOwn(places, group.id) ? places[group.id] : null;
   return { kind: 'maritime', providerId: `${group.spec.slug}:${dayLabel}`, chokepoint: group.spec.slug,
     title: `${group.name}: ${count} ship transit${plural} on ${dayLabel}`,
