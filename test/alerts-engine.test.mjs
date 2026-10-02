@@ -334,6 +334,108 @@ test('bootstrap past the per-rule cap: hits held back at bootstrap open silent l
   assert.deepEqual(later.created.map(alert => alert.silent), [false]);
 });
 
+test('bootstrap at scale: with several broad rules over many events, every later open of a bootstrap event is silent', t => {
+  const { engine, sweep, dir } = setup(t, { warm: false, config: { maxActivePerRule: 5, maxAlerts: 100 } });
+  for (let n = 0; n < 3; n += 1) engine.putRule(`broad-${n}`, watchRule);
+  let events = Array.from({ length: 60 }, () => ev());
+  const first = engine.evaluate({ events });
+  assert.equal(first.created.length, 20, 'events-critical and three broad rules, five each');
+  const baseline = Object.keys(JSON.parse(readFileSync(join(dir, 'alerts', 'alerts.json'), 'utf8')).engine.baseline);
+  assert.ok(baseline.length <= 60, `one subject per event, not per rule and event: ${baseline.length}`);
+
+  const later = [];
+  for (let round = 0; round < 5; round += 1) {
+    events = events.slice(10);
+    later.push(...sweep({ events }).created, ...sweep({ events }).created);
+  }
+  assert.ok(later.length >= 40, String(later.length));
+  assert.deepEqual(later.filter(alert => !alert.silent).map(alert => alert.title), [], 'no bootstrap event ever notifies');
+
+  // Only a new event remains: the old alerts resolve after two misses and the new event takes their slots.
+  const brandNew = ev();
+  sweep({ events: [brandNew] });
+  const opened = sweep({ events: [brandNew] }).created;
+  assert.deepEqual(opened.map(alert => [alert.entity.id, alert.silent]), Array.from({ length: 4 }, () => [brandNew.id, false]));
+  const left = Object.keys(JSON.parse(readFileSync(join(dir, 'alerts', 'alerts.json'), 'utf8')).engine.baseline);
+  assert.deepEqual(left, [], 'subjects no rule hits any more leave the baseline');
+});
+
+test('bootstrap at real scale: 2000 events and 3 broad rules, half the events go, every new open is silent', t => {
+  const { engine, sweep } = setup(t, { warm: false });
+  for (let n = 0; n < 3; n += 1) engine.putRule(`broad-${n}`, watchRule);
+  const events = Array.from({ length: 2000 }, () => ev());
+  assert.equal(engine.evaluate({ events }).created.length, 200);
+  const remaining = events.slice(1000);
+  sweep({ events: remaining });
+  const later = sweep({ events: remaining }).created;
+  assert.equal(later.length, 200, 'four rules refill their 50 slots');
+  assert.equal(later.filter(alert => !alert.silent).length, 0);
+});
+
+test('forSweeps 3 rules over many events open after three sweeps and pending stays bounded by construction', t => {
+  const { engine, sweep, dir } = setup(t, { config: { maxActivePerRule: 5 } });
+  for (let n = 0; n < 5; n += 1) engine.putRule(`slow-${n}`, { ...watchRule, forSweeps: 3 });
+  const events = Array.from({ length: 200 }, () => ev({ severity: 'moderate' }));
+  const pendingSizes = [];
+  let result;
+  for (let round = 0; round < 3; round += 1) {
+    // The feed order changes every sweep; streaks that have started keep their place anyway.
+    result = sweep({ events: round % 2 ? [...events].reverse() : events });
+    pendingSizes.push(Object.keys(JSON.parse(readFileSync(join(dir, 'alerts', 'alerts.json'), 'utf8')).engine.pending).length);
+  }
+  for (let n = 0; n < 5; n += 1) assert.equal(ofRule(engine, `slow-${n}`, 'active').length, 5, `slow-${n}`);
+  assert.ok(pendingSizes.every(size => size <= 5 * 5), pendingSizes.join(','));
+  assert.deepEqual(result.summary.overflow.map(row => row.count), [195, 195, 195, 195, 195], 'the untracked hits are reported');
+});
+
+test('a hit pushed out of the tracked set by more severe ones loses its pending streak', t => {
+  const { engine, sweep, dir } = setup(t, { config: { maxActivePerRule: 5 } });
+  engine.putRule('slow', { ...watchRule, forSweeps: 3 });
+  const moderate = Array.from({ length: 10 }, () => ev({ severity: 'moderate' }));
+  const high = Array.from({ length: 10 }, () => ev({ severity: 'high' }));
+  const pendingOf = () => Object.keys(JSON.parse(readFileSync(join(dir, 'alerts', 'alerts.json'), 'utf8')).engine.pending).filter(key => key.startsWith('slow|'));
+  sweep({ events: moderate });
+  assert.equal(pendingOf().length, 5);
+  sweep({ events: [...moderate, ...high] });
+  const pending = pendingOf();
+  assert.equal(pending.length, 5);
+  assert.ok(pending.every(key => high.some(event => key === `slow|${event.id}`)), 'only the high hits are tracked now');
+});
+
+test('a failed evaluation does not shrink the baseline', t => {
+  const { engine, sweep } = setup(t, { warm: false, config: { maxActivePerRule: 1 } });
+  const events = [ev(), ev(), ev()];
+  const [opened] = engine.evaluate({ events }).created;
+  engine.evaluate({ get events() { throw new Error('feed down'); } });
+  const rest = events.filter(event => opened.entity.id !== event.id);
+  sweep({ events: rest });
+  const later = sweep({ events: rest }).created.filter(alert => alert.ruleId === 'events-critical');
+  assert.equal(later.length, 1);
+  assert.equal(later[0].silent, true);
+});
+
+test('the global ceiling is severity-aware: a critical hit displaces the least severe open alert, once', t => {
+  const { engine, sweep, clock } = setup(t, { config: { maxAlerts: 20 } });
+  engine.putRule('watch-only', { ...watchRule, params: { minLevel: 'watch', maxLevel: 'watch' } });
+  const events = Array.from({ length: 20 }, () => ev({ severity: 'moderate' }));
+  assert.equal(sweep({ events }).created.length, 20);
+  const critical = ev();
+  const result = sweep({ events: [...events, critical] });
+  assert.deepEqual(result.created.map(alert => [alert.ruleId, alert.severity]), [['events-critical', 'critical']]);
+  assert.equal(result.resolved.length, 1);
+  assert.equal(result.resolved[0].severity, 'watch');
+  assert.ok(result.resolved[0].log.some(entry => entry.action === 'resolved' && /displaced/.test(entry.note)));
+  assert.deepEqual(result.summary.overflow, [{ ruleId: 'watch-only', count: 1 }]);
+  assert.equal(engine.list({ state: 'active' }).length, 20);
+  for (let round = 0; round < 4; round += 1) {
+    clock.now += 15 * MINUTE;
+    const again = sweep({ events: [...events, critical] });
+    assert.equal(again.created.length, 0, `sweep ${round}: nothing is re-created`);
+    assert.equal(again.resolved.length, 0);
+  }
+  assert.equal(engine.list({ state: 'active' }).length, 20);
+});
+
 test('bootstrap with a threshold that needs two sweeps: the condition present at bootstrap opens silent', t => {
   const { engine, sweep } = setup(t, { warm: false });
   assert.equal(engine.evaluate({ events: [], ...vix(35) }).created.length, 0);

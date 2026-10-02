@@ -196,6 +196,27 @@ test('counter tables are capped at 5000 entries on save, the oldest first, and l
   assert.deepEqual(Object.keys(reloaded.state.engine.pending), keys);
 });
 
+test('the emergency pending cut drops the shortest streaks first, never the advanced ones', t => {
+  const dir = tmp(t);
+  const subject = store(dir);
+  subject.load();
+  for (let n = 0; n < 1000; n += 1) subject.state.engine.pending[`rule|old-${n}`] = 2;
+  for (let n = 0; n < 5000; n += 1) subject.state.engine.pending[`rule|new-${n}`] = 1;
+  subject.save();
+  const kept = Object.keys(subject.state.engine.pending);
+  assert.equal(kept.length, 5000);
+  assert.equal(kept.filter(key => key.startsWith('rule|old-')).length, 1000);
+});
+
+test('stored overflow keys must be rule ids', t => {
+  const dir = tmp(t);
+  mkdirSync(join(dir, 'alerts'), { recursive: true });
+  writeFileSync(alertsFile(dir), '{"version":1,"alerts":[],"engine":{"overflow":{"Bad Key!":3,"__proto__":2,"<img>":1,"events-critical":4,"constructor":2,"x":"y"}}}');
+  const subject = store(dir);
+  subject.load();
+  assert.deepEqual(Object.keys(subject.state.engine.overflow), ['events-critical', 'constructor']);
+});
+
 test('retention: resolved alerts older than 30 days are dropped, younger ones and active ones are kept', t => {
   const dir = tmp(t);
   const subject = store(dir);
