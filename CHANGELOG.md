@@ -1,5 +1,7 @@
 # Changelog / Változásnapló
 
+- [2.9.0 — Átlátható rekordböngésző és közös súlyossági nyelv / A readable record browser and a shared severity vocabulary](docs/releases/v2.9.0.md) — 2026-10-02
+
 - [2.8.0 — Megbízható Safecast és pontosabb GDELT / Reliable Safecast and sharper GDELT](docs/releases/v2.8.0.md) — 2026-10-02
 
 - [2.7.2 — CI javítás és karbantartás / CI fix and maintenance](docs/releases/v2.7.2.md) — 2026-10-02

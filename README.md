@@ -149,6 +149,10 @@ Open `http://localhost:3117` once while the server runs. **PWA** settings and th
 
 See the [completed implementation register](docs/audit/intelligence-workspace-implementation.md) and [browser/test evidence](docs/audit/intelligence-workspace-verification.md).
 
+### Record Inspector (v2.9)
+
+The **Current public data** cards are summaries: state, provider time, record count, severity badges and the top three titles. **Open records** docks the Inspector on the right (a bottom sheet on phones): filter by severity, time window and text, sort, page through 25 records at a time and read each record's times, location, facts and original link; **Event details** opens the event dialog. Expand it into the full-screen record browser, whose **All sources** view covers every event (news, USGS, NOAA, WHO and more). Keys: `j`/`k` move, `Enter` details, `/` search, `e` expand, `Esc` close; the view is a shareable link such as `#src=GDACS&sev=high`. Severity is always a glyph plus a colour: ◆ critical, ▲ high, ● watch, ○ info, – unknown; provider words such as Red/Orange/Green are mapped onto these levels.
+
 ---
 
 ## What You Get
@@ -453,7 +457,7 @@ crucix/
 
 ### Tier 7: Current public data (9)
 
-All nine feeds are free and require no API key. The **Current public data** panel shows provider time, status, attribution and expandable records. Records have original links and enter event details, searchable history and exports. Geographic natural events and forecast points are map layers. Provider dates are checked again on snapshot reads and in the browser, including offline PWA restores; expired values are hidden.
+All nine feeds are free and require no API key. The **Current public data** panel shows provider time, status, attribution and a summary of the current records, which open in the [Record Inspector](#record-inspector-v29). Records have original links and enter event details, searchable history and exports. Geographic natural events and forecast points are map layers. Provider dates are checked again on snapshot reads and in the browser, including offline PWA restores; expired values are hidden.
 
 | Source | Data / default watched scope | Freshness ceiling |
 | --- | --- | --- |
