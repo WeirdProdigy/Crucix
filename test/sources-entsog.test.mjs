@@ -75,6 +75,7 @@ test('licence, rights and attribution quote the ENTSOG Transparency Platform ter
   const result = parse();
   assert.equal(result.attribution, 'ENTSOG TP 02-10-2026 https://transparency.entsog.eu/');
   assert.match(result.rights, /you may download, store and use the contents of the ENTSOG TP/); assert.match(result.rights, /indicate the source, and the date of data download\/extraction/);
+  assert.match(result.rights, /and provided you keep intact all trademark, copyright and other proprietary notices indicated/); assert.match(result.rights, /separate ENTSOG TP Disclaimer \(LGT0291\) says "ENTSOG cannot be held liable/);
   assert.match(result.rights, /does not permit automatic extraction of data or other usage that reduces the performance/); assert.match(result.rights, /cannot be held liable for the accuracy and timeliness/);
   assert.ok(result.rights.length <= 1000, `rights length ${result.rights.length}`);
   assert.match(result.license, /ENTSOG/); assert.equal(result.licenseUrl, 'https://transparency.entsog.eu/pdf/TRA0394_20161115_ENTSOG_TP_Privacy_TC_of_Use_Rev_3.pdf');

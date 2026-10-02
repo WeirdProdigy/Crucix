@@ -56,12 +56,12 @@ test('parse turns the real answers into a price, a frequency and a generation mi
   assert.deepEqual(ids(result), ['hu-price', 'hu-frequency', 'hu-mix']);
   assert.equal(result.observedAt, '2026-10-02T22:49:53.000Z', 'the feed time is the newest sample time');
   const [price, frequency, mix] = result.observations;
-  assert.equal(price.kind, 'energy'); assert.equal(price.source, 'Energy-Charts-HU'); assert.equal(price.severity, 'moderate', '182.36 EUR/MWh is in the moderate band (150 to 300)');
+  assert.equal(price.kind, 'energy'); assert.equal(price.source, 'Energy-Charts-HU'); assert.equal(price.severity, 'info', '182.36 EUR/MWh is the usual Hungarian level (median around 180): below the moderate threshold of 300');
   assert.equal(price.title, 'Hungary day-ahead power price: 182.36 EUR/MWh'); assert.equal(price.pricePerMwh, 182.36);
   assert.equal(price.observedAt, '2026-10-02T22:45:00.000Z', 'the latest slot start, in UTC');
   assert.match(price.summary, /day-ahead/i); assert.match(price.summary, /2026-10-02 22:45 UTC/); assert.match(price.summary, /not a real-time price/i);
   assert.equal(frequency.kind, 'energy'); assert.equal(frequency.severity, 'info'); assert.equal(frequency.frequencyHz, 50.0217);
-  assert.equal(frequency.title, 'Continental Europe grid frequency: 50.0217 Hz'); assert.equal(frequency.observedAt, '2026-10-02T22:49:53.000Z');
+  assert.equal(frequency.title, 'Continental Europe grid frequency: 50.0217 Hz (measured in Freiburg)'); assert.equal(frequency.observedAt, '2026-10-02T22:49:53.000Z');
   assert.match(frequency.summary, /Fraunhofer ISE/); assert.match(frequency.summary, /Freiburg/); assert.match(frequency.summary, /Hungary/); assert.match(frequency.summary, /22:49:53 UTC/); assert.match(frequency.summary, /0\.0217 Hz above/);
   assert.equal(mix.kind, 'energy'); assert.equal(mix.severity, 'info'); assert.equal(mix.renewableSharePct, 11.6);
   assert.equal(mix.title, 'Hungary electricity generation: 11.6% renewable'); assert.equal(mix.observedAt, '2026-10-02T21:30:00.000Z');
@@ -83,7 +83,8 @@ test('licence, rights and attribution come from the Energy-Charts and SMARD term
 });
 
 test('the day-ahead price is rated at its exact boundaries and a negative price is info with a note', () => {
-  const cases = [[-12.5, 'info'], [0, 'info'], [149.99, 'info'], [149.994, 'info'], [149.996, 'moderate'], [150, 'moderate'], [299.99, 'moderate'], [299.996, 'high'], [300, 'high'], [1200, 'high']];
+  // The usual Hungarian level is 150 to 250 (72% of the slots of 14 days were at or above 150): only the evening peaks are rated.
+  const cases = [[-12.5, 'info'], [0, 'info'], [150, 'info'], [250, 'info'], [299.99, 'info'], [299.994, 'info'], [299.996, 'moderate'], [300, 'moderate'], [399.99, 'moderate'], [399.994, 'moderate'], [399.996, 'high'], [400, 'high'], [1200, 'high']];
   for (const [value, severity] of cases) {
     const row = parse(priceAt(value)).observations.find(item => item.providerId === 'hu-price');
     assert.equal(row.severity, severity, `${value} EUR/MWh`);
@@ -107,7 +108,9 @@ test('the grid frequency is rated by its deviation from 50 Hz at exact boundarie
   const worst = parse(priceAt(400), POWER, frequencyAt(49.7));
   assert.deepEqual(worst.observations.map(row => row.severity), ['high', 'high', 'info'], 'most severe first, then the fixed order');
   const mixed = parse(priceAt(200), POWER, frequencyAt(50.0));
-  assert.deepEqual(ids(mixed), ['hu-price', 'hu-frequency', 'hu-mix']); assert.deepEqual(mixed.observations.map(row => row.severity), ['moderate', 'info', 'info']);
+  assert.deepEqual(ids(mixed), ['hu-price', 'hu-frequency', 'hu-mix']); assert.deepEqual(mixed.observations.map(row => row.severity), ['info', 'info', 'info'], '200 EUR/MWh is not rated any more');
+  const peak = parse(priceAt(300), POWER, frequencyAt(50.0));
+  assert.deepEqual(ids(peak), ['hu-price', 'hu-frequency', 'hu-mix']); assert.deepEqual(peak.observations.map(row => row.severity), ['moderate', 'info', 'info']);
   const frequencyFirst = parse(priceAt(100), POWER, frequencyAt(50.15));
   assert.deepEqual(ids(frequencyFirst), ['hu-frequency', 'hu-price', 'hu-mix']);
 });
@@ -134,7 +137,7 @@ test('null samples are skipped, an all-null series gives no observation and neve
   const nothing = parse({ ...copy(PRICE), price: [null, null, null, null, null, null] }, { ...copy(POWER), production_types: POWER.production_types.map(t => ({ name: t.name, data: [null, null, null] })) }, { ...copy(FREQUENCY), data: FREQUENCY.data.map(() => null) });
   assert.equal(nothing.status, 'stale', 'no sample at all is no current reading'); assert.deepEqual(nothing.observations, []); assert.equal(nothing.observedAt, null); assert.equal(nothing.freshness.reason, 'unknown-provider-time');
   assert.equal('metrics' in nothing && Object.keys(nothing.metrics).length, 0);
-  assert.equal(parse({ unix_seconds: [], price: [], unit: 'EUR / MWh' }, { unix_seconds: [], production_types: [] }, { unix_seconds: [], data: [] }).status, 'stale', 'empty arrays are not a healthy feed');
+  assert.equal(parse({ license_info: PRICE.license_info, unix_seconds: [], price: [], unit: 'EUR / MWh' }, { unix_seconds: [], production_types: [] }, { unix_seconds: [], data: [] }).status, 'stale', 'empty arrays are not a healthy feed');
 });
 
 test('a series whose latest sample is older than the policy window is dropped and never replaced', () => {
@@ -185,7 +188,14 @@ test('seconds are the time unit: milliseconds read as a changed shape and never 
   const micro = { ...copy(FREQUENCY), unix_seconds: FREQUENCY.unix_seconds.map(value => value * 1e6) };
   assert.equal(ids(parse(PRICE, POWER, micro)).includes('hu-frequency'), false);
   const iso8601 = { ...copy(PRICE), unix_seconds: PRICE.unix_seconds.map(value => iso(value * 1000)) };
-  assert.equal(ids(parse(iso8601)).includes('hu-price'), false, 'v2 style timestamps are another shape');
+  assert.equal(ids(parse(iso8601)).includes('hu-price'), false, 'v2 style timestamps are another shape'); assert.match(parse(iso8601).summary, /price: unexpected timestamps or values/);
+  const isoText = payload => ({ ...copy(payload), unix_seconds: payload.unix_seconds.map(value => iso(value * 1000)) });
+  const allIso = parse(isoText(PRICE), isoText(POWER), isoText(FREQUENCY));
+  assert.equal(allIso.status, 'error', 'ISO text everywhere is a changed shape, not a quiet feed'); assert.deepEqual(allIso.observations, []); assert.equal(allIso.observedAt, null); assert.match(allIso.error, /unexpected/i);
+  const isoMix = parse(PRICE, isoText(POWER), FREQUENCY);
+  assert.equal(ids(isoMix).includes('hu-mix'), false); assert.match(isoMix.summary, /mix: unexpected timestamps or values/);
+  const isoFrequency = parse(PRICE, POWER, isoText(FREQUENCY));
+  assert.equal(ids(isoFrequency).includes('hu-frequency'), false); assert.match(isoFrequency.summary, /frequency: unexpected timestamps or values/); assert.equal('grid_frequency_hz' in isoFrequency.metrics, false);
   const small = { ...copy(PRICE), unix_seconds: PRICE.unix_seconds.map((_, i) => i) };
   assert.equal(ids(parse(small)).includes('hu-price'), false, 'seconds from 1970 are no provider time'); assert.match(parse(small).summary, /price: unexpected timestamps or values/);
 });
@@ -210,9 +220,11 @@ test('the generation mix share comes from the provider series; a missing produce
   assert.equal(parse(PRICE, withShare(100), FREQUENCY).observations.find(r => r.providerId === 'hu-mix').renewableSharePct, 100);
   const short = copy(POWER); short.production_types.find(type => type.name === 'Renewable share of generation').data = [11.6];
   assert.equal(ids(parse(PRICE, short, FREQUENCY)).includes('hu-mix'), false, 'a series that does not line up with the time axis is another shape');
-  const lateShare = copy(POWER); lateShare.production_types.find(type => type.name === 'Renewable share of generation').data = [11.6, 11.7, null];
+  // Every slot has visibly different values, so reading another slot of the sources (first or last) can not pass.
+  const lateShare = powerOf({ Nuclear: [100, 200, 300], 'Fossil gas': [10, 20, 30], Solar: [1, 2, 3], 'Renewable share of generation': [11.6, 11.7, null] }, '2026-10-02T21:00:00Z');
   const late = parse(PRICE, lateShare, FREQUENCY).observations.find(r => r.providerId === 'hu-mix');
-  assert.equal(late.observedAt, '2026-10-02T21:15:00.000Z'); assert.equal(late.renewableSharePct, 11.7); assert.match(late.summary, /Nuclear 1429 MW/, 'sources are read from the same slot');
+  assert.equal(late.observedAt, '2026-10-02T21:15:00.000Z'); assert.equal(late.renewableSharePct, 11.7);
+  assert.match(late.summary, /Largest sources: Nuclear 200 MW, Fossil gas 20 MW, Solar 2 MW\./, 'the sources are read from the same slot as the share');
 });
 
 test('wrong shapes and provider errors degrade to an error result, never to a quiet feed', () => {
@@ -241,6 +253,25 @@ test('wrong shapes and provider errors degrade to an error result, never to a qu
   assert.equal(half.status, 'ok'); assert.match(half.summary, /price: request failed: HTTP 429/); assert.equal('hu_power_price' in half.metrics, false);
   assert.equal(parse(PRICE, { error: 'HTTP 404', status: 404 }, FREQUENCY).status, 'ok', 'a missing mix leaves the other two');
   assert.match(parse(PRICE, { error: 'HTTP 404', status: 404 }, FREQUENCY).summary, /mix: request failed: HTTP 404/);
+});
+
+test('the price series is published only with a CC BY 4.0 licence from the answer itself', () => {
+  const ok = parse(PRICE, POWER, FREQUENCY);
+  assert.equal(ids(ok).includes('hu-price'), true); assert.equal(ok.metrics.hu_power_price, 182.36);
+  const withoutLicence = copy(PRICE); delete withoutLicence.license_info;
+  const bad = [withoutLicence, { ...copy(PRICE), license_info: null }, { ...copy(PRICE), license_info: 5 }, { ...copy(PRICE), license_info: {} }, { ...copy(PRICE), license_info: 'For private and internal use only' },
+    { ...copy(PRICE), license_info: 'CC BY-NC 4.0' }, { ...copy(PRICE), license_info: 'CC BY 4x0' },{ ...copy(PRICE), license_info: 'CC BY 3.0' }, { ...copy(PRICE), license_info: '' }, { ...copy(PRICE), license_info: 'x'.repeat(100000) },
+    { ...copy(PRICE), license_info: `${' '.repeat(200)}CC BY 4.0` }, { ...copy(PRICE), license_info: '<'.repeat(1000000) }];
+  for (const payload of bad) {
+    const result = parse(payload, POWER, FREQUENCY);
+    assert.equal(result.status, 'ok', 'the other series stay'); assert.deepEqual(ids(result), ['hu-frequency', 'hu-mix']); assert.match(result.summary, /price: unexpected licence/);
+    assert.equal('hu_power_price' in result.metrics, false, 'no price metric without the licence'); assert.equal(result.metrics.grid_frequency_hz, 50.0217);
+  }
+  assert.equal(parse(withoutLicence, null, null).status, 'error', 'the licence alone can make the feed unreadable');
+  for (const license_info of ['CC BY 4.0', 'cc by 4.0 (creativecommons.org/licenses/by/4.0) from Bundesnetzagentur | SMARD.de', 'Data: CC BY 4.0 from SMARD.de']) assert.equal(ids(parse({ ...copy(PRICE), license_info }, POWER, FREQUENCY)).includes('hu-price'), true, license_info);
+  const exactly200 = `CC BY 4.0${' '.repeat(191)}`; assert.equal(exactly200.length, 200);
+  assert.equal(ids(parse({ ...copy(PRICE), license_info: exactly200 }, POWER, FREQUENCY)).includes('hu-price'), true, 'a licence text of 200 characters is the limit');
+  assert.equal(ids(parse({ ...copy(PRICE), license_info: `${exactly200} ` }, POWER, FREQUENCY)).includes('hu-price'), false);
 });
 
 test('a deprecated endpoint is reported in the summary and still read', () => {
@@ -308,7 +339,8 @@ test('observations survive the server normalization with facts, metrics and the 
   const [out] = normalizeLiveSources({ 'Energy-Charts-HU': parse() }, now);
   assert.equal(out.status, 'ok'); assert.equal(out.url, 'https://energy-charts.info/'); assert.equal(out.observations.length, 3);
   assert.deepEqual(out.observations.map(row => row.facts), [[{ label: 'pricePerMwh', value: 182.36 }], [{ label: 'frequencyHz', value: 50.0217 }], [{ label: 'renewableSharePct', value: 11.6 }]]);
-  assert.deepEqual(out.observations.map(row => row.severity), ['moderate', 'info', 'info']);
+  assert.deepEqual(out.observations.map(row => row.severity), ['info', 'info', 'info'], 'all info: the fixed row order');
+  assert.deepEqual(out.observations.map(row => row.facts[0].label), ['pricePerMwh', 'frequencyHz', 'renewableSharePct']);
   assert.ok(out.observations.every(row => row.kind === 'energy' && row.url.startsWith('https://energy-charts.info/charts/')));
   assert.deepEqual(out.metrics, { hu_power_price: 182.36, grid_frequency_hz: 50.0217 });
   assert.equal(out.license, 'CC BY 4.0'); assert.match(out.attribution, /Energy-Charts/);

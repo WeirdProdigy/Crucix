@@ -1,7 +1,8 @@
 // Energy-Charts (Fraunhofer ISE): the Hungarian day-ahead power price, the generation mix of Hungary and the grid frequency of
 // Continental Europe. https://api.energy-charts.info - v1 endpoints (compact columnar JSON), checked live on 2026-10-02:
-//   - /price?bzn=HU&start&end: { license_info, unix_seconds, price, unit: 'EUR / MWh', deprecated }. 15-minute day-ahead slots; a slot is
-//     stamped with its START in unix SECONDS. A default query returns a whole day, so the curve holds slots that have not started yet:
+//   - /price?bzn=HU&start&end: { license_info, unix_seconds, price, unit: 'EUR / MWh', deprecated }. `license_info` is the licence of that bidding
+//     zone ("CC BY 4.0 ... from Bundesnetzagentur | SMARD.de" for HU; the zones that are not CC BY 4.0 are private-use only), so a price answer
+//     without a CC BY 4.0 licence is not published. 15-minute day-ahead slots; a slot is stamped with its START in unix SECONDS. A default query returns a whole day, so the curve holds slots that have not started yet:
 //     the price now is the newest slot that has started. A window with no data answers HTTP 404 ("no content available").
 //   - /public_power?country=hu&start&end: { unix_seconds, production_types: [{ name, data }], deprecated }. The same 15-minute slots, but the
 //     newest sample lags about an hour and a half. The types vary (Fossil oil is listed on some days only) and the answer carries derived
@@ -11,6 +12,9 @@
 //     the synchronous area Continental Europe (which Hungary belongs to), about 90 seconds behind. The documented parameter is `region`, not
 //     `country`. A default query returns the whole day so far (1.5 MB), so a 20 minute window is asked for. A window beyond the data is a
 //     series of nulls.
+// Hungarian day-ahead prices run high: over the 14 days to 2026-10-02 (1,344 slots) 72% were at or above 150 EUR/MWh, 3.9% at or above 300, the
+// median was around 180 and the maximum 574 (31 slots were slightly negative). The ratings below (moderate from 300, high from 400) therefore
+// mark the evening peaks only; 150 and 300 would have rated most of the day.
 // The API allows 2 requests per minute per endpoint (price: a burst of 2) and answers HTTP 429 beyond that, so every answer is cached for
 // two minutes (a manual sweep next to a scheduled one stays under the limit). Times are unix SECONDS: anything else (milliseconds, ISO
 // text, small numbers) is another shape of the answer and reads as an error, never as a healthy feed. Provider text is never shown as
@@ -36,7 +40,7 @@ const SHARE_SERIES = 'Renewable share of generation';
 const NOT_GENERATION = /share|load|trading/i; // derived series of the answer: Load, Residual load, Cross border electricity trading, the shares
 const TYPE_NAME = /^[A-Za-z][A-Za-z0-9 /().,+-]*$/;
 const RANK = { high: 0, moderate: 1, info: 2 };
-const SUMMARY = 'The Hungarian day-ahead power price (EUR/MWh, rated moderate from 150 and high from 300), the renewable share of Hungarian electricity generation and the grid frequency of Continental Europe (rated by its deviation from 50 Hz: moderate from 0.1 Hz, high from 0.2 Hz), from Energy-Charts (Fraunhofer ISE). The day-ahead price is fixed a day ahead, the generation data is published with a delay of about an hour and a half, and the frequency is measured in Freiburg, Germany.';
+const SUMMARY = 'The Hungarian day-ahead power price (EUR/MWh, rated moderate from 300 and high from 400), the renewable share of Hungarian electricity generation and the grid frequency of Continental Europe (rated by its deviation from 50 Hz: moderate from 0.1 Hz, high from 0.2 Hz), from Energy-Charts (Fraunhofer ISE). The day-ahead price is fixed a day ahead, the generation data is published with a delay of about an hour and a half, and the frequency is measured in Freiburg, Germany.';
 const EXTRAS = {
   attribution: 'Fraunhofer ISE, Energy-Charts (https://energy-charts.info); day-ahead prices: Bundesnetzagentur | SMARD.de',
   rights: 'Energy-Charts data is licensed CC BY 4.0 with attribution to energy-charts.info unless the response says otherwise. Day-ahead prices of the Hungarian bidding zone: "CC BY 4.0 (creativecommons.org/licenses/by/4.0) from Bundesnetzagentur | SMARD.de", published without changes. The grid frequency is measured at Fraunhofer ISE in Freiburg. The API allows 2 requests per minute per endpoint and per client; commercial access needs a contact with Fraunhofer ISE.',
@@ -64,7 +68,7 @@ function sampleOf(times, values, valid, limitMs, now) {
     const value = values[i];
     if (value === null || value === undefined) continue;
     const time = times[i];
-    if (typeof time !== 'number' || !Number.isFinite(time) || time < MIN_S || time > MAX_S || !valid(value)) { bad++; continue; }
+    if (!Number.isFinite(time) || time < MIN_S || time > MAX_S || !valid(value)) { bad++; continue; }
     const ms = Math.round(time * 1000);
     if (ms <= limitMs && (!best || ms > best.ms)) best = { ms, value, index: i };
   }
@@ -83,6 +87,8 @@ function readPrice(payload, now) {
   if (problem) return problem;
   if (!Array.isArray(payload.unix_seconds) || !Array.isArray(payload.price) || payload.unix_seconds.length !== payload.price.length) return failed('unexpected response');
   if (typeof payload.unit !== 'string' || payload.unit.length > 20 || !/^EUR\s*\/\s*MWh$/i.test(payload.unit)) return failed('unexpected unit');
+  // The licence is per bidding zone and this field is authoritative: only CC BY 4.0 data is published.
+  if (typeof payload.license_info !== 'string' || payload.license_info.length > 200 || !/CC BY 4\.0/i.test(payload.license_info)) return failed('unexpected licence');
   // The newest slot that has started: later slots are tomorrow's prices, not the price now.
   return sampleOf(payload.unix_seconds, payload.price, number(-1000, 10000), now, now);
 }
@@ -114,15 +120,15 @@ function readMix(payload, now) {
 function priceRow(sample) {
   const value = round(sample.value, 2);
   return { kind: 'energy', providerId: 'hu-price', title: `Hungary day-ahead power price: ${value.toFixed(2)} EUR/MWh`,
-    summary: `Day-ahead spot price for the Hungarian bidding zone (HU) for the period starting ${stamp(sample.ms)} UTC: ${value.toFixed(2)} EUR/MWh.${value < 0 ? ' A negative price means that supply exceeds demand in the day-ahead auction: producers pay to sell.' : ''} Day-ahead auction result as published by Energy-Charts (data from Bundesnetzagentur | SMARD.de); it is fixed a day ahead and is not a real-time price. Rated high from 300 EUR/MWh and moderate from 150 EUR/MWh.`,
+    summary: `Day-ahead spot price for the Hungarian bidding zone (HU) for the period starting ${stamp(sample.ms)} UTC: ${value.toFixed(2)} EUR/MWh.${value < 0 ? ' A negative price means that supply exceeds demand in the day-ahead auction: producers pay to sell.' : ''} Day-ahead auction result as published by Energy-Charts (data from Bundesnetzagentur | SMARD.de); it is fixed a day ahead and is not a real-time price. Hungarian day-ahead prices run high (median around 180 EUR/MWh): rated moderate from 300 EUR/MWh and high from 400 EUR/MWh.`,
     source: SOURCE, url: `${CHARTS}price_spot_market/chart.htm?l=en&c=HU`, observedAt: new Date(sample.ms).toISOString(),
-    severity: value >= 300 ? 'high' : value >= 150 ? 'moderate' : 'info', pricePerMwh: value };
+    severity: value >= 400 ? 'high' : value >= 300 ? 'moderate' : 'info', pricePerMwh: value };
 }
 
 function frequencyRow(sample) {
   const value = round(sample.value, 4), deviation = round(Math.abs(value - 50), 4);
   const side = deviation === 0 ? 'exactly at the 50 Hz nominal frequency' : `${deviation} Hz ${value > 50 ? 'above' : 'below'} the 50 Hz nominal frequency`;
-  return { kind: 'energy', providerId: 'hu-frequency', title: `Continental Europe grid frequency: ${value.toFixed(4)} Hz`,
+  return { kind: 'energy', providerId: 'hu-frequency', title: `Continental Europe grid frequency: ${value.toFixed(4)} Hz (measured in Freiburg)`,
     summary: `Grid frequency of the synchronous area Continental Europe, which includes Hungary, measured by Fraunhofer ISE in Freiburg (Germany): ${value.toFixed(4)} Hz in the 1-second sample of ${stamp(sample.ms, true)} UTC, ${side}. Rated high from a deviation of 0.2 Hz and moderate from 0.1 Hz.`,
     source: SOURCE, url: `${CHARTS}frequency/chart.htm?l=en&c=DE`, observedAt: new Date(sample.ms).toISOString(),
     severity: deviation >= 0.2 ? 'high' : deviation >= 0.1 ? 'moderate' : 'info', frequencyHz: value };
