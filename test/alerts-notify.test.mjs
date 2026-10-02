@@ -1,0 +1,549 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { AlertNotifier, parseQuietHours } from '../lib/alerts/notify.mjs';
+import { TelegramAlerter } from '../lib/alerts/telegram.mjs';
+import { DiscordAlerter } from '../lib/alerts/discord.mjs';
+
+const NTFY_URL = 'https://ntfy.example.test/crucix-secret-topic';
+const HOOK_URL = 'https://hooks.example.test/in/SECRETPATH123?token=SECRETQUERY';
+const TOKEN = 'tk_SECRETTOKEN';
+const PUBLIC_URL = 'https://dash.example.test/crucix';
+const SECRETS = [TOKEN, 'crucix-secret-topic', 'SECRETPATH123', 'SECRETQUERY'];
+const CHANNELS = ['telegram', 'discord', 'ntfy', 'webhook'];
+
+// Local wall-clock times: quiet hours are defined in local time, so the tests build dates from local components.
+const at = (hour, minute = 0, day = 2) => new Date(2026, 9, day, hour, minute, 0).getTime();
+const NOON = at(12);
+
+function recorder() {
+  const lines = [];
+  const push = (...parts) => lines.push(parts.join(' '));
+  return { lines, warn: push, error: push, log: push, info: push };
+}
+
+let seq = 0;
+function alert(overrides = {}) {
+  seq += 1;
+  return {
+    id: `alert-${String(seq).padStart(32, '0')}`, ruleId: 'events-critical', ruleName: 'Critical events',
+    dedupKey: `events-critical|event-${seq}`, kind: 'event', severity: 'high', state: 'firing',
+    title: `Event ${seq} reported`, summary: `Summary ${seq}`, entity: { type: 'event', id: `event-${seq}` },
+    evidence: [], firstSeenAt: NOON, lastSeenAt: NOON, count: 1, notify: true, silent: false,
+    log: [{ at: NOON, action: 'created' }], ...overrides,
+  };
+}
+const batch = (created = [], escalated = [], silent = false) => ({ created, escalated, silent });
+
+// A stand-in for TelegramAlerter / DiscordAlerter: records the arguments of sendMessage and answers `result`.
+function fakeAlerter(result, { configured = true, throws = false } = {}) {
+  const fake = {
+    isConfigured: configured, calls: [], result,
+    async sendMessage(...args) {
+      fake.calls.push(args);
+      if (throws) throw new Error('send exploded');
+      return fake.result;
+    },
+  };
+  return fake;
+}
+const fakeTelegram = options => fakeAlerter({ ok: true, messageId: 1 }, options);
+const fakeDiscord = options => fakeAlerter(true, options);
+
+function fakeFetch(responder = () => ({ ok: true, status: 200 })) {
+  const calls = [];
+  const fn = async (url, init) => { calls.push({ url, init }); return responder(url, init); };
+  fn.calls = calls;
+  return fn;
+}
+
+// A notifier with all four channels over fakes; any option (even `undefined`) replaces its default.
+function setup(options = {}) {
+  const pick = (key, fallback) => (key in options ? options[key] : fallback);
+  const logger = pick('logger', recorder());
+  const clock = { now: NOON };
+  const telegram = pick('telegram', fakeTelegram());
+  const discord = pick('discord', fakeDiscord());
+  const fetch = pick('fetch', fakeFetch());
+  const notifier = new AlertNotifier({
+    ntfy: { url: NTFY_URL, token: TOKEN }, webhook: { url: HOOK_URL }, now: () => clock.now,
+    ...options, telegram, discord, fetch, logger,
+  });
+  const callsTo = url => (fetch?.calls ?? []).filter(call => call.url === url);
+  return { notifier, telegram, discord, fetch, logger, clock, ntfyCalls: () => callsTo(NTFY_URL), hookCalls: () => callsTo(HOOK_URL) };
+}
+
+const everyChannelCalls = ({ telegram, discord, ntfyCalls, hookCalls }) => [telegram.calls.length, discord.calls.length, ntfyCalls().length, hookCalls().length];
+
+// ─── configuration and channels ────────────────────────────────────────────────
+
+test('channels() lists only configured channels, in a fixed order', () => {
+  assert.deepEqual(new AlertNotifier({ logger: recorder() }).channels(), []);
+  assert.deepEqual(setup().notifier.channels(), CHANNELS);
+  assert.deepEqual(setup({ telegram: fakeTelegram({ configured: false }), webhook: undefined }).notifier.channels(), ['discord', 'ntfy']);
+  assert.deepEqual(setup({ telegram: undefined, discord: undefined, ntfy: { url: null, token: null }, webhook: { url: null } }).notifier.channels(), []);
+  assert.deepEqual(setup({ fetch: null }).notifier.channels(), ['telegram', 'discord'], 'without a fetch there is no ntfy or webhook');
+});
+
+test('ntfy and webhook URLs with credentials, other schemes or garbage are not channels, and the warning does not echo them', () => {
+  const bad = [
+    'https://user:pass@ntfy.example.test/topic', 'ftp://ntfy.example.test/topic', 'not a url', 'javascript:alert(1)', `https://ntfy.example.test/${'a'.repeat(3000)}`,
+  ];
+  for (const url of bad) {
+    const { notifier, logger } = setup({ ntfy: { url }, webhook: { url } });
+    assert.deepEqual(notifier.channels().filter(name => name === 'ntfy' || name === 'webhook'), [], url.slice(0, 40));
+    assert.ok(logger.lines.length >= 1);
+    for (const line of logger.lines) assert.ok(!line.includes(url.slice(0, 30)) && !line.includes('pass@'), line);
+  }
+});
+
+test('a malformed ntfy token disables ntfy instead of sending without it', () => {
+  for (const token of ['has space', 'new\nline', 'tökén', 'x'.repeat(600)]) {
+    const { notifier, logger } = setup({ ntfy: { url: NTFY_URL, token } });
+    assert.ok(!notifier.channels().includes('ntfy'));
+    assert.ok(logger.lines.length >= 1);
+    for (const line of logger.lines) assert.ok(!line.includes(token), line);
+  }
+});
+
+test('invalid options fall back to the defaults with a warning', async () => {
+  const { notifier, telegram, logger } = setup({ minSeverity: 'bogus', maxPerSweep: 99, publicUrl: 'https://user:secret@dash.example.test/', quietHours: '25:99-xx' });
+  assert.ok(logger.lines.length >= 3);
+  assert.ok(logger.lines.every(line => !line.includes('secret')));
+  const many = Array.from({ length: 8 }, () => alert({ severity: 'high' }));
+  const result = await notifier.dispatch(batch([...many, alert({ severity: 'watch' })]));
+  assert.equal(telegram.calls.length, 6, 'default cap 5 plus a digest, and the watch alert stays below the default high gate');
+  assert.equal(result.digest.count, 3);
+  assert.ok(!notifier.formatText(alert()).includes('dash.example'));
+  assert.equal(notifier.inQuietHours(new Date(at(3))), false);
+  const zero = setup({ maxPerSweep: 0 });
+  await zero.notifier.dispatch(batch(Array.from({ length: 8 }, () => alert())));
+  assert.equal(zero.telegram.calls.length, 6);
+});
+
+// ─── gates ─────────────────────────────────────────────────────────────────────
+
+test('severity gate: the default minimum is high and minSeverity moves it', async () => {
+  const levels = ['critical', 'high', 'watch', 'info'];
+  const run = async minSeverity => {
+    const env = setup(minSeverity === undefined ? {} : { minSeverity });
+    const result = await env.notifier.dispatch(batch(levels.map(severity => alert({ severity }))));
+    return { sent: result.sent.length, skipped: result.skipped, texts: env.telegram.calls.map(call => call[0].split('\n')[0].match(/^\[(\w+)\]/)[1]) };
+  };
+  assert.deepEqual(await run(), { sent: 2, skipped: 2, texts: ['CRITICAL', 'HIGH'] });
+  assert.deepEqual(await run('watch'), { sent: 3, skipped: 1, texts: ['CRITICAL', 'HIGH', 'WATCH'] });
+  assert.deepEqual(await run('info'), { sent: 4, skipped: 0, texts: ['CRITICAL', 'HIGH', 'WATCH', 'INFO'] });
+  assert.deepEqual(await run('critical'), { sent: 1, skipped: 3, texts: ['CRITICAL'] });
+});
+
+test('an alert whose rule has notify off is never sent', async () => {
+  const env = setup();
+  const result = await env.notifier.dispatch(batch([alert({ severity: 'critical', notify: false }), alert({ severity: 'critical', notify: undefined })], [alert({ severity: 'critical', notify: false })]));
+  assert.deepEqual(result, { sent: [], digest: null, skipped: 3 });
+  assert.deepEqual(everyChannelCalls(env), [0, 0, 0, 0]);
+});
+
+test('a silent (bootstrap) batch sends nothing, even for critical and escalated alerts', async () => {
+  const env = setup();
+  const result = await env.notifier.dispatch(batch([alert({ severity: 'critical', silent: true }), alert({ severity: 'critical' })], [alert({ severity: 'critical' })], true));
+  assert.deepEqual(result, { sent: [], digest: null, skipped: 3 });
+  assert.deepEqual(everyChannelCalls(env), [0, 0, 0, 0]);
+});
+
+test('a created alert flagged silent stays silent, but a later escalation of it notifies', async () => {
+  const env = setup();
+  const created = await env.notifier.dispatch(batch([alert({ severity: 'critical', silent: true })]));
+  assert.deepEqual(created, { sent: [], digest: null, skipped: 1 });
+  assert.deepEqual(everyChannelCalls(env), [0, 0, 0, 0]);
+
+  const escalated = alert({ severity: 'critical', silent: true });
+  const result = await env.notifier.dispatch(batch([], [escalated]));
+  assert.equal(result.sent.length, 1);
+  assert.equal(result.sent[0].alertId, escalated.id);
+  assert.deepEqual(result.sent[0].channels, CHANNELS);
+  assert.deepEqual(everyChannelCalls(env), [1, 1, 1, 1]);
+  assert.equal(JSON.parse(env.hookCalls()[0].init.body).escalated, true);
+});
+
+test('escalation re-notifies; an alert listed twice is sent once', async () => {
+  const env = setup();
+  const first = alert({ severity: 'high' });
+  await env.notifier.dispatch(batch([first]));
+  const result = await env.notifier.dispatch(batch([], [{ ...first, severity: 'critical' }]));
+  assert.equal(env.telegram.calls.length, 2);
+  assert.match(env.telegram.calls[1][0], /^\[CRITICAL\]/);
+  assert.equal(result.sent.length, 1);
+
+  const dup = alert();
+  const twice = await env.notifier.dispatch(batch([dup], [dup]));
+  assert.equal(twice.sent.length, 1);
+  assert.equal(twice.skipped, 1);
+  assert.equal(env.telegram.calls.length, 3);
+});
+
+test('no channel configured: nothing to do, nothing held', async () => {
+  const notifier = new AlertNotifier({ quietHours: '00:00-23:59', now: () => at(12), logger: recorder() });
+  assert.deepEqual(await notifier.dispatch(batch([alert({ severity: 'critical' })])), { sent: [], digest: null, skipped: 1 });
+});
+
+// ─── cap and digest ───────────────────────────────────────────────────────────
+
+test('at most 5 individual messages per sweep, then one digest with the right count on every channel', async () => {
+  const env = setup({ publicUrl: PUBLIC_URL });
+  const many = [...Array.from({ length: 8 }, () => alert({ severity: 'high' })), alert({ severity: 'critical' })];
+  const result = await env.notifier.dispatch(batch(many));
+
+  assert.equal(result.sent.length, 5);
+  assert.deepEqual(result.digest, { count: 4, channels: CHANNELS });
+  assert.equal(result.skipped, 0);
+  assert.deepEqual(everyChannelCalls(env), [6, 6, 6, 6]);
+  assert.match(env.telegram.calls[0][0], /^\[CRITICAL\]/, 'the most severe alert is not the one that falls into the digest');
+  assert.equal(env.telegram.calls[5][0].split('\n')[0], '+4 more alerts');
+  assert.match(env.telegram.calls[5][0], /crucix$/, 'the digest carries the link too');
+  assert.deepEqual(JSON.parse(env.hookCalls()[5].init.body), { event: 'digest', count: 4, overflow: 4, held: 0 });
+  assert.match(env.ntfyCalls()[5].init.headers.Title, /^Crucix: 4 alerts$/);
+});
+
+test('the cap is configurable and a batch within the cap sends no digest', async () => {
+  const two = setup({ maxPerSweep: 2 });
+  const result = await two.notifier.dispatch(batch(Array.from({ length: 3 }, () => alert())));
+  assert.equal(result.sent.length, 2);
+  assert.equal(result.digest.count, 1);
+  assert.equal(two.telegram.calls[2][0].split('\n')[0], '+1 more alert');
+
+  const five = setup();
+  const fits = await five.notifier.dispatch(batch(Array.from({ length: 5 }, () => alert())));
+  assert.equal(fits.sent.length, 5);
+  assert.equal(fits.digest, null);
+  assert.equal(five.telegram.calls.length, 5);
+});
+
+// ─── text ──────────────────────────────────────────────────────────────────────
+
+test('formatText is plain text: severity, title, summary, up to three evidence titles, then the link', () => {
+  const { notifier } = setup({ publicUrl: PUBLIC_URL });
+  const text = notifier.formatText(alert({
+    severity: 'critical', title: 'Quake near Budapest', summary: 'Magnitude 5 detected',
+    evidence: ['one', 'two', 'three', 'four'].map(word => ({ type: 'event', id: word, title: `Report ${word}` })),
+  }));
+  assert.equal(text, '[CRITICAL] Quake near Budapest\nMagnitude 5 detected\n- Report one\n- Report two\n- Report three\nhttps://dash.example.test/crucix');
+  assert.equal(setup().notifier.formatText(alert({ title: 'Bare', summary: '' })), '[HIGH] Bare');
+});
+
+test('hostile feed text stays literal on Telegram: no parse mode, markdown characters untouched, one line per field', async () => {
+  const env = setup();
+  const title = '*_[x](http://evil) `code` <b>bold</b> @everyone';
+  await env.notifier.dispatch(batch([alert({ title, summary: `line one\nline two\r\n${String.fromCharCode(0x202e)}reversed`, evidence: [{ title: '_[y](http://evil2)' }] })]));
+  const [text, options] = env.telegram.calls[0];
+  assert.equal(text, `[HIGH] ${title}\nline one line two reversed\n- _[y](http://evil2)`);
+  assert.equal(options.parseMode, null);
+  assert.ok(!text.includes(String.fromCharCode(0x202e)));
+});
+
+test('long fields are truncated: a 400-character title to 160, and the whole message stays under every channel limit', () => {
+  const { notifier } = setup({ publicUrl: `https://dash.example.test/${'p'.repeat(450)}` });
+  const long = 'x'.repeat(400);
+  const first = notifier.formatText(alert({ title: long })).split('\n')[0];
+  assert.equal(first, `[HIGH] ${'x'.repeat(160)}`);
+
+  const text = notifier.formatText(alert({ title: long, summary: 'y'.repeat(100000), evidence: Array.from({ length: 1000 }, () => ({ title: 'z'.repeat(5000) })) }));
+  assert.ok(text.length < 2000, String(text.length));
+  assert.equal(text.split('\n').filter(line => line.startsWith('- ')).length, 3);
+  assert.ok(text.split('\n').every(line => line.length < 900));
+});
+
+test('a link longer than 500 characters is ignored with a warning', () => {
+  const { notifier, logger } = setup({ publicUrl: `https://dash.example.test/${'p'.repeat(600)}` });
+  assert.ok(!notifier.formatText(alert()).includes('dash.example'));
+  assert.ok(logger.lines.length >= 1);
+});
+
+test('Discord gets the same text with markdown and mentions neutralised', async () => {
+  const env = setup();
+  await env.notifier.dispatch(batch([alert({ title: '*_[x](http://evil) ~~s~~ ||spoiler|| @everyone <@123456> # head > quote', summary: '`tick` \\ back', evidence: [{ title: '> ![img](http://evil)' }] })]));
+  const [content, embeds, options] = env.discord.calls[0];
+  assert.deepEqual(embeds, []);
+  assert.deepEqual(options, { suppressMentions: true });
+  const [head, ...rest] = content.split('\n');
+  assert.ok(head.startsWith('[HIGH] '), 'the severity label itself is not escaped');
+  // Whatever markdown or mention syntax survives the escaping must be preceded by a backslash.
+  for (const line of [head.slice(7), ...rest.map(line => line.replace(/^- /, ''))]) {
+    const bare = line.replace(/\\./g, '');
+    assert.ok(!/[*_~`|>#[\]()<@]/.test(bare), `unescaped syntax in: ${line}`);
+  }
+  assert.ok(content.includes('\\@everyone') && content.includes('\\<\\@123456\\>'));
+  assert.ok(content.includes('\\[x\\]\\(http://evil\\)'));
+});
+
+test('the Discord link line is left unescaped so the URL still works', async () => {
+  const env = setup({ publicUrl: 'https://dash.example.test/a_b_c' });
+  await env.notifier.dispatch(batch([alert()]));
+  assert.equal(env.discord.calls[0][0].split('\n').at(-1), 'https://dash.example.test/a_b_c');
+});
+
+// ─── webhook ───────────────────────────────────────────────────────────────────
+
+test('the webhook gets valid JSON with the hostile title intact as data', async () => {
+  const env = setup();
+  const title = '*_[x](http://evil) "quoted" </script><img src=x onerror=alert(1)> \\ ';
+  const hostile = alert({ severity: 'critical', title, summary: '{"event":"x"}', evidence: [{ type: 'event', id: 'e1', title: '<b>t</b>', source: 'ACLED' }] });
+  await env.notifier.dispatch(batch([hostile]));
+
+  const [call] = env.hookCalls();
+  assert.equal(call.init.method, 'POST');
+  assert.equal(call.init.headers['Content-Type'], 'application/json');
+  assert.ok(!('Authorization' in call.init.headers), 'the ntfy token never goes to the webhook');
+  const body = JSON.parse(call.init.body);
+  assert.equal(body.event, 'alert');
+  assert.equal(body.escalated, false);
+  assert.equal(body.alert.id, hostile.id);
+  assert.equal(body.alert.title, title);
+  assert.equal(body.alert.summary, '{"event":"x"}');
+  assert.equal(body.alert.severity, 'critical');
+  assert.deepEqual(body.alert.evidence, hostile.evidence);
+  assert.ok(!('log' in body.alert) && !('dedupKey' in body.alert), 'internal bookkeeping stays out of the payload');
+});
+
+// ─── ntfy ──────────────────────────────────────────────────────────────────────
+
+test('ntfy: POST with the text body, the priority mapping and a Bearer header only when a token is set', async () => {
+  const priorities = { critical: 5, high: 4, watch: 3, info: 2 };
+  for (const [severity, priority] of Object.entries(priorities)) {
+    const live = setup({ minSeverity: 'info' });
+    const item = alert({ severity, title: 'Plain title', summary: 'Details' });
+    await live.notifier.dispatch(batch([item]));
+    const [call] = live.ntfyCalls();
+    assert.equal(call.init.method, 'POST');
+    assert.equal(call.init.headers.Priority, String(priority), severity);
+    assert.equal(call.init.headers.Authorization, `Bearer ${TOKEN}`);
+    assert.equal(call.init.headers.Title, `[${severity.toUpperCase()}] Plain title`);
+    assert.equal(call.init.headers['Content-Type'], 'text/plain; charset=utf-8');
+    assert.equal(call.init.body, live.notifier.formatText(item));
+  }
+
+  const open = setup({ ntfy: { url: NTFY_URL } });
+  await open.notifier.dispatch(batch([alert()]));
+  assert.ok(!('Authorization' in open.ntfyCalls()[0].init.headers));
+});
+
+test('ntfy header values are ASCII-safe even for Hungarian, non-Latin-1 and multi-line titles', async () => {
+  const env = setup();
+  const title = 'Árvíz riasztás — tűz\nDunakeszi őű 中文 🔥';
+  const hostile = alert({ title, ruleId: 'events-critical', severity: 'critical' });
+  await env.notifier.dispatch(batch([hostile, alert({ ruleId: 'árvíz\nX: injected', severity: 'critical', title: 'plain' })]));
+
+  const calls = env.ntfyCalls();
+  assert.equal(calls.length, 2);
+  for (const { init } of calls) {
+    for (const [name, value] of Object.entries(init.headers)) {
+      assert.match(name, /^[A-Za-z-]+$/);
+      assert.match(value, /^[\x20-\x7e]*$/, `${name}: ${JSON.stringify(value)}`);
+    }
+  }
+  // RFC 2047 encoded word: it decodes back to the cleaned title, and the body carries the text as UTF-8.
+  const encoded = calls[0].init.headers.Title;
+  const match = /^=\?UTF-8\?B\?([A-Za-z0-9+/=]+)\?=$/.exec(encoded);
+  assert.ok(match, encoded);
+  assert.equal(Buffer.from(match[1], 'base64').toString('utf8'), `[CRITICAL] ${title.replace(/\s+/g, ' ')}`);
+  assert.ok(calls[0].init.body.includes('Árvíz riasztás'));
+  assert.ok(!('X' in calls[1].init.headers) && !('injected' in calls[1].init.headers));
+  assert.match(calls[1].init.headers.Tags, /^[a-z0-9_,-]+$/, 'a rule id that is not a safe tag is left out');
+});
+
+test('ntfy tags carry the severity and the rule id', async () => {
+  const env = setup();
+  await env.notifier.dispatch(batch([alert({ severity: 'critical', ruleId: 'vix-spike' })]));
+  assert.equal(env.ntfyCalls()[0].init.headers.Tags, 'rotating_light,crucix,vix-spike');
+});
+
+test('network calls use a 10 s abort signal, refuse redirects and never read the response body', async () => {
+  let bodyRead = false;
+  const fetch = fakeFetch(() => ({ ok: true, status: 200, text() { bodyRead = true; return ''; }, json() { bodyRead = true; return {}; }, arrayBuffer() { bodyRead = true; return new ArrayBuffer(0); } }));
+  const env = setup({ fetch });
+  const result = await env.notifier.dispatch(batch([alert()]));
+  assert.equal(fetch.calls.length, 2);
+  for (const { init } of fetch.calls) {
+    assert.ok(init.signal instanceof AbortSignal);
+    assert.equal(init.signal.aborted, false);
+    assert.equal(init.redirect, 'error');
+    assert.equal(init.method, 'POST');
+  }
+  assert.equal(bodyRead, false);
+  assert.deepEqual(result.sent[0].channels, CHANNELS);
+});
+
+// ─── failures ──────────────────────────────────────────────────────────────────
+
+test('a throwing or failing channel does not stop the others and no log line leaks a secret', async () => {
+  const fetch = fakeFetch(url => {
+    if (url === NTFY_URL) throw Object.assign(new Error(`connect ECONNREFUSED ${NTFY_URL} Bearer ${TOKEN}`), { name: 'TypeError' });
+    return { ok: false, status: 500, statusText: HOOK_URL };
+  });
+  const env = setup({ telegram: fakeTelegram({ throws: true }), fetch });
+  const result = await env.notifier.dispatch(batch([alert({ severity: 'critical' }), alert({ severity: 'high' })]));
+
+  assert.equal(env.telegram.calls.length, 2, 'the failing channel is still tried for every message');
+  assert.equal(env.discord.calls.length, 2);
+  assert.deepEqual(result.sent.map(entry => entry.channels), [['discord'], ['discord']]);
+  assert.ok(env.logger.lines.length >= 4);
+  const log = env.logger.lines.join('\n');
+  for (const secret of SECRETS) assert.ok(!log.includes(secret), `log leaks ${secret}`);
+  assert.match(log, /telegram/);
+  assert.match(log, /ntfy.*TypeError/);
+  assert.match(log, /webhook.*HTTP 500/);
+});
+
+test('a channel that answers not-ok is not reported as sent', async () => {
+  const env = setup({ telegram: Object.assign(fakeTelegram(), { result: { ok: false } }), discord: Object.assign(fakeDiscord(), { result: false }) });
+  const result = await env.notifier.dispatch(batch([alert()]));
+  assert.deepEqual(result.sent, [{ alertId: result.sent[0].alertId, channels: ['ntfy', 'webhook'] }]);
+  const none = setup({ telegram: Object.assign(fakeTelegram(), { result: { ok: false } }), discord: Object.assign(fakeDiscord(), { result: false }), fetch: fakeFetch(() => ({ ok: false, status: 503 })) });
+  assert.deepEqual(await none.notifier.dispatch(batch([alert()])), { sent: [], digest: null, skipped: 0 });
+});
+
+test('dispatch never throws, whatever it is given', async () => {
+  const env = setup();
+  const throwing = { get severity() { throw new Error('getter'); }, id: 'x', notify: true };
+  for (const input of [undefined, null, 'x', 42, {}, { created: 'no' }, batch([null, 1, 'x', [], throwing]), { created: [alert()], escalated: null }]) {
+    const result = await env.notifier.dispatch(input);
+    assert.ok(Array.isArray(result.sent));
+    assert.equal(typeof result.skipped, 'number');
+  }
+  const broken = setup({ logger: { warn() { throw new Error('logger down'); }, error() { throw new Error('logger down'); }, log() { throw new Error('logger down'); } }, telegram: fakeTelegram({ throws: true }) });
+  assert.equal((await broken.notifier.dispatch(batch([alert()]))).sent.length, 1);
+});
+
+// ─── quiet hours ───────────────────────────────────────────────────────────────
+
+test('parseQuietHours: valid windows, wrap past midnight, and everything else is null', () => {
+  assert.deepEqual(parseQuietHours('22:00-07:00'), { start: 1320, end: 420 });
+  assert.deepEqual(parseQuietHours('09:30-17:45'), { start: 570, end: 1065 });
+  assert.deepEqual(parseQuietHours(' 6:05 - 7:00 '), { start: 365, end: 420 });
+  assert.deepEqual(parseQuietHours('00:00-23:59'), { start: 0, end: 1439 });
+  for (const bad of ['', '  ', null, undefined, 42, {}, '22:00', '22:00-', '25:00-07:00', '22:60-07:00', '22:00-24:00', 'ab:cd-ef:gh', '22:00-22:00', '22:00-07:00;x', '22.00-07.00', '22:00–07:00', `22:00-07:00${' '.repeat(100)}x`]) {
+    assert.equal(parseQuietHours(bad), null, JSON.stringify(bad));
+  }
+});
+
+test('inQuietHours follows the injected clock: wrap window, plain window, start inclusive, end exclusive, none configured', () => {
+  const wrap = setup({ quietHours: '22:00-07:00' }).notifier;
+  for (const [hour, minute, quiet] of [[22, 0, true], [23, 30, true], [0, 0, true], [6, 59, true], [7, 0, false], [12, 0, false], [21, 59, false]]) {
+    assert.equal(wrap.inQuietHours(new Date(at(hour, minute))), quiet, `${hour}:${minute}`);
+  }
+  const plain = setup({ quietHours: '09:30-17:45' }).notifier;
+  for (const [hour, minute, quiet] of [[9, 29, false], [9, 30, true], [12, 0, true], [17, 44, true], [17, 45, false], [23, 0, false]]) {
+    assert.equal(plain.inQuietHours(new Date(at(hour, minute))), quiet, `${hour}:${minute}`);
+  }
+  const none = setup().notifier;
+  assert.equal(none.inQuietHours(new Date(at(3))), false);
+  assert.equal(none.inQuietHours(new Date(NaN)), false);
+  assert.equal(wrap.inQuietHours(new Date(NaN)), false);
+});
+
+test('during quiet hours critical goes through, high is held and released as one digest after the window', async () => {
+  const env = setup({ quietHours: '22:00-07:00' });
+  env.clock.now = at(23, 30);
+  const first = await env.notifier.dispatch(batch([alert({ severity: 'critical', title: 'Critical one' }), alert({ severity: 'high' }), alert({ severity: 'high' })]));
+  assert.equal(env.telegram.calls.length, 1);
+  assert.match(env.telegram.calls[0][0], /^\[CRITICAL\] Critical one/);
+  assert.equal(first.sent.length, 1);
+  assert.equal(first.digest, null);
+  assert.equal(first.skipped, 0, 'held alerts are not skipped');
+
+  env.clock.now = at(23, 45);
+  assert.deepEqual(await env.notifier.dispatch(batch()), { sent: [], digest: null, skipped: 0 });
+  assert.equal(env.telegram.calls.length, 1);
+
+  env.clock.now = at(7, 5, 3);
+  const released = await env.notifier.dispatch(batch());
+  assert.deepEqual(released, { sent: [], digest: { count: 2, channels: CHANNELS }, skipped: 0 });
+  assert.equal(env.telegram.calls.length, 2);
+  assert.equal(env.telegram.calls[1][0].split('\n')[0], '2 alerts held during quiet hours');
+  assert.deepEqual(JSON.parse(env.hookCalls()[1].init.body), { event: 'digest', count: 2, overflow: 0, held: 2 });
+
+  env.clock.now = at(7, 20, 3);
+  assert.deepEqual(await env.notifier.dispatch(batch()), { sent: [], digest: null, skipped: 0 });
+  assert.equal(env.telegram.calls.length, 2, 'the digest is sent once');
+});
+
+test('the release digest also merges with the cap overflow of the same dispatch', async () => {
+  const env = setup({ quietHours: '22:00-07:00', maxPerSweep: 1 });
+  env.clock.now = at(23, 0);
+  await env.notifier.dispatch(batch([alert()]));
+  env.clock.now = at(8, 0, 3);
+  const result = await env.notifier.dispatch(batch([alert(), alert(), alert()]));
+  assert.equal(result.sent.length, 1);
+  assert.deepEqual(result.digest, { count: 3, channels: CHANNELS });
+  assert.deepEqual(env.telegram.calls.at(-1)[0].split('\n').slice(0, 2), ['+2 more alerts', '1 alert held during quiet hours']);
+});
+
+test('a held alert that escalates to critical during quiet hours is sent at once and not counted again', async () => {
+  const env = setup({ quietHours: '22:00-07:00' });
+  env.clock.now = at(23, 0);
+  const held = alert({ severity: 'high' });
+  await env.notifier.dispatch(batch([held]));
+  assert.equal(env.telegram.calls.length, 0);
+
+  env.clock.now = at(23, 30);
+  const result = await env.notifier.dispatch(batch([], [{ ...held, severity: 'critical' }]));
+  assert.equal(result.sent.length, 1);
+  assert.equal(env.telegram.calls.length, 1);
+
+  env.clock.now = at(8, 0, 3);
+  assert.deepEqual(await env.notifier.dispatch(batch()), { sent: [], digest: null, skipped: 0 });
+  assert.equal(env.telegram.calls.length, 1);
+});
+
+test('a release digest that no channel accepted stays held for the next dispatch', async () => {
+  const env = setup({ quietHours: '22:00-07:00', ntfy: undefined, webhook: undefined, discord: undefined });
+  env.clock.now = at(23, 0);
+  await env.notifier.dispatch(batch([alert()]));
+  env.clock.now = at(8, 0, 3);
+  env.telegram.result = { ok: false };
+  assert.equal((await env.notifier.dispatch(batch())).digest, null);
+  env.telegram.result = { ok: true };
+  const retry = await env.notifier.dispatch(batch());
+  assert.deepEqual(retry.digest, { count: 1, channels: ['telegram'] });
+  assert.equal(env.telegram.calls.length, 2);
+});
+
+test('a silent batch neither sends nor releases held alerts', async () => {
+  const env = setup({ quietHours: '22:00-07:00' });
+  env.clock.now = at(23, 0);
+  await env.notifier.dispatch(batch([alert()]));
+  env.clock.now = at(8, 0, 3);
+  assert.deepEqual(await env.notifier.dispatch(batch([], [], true)), { sent: [], digest: null, skipped: 0 });
+  assert.equal(env.telegram.calls.length, 0);
+  assert.equal((await env.notifier.dispatch(batch())).digest.count, 1);
+});
+
+// ─── the existing alerters keep their behaviour ────────────────────────────────
+
+test('TelegramAlerter.sendMessage defaults to Markdown and sends plain text for parseMode null', async t => {
+  const original = globalThis.fetch;
+  const bodies = [];
+  globalThis.fetch = async (url, init) => { bodies.push(JSON.parse(init.body)); return { ok: true, json: async () => ({ result: { message_id: 7 } }) }; };
+  t.after(() => { globalThis.fetch = original; });
+  const bot = new TelegramAlerter({ botToken: '123:abc', chatId: '42' });
+
+  assert.deepEqual(await bot.sendMessage('a'), { ok: true, messageId: 7 });
+  assert.deepEqual(await bot.sendMessage('b', { parseMode: null }), { ok: true, messageId: 7 });
+  await bot.sendMessage('c', { parseMode: 'HTML' });
+  assert.equal(bodies[0].parse_mode, 'Markdown');
+  assert.equal('parse_mode' in bodies[1], false);
+  assert.equal(bodies[1].text, 'b');
+  assert.equal(bodies[1].disable_web_page_preview, true);
+  assert.equal(bodies[2].parse_mode, 'HTML');
+});
+
+test('DiscordAlerter.sendMessage adds allowed_mentions only on request', async t => {
+  const original = globalThis.fetch;
+  const bodies = [];
+  globalThis.fetch = async (url, init) => { bodies.push(JSON.parse(init.body)); return { ok: true, status: 204 }; };
+  t.after(() => { globalThis.fetch = original; });
+  const bot = new DiscordAlerter({ webhookUrl: 'https://discord.example.test/api/webhooks/1/token' });
+
+  assert.equal(await bot.sendMessage('plain call'), true);
+  assert.equal(await bot.sendMessage('quiet call', [], { suppressMentions: true }), true);
+  assert.equal('allowed_mentions' in bodies[0], false);
+  assert.deepEqual(bodies[1], { content: 'quiet call', allowed_mentions: { parse: [] } });
+});

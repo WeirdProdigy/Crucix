@@ -22,6 +22,17 @@ export function envUrl(name, fallback) {
   return url.toString().replace(/\/$/, '');
 }
 
+// An optional http(s) URL from the environment. Unlike envUrl it never throws: an unusable value (other scheme,
+// embedded credentials, not a URL) is treated as unset and the warning names the variable only, never its value.
+function envUrlOrNull(name) {
+  try {
+    return envUrl(name, null);
+  } catch (error) {
+    console.warn(`[Config] ${error.message}; ${name} is ignored`);
+    return null;
+  }
+}
+
 export default {
   port: envInteger('PORT', 3117, 1, 65535),
   host: process.env.HOST || '127.0.0.1',
@@ -67,6 +78,17 @@ export default {
     guildId: process.env.DISCORD_GUILD_ID || null, // Server ID (for instant slash command registration)
     allowedUserIds: (process.env.DISCORD_ALLOWED_USER_IDS || '').split(',').map(id => id.trim()).filter(Boolean),
     webhookUrl: process.env.DISCORD_WEBHOOK_URL || null, // Fallback: webhook-only alerts (no bot needed)
+  },
+
+  // Alert engine: notification channels exist only when their variable is set (see .env.example)
+  alerts: {
+    notifyMinSeverity: (process.env.ALERT_NOTIFY_MIN_SEVERITY || '').trim().toLowerCase() || 'high', // critical | high | watch | info; the notifier validates it
+    quietHours: (process.env.ALERT_QUIET_HOURS || '').trim() || null, // HH:MM-HH:MM local time; the notifier validates it
+    maxNotificationsPerSweep: envInteger('ALERT_MAX_NOTIFICATIONS_PER_SWEEP', 5, 1, 50),
+    publicUrl: envUrlOrNull('ALERT_PUBLIC_URL'), // dashboard link added to notifications
+    ntfy: { url: envUrlOrNull('ALERT_NTFY_URL'), token: process.env.ALERT_NTFY_TOKEN || null },
+    webhook: { url: envUrlOrNull('ALERT_WEBHOOK_URL') },
+    maxActivePerRule: envInteger('ALERT_MAX_ACTIVE_PER_RULE', 50, 1, 500),
   },
 
   // Delta engine thresholds — override defaults from lib/delta/engine.mjs
