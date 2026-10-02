@@ -247,7 +247,9 @@ async function inspectorChecks() {
         const panel = await aside.boundingBox();
         assert(await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('#record-inspector'), [panel.x + panel.width / 2, panel.y + 40]), 'The inspector is the panel on top');
         await page.locator('#alertBell').click(); await alertTray.waitFor({ state: 'visible' }); assert(await aside.isVisible(), 'A tray opened over the inspector leaves it open');
-        await alertTray.locator('[data-alert-action="close"]').click(); await alertTray.waitFor({ state: 'hidden' });
+        // Activating the records card while the inspector is already open closes the tray too (it was only closed on closed -> open before).
+        await card.focus(); await page.keyboard.press('Enter'); await alertTray.waitFor({ state: 'hidden'});
+        assert(await aside.isVisible() && await focused(page, '#record-inspector .ri-row'), 'The card puts the focus into the inspector and the tray steps aside');
         // Expand with 'e', switch to all sources, collapse back with Escape, close with Escape.
         await card.click(); await aside.waitFor({ state: 'visible' }); await page.keyboard.press('e');
         const browserDialog = page.locator('#record-browser[open]'); await browserDialog.waitFor();
@@ -258,6 +260,12 @@ async function inspectorChecks() {
         await page.screenshot({ path: path.join(artifacts, 'browser-desktop.png') });
         await page.keyboard.press('Escape'); await aside.waitFor({ state: 'visible' }); assert.equal(await page.locator('#record-browser[open]').count(), 0); assert.match(hash(page), /src=GDACS/);
         await page.keyboard.press('Escape'); await aside.waitFor({ state: 'hidden' }); assert(await focused(page, '[data-open-records="GDACS"]'));
+        // A hash that opens the inspector while the focus is in the tray hands the focus to the inspector (not to the page).
+        await page.keyboard.press('Escape'); await aside.waitFor({ state: 'hidden' });
+        await page.locator('#alertBell').click(); await alertTray.waitFor({ state: 'visible' }); await alertTray.locator('#at-tab-active').focus();
+        await page.evaluate(() => { location.hash = '#src=GDACS'; }); await aside.waitFor({ state: 'visible' });
+        assert(await alertTray.isHidden(), 'The inspector took the place of the tray'); assert(await focused(page, '#record-inspector .ri-row'), 'The focus went into the inspector instead of dropping to the page');
+        await page.keyboard.press('Escape'); await aside.waitFor({ state: 'hidden' });
         // The hash restores the view on hashchange and on reload; a hostile hash opens nothing and throws nothing.
         await page.goto(target.origin + '/#src=GDACS&sev=high', { waitUntil: 'domcontentloaded' }); await aside.waitFor({ state: 'visible' }); assert.equal(await aside.locator('.ri-row').count(), 1);
         await page.reload({ waitUntil: 'domcontentloaded' }); await page.waitForSelector('#eventsTrigger'); await aside.waitFor({ state: 'visible' }); await page.waitForTimeout(1500);
@@ -295,8 +303,8 @@ async function inspectorChecks() {
     console.log('INSPECTOR mobile PASS', { sheet: box });
   } finally { await context.close(); await fetch(target.origin + '/control?liveSources=false'); }
 }
-// Alerts: the strip under the top bar, the threat drivers, the tray (tabs, acknowledge, snooze, evidence), toasts, the tab
-// title, Esc and focus return, hostile titles, the phone layout. Its own Chromium shows classic scrollbars (Playwright hides
+// Alerts: the strip under the top bar, the threat drivers, the tray (tabs, acknowledge, snooze, evidence, the rules editor), toasts,
+// the tab title, Esc and focus return, hostile titles, the phone layout. Its own Chromium shows classic scrollbars (Playwright hides
 // them by default), so a scrollbar artefact in the screenshots is a real one.
 async function alertChecks() {
   const control = async mode => assert.equal(await (await fetch(target.origin + '/control?alerts=' + mode)).text(), 'ok');
@@ -353,9 +361,10 @@ async function alertChecks() {
       assert.equal(await toggle.getAttribute('aria-expanded'), 'true', 'An update keeps the snooze menu open'); assert(await focused(page, `[data-alert-action="snooze-menu"][data-alert-id="${ids.high}"]`), 'An update keeps the focus');
       await page.keyboard.press('Escape'); assert.equal(await toggle.getAttribute('aria-expanded'), 'false'); assert(await tray.isVisible()); assert(await focused(page, `[data-alert-action="snooze-menu"][data-alert-id="${ids.high}"]`));
       await toggle.click(); await row.locator('[data-alert-action="snooze"][data-minutes="60"]').click(); await level(page, 3);
-      await tray.locator('#at-tab-handled').click(); assert.match(await tray.locator(`.at-alert[data-alert-id="${ids.high}"] .at-state`).innerText(), /Snoozed until/);
+      // textContent, not innerText: a row is content-visibility:auto and its contents are skipped until the next frame, so innerText can be empty right after the redraw.
+      await tray.locator('#at-tab-handled').click(); assert.match(await tray.locator(`.at-alert[data-alert-id="${ids.high}"] .at-state`).textContent(), /Snoozed until/);
       // Evidence opens the event detail over the tray.
-      const evidence = tray.locator(`.at-alert[data-alert-id="${ids.high}"] [data-alert-action="evidence"]`).first(), eventTitle = await evidence.innerText();
+      const evidence = tray.locator(`.at-alert[data-alert-id="${ids.high}"] [data-alert-action="evidence"]`).first(), eventTitle = (await evidence.textContent()).trim();
       await evidence.click(); await page.waitForSelector('#ci-dialog'); assert.equal(await page.locator('#ci-title').innerText(), eventTitle);
       await page.keyboard.press('Escape'); assert.equal(await page.locator('#ci-overlay').count(), 0); assert(await tray.isVisible(), 'Closing the event detail leaves the tray open');
       // Esc closes the tray and returns the focus to the bell.
@@ -373,8 +382,78 @@ async function alertChecks() {
       await page.waitForTimeout(4000); assert.equal(await toast.count(), 1, 'No timer dismisses a toast');
       await toast.locator('[data-alert-action="dismiss"]').click(); assert.equal(await toast.count(), 0); assert(await page.locator('#alertToasts').isHidden(), 'The empty stack takes no room');
       assert.equal(await page.evaluate(() => window.__alertXss), undefined);
+      await rulesChecks(page, false);
       console.log('ALERTS desktop PASS', { ids });
     } finally { await context.close(); }
+  }
+  // The Rules tab: the list, a toggle, an override and its reset, the form for two kinds, a rejected rule (the server's message at the
+  // field), a new threshold rule on the VIX, editing and Esc, a hostile name, the delete question. Everything it creates it deletes.
+  async function rulesChecks(page, phone) {
+    const tray = page.locator('#alertTray'), bell = page.locator('#alertBell'), size = phone ? 'mobile' : 'desktop';
+    const rule = id => tray.locator(`.ar-rule[data-rule-id="${id}"]`);
+    const shot = name => page.screenshot({ path: path.join(artifacts, `alerts-rules-${name}-${size}.png`) });
+    const fits = async what => assert(await tray.evaluate(node => node.scrollWidth <= node.clientWidth + 1), `Nothing in the Rules tab is clipped sideways: ${what}`);
+    if (!await tray.isVisible()) { await bell.click(); await tray.waitFor({ state: 'visible' }); }
+    await tray.locator('#at-tab-rules').click(); await tray.locator('.ar-rule').first().waitFor();
+    assert.equal(await tray.locator('.ar-rule').count(), 8, 'The eight built-in rules'); assert.equal(await tray.locator('.ar-source-builtin').count(), 8);
+    assert.match(await rule('vix-spike').innerText(), /VIX spike[\s\S]*threshold[\s\S]*VIX > 30/i, 'Name, kind and the localised summary (CSS upper-cases the badges)');
+    assert.match(await rule('events-high').innerText(), /= High/); assert.match(await rule('hungary-region').innerText(), /500 km @ 47\.5, 19/);
+    assert.equal(await tray.locator('.ar-rule [data-rule-action="delete"], .ar-rule [data-rule-action="reset"]').count(), 0, 'No delete or reset on a pristine built-in');
+    await fits('list'); await shot('list');
+    // A toggle saves at once and keeps the focus; the rule is then an override that can be reset.
+    const notify = rule('vix-spike').locator('[data-rule-toggle="notify"]');
+    assert.equal(await notify.isChecked(), true); await notify.click(); await rule('vix-spike').locator('.ar-source-override').waitFor();
+    assert.equal(await rule('vix-spike').locator('[data-rule-toggle="notify"]').isChecked(), false, 'The saved state is shown');
+    assert(await focused(page, '#alertTray [data-rule-toggle="notify"][data-rule-id="vix-spike"]'), 'The toggle keeps the focus after the save');
+    await rule('vix-spike').locator('[data-rule-action="reset"]').click(); await rule('vix-spike').locator('.ar-source-builtin').waitFor();
+    assert.equal(await rule('vix-spike').locator('[data-rule-toggle="notify"]').isChecked(), true, 'Reset brings the default back'); assert.match(await tray.locator('.ar-status').innerText(), /reset to default/);
+    // The form: the event fields first, then a threshold.
+    await tray.locator('[data-rule-action="new"]').click(); await tray.locator('#ar-name').waitFor(); assert(await focused(page, '#ar-name'), 'The focus goes into the form');
+    assert.equal(await tray.locator('.ar-list').count(), 0, 'The form replaces the list');
+    assert.deepEqual(await tray.locator('.ar-form [data-rule-field]').evaluateAll(nodes => nodes.map(node => node.dataset.ruleField)),
+      ['name', 'id', 'kind', 'params.minLevel', 'params.maxLevel', 'scope.kinds', 'scope.sources', 'scope.keywords', 'scope.radius.lat', 'scope.radius.lon', 'scope.radius.km', 'severity', 'forSweeps', 'cooldownMinutes', 'enabled', 'notify']);
+    await tray.locator('[data-rule-action="preset-hungary"]').click(); assert.equal(await tray.locator('#ar-lat').inputValue(), '47.5'); assert.equal(await tray.locator('#ar-km').inputValue(), '500');
+    await fits('event form'); await shot('form-event');
+    await tray.locator('#ar-kind').selectOption('threshold'); assert(await focused(page, '#ar-kind'), 'Changing the type keeps the focus on it');
+    assert.equal(await tray.locator('.ar-form [data-rule-field="params.metric"]').count(), 1); assert.equal(await tray.locator('[data-rule-action="preset-hungary"]').count(), 0);
+    await tray.locator('#ar-metric').selectOption('vix'); assert.match(await tray.locator('#ar-metric').evaluate(node => node.selectedOptions[0].textContent), /^VIX — /, 'The metric option carries the current value');
+    assert.match(await tray.locator('.ar-form .ar-hint').first().innerText(), /\S/);
+    await tray.locator('#ar-name').fill('VIX over 30'); await tray.locator('#ar-value').fill('30'); await fits('threshold form'); await shot('form-threshold');
+    // A rule the server refuses: the message sits at its field, what was typed stays, nothing is saved.
+    await tray.locator('#ar-name').fill(''); await tray.locator('.ar-save').click();
+    const nameError = tray.locator('[data-rule-field="name"] .ar-error'); await nameError.waitFor();
+    assert.match(await nameError.innerText(), /must not be empty/); assert.match(await tray.locator('.ar-notice').innerText(), /Could not save the rule/);
+    assert(await focused(page, '#ar-name'), 'The focus goes to the field the server named'); assert.equal(await tray.locator('#ar-value').inputValue(), '30', 'What was typed stays');
+    assert.equal(await tray.locator('#ar-name').getAttribute('aria-invalid'), 'true'); assert.equal(await tray.locator('.ar-rule').count(), 0);
+    await fits('error state'); await shot('form-error');
+    await tray.locator('#ar-name').fill('VIX over 30'); await tray.locator('#ar-value').fill('abc'); await tray.locator('.ar-save').click();
+    await tray.locator('[data-rule-field="params.value"] .ar-error').waitFor(); assert.match(await tray.locator('[data-rule-field="params.value"] .ar-error').innerText(), /number/, 'A value that is no number is named at its own field');
+    await tray.locator('#ar-value').fill('30'); await tray.locator('.ar-save').click();
+    await rule('vix-over-30').waitFor(); assert.match(await rule('vix-over-30').innerText(), /VIX over 30[\s\S]*custom[\s\S]*VIX > 30/i); assert.equal(await tray.locator('.ar-source-user').count(), 1);
+    assert(await focused(page, '#alertTray [data-rule-action="edit"][data-rule-id="vix-over-30"]'), 'The focus goes to the new rule\'s Edit button'); assert.match(await tray.locator('.ar-status').innerText(), /Rule saved/);
+    await page.waitForFunction(() => document.getElementById('alertRulesLive')?.textContent === 'Rule saved'); // The result is spoken through the status node (a moment after it is drawn)
+    // Editing: the values come back; Esc closes the form first and the tray after.
+    await rule('vix-over-30').locator('[data-rule-action="edit"]').click(); await tray.locator('#ar-value').waitFor();
+    assert.equal(await tray.locator('#ar-value').inputValue(), '30'); assert.equal(await tray.locator('#ar-metric').inputValue(), 'vix'); assert.equal(await tray.locator('#ar-kind').count(), 0, 'The type of an existing rule is fixed');
+    await page.keyboard.press('Escape'); assert.equal(await tray.locator('.ar-form').count(), 0); assert(await tray.isVisible(), 'The first Esc closes the form only');
+    assert(await focused(page, '#alertTray [data-rule-action="edit"][data-rule-id="vix-over-30"]'), 'Esc returns the focus to the rule');
+    // A live update does not take away a form that is open.
+    await rule('vix-over-30').locator('[data-rule-action="edit"]').click(); await tray.locator('#ar-name').fill('Typing while the page updates'); await tray.locator('#ar-name').focus();
+    await page.evaluate(() => pollSnapshot()); await page.waitForTimeout(900);
+    assert.equal(await tray.locator('#ar-name').inputValue(), 'Typing while the page updates', 'A redraw of the tray keeps the form'); assert(await focused(page, '#ar-name'), 'and the focus');
+    await tray.locator('[data-rule-action="cancel"]').click();
+    // A hostile name stays text.
+    await tray.locator('[data-rule-action="new"]').click(); await tray.locator('#ar-name').fill('<img src=x onerror="window.__ruleXss=1">'); await tray.locator('#ar-id').fill('hostile-rule'); await tray.locator('.ar-save').click();
+    await rule('hostile-rule').waitFor(); assert.equal(await page.evaluate(() => window.__ruleXss), undefined); assert.equal(await tray.locator('img').count(), 0); assert.match(await rule('hostile-rule').innerText(), /<img src=x/);
+    // The delete question, then the deletion; the page's rule count is the server's.
+    for (const id of ['hostile-rule', 'vix-over-30']) {
+      await rule(id).locator('[data-rule-action="delete"]').click(); assert(await focused(page, '#alertTray [data-rule-action="delete-confirm"]'), 'The question takes the focus');
+      if (id === 'hostile-rule') { await rule(id).locator('[data-rule-action="cancel-confirm"]').click(); assert.equal(await rule(id).count(), 1, 'Cancel keeps the rule'); await rule(id).locator('[data-rule-action="delete"]').click(); }
+      await rule(id).locator('[data-rule-action="delete-confirm"]').click(); await rule(id).waitFor({ state: 'detached' });
+    }
+    assert.match(await tray.locator('.ar-status').innerText(), /Rule deleted/); assert.equal(await tray.locator('.ar-rule').count(), 8); assert(await focused(page, '#alertTray [data-rule-action="new"]'));
+    assert.equal(await page.evaluate(() => window.__ruleXss), undefined);
+    await tray.locator('#at-tab-active').click(); assert.equal(await tray.locator('.ar-panel').count(), 0, 'Back on the Active tab');
   }
   async function phone({ context, page }) {
     try {
@@ -392,6 +471,8 @@ async function alertChecks() {
       await control('newcritical'); const toast = page.locator('#alertToasts .al-toast'); await toast.waitFor(); await page.waitForTimeout(300);
       const card = await toast.boundingBox(); assert(card.x >= 0 && card.x + card.width <= 390 && card.y + card.height <= 844, 'The toast fits the phone screen');
       await page.screenshot({ path: path.join(artifacts, 'alerts-toast-mobile.png') });
+      await toast.locator('[data-alert-action="dismiss"]').click();
+      await rulesChecks(page, true);
       console.log('ALERTS mobile PASS', { strip: box, sheet });
     } finally { await context.close(); }
   }

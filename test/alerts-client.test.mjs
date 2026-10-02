@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 import { DEFAULT_RULES } from '../lib/alerts/rules.mjs';
+import { dom } from './fixtures/alert-dom.mjs';
 const read=file=>readFileSync(new URL('../dashboard/public/'+file,import.meta.url),'utf8');
 // record-core.js, alerts-core.js and alerts.js share one realm, as in the page; a fresh realm per test, so nothing leaks.
 // Results cross the realm boundary: compare plain data through JSON (prototypes differ).
@@ -276,29 +277,7 @@ test('robustness: garbage summaries, views and translators never throw',()=>{
 });
 
 // ===== Controller =====
-// A minimal DOM: elements keep their attributes, listeners and innerHTML; queries find nothing, except the toast nodes that
-// insertAdjacentHTML adds (one per call, matched by class, level class or data-alert-id). Enough for mount/update/open, the
-// toast stack and for driving the delegated click listener with a fake button.
-const TOAST_SELECTOR=/^\.al-toast(-[a-z]+)?(?:\[data-alert-id="([^"]*)"\])?$/;
-function dom({protocol='http:',topbar=true,fetch,offline=false,files=['record-core.js','alerts-core.js','alerts.js'],hash=''}={}){
-  const ids=new Map(),errors=[],calls=[],opened=[],listeners={document:{},window:{}},on=(table,type,fn)=>{(table[type]??=[]).push(fn);};
-  const el=tag=>{const node={tag,id:'',hidden:false,className:'',innerHTML:'',textContent:'',attrs:{},handlers:{},kids:[],isConnected:true,focused:0,
-    style:{setProperty(k,v){node.style[k]=v;}},classList:{set:new Set(),add(c){this.set.add(c);},remove(c){this.set.delete(c);},toggle(c,on){if(on)this.set.add(c);else this.set.delete(c);},contains(c){return this.set.has(c);}},
-    setAttribute(k,v){node.attrs[k]=String(v);},getAttribute(k){return Object.hasOwn(node.attrs,k)?node.attrs[k]:null;},hasAttribute(k){return Object.hasOwn(node.attrs,k);},removeAttribute(k){delete node.attrs[k];},
-    addEventListener(type,fn){node.handlers[type]=fn;},after(...nodes){nodes.forEach(add);},append(...nodes){nodes.forEach(add);},
-    insertAdjacentHTML(_,html){node.innerHTML+=html;const kid={html,inner:{},contains:x=>x===kid.inner,remove(){node.kids=node.kids.filter(item=>item!==kid);node.innerHTML=node.innerHTML.replace(html,'');}};node.kids.push(kid);},
-    querySelector(){return null;},querySelectorAll(selector){const m=TOAST_SELECTOR.exec(selector);return m?node.kids.filter(kid=>(!m[1]||kid.html.includes('al-toast'+m[1]+'"'))&&(m[2]===undefined||kid.html.includes(`data-alert-id="${m[2]}"`))):[];},
-    contains(){return false;},closest(){return null;},getBoundingClientRect(){return {top:40,bottom:80};},focus(){node.focused++;}};return node;};
-  const add=node=>{if(node.id)ids.set(node.id,node);};
-  const document={title:'Crucix',activeElement:null,body:el('body'),createElement:el,getElementById:id=>ids.get(id)||null,querySelector(){return null;},querySelectorAll(){return [];},addEventListener:(type,fn)=>on(listeners.document,type,fn)};
-  if(topbar){const bar=el('div');bar.id='topbar';add(bar);const bell=el('button');bell.id='alertBell';add(bell);}
-  const spy=fetch||(async(url,init)=>{calls.push([url,init]);return {ok:true,status:200,json:async()=>({alerts:[]})};});
-  const window={addEventListener:(type,fn)=>on(listeners.window,type,fn),CrucixIntelligence:{openEvent:id=>opened.push(id)},...(offline?{__CRUCIX_OFFLINE_SHELL__:true}:{})};
-  const location={protocol,hash,pathname:'/',search:''};
-  const context=vm.createContext({window,document,location,history:{replaceState(){}},console:{error:(...args)=>errors.push(args)},fetch:(...args)=>spy(...args),CSS:{escape:value=>String(value)},Date,URL,JSON,setTimeout,clearTimeout,setInterval:()=>0});
-  for(const file of files)vm.runInContext(read(file),context);
-  return {A:window.CrucixAlerts,window,document,location,listeners,errors,calls,opened,byId:id=>ids.get(id)};
-}
+// The fake DOM is test/fixtures/alert-dom.mjs.
 const button=attrs=>{const node={getAttribute:k=>Object.hasOwn(attrs,k)?attrs[k]:null,hasAttribute:k=>Object.hasOwn(attrs,k),closest:()=>node,focus(){},setAttribute(k,v){attrs[k]=String(v);}};return node;};
 const click=(root,attrs)=>root.handlers.click({currentTarget:root,target:button(attrs),preventDefault(){}});
 const ticks=()=>new Promise(resolve=>setTimeout(resolve,20));
@@ -524,4 +503,29 @@ test('controller: a failed request keeps the status and the server error for the
     assert(error&&typeof error.message==='string','an Error',String(status)); assert.match(error.message,new RegExp('HTTP '+status));
     assert.deepEqual(plain({status:error.status,code:error.code,field:error.field,detail:error.detail}),expected,String(status));
   }
+});
+
+test('renderTray: the Rules tab shows the rule editor when it is loaded and a view is given, else the empty placeholder',()=>{
+  const load4=()=>{const window={},context=vm.createContext({window,Date,URL});for(const file of ['record-core.js','alerts-core.js','alerts.js','alert-rules.js'])vm.runInContext(read(file),context);return window;};
+  const A=load4().CrucixAlerts,rules={rules:[{id:'vix-spike',name:'VIX spike',kind:'threshold',severity:'high',enabled:true,notify:true,source:'builtin',params:{metric:'vix',op:'>',value:30}}],metrics:[],editing:null};
+  const html=A.renderTray(view([],{tab:'rules',rules}),t,now);
+  assert(html.includes('<div class="at-rules"><section class="ar-panel"')&&html.includes('data-rule-id="vix-spike"'),'the editor fills the placeholder');
+  assert(A.renderTray(view([],{tab:'rules'}),t,now).includes('<div class="at-rules"></div>'),'no view of its own: empty');
+  assert(!A.renderTray(view([],{tab:'active',rules}),t,now).includes('ar-panel'),'only on the Rules tab');
+  // An editor that throws, or answers with something else, never breaks the tray.
+  const broken=load4();broken.CrucixAlertRules.renderRules=()=>{throw new Error('boom');};
+  assert(broken.CrucixAlerts.renderTray(view([],{tab:'rules',rules}),t,now).includes('<div class="at-rules"></div>'));
+});
+
+test('controller: a redraw puts the focus and the caret back into the text field that had them',()=>{
+  const {A,byId,document}=dom();A.mount({getSummary:()=>summaryOf(firing()),t,now:()=>now});A.open();
+  const tray=byId('alertTray'),typed={id:'ar-name',selectionStart:3,selectionEnd:5,hasAttribute:()=>false,getAttribute:()=>null};
+  const fresh={focused:0,selection:null,focus(){this.focused++;},setSelectionRange(start,end){this.selection=[start,end];}};
+  tray.contains=node=>node===typed;document.activeElement=typed;tray.querySelector=selector=>selector==='#ar-name'?fresh:null;
+  assert(A.update(summaryOf(firing(),{generatedAt:Date.now()+60000})),'a newer summary redraws the tray');
+  assert.equal(fresh.focused,1,'the focus came back'); assert.deepEqual(plain(fresh.selection),[3,5],'with its caret and selection');
+  // A checkbox has no caret (selectionStart is null) and nothing to restore.
+  const box={id:'ar-notify',selectionStart:null,selectionEnd:null,hasAttribute:()=>false,getAttribute:()=>null},again={focused:0,focus(){this.focused++;}};
+  tray.contains=node=>node===box;document.activeElement=box;tray.querySelector=selector=>selector==='#ar-notify'?again:null;
+  assert.doesNotThrow(()=>A.update(summaryOf(firing(),{generatedAt:Date.now()+120000}))); assert.equal(again.focused,1);
 });

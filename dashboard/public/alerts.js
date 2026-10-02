@@ -122,15 +122,22 @@
       +(rows?`<ul>${rows}</ul>`:`<p class="at-empty">${tx('alerts.calm','No active alerts')}</p>`)+'</section>';
   }
 
-  // Inner HTML of #alertTray. view = {tab, alerts, summary, expandedGroups: string[], threatOpen: boolean}; the alerts of
-  // every state may be given, each tab shows its own. The Rules tab is an empty div.at-rules (filled by the rule editor).
+  // The Rules tab's content comes from the rule editor (alert-rules.js, loaded after this file): without it, or without a view
+  // of its own, the tab is an empty div.at-rules.
+  function rulesPanel(rules,t){
+    const editor=window.CrucixAlertRules;
+    if(!obj(rules)||typeof editor?.renderRules!=='function')return '';
+    try{return editor.renderRules(rules,t);}catch(error){log(error);return '';}
+  }
+  // Inner HTML of #alertTray. view = {tab, alerts, summary, expandedGroups: string[], threatOpen: boolean, rules}; the alerts of
+  // every state may be given, each tab shows its own. `rules` is the rule editor's view (CrucixAlertRules.view()).
   function renderTray(view,t,now){
     const v=obj(view)||{},tx=translator(t),s=obj(v.summary)||{},tab=TABS.some(([id])=>id===v.tab)?v.tab:'active';
     const all=sortAlerts(v.alerts).filter(alert=>text(alert.id));
     const inTab=states=>all.filter(alert=>states.includes(alert.state));
     const tabs=TABS.map(([id,key,fallback,states])=>`<button type="button" role="tab" class="at-tab" id="at-tab-${id}" data-alert-tab="${id}" aria-selected="${id===tab}" aria-controls="at-panel" tabindex="${id===tab?0:-1}">${tx('alerts.'+key,fallback)}${states?` <span class="at-tab-count">${inTab(states).length}</span>`:''}</button>`).join('');
     const states=TABS.find(([id])=>id===tab)[3],shown=states?inTab(states):[];
-    const panel=states?(tab==='active'&&shown.length?ackAll(tx,shown):'')+alertList(tx,shown,v,s,now,tab):'<div class="at-rules"></div>';
+    const panel=states?(tab==='active'&&shown.length?ackAll(tx,shown):'')+alertList(tx,shown,v,s,now,tab):`<div class="at-rules">${rulesPanel(v.rules,t)}</div>`;
     const close=tx('alerts.close','Close');
     return `<header class="at-head"><h2 id="at-heading">${tx('alerts.title','Alerts')}</h2><button type="button" class="ri-icon" data-alert-action="close" aria-label="${close}" title="${close}"><span aria-hidden="true">×</span></button></header>`
       +(v.threatOpen===true?drivers(tx,s,all):'')
@@ -155,7 +162,7 @@
   // tray's list from GET /api/alerts. File pages and the offline shell are read-only: summary only, no request, no actions.
   // Every entry point catches its own errors: an alert failure never stops the dashboard.
   const ALERT_ID=/^alert-[0-9a-f]{32}$/,EVENT_ID=/^event-[0-9a-f]{32}$/,TAB_IDS=TABS.map(([id])=>id),MAX_TOASTS=3,SCROLLERS=['.at-panel','.at-drivers'];
-  const FOCUS_ATTRS=['data-alert-action','data-alert-id','data-minutes','data-severity','data-rule-id','data-event-id'];
+  const FOCUS_ATTRS=['data-alert-action','data-alert-id','data-minutes','data-severity','data-rule-id','data-event-id','data-rule-action','data-rule-toggle'];
   const BELL='<svg class="al-bell-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false"><path d="M8 1.75a4 4 0 0 0-4 4v2.5l-1.25 2.5h10.5L12 8.25v-2.5a4 4 0 0 0-4-4zM6.5 12.75a1.5 1.5 0 0 0 3 0" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
   let opts={},strip=null,tray=null,toasts=null,announcer=null,errorLive=null,summary={},alerts=[],loaded=false,primed=false,readOnly=false;
   let tab='active',threatOpen=false,expandedGroups=[],notice=null,opener=null,loadSeq=0,loadTimer=null,speakTimer=0,lastLevel=0;
@@ -187,12 +194,17 @@
   const openToggles=()=>[strip,tray].flatMap(root=>root?[...root.querySelectorAll('[data-alert-action="snooze-menu"][aria-expanded="true"]')]:[]);
   function paint(el,html,fallback){
     const active=el.contains(document.activeElement)?document.activeElement:null,key=focusKey(active);
+    const caret=active&&typeof active.selectionStart==='number'?[active.selectionStart,active.selectionEnd]:null;
     const menu=attr(el.querySelector('[data-alert-action="snooze-menu"][aria-expanded="true"]'),'data-alert-id');
     const scroll=SCROLLERS.map(selector=>el.querySelector(selector)?.scrollTop||0);
     el.innerHTML=html;
     if(menu)setMenu(el.querySelector(`[data-alert-action="snooze-menu"][data-alert-id="${CSS.escape(menu)}"]`),true);
     SCROLLERS.forEach((selector,i)=>{const node=el.querySelector(selector);if(node&&scroll[i])node.scrollTop=scroll[i];});
-    if(active)((key&&el.querySelector(key))||el.querySelector(fallback))?.focus({preventScroll:true});
+    if(!active)return;
+    const target=(key&&el.querySelector(key))||el.querySelector(fallback);
+    target?.focus({preventScroll:true});
+    // A text field keeps its caret (the rule editor's form is redrawn by live updates).
+    if(caret&&typeof target?.setSelectionRange==='function')try{target.setSelectionRange(caret[0],caret[1]);}catch{}
   }
   // A failure is drawn without a role (redraws would repeat it) and spoken once through the persistent #alertError node.
   const noticeHtml=tag=>notice?`<${tag} class="al-notice">${translator(opts.t)(notice.key,notice.fallback)}</${tag}>`:'';
@@ -212,7 +224,8 @@
   }
   function drawTray(){
     if(!trayOpen())return;
-    const html=renderTray({tab,alerts:loaded?alerts:list(summary.top),summary,expandedGroups,threatOpen},opts.t,clock()),cut=html.indexOf('</header>')+9;
+    const rules=tab==='rules'?window.CrucixAlertRules?.view?.():undefined;
+    const html=renderTray({tab,alerts:loaded?alerts:list(summary.top),summary,expandedGroups,threatOpen,rules},opts.t,clock()),cut=html.indexOf('</header>')+9;
     paint(tray,notice?.where==='tray'?html.slice(0,cut)+noticeHtml('p')+html.slice(cut):html,'#at-panel');
     dockTray();
   }
@@ -321,6 +334,7 @@
     if(focusId)tab='active';
     threatOpen=threat;
     drawTray();drawStrip();syncBell();focusRow(focusId);
+    if(tab==='rules')window.CrucixAlertRules?.activate?.();
     if(!readOnly)load().then(()=>{if(focusId&&trayOpen()&&attr(document.activeElement?.closest?.('.at-alert'),'data-alert-id')!==focusId)focusRow(focusId);}).catch(log);
   }
   // focus: 'return' (Esc, × : back to the opener), 'inside' (the bell: only when the focus was in the tray), 'none' (another
@@ -338,6 +352,8 @@
   function selectTab(id,focus){
     if(!TAB_IDS.includes(id))return;
     tab=id;drawTray();
+    // The Rules tab reads the rules (and the metric values) each time it is shown.
+    if(id==='rules')window.CrucixAlertRules?.activate?.();
     if(focus)tray.querySelector('#at-tab-'+id)?.focus();
   }
 
@@ -422,6 +438,7 @@
       toasts=make('div','alertToasts');
       for(const node of [strip,tray,toasts]){node.classList.toggle('al-readonly',readOnly);node.addEventListener('click',guarded(onClick));node.addEventListener('keydown',guarded(onKey));}
       bar.after(strip);document.body.append(tray,toasts,announcer,errorLive);
+      window.CrucixAlertRules?.attach?.({root:tray,t:opts.t,redraw:drawTray,readOnly});
       document.addEventListener('click',guarded(onDocumentClick));
       // The page scrolls <body>, whose scroll events do not bubble: listen in the capture phase.
       document.addEventListener('scroll',event=>{if(!tray.contains(event.target))guarded(dockTray)();},{capture:true,passive:true});

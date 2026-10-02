@@ -31,9 +31,10 @@ test('service worker caches only the allowlisted static shell and never API/live
 
 test('the alert client is in the shell cache and loads after its dependencies',()=>{
   const sw=readFileSync(new URL('../dashboard/public/sw.js',import.meta.url),'utf8'),base=JSON.parse(sw.match(/const BASE = (\[[^\]]*\]);/)[1].replace(/'/g,'"'));
-  for(const path of ['/alerts-core.js','/alerts.js','/alerts.css'])assert.ok(base.includes(path),path+' is in BASE');
+  for(const path of ['/alerts-core.js','/alerts.js','/alert-rules.js','/alerts.css'])assert.ok(base.includes(path),path+' is in BASE');
   const html=readFileSync(new URL('../dashboard/public/jarvis.html',import.meta.url),'utf8'),at=needle=>{const i=html.indexOf(needle);assert.ok(i>0,needle);return i;};
   assert.ok(at('<script src="record-core.js">')<at('<script src="alerts-core.js">')&&at('<script src="alerts-core.js">')<at('<script src="alerts.js">'),'record-core -> alerts-core -> alerts');
+  assert.ok(at('<script src="alerts.js">')<at('<script src="alert-rules.js">'),'the rule editor loads after the alert controller');
   assert.ok(at('href="record-inspector.css"')<at('href="alerts.css"'),'alerts.css overrides after record-inspector.css');
 });
 

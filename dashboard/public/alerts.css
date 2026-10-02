@@ -85,6 +85,46 @@
 .at-overflow{display:flex;flex-wrap:wrap;gap:4px 10px;padding:6px 8px;border-bottom:1px solid var(--border);font-size:11px}
 .at-empty{margin:12px 0 0;color:var(--dim)}
 .at-rules{min-height:0}
+/* ===== Rules tab (alert-rules.js): the list, the form, the confirm line ===== */
+.ar-panel{display:flex;flex-direction:column;gap:8px}
+.ar-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ar-heading{margin:0;color:var(--dim);font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.ar-list{margin:0;padding:0;list-style:none}
+.ar-rule{display:flex;flex-direction:column;gap:4px;padding:10px 4px 10px 8px;border-bottom:1px solid var(--border);border-left:3px solid var(--border)}
+.ar-rule-top{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
+.ar-rule-name{min-width:0;font-weight:600;overflow-wrap:anywhere}
+.ar-rule-off .ar-rule-name,.ar-rule-off .ar-summary{color:var(--dim)}
+.ar-badge{padding:0 6px;border:1px solid var(--border-bright,rgba(100,240,200,.3));border-radius:3px;color:var(--dim);font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+.ar-source-user{color:var(--accent)}.ar-source-override{color:var(--warn);border-style:dashed;border-color:var(--warn)}
+.ar-summary{margin:0;color:var(--text);font-size:11px;overflow-wrap:anywhere}
+.ar-rule-line{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;color:var(--dim);font-size:11px}
+.ar-sev{display:inline-flex;align-items:center;gap:4px;min-width:0}
+.ar-toggle,.ar-check-label{display:inline-flex;align-items:center;gap:6px;min-height:26px;cursor:pointer}
+.ar-toggle input,.ar-check-label input,.ar-kind input{flex:none;width:16px;height:16px;margin:0;accent-color:var(--accent)}
+.ar-rule-actions{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px;margin-left:auto}
+.ar-confirm{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px;padding:2px 6px;border:1px solid var(--danger,#ff5f63);border-radius:4px;font-size:11px}
+.al-btn.ar-danger{border-color:var(--danger,#ff5f63);color:#ffd8d9}
+.ar-status{margin:0;color:var(--accent);font-size:11px}
+.ar-notice{margin:0}
+.ar-form{display:flex;flex-direction:column;gap:10px}
+.ar-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px}
+.ar-field{display:flex;flex-direction:column;gap:3px;min-width:0;margin:0;padding:0;border:0}
+[data-rule-field="name"],[data-rule-field="params.metric"],[data-rule-field="scope.sources"],[data-rule-field="scope.keywords"],.ar-kinds,.ar-group,.ar-static{grid-column:1/-1}
+.ar-label{color:var(--dim);font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+.ar-form :is(input[type=text],select){width:100%;min-height:32px;padding:0 8px;background:var(--bg);border:1px solid var(--border-bright,rgba(100,240,200,.3));border-radius:4px;color:var(--text);font:inherit;font-size:12px}
+.ar-form :is(input,select)[aria-invalid="true"],.ar-kinds[aria-invalid="true"]{border-color:var(--danger,#ff5f63)}
+.ar-hint{margin:0;color:var(--dim);font-size:10px}
+.ar-error{margin:0;padding-left:6px;border-left:2px solid var(--danger,#ff5f63);color:#ffd8d9;font-size:11px;overflow-wrap:anywhere}
+.ar-static{flex-direction:row;align-items:baseline;gap:8px}
+.ar-static-value{overflow-wrap:anywhere}
+.ar-group{display:flex;flex-direction:column;gap:6px;padding:8px;border:1px solid var(--border)}
+.ar-group-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px}
+.ar-radius{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.ar-kinds{padding:6px 8px;border:1px solid var(--border)}
+.ar-kind-list{display:flex;flex-wrap:wrap;gap:2px 12px}
+.ar-kind{display:inline-flex;align-items:center;gap:5px;min-height:26px;cursor:pointer}
+.ar-actions{position:sticky;bottom:0;display:flex;gap:8px;padding:8px 0 2px;background:#060e16;border-top:1px solid var(--border)}
+.ar-panel[aria-busy="true"]{cursor:progress}
 /* An action or load failure, in the tray under its header or at the end of the strip. */
 .al-notice{margin:8px 0 0;padding:6px 8px;border:1px solid var(--danger,#ff5f63);border-radius:3px;color:#ffd8d9;font-size:11px}
 #alertStrip .al-notice{margin:0;padding:2px 8px}
@@ -117,6 +157,9 @@
   #alertTray{top:auto;left:0;width:100%;max-height:75vh;max-height:75dvh;border-left:0;border-top:1px solid var(--border-bright,rgba(100,240,200,.3));border-radius:12px 12px 0 0;box-shadow:0 -12px 40px rgba(0,0,0,.5);animation-name:al-slide-up}
   #alertToasts{right:8px;left:8px;bottom:8px;width:auto}
   .as-threat,.al-btn,.at-tab,.at-group-toggle,.at-evidence-link{min-height:44px}
+  .ar-form :is(input[type=text],select){min-height:44px}
+  .ar-toggle,.ar-check-label,.ar-kind{min-height:44px}
+  .ar-toggle input,.ar-check-label input,.ar-kind input{width:22px;height:22px}
   .at-evidence-link{padding:0 4px}
   .al-toast-close{width:44px;height:44px}
 }

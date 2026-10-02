@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { FACT_FIELDS } from '../lib/intelligence/live-sources.mjs';
-import { DEFAULT_RULES } from '../lib/alerts/rules.mjs';
+import { DEFAULT_RULES, RULE_KINDS } from '../lib/alerts/rules.mjs';
+import { METRICS } from '../lib/alerts/metrics.mjs';
 
 const LANGS = ['en', 'hu', 'fr'];
 const locale = lang => JSON.parse(fs.readFileSync(new URL(`../locales/${lang}.json`, import.meta.url), 'utf8'));
@@ -63,4 +64,16 @@ test('the browser key hint lists only keys the browser has (no e, Esc goes back)
     assert.ok(!/(^| )e /.test(browser), `${lang}: the browser has no e key`);
   }
   assert.ok(/(^| )e /.test(flat('en').get('inspector.keys')), 'the panel keeps e expand');
+});
+
+test('the rule editor names every rule kind, every metric of the registry and every unit in en, hu and fr', () => {
+  for (const lang of LANGS) {
+    const strings = flat(lang), rules = locale(lang).alerts.rules;
+    assert.deepEqual(Object.keys(rules.kind), [...RULE_KINDS], `${lang}: alerts.rules.kind`);
+    assert.deepEqual(Object.keys(rules.metric), METRICS.map(metric => metric.key), `${lang}: alerts.rules.metric`);
+    for (const unit of new Set(METRICS.map(metric => metric.unit))) if (/^[a-z]+$/.test(unit)) assert.ok(strings.has(`alerts.rules.unit.${unit}`), `${lang}: alerts.rules.unit.${unit}`);
+    for (const source of ['builtin', 'override', 'user']) assert.ok(strings.has(`alerts.rules.source.${source}`), `${lang}: source.${source}`);
+  }
+  assert.equal(flat('en').get('alerts.rules.metric.vix'), 'VIX');
+  assert.equal(flat('en').get('alerts.rules.title'), 'Rules');
 });
