@@ -166,6 +166,9 @@ test('renderTray: grouping, expansion and overflow',()=>{
   const open=A.renderTray(view([...six,lone],{expandedGroups:['events-high']}),t,now);
   assert.match(open,/data-alert-action="group" data-rule-id="events-high" aria-expanded="true"/);
   assert.equal(count(open,'<li class="at-alert'),7);
+  // The caret is decoration: aria-expanded carries the state, the arrow is never read aloud.
+  assert(collapsed.includes('<span class="at-caret" aria-hidden="true">▸</span></button>'),'collapsed caret');
+  assert(open.includes('<span class="at-caret" aria-hidden="true">▾</span></button>'),'expanded caret');
   const five=A.renderTray(view(six.slice(0,5)),t,now);
   assert(!five.includes('data-alert-action="group"'),'five alerts are not grouped'); assert.equal(count(five,'<li class="at-alert'),5);
   const loneOverflow=A.renderTray(view([lone],{summary:{...summaryOf([lone]),overflow:[{ruleId:'events-critical',count:3}]}}),t,now);

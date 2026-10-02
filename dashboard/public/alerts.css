@@ -46,8 +46,10 @@
 .at-tab[aria-selected="true"]{border-bottom-color:var(--accent);color:var(--text);font-weight:600}
 .at-tab-count{font-family:var(--mono);font-variant-numeric:tabular-nums}
 /* Basis auto, not 0: the bottom sheet has no fixed height (it grows to its content up to max-height), so a zero basis would
-   collapse the list to its padding. min-height keeps at least a few rows reachable when the drivers block is open. */
-.at-panel{flex:1 1 auto;min-height:96px;padding:8px 0 0;overflow:auto;overscroll-behavior:contain}
+   collapse the list to its padding. Flex shrink is shared in proportion to basis: a shrink factor of 100 makes the list give
+   up its height first, so the drivers block keeps all its rows; min-height keeps a few rows reachable on very short screens,
+   where the drivers block scrolls instead. */
+.at-panel{flex:1 100 auto;min-height:96px;padding:8px 0 0;overflow:auto;overscroll-behavior:contain}
 .at-bulk{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}
 .at-list,.at-group-list{margin:0;padding:0;list-style:none}
 .at-group-list{padding-left:12px;border-left:1px solid var(--border)}
