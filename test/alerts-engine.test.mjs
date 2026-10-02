@@ -8,6 +8,7 @@ import { AlertEngine, AlertError } from '../lib/alerts/engine.mjs';
 const T0 = Date.parse('2026-10-02T12:00:00Z');
 const MINUTE = 60000;
 const SWEEP = 15 * MINUTE;
+const YEAR = 365 * 24 * 60 * MINUTE;
 const ALERT_ID = /^alert-[0-9a-f]{32}$/;
 
 function recorder() {
@@ -305,6 +306,121 @@ test('maxActivePerRule comes from the config', t => {
 
 // ─── bootstrap, restart ──────────────────────────────────────────────────────
 
+test('bootstrap past the per-rule cap: hits held back at bootstrap open silent later, new ones do not', t => {
+  const { engine, sweep } = setup(t, { warm: false });
+  const events = Array.from({ length: 60 }, () => ev());
+  const first = engine.evaluate({ events });
+  assert.equal(first.created.length, 50);
+  assert.ok(first.created.every(alert => alert.silent));
+  assert.deepEqual(first.summary.overflow, [{ ruleId: 'events-critical', count: 10 }]);
+
+  const gone = new Set(first.created.slice(0, 5).map(alert => alert.dedupKey));
+  const remaining = events.filter(event => !gone.has(`events-critical|${event.id}`));
+  assert.equal(sweep({ events: remaining }).created.length, 0);
+  const freed = sweep({ events: remaining });
+  assert.equal(freed.resolved.length, 5);
+  assert.equal(freed.silent, false);
+  assert.equal(freed.created.length, 5, 'five held-back hits fill the freed slots');
+  for (const alert of freed.created) {
+    assert.equal(alert.silent, true, 'present at bootstrap: still the baseline');
+    assert.ok(alert.log.some(entry => entry.action === 'silent'));
+  }
+  assert.deepEqual(freed.summary.overflow, [{ ruleId: 'events-critical', count: 5 }]);
+
+  // Free every slot: a brand-new event is not part of the baseline.
+  engine.putRule('events-critical', { enabled: false });
+  engine.deleteRule('events-critical');
+  const later = sweep({ events: [ev()] });
+  assert.deepEqual(later.created.map(alert => alert.silent), [false]);
+});
+
+test('bootstrap with a threshold that needs two sweeps: the condition present at bootstrap opens silent', t => {
+  const { engine, sweep } = setup(t, { warm: false });
+  assert.equal(engine.evaluate({ events: [], ...vix(35) }).created.length, 0);
+  const second = sweep(vix(36));
+  assert.equal(second.silent, false);
+  assert.deepEqual(second.created.map(alert => [alert.ruleId, alert.silent]), [['vix-spike', true]]);
+});
+
+test('a baseline key that stops matching is no longer the baseline', t => {
+  const { engine, sweep } = setup(t, { warm: false });
+  engine.evaluate({ events: [], ...vix(35) });
+  sweep();
+  sweep(vix(35));
+  assert.deepEqual(sweep(vix(35)).created.map(alert => alert.silent), [false]);
+});
+
+test('the bootstrap ends only when an evaluation could read the event list', t => {
+  const { engine } = setup(t, { warm: false });
+  assert.equal(engine.evaluate({}).silent, true);
+  assert.equal(engine.evaluate({ get events() { throw new Error('no events'); } }).silent, true);
+  assert.equal(engine.evaluate({ events: 'nope' }).silent, true);
+  const baseline = engine.evaluate({ events: [ev()] });
+  assert.equal(baseline.silent, true);
+  assert.ok(baseline.created.length === 1 && baseline.created.every(alert => alert.silent));
+  assert.equal(engine.evaluate({ events: [] }).silent, false);
+});
+
+test('a global ceiling on open alerts: hits beyond maxAlerts are held back and nothing is re-created later', t => {
+  const { engine, sweep, dir } = setup(t, { config: { maxAlerts: 10 } });
+  const events = Array.from({ length: 20 }, () => ev());
+  assert.equal(sweep({ events }).created.length, 10);
+  for (let round = 0; round < 3; round += 1) {
+    const result = sweep({ events });
+    assert.equal(result.created.length, 0, `sweep ${round + 2}`);
+    assert.deepEqual(result.summary.overflow, [{ ruleId: 'events-critical', count: 10 }]);
+  }
+  assert.equal(engine.list({ state: 'all' }).length, 10);
+  const saved = JSON.parse(readFileSync(join(dir, 'alerts', 'alerts.json'), 'utf8'));
+  assert.equal(saved.alerts.length, 10);
+});
+
+test('summary.overflow lists at most 10 rules, most held back first, and rules() is unchanged by it', t => {
+  const { engine, sweep } = setup(t, { config: { maxActivePerRule: 2 } });
+  for (let n = 0; n < 12; n += 1) engine.putRule(`wide-${String(n).padStart(2, '0')}`, { ...watchRule, params: { minLevel: n === 11 ? 'high' : 'watch' } });
+  const before = engine.rules();
+  const events = [...Array.from({ length: 4 }, () => ev({ severity: 'moderate' })), ev({ severity: 'high' })];
+  const { summary } = sweep({ events });
+  assert.equal(summary.overflow.length, 10);
+  assert.deepEqual(summary.overflow.slice(0, 2), [{ ruleId: 'wide-00', count: 3 }, { ruleId: 'wide-01', count: 3 }]);
+  assert.equal(summary.overflow.some(row => row.ruleId === 'wide-11'), false, 'wide-11 had one hit and no overflow');
+  assert.deepEqual(engine.rules(), before);
+  const failed = engine.evaluate({ get events() { throw new Error('feed down'); } });
+  assert.deepEqual(failed.summary.overflow, summary.overflow, 'a rule that failed keeps its last count');
+  assert.equal(sweep({ events: [] }).summary.overflow.length, 0, 'only the last evaluation counts');
+});
+
+test('a forward clock jump that is corrected does not stretch cooldowns or snoozes', t => {
+  const { engine, sweep, clock } = setup(t);
+  const events = [ev(), ev()];
+  const [first, snoozed] = sweep({ events }).created;
+  clock.now = T0 + YEAR;
+  sweep({ events });
+  engine.resolve(first.id);
+  engine.snooze(snoozed.id, 60);
+
+  clock.now = T0 + SWEEP;
+  assert.equal(sweep({ events }).created.length, 0, 'the cooldown still runs, for its normal 30 minutes');
+  const { snooze } = engine.get(snoozed.id);
+  assert.ok(snooze.at <= clock.now);
+  assert.equal(snooze.until, clock.now + 60 * MINUTE, 'the snooze keeps its length from the corrected clock');
+  for (const alert of engine.list({ state: 'active' })) assert.ok(alert.lastSeenAt <= clock.now);
+  assert.equal(sweep({ events }).created.length, 0);
+  const reopened = sweep({ events }).created;
+  assert.deepEqual(reopened.map(alert => alert.dedupKey), [first.dedupKey], 'reopens 30 minutes after the correction');
+  assert.equal(engine.get(snoozed.id).state, 'snoozed');
+});
+
+test('pending counters stay bounded: 2000 events x 50 rules at forSweeps 3 save at most 5000 entries', t => {
+  const { engine, sweep, dir } = setup(t);
+  for (let n = 0; n < 50; n += 1) engine.putRule(`slow-${n}`, { ...watchRule, forSweeps: 3 });
+  const events = Array.from({ length: 2000 }, () => ev({ severity: 'moderate' }));
+  sweep({ events });
+  const saved = JSON.parse(readFileSync(join(dir, 'alerts', 'alerts.json'), 'utf8'));
+  const pending = Object.keys(saved.engine.pending).length;
+  assert.ok(pending > 0 && pending <= 5000, String(pending));
+});
+
 test('bootstrap: the first evaluation creates silent alerts; the next one is not silent and adds nothing', t => {
   const { engine, clock } = setup(t, { warm: false });
   const events = Array.from({ length: 11 }, () => ev());
@@ -429,6 +545,7 @@ test('the clock going backwards gives no negative ages and no mass resolve', t =
   assert.equal(engine.list({ state: 'resolved' }).length, 0, 'one miss is not a resolve');
   for (const alert of engine.list({ state: 'all' })) {
     assert.ok(alert.lastSeenAt >= alert.firstSeenAt, 'lastSeenAt never goes before firstSeenAt');
+    assert.ok(alert.lastSeenAt <= clock.now, 'nor after now');
     assert.equal(alert.count, 2);
   }
   assert.equal(engine.get(snoozed.id).state, 'snoozed', 'a snooze does not expire because the clock went back');
@@ -612,7 +729,8 @@ test('summary: counts, at most 5 drivers, top ordering and compact shape', t => 
   engine.ack(all.find(alert => alert.severity === 'info').id);
 
   const summary = engine.summary();
-  assert.deepEqual(Object.keys(summary).sort(), ['counts', 'generatedAt', 'lastEvaluatedAt', 'rules', 'status', 'threat', 'top']);
+  assert.deepEqual(Object.keys(summary).sort(), ['counts', 'generatedAt', 'lastEvaluatedAt', 'overflow', 'rules', 'status', 'threat', 'top']);
+  assert.deepEqual(summary.overflow, []);
   assert.equal(summary.generatedAt, clock.now);
   assert.equal(summary.lastEvaluatedAt, clock.now);
   assert.deepEqual(summary.counts, { critical: 2, high: 2, watch: 2, info: 0, total: 7, acked: 1, snoozed: 0 });

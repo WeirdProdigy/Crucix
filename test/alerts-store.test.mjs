@@ -71,6 +71,8 @@ test('round trip: alerts, engine state and user rules survive a save and a reloa
   first.state.engine.misses['events-critical|event-1'] = 1;
   first.state.engine.failStreaks.GDELT = 2;
   first.state.engine.cooldowns['events-critical|event-9'] = NOW + 20 * 60000;
+  first.state.engine.baseline['events-critical|event-8'] = NOW - HOUR;
+  first.state.engine.overflow['events-critical'] = 12;
   first.state.userRules.push({ id: 'my-rule', rule: USER_RULE }, { id: 'vix-spike', override: { enabled: false } });
   assert.equal(first.save(), true);
 
@@ -160,13 +162,38 @@ test('caps: 1001 alerts are cut to 1000, resolved ones first and the oldest of t
   assert.equal(ids.has(alert(1).id), true, 'active alerts stay while resolved ones can go');
 });
 
-test('caps: with only active alerts over the cap, the longest-unseen ones go', t => {
+test('caps: the count cap never drops open alerts (dropping one would only reopen it on the next sweep)', t => {
   const dir = tmp(t);
   const subject = store(dir, { maxAlerts: 10 });
   subject.load();
   for (let n = 1; n <= 12; n += 1) subject.state.alerts.push(alert(n));
+  for (let n = 13; n <= 15; n += 1) subject.state.alerts.push(alert(n, { state: 'resolved', resolvedAt: NOW - n }));
   subject.save();
-  assert.deepEqual(subject.state.alerts.map(item => item.id), Array.from({ length: 10 }, (_, i) => alert(i + 3).id));
+  assert.deepEqual(subject.state.alerts.map(item => item.id), Array.from({ length: 12 }, (_, i) => alert(i + 1).id));
+  const reloaded = store(dir, { maxAlerts: 10 });
+  reloaded.load();
+  assert.equal(reloaded.state.alerts.length, 12);
+});
+
+test('counter tables are capped at 5000 entries on save, the oldest first, and load keeps the same newest ones', t => {
+  const dir = tmp(t);
+  const subject = store(dir);
+  subject.load();
+  for (let n = 0; n < 6000; n += 1) subject.state.engine.pending[`rule|key-${n}`] = 1;
+  for (let n = 0; n < 5001; n += 1) subject.state.engine.baseline[`rule|key-${n}`] = NOW;
+  subject.save();
+  const keys = Object.keys(subject.state.engine.pending);
+  assert.equal(keys.length, 5000);
+  assert.equal(keys[0], 'rule|key-1000');
+  assert.equal(Object.keys(subject.state.engine.baseline).length, 5000);
+  const saved = JSON.parse(readFileSync(alertsFile(dir), 'utf8'));
+  assert.equal(Object.keys(saved.engine.pending).length, 5000);
+
+  const engine = { ...saved.engine, pending: Object.fromEntries(Array.from({ length: 6000 }, (_, n) => [`rule|key-${n}`, 1])) };
+  writeJsonAtomic(alertsFile(dir), { ...saved, engine });
+  const reloaded = store(dir);
+  reloaded.load();
+  assert.deepEqual(Object.keys(reloaded.state.engine.pending), keys);
 });
 
 test('retention: resolved alerts older than 30 days are dropped, younger ones and active ones are kept', t => {
@@ -277,6 +304,7 @@ test('save never throws: an unwritable directory is logged and reported as false
 test('save retries once after a Windows EPERM or EBUSY and gives up on anything else', t => {
   const dir = tmp(t);
   const calls = [];
+  const pauses = [];
   let failures = [];
   const writeJson = (path, value) => {
     calls.push(path);
@@ -284,12 +312,13 @@ test('save retries once after a Windows EPERM or EBUSY and gives up on anything 
     if (code) throw Object.assign(new Error(`${code}: locked`), { code });
     writeJsonAtomic(path, value);
   };
-  const subject = store(dir, { writeJson, logger: quiet });
+  const subject = store(dir, { writeJson, logger: quiet, pause: ms => pauses.push(ms) });
   subject.load();
 
   failures = ['EPERM'];
   assert.equal(subject.save(), true);
   assert.equal(calls.length, 2);
+  assert.deepEqual(pauses, [50], 'one short pause before the retry');
   assert.ok(existsSync(alertsFile(dir)));
 
   calls.length = 0;
@@ -301,6 +330,7 @@ test('save retries once after a Windows EPERM or EBUSY and gives up on anything 
   failures = ['EACCES'];
   assert.equal(subject.save(), false);
   assert.equal(calls.length, 1, 'other errors are not retried');
+  assert.equal(pauses.length, 2);
 });
 
 test('the rules file is written only when the rule records changed', t => {
