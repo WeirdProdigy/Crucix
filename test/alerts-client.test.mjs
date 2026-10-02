@@ -2,19 +2,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
+import { DEFAULT_RULES } from '../lib/alerts/rules.mjs';
 const read=file=>readFileSync(new URL('../dashboard/public/'+file,import.meta.url),'utf8');
 // record-core.js, alerts-core.js and alerts.js share one realm, as in the page; a fresh realm per test, so nothing leaks.
 // Results cross the realm boundary: compare plain data through JSON (prototypes differ).
 const load=()=>{const window={},context=vm.createContext({window,Date,URL});for(const file of ['record-core.js','alerts-core.js','alerts.js'])vm.runInContext(read(file),context);return window;};
 const plain=value=>JSON.parse(JSON.stringify(value));
 const t=(_,fallback)=>fallback;
+// The dashboard's t() (jarvis.html): walks the key with `in`, so prototype members are reachable; non-strings give the fallback.
+const pageT=locale=>(keyPath,fallback)=>{let value=locale;for(const key of keyPath.split('.')){if(value&&typeof value==='object'&&key in value)value=value[key];else return fallback||keyPath;}return typeof value==='string'?value:(fallback||keyPath);};
 const now=Date.parse('2026-10-02T12:00:00Z'),MIN=60000,HOUR=3600000;
 const EVENT='event-'+'a'.repeat(32),HOSTILE='"><img onerror=x>';
 const count=(html,needle)=>html.split(needle).length-1;
 const hhmm=ms=>{const d=new Date(ms);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');};
 // A tag with an on*= attribute name. Escaped text ("&lt;img onerror=x&gt;") is not a tag, and inside a tag the quoted attribute
 // values are dropped first: an escaped value cannot contain a raw quote, so " onerror=" there is inert text.
-const hasInlineHandler=html=>(html.match(/<[a-z][^>]*>/gi)||[]).some(tag=>/\son\w+\s*=/i.test(tag.replace(/"[^"]*"/g,'""')));
+// An attribute name may also follow a closing quote or a slash directly (<img src="x"onerror=y>, <img/onerror=y>).
+const hasInlineHandler=html=>(html.match(/<[a-z][^>]*>/gi)||[]).some(tag=>/[\s"'/]on\w+\s*=/i.test(tag.replace(/"[^"]*"/g,'""')));
 let serial=0;
 const alert=(more={})=>{serial+=1;return {id:'alert-'+String(serial).padStart(32,'0'),ruleId:'events-critical',ruleName:'Critical events',dedupKey:'events-critical|'+EVENT,kind:'event',severity:'critical',state:'firing',
   title:'Alert '+serial,summary:'Summary '+serial,evidence:[{type:'event',id:EVENT,title:'Quake near Szeged',source:'USGS',level:'critical'}],firstSeenAt:now-2*HOUR,lastSeenAt:now-10*MIN,count:3,notify:true,silent:false,log:[],...more};};
@@ -98,6 +102,7 @@ test('renderStrip: active state',()=>{
   assert(html.includes('Earthquake M7.1')); assert(!html.includes('No active alerts'));
   for(const action of ['ack','snooze-menu','open'])assert(html.includes(`data-alert-action="${action}" data-alert-id="${top.id}"`),action);
   for(const minutes of [60,480,1440])assert(html.includes(`data-alert-action="snooze" data-alert-id="${top.id}" data-minutes="${minutes}"`),String(minutes));
+  assert.match(html,/<span class="al-snooze-menu" id="as-snooze" role="group" aria-label="Snooze" hidden>/,'the snooze lengths start hidden');
   assert(html.includes('+2 more alerts'),'the other firing alerts are counted');
   assert(A.renderStrip(summaryOf(alerts),t,now,true).includes('aria-expanded="true"'),'an open threat panel is announced');
 });
@@ -108,6 +113,10 @@ test('renderTray: tabs, empty state and the rules placeholder',()=>{
   assert.equal(count(html,'role="tab"'),4);
   for(const [tab,label] of [['active','Active'],['handled','Handled'],['resolved','Resolved'],['rules','Rules']])assert(html.includes(`data-alert-tab="${tab}"`)&&html.includes(label),tab);
   assert.match(html,/data-alert-tab="active"[^>]*aria-selected="true"/); assert.match(html,/data-alert-tab="rules"[^>]*aria-selected="false"/);
+  // Roving tabindex: only the selected tab is in the tab order.
+  assert.match(html,/data-alert-tab="active"[^>]*tabindex="0"/);
+  for(const tab of ['handled','resolved','rules'])assert.match(html,new RegExp(`data-alert-tab="${tab}"[^>]*tabindex="-1"`),tab);
+  assert.match(A.renderTray(view([],{tab:'resolved'}),t,now),/data-alert-tab="resolved"[^>]*tabindex="0"/);
   assert(html.includes('role="tabpanel"')); assert(html.includes('Nothing here'));
   assert(html.includes('data-alert-action="close"'));
   const rules=A.renderTray(view([alert()],{tab:'rules'}),t,now);
@@ -125,6 +134,9 @@ test('renderTray: rows, actions and per-tab filtering',()=>{
   assert.match(active,new RegExp(`<li class="at-alert[^"]*" data-alert-id="${firing.id}"`));
   for(const action of ['ack','snooze-menu','resolve'])assert(active.includes(`data-alert-action="${action}" data-alert-id="${firing.id}"`),action);
   for(const minutes of [60,480,1440])assert(active.includes(`data-alert-action="snooze" data-alert-id="${firing.id}" data-minutes="${minutes}"`),String(minutes));
+  // The snooze lengths start closed: the toggle says so and the group is hidden.
+  assert.match(active,/data-alert-action="snooze-menu" data-alert-id="[^"]+" aria-expanded="false" aria-controls="at-snooze-0">/);
+  assert.match(active,/<span class="al-snooze-menu" id="at-snooze-0" role="group" aria-label="Snooze" hidden>/);
   for(const text of ['Firing one','Critical events','<span class="at-age">2h</span>','seen 4×','Summary'])assert(active.includes(text),text);
   assert(active.includes(`data-alert-action="evidence" data-event-id="${EVENT}"`)&&active.includes('Quake near Szeged'),'evidence opens the event');
   assert(active.includes('<span class="ri-sr">Critical</span>'));
@@ -165,34 +177,64 @@ test('renderTray: threat drivers block',()=>{
   assert(!A.renderTray(view(alerts),t,now).includes('Driving this level'),'closed by default');
   const html=A.renderTray(view(alerts,{threatOpen:true}),t,now);
   assert(html.includes('Driving this level')&&html.includes('Threat 5/5')&&html.includes('Driver title'));
-  assert(html.includes(`data-alert-id="${a.id}"`));
+  assert.match(html,new RegExp(`<li data-driver-id="${a.id}">`),'a driver names its alert');
+  assert.equal(count(html,`data-alert-id="${a.id}"`),count(A.renderTray(view(alerts),t,now),`data-alert-id="${a.id}"`),'a driver never carries data-alert-id');
   assert(A.renderTray(view([],{threatOpen:true}),t,now).includes('No active alerts'),'no drivers at level 1');
+  // The rule name of a driver: from the alert list, else from summary.top, before the bare rule id.
+  const own=alert({ruleId:'my-rule',ruleName:'My watch rule'});
+  const fromTop=A.renderTray(view([],{summary:summaryOf([own]),threatOpen:true}),t,now);
+  assert(fromTop.includes('My watch rule')&&!fromTop.includes('>my-rule<'),'summary.top supplies the name');
+  const bare=A.renderTray(view([],{summary:{...summaryOf([own]),top:[]},threatOpen:true}),t,now);
+  assert(bare.includes('>my-rule<'),'without a name the rule id is shown');
 });
 
-test('built-in rule names are localised by id, other names shown as stored',()=>{
-  const A=load().CrucixAlerts;
-  const tr=(key,fallback)=>({'alerts.ruleNames.events-critical':'Kritikus események','alerts.ruleNames.constructor':'NOPE'})[key]??fallback;
-  const html=A.renderTray(view([alert(),alert({ruleId:'constructor',ruleName:'My rule'})]),tr,now);
-  assert(html.includes('Kritikus események')); assert(html.includes('My rule')); assert(!html.includes('NOPE'));
+test('rule names are localised by id, rules without a locale name keep the stored one',()=>{
+  const A=load().CrucixAlerts,tr=pageT({alerts:{ruleNames:{'events-critical':'Kritikus események'}}});
+  const html=A.renderTray(view([alert(),alert({ruleId:'constructor',ruleName:'Prototype-named rule'}),alert({ruleId:'my-rule',ruleName:'My rule'}),alert({ruleId:'Bad Id!',ruleName:'Odd rule'})]),tr,now);
+  for(const name of ['Kritikus események','Prototype-named rule','My rule','Odd rule'])assert(html.includes(name),name);
+  assert(!html.includes('function'),'a prototype member is never shown');
   assert(A.renderToast(alert(),tr).includes('Kritikus események'));
+  // Every built-in rule is looked up under its own key (the locale test pins that each key exists).
+  const keyT=key=>'L:'+key;
+  assert.equal(DEFAULT_RULES.length,8);
+  for(const {id,name} of DEFAULT_RULES)assert(A.renderToast(alert({ruleId:id,ruleName:name}),keyT).includes('L:alerts.ruleNames.'+id),id);
+  assert(!A.renderToast(alert({ruleId:'Bad Id!',ruleName:'Odd rule'}),keyT).includes('L:alerts.ruleNames'),'malformed ids are not looked up');
 });
 
 test('hostile feed text stays inert',()=>{
-  assert(hasInlineHandler('<img src="x" onerror=y>')&&hasInlineHandler('<b\nonclick="y">'),'the matcher finds handlers');
+  for(const tag of ['<img src="x" onerror=y>','<b\nonclick="y">','<img src="x"onerror=y>','<img/onerror=y>'])assert(hasInlineHandler(tag),'the matcher finds '+tag);
   assert(!hasInlineHandler('<b title=" onerror=x">&lt;img onerror=x&gt;</b>'),'quoted values and escaped text are inert');
-  const A=load().CrucixAlerts;
-  const evil=alert({id:HOSTILE,ruleId:HOSTILE,ruleName:HOSTILE,title:HOSTILE,summary:HOSTILE,severity:HOSTILE,state:'firing',
-    evidence:[{type:'event',id:HOSTILE,title:HOSTILE,source:HOSTILE},{type:'link',title:HOSTILE,url:'javascript:alert(1)'},{type:'link',title:'Safe',url:'https://example.org/?token=s'}]});
+  const A=load().CrucixAlerts,E='&quot;&gt;&lt;img onerror=x&gt;',SAFE='https://example.org/a?x=1&y=2';
+  // The leader has a valid severity, so it is the strip's top alert; its rule has more than five alerts, so a group renders.
+  const leader=alert({id:HOSTILE,ruleId:HOSTILE,ruleName:HOSTILE,title:HOSTILE,summary:HOSTILE,severity:'critical',lastSeenAt:now,
+    evidence:[{type:'event',id:HOSTILE,title:HOSTILE,source:HOSTILE},{type:'link',title:HOSTILE,url:SAFE,source:HOSTILE},{type:'link',title:HOSTILE,url:'javascript:alert(1)'},{type:'link',title:'Safe',url:'https://example.org/?token=s'}]});
+  const crowd=Array.from({length:6},()=>alert({ruleId:HOSTILE,ruleName:HOSTILE,title:HOSTILE,severity:'high'}));
+  // An unknown severity and unreadable times take the fallback paths.
+  const evil=alert({id:HOSTILE,ruleId:HOSTILE,ruleName:HOSTILE,title:HOSTILE,summary:HOSTILE,severity:HOSTILE,state:'firing',evidence:[{type:'event',id:HOSTILE,title:HOSTILE,source:HOSTILE}]});
   const good=alert({title:HOSTILE,summary:HOSTILE,ruleName:HOSTILE,evidence:[{type:'event',id:EVENT,title:HOSTILE,url:'javascript:alert(1)'}]});
-  const summary={...summaryOf([good]),top:[compact(good),compact(evil)],threat:{level:5,drivers:[{alertId:HOSTILE,ruleId:HOSTILE,severity:HOSTILE,title:HOSTILE}]},overflow:[{ruleId:HOSTILE,count:HOSTILE}]};
-  const outputs=[A.renderStrip(summary,t,now,true),A.renderToast(good,t),A.renderToast(evil,t),
-    ...['active','handled','resolved'].map(tab=>A.renderTray({tab,alerts:[good,evil,{...evil,state:'snoozed',snooze:{until:HOSTILE}},{...evil,state:'resolved',resolvedAt:HOSTILE}],summary,expandedGroups:[HOSTILE],threatOpen:true},t,now))];
+  const snoozed={...leader,state:'snoozed',snooze:{at:now,until:now+HOUR,reason:HOSTILE}};
+  const summary={...summaryOf([leader,good]),top:[compact(leader),compact(good),compact(evil)],threat:{level:5,drivers:[{alertId:HOSTILE,ruleId:HOSTILE,severity:HOSTILE,title:HOSTILE}]},overflow:[{ruleId:HOSTILE,count:HOSTILE},{ruleId:HOSTILE+'x',count:2}]};
+  const alerts=[leader,...crowd,good,evil,snoozed,{...evil,state:'snoozed',snooze:{until:HOSTILE}},{...evil,state:'resolved',resolvedAt:HOSTILE}];
+  const strip=A.renderStrip(summary,t,now,true);
+  const [active,handled,resolved]=['active','handled','resolved'].map(tab=>A.renderTray({tab,alerts,summary,expandedGroups:[HOSTILE],threatOpen:true},t,now));
+  const outputs=[strip,A.renderToast(leader,t),A.renderToast(good,t),A.renderToast(evil,t),active,handled,resolved];
   for(const html of outputs){
     assert(!html.includes('<img'),'no raw markup'); assert(!html.includes('"&gt;<')&&!html.includes('">&lt;img'),'no attribute breakout');
-    assert(!/href=/.test(html),'unsafe evidence links are dropped'); assert(!hasInlineHandler(html),'no inline handler');
+    for(const href of html.match(/href="[^"]*"/g)||[])assert.equal(href,'href="https://example.org/a?x=1&amp;y=2"','only the safe evidence link, escaped');
+    assert(!hasInlineHandler(html),'no inline handler');
   }
-  assert(outputs[3].includes('&quot;&gt;&lt;img onerror=x&gt;'),'escaped text is present');
-  assert(outputs[3].includes('data-event-id="&quot;&gt;&lt;img onerror=x&gt;"'),'attribute values are escaped');
+  // Every escape site with hostile input, text and attribute context alike.
+  for(const action of ['ack','snooze-menu','open'])assert(strip.includes(`data-alert-action="${action}" data-alert-id="${E}"`),'strip '+action);
+  assert(strip.includes(`data-alert-action="snooze" data-alert-id="${E}" data-minutes="60"`)&&strip.includes(`<span class="as-title">${E}</span>`));
+  assert(active.includes(`data-alert-action="group" data-rule-id="${E}" aria-expanded="true"`),'the group toggle');
+  assert(active.includes(`<li class="at-alert at-critical" data-alert-id="${E}">`)&&active.includes(`data-alert-action="resolve" data-alert-id="${E}"`),'row and actions');
+  assert(active.includes(`data-event-id="${E}"`),'evidence event id');
+  assert(active.includes(`<a href="https://example.org/a?x=1&amp;y=2" target="_blank" rel="noopener noreferrer">${E} ↗</a><span class="at-source">${E}</span>`),'a safe evidence link with a hostile title');
+  assert(active.includes(`<li data-driver-id="${E}">`)&&active.includes(`<span class="at-driver-title">${E}</span>`),'drivers');
+  assert(active.includes(`<span class="at-rule">${E}x</span>`),'an overflow-only rule');
+  assert(handled.includes(`· ${E}</span>`),'the snooze reason');
+  assert(resolved.includes(`data-alert-id="${E}"`)&&resolved.includes('Resolved —'),'an unreadable resolve time');
+  assert(outputs[1].includes(`data-alert-action="dismiss" data-alert-id="${E}"`),'toast');
   const safe=A.renderTray({tab:'active',alerts:[alert({evidence:[{type:'link',title:'Report',url:'https://example.org/report'}]})],summary:summaryOf([])},t,now);
   assert(safe.includes('href="https://example.org/report"')&&safe.includes('rel="noopener noreferrer"'),'a safe evidence link is kept');
 });

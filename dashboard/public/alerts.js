@@ -9,7 +9,7 @@
   // `data-alert-id`: ack | snooze-menu (toggles the hidden 1 h / 8 h / 24 h group) | snooze (+ data-minutes) | resolve | open |
   // dismiss (toast) | close (tray) | threat | group (+ data-rule-id) | ack-all (+ data-severity) | evidence (+ data-event-id).
   // Tabs are `button[data-alert-tab]`. Element ids the markup refers to: alertTray (aria-controls of the threat badge).
-  const BUILTIN_RULES=new Set(['events-critical','events-high','convergence-default','source-stale','vix-spike','hy-spread-wide','delta-critical','hungary-region']);
+  const RULE_ID=/^[a-z0-9-]{1,40}$/;
   const SNOOZES=[[60,'snooze1h','1 h'],[480,'snooze8h','8 h'],[1440,'snooze24h','24 h']];
   const TABS=[['active','tabActive','Active',['firing']],['handled','tabHandled','Handled',['acked','snoozed']],['resolved','tabResolved','Resolved',['resolved']],['rules','tabRules','Rules',null]];
   const STATE_TEXT={firing:['firing','Firing'],acked:['acked','Acknowledged'],snoozed:['snoozedUntil','Snoozed until'],resolved:['resolvedAt','Resolved']};
@@ -24,8 +24,10 @@
   const levelName=(tx,level)=>level==='unknown'?tx('inspector.level.unknown','Unknown'):tx('alerts.level.'+level,level[0].toUpperCase()+level.slice(1));
   // Glyph and colour for the eye, the level name for screen readers: colour is never the only signal.
   const glyph=(tx,level)=>`<span class="ri-glyph sev-${level}" aria-hidden="true">${GLYPH[level]||'–'}</span><span class="ri-sr">${levelName(tx,level)}</span>`;
-  // Built-in rule names are English constants on the server: localised by id, other names shown as stored.
-  const ruleLabel=(tx,ruleId,ruleName)=>{const id=text(ruleId),name=text(ruleName)||id;return BUILTIN_RULES.has(id)?tx('alerts.ruleNames.'+id,name):esc(name);};
+  // Built-in rule names are English constants on the server: localised by id (alerts.ruleNames.<id>); a rule without a locale
+  // key keeps its stored name. Only well-formed rule ids are looked up; a non-string result (e.g. a prototype member such as
+  // "constructor") falls back to the stored name in the translator.
+  const ruleLabel=(tx,ruleId,ruleName)=>{const id=text(ruleId),name=text(ruleName)||id;return RULE_ID.test(id)?tx('alerts.ruleNames.'+id,name):esc(name);};
   const threatLevel=summary=>{const level=obj(summary.threat)?.level;return Number.isInteger(level)&&level>=1&&level<=5?level:1;};
   const pad=n=>String(n).padStart(2,'0');
   // Local HH:MM, with the date in front when it is not the day of `now`.
@@ -96,7 +98,7 @@
       held.delete(group.ruleId);
       if(!group.grouped)return rows(group)+(extra?`<li class="at-overflow"><span class="at-rule">${name}</span>${extra}</li>`:'');
       const open=expanded.includes(group.ruleId),lead=levelOf(group.alerts[0].severity);
-      return `<li class="at-group"><div class="at-group-head"><button type="button" class="at-group-toggle" data-alert-action="group" data-rule-id="${esc(group.ruleId)}" aria-expanded="${open}">${glyph(tx,lead)}<span class="at-group-name">${name}</span><span class="at-group-count">${group.alerts.length}</span></button>${extra}</div>`
+      return `<li class="at-group"><div class="at-group-head"><button type="button" class="at-group-toggle" data-alert-action="group" data-rule-id="${esc(group.ruleId)}" aria-expanded="${open}">${glyph(tx,lead)}<span class="at-group-name">${name}</span><span class="at-group-count">${group.alerts.length}</span><span class="at-caret" aria-hidden="true">${open?'▾':'▸'}</span></button>${extra}</div>`
         +`${open?`<ul class="at-group-list">${rows(group)}</ul>`:''}</li>`;
     });
     // Rules whose every hit was held back still say so.
@@ -109,10 +111,13 @@
     return `<div class="at-bulk" role="group" aria-label="${label}"><button type="button" class="al-btn" data-alert-action="ack-all">${label}</button>`
       +levels.map(level=>`<button type="button" class="al-btn" data-alert-action="ack-all" data-severity="${level}" aria-label="${label}: ${levelName(tx,level)}"><span class="sev-${level}" aria-hidden="true">${GLYPH[level]}</span> ${levelName(tx,level)}</button>`).join('')+'</div>';
   }
-  // Why the threat level is what it is: the firing alerts that drive it (at most five, from the summary).
+  // Why the threat level is what it is: the firing alerts that drive it (at most five, from the summary). A driver carries
+  // data-driver-id, not data-alert-id, so a lookup of an alert row never lands on it. Its rule name comes from the alert list,
+  // else from summary.top, before the bare rule id is shown.
   function drivers(tx,s,alerts){
-    const level=threatLevel(s),names=new Map(alerts.map(alert=>[alert.id,alert.ruleName]));
-    const rows=list(obj(s.threat)?.drivers).map(driver=>`<li data-alert-id="${esc(driver.alertId)}">${glyph(tx,levelOf(driver.severity))}<span class="at-driver-title">${esc(driver.title)}</span><span class="at-rule">${ruleLabel(tx,driver.ruleId,names.get(driver.alertId))}</span></li>`).join('');
+    const level=threatLevel(s),names=new Map();
+    for(const alert of [...alerts,...list(s.top)])if(text(alert.id)&&text(alert.ruleName)&&!names.has(alert.id))names.set(alert.id,alert.ruleName);
+    const rows=list(obj(s.threat)?.drivers).map(driver=>`<li data-driver-id="${esc(driver.alertId)}">${glyph(tx,levelOf(driver.severity))}<span class="at-driver-title">${esc(driver.title)}</span><span class="at-rule">${ruleLabel(tx,driver.ruleId,names.get(driver.alertId))}</span></li>`).join('');
     return `<section class="at-drivers" aria-labelledby="at-drivers-heading"><h3 id="at-drivers-heading">${tx('alerts.drivers','Driving this level')} · ${tx('alerts.threat','Threat')} ${level}/5</h3>`
       +(rows?`<ul>${rows}</ul>`:`<p class="at-empty">${tx('alerts.calm','No active alerts')}</p>`)+'</section>';
   }
