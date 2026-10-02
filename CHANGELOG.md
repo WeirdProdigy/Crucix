@@ -1,5 +1,7 @@
 # Changelog / Változásnapló
 
+- [2.7.1 — GDELT javítás és megbízhatóság / GDELT fix and reliability](docs/releases/v2.7.1.md) — 2026-10-02
+
 - [2.7.0 — Friss ingyenes adatforrások / Current free data sources](docs/releases/v2.7.0.md) — 2026-10-01
 
 - [2.6.0 — Mentett munkaterületek és PWA / Saved workspaces and PWA](docs/releases/v2.6.0.md) — 2026-10-01

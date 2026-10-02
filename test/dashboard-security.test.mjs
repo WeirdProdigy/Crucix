@@ -36,3 +36,39 @@ test('external links escape attribute delimiters and reject active protocols', (
   assert.equal(safe('javascript:alert(1)'), null);
   assert.ok(!safe('https://example.com/?x=" onmouseover="alert(1)').includes('"'));
 });
+
+test('missing external links never become local undefined or null routes', () => {
+  const safe = helper('safeExternalUrl', { URL, location: { href: 'http://localhost:3117/' } });
+  for (const value of [undefined, null, '', ' \t\n ', false, 0, {}, []]) {
+    assert.equal(safe(value), null, `No link for ${String(value)}`);
+  }
+  assert.equal(safe('https://example.com/report'), 'https://example.com/report');
+});
+
+test('dashboard controls never open links while ticker cards remain clickable', () => {
+  const clicks = [], opened = [], details = [];
+  const start = html.indexOf('function init(){');
+  const end = html.indexOf("\ndocument.addEventListener('DOMContentLoaded'", start);
+  assert.ok(start >= 0 && end > start, 'Dashboard init function exists');
+  const context = {
+    booted: true, uiEventsBound: false,
+    rerenderDashboard() {}, renderGlossary() {}, bindSettingsEvents() {}, syncResponsiveLayout() {},
+    document: {
+      getElementById: () => ({ addEventListener() {} }),
+      addEventListener: (type, listener) => { if (type === 'click') clicks.push(listener); },
+    },
+    CrucixIntelligence: { openEvent: id => details.push(id) },
+    window: { open: (...args) => opened.push(args) },
+    safeExternalUrl: helper('safeExternalUrl', { URL, location: { href: 'http://localhost:3117/' } }),
+  };
+  vm.runInNewContext(`${html.slice(start, end)}\ninit();`, context);
+  const click = card => { for (const listener of clicks) listener({ target: { closest: () => card } }); };
+  click(null); // Visuals, settings and other controls outside ticker cards.
+  click({ dataset: {} }); // A ticker card without a source link.
+  assert.deepEqual(opened, [], 'Controls and missing links cannot navigate');
+  click({ dataset: { url: 'https://example.com/report' } });
+  assert.deepEqual(opened, [['https://example.com/report', '_blank', 'noopener']]);
+  click({ dataset: { eventId: 'event-fixture', url: 'https://example.com/report' } });
+  assert.deepEqual(details, ['event-fixture']);
+  assert.equal(opened.length, 1, 'Event details stay inside the dashboard');
+});

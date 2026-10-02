@@ -392,7 +392,7 @@ crucix/
 
 | Source | What It Tracks | Auth |
 |--------|---------------|------|
-| **GDELT** | Global news events, conflict mapping (100+ languages) | None |
+| **GDELT** | Conflict, economy, health and crisis stories from the 15-minute GKG news feed (100+ languages), ranked by theme focus, with city-level map points | None |
 | **OpenSky** | ADS-B observations across 10 hotspots; fallback expires after one hour | None |
 | **NASA FIRMS** | Satellite fire/thermal anomaly detection (3hr latency) | Free key |
 | **Maritime** | Reference chokepoints; the briefing adapter does not connect to live AIS | None for reference data |

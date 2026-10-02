@@ -44,3 +44,11 @@ test('malformed JSON is an error, text endpoints preserve full bounded text', as
   assert.match((await safeFetch(url)).error, /Invalid JSON/);
   assert.equal((await safeFetch(url, { format: 'text' })).rawText.length, 600);
 });
+test('binary endpoints return the exact bytes and honor the response limit', async t => {
+  const bytes = Buffer.from(Array.from({ length: 256 }, (_, i) => i));
+  const url = await fixture(t, (_req, res) => res.end(bytes));
+  const result = await safeFetch(url, { format: 'buffer', retries: 0 });
+  assert.ok(Buffer.isBuffer(result.rawBuffer));
+  assert.deepEqual(result.rawBuffer, bytes, 'Bytes that are invalid UTF-8 must not be altered');
+  assert.match((await safeFetch(url, { format: 'buffer', maxBytes: 64, retries: 0 })).error, /byte limit/);
+});

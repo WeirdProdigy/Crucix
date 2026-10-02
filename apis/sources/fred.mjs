@@ -32,7 +32,8 @@ const KEY_SERIES = {
   BAMLH0A0HYM2: 'High Yield Spread (Credit Stress)',
   // Commodities via FRED
   DCOILWTICO: 'WTI Crude Oil',
-  GOLDAMGBD228NLBM: 'Gold Price (London Fix)',
+  // FRED removed the LBMA gold series in January 2022. Gold is supplied by
+  // the existing YFinance adapter instead of an unavailable FRED series.
   // Housing
   MORTGAGE30US: '30-Year Mortgage Rate',
   // Global

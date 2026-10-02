@@ -1,134 +1,175 @@
 // GDELT — Global Database of Events, Language, and Tone
-// No auth required. Updates every 15 minutes. Monitors news in 100+ languages.
-// DOC 2.0 API: full-text search across last 3 months of global news
-// GEO 2.0 API: geolocation mapping of events
+// No auth required. Reads the GKG 2.0 file GDELT publishes every 15 minutes (global news in
+// 100+ languages with themes, locations and tone).
+//
+// The REST APIs on api.gdeltproject.org are deliberately not used: every response takes ~10 s,
+// scheduled clients get HTTP 429 without a Retry-After header (retrying only keeps the window
+// closed), and the GEO route /api/v2/geo/geo now answers 404. The static file feed on
+// data.gdeltproject.org has no such limits. Column layout: GKG 2.1 codebook.
 
 import { safeFetch } from '../utils/fetch.mjs';
+import { readZipEntry } from '../utils/zip.mjs';
+import { providerTime } from '../utils/freshness.mjs';
 
-const BASE = 'https://api.gdeltproject.org/api/v2';
+const BASE = 'https://data.gdeltproject.org/gdeltv2';
+const INDEX_LINE = /^https?:\/\/data\.gdeltproject\.org\/gdeltv2\/(\d{14})\.gkg\.csv\.zip$/;
+const MAX_FEED_AGE_MS = 3 * 3600000;
+const FEED_LABEL_LEAD_MS = 20 * 60000; // files are labelled ~10 minutes ahead of when they are written
+const PUBLISHED_SKEW_MS = 5 * 60000;
+const MIN_THEME_HITS = 2;
+const MAX_ARTICLES = 50;
+const MAX_POINTS = 30;
+const MAX_TITLE = 300;
+const MAX_ARCHIVE_BYTES = 20 * 1024 * 1024;
+const MAX_CSV_BYTES = 64 * 1024 * 1024;
 
-// Search recent global events/articles by keyword
-export async function searchEvents(query = '', opts = {}) {
-  const {
-    mode = 'ArtList',       // ArtList, TimelineVol, TimelineVolInfo, TimelineTone, TimelineLang, TimelineSourceCountry
-    maxRecords = 75,
-    timespan = '24h',       // e.g. "24h", "7d", "3m"
-    format = 'json',
-    sortBy = 'DateDesc',    // DateDesc, DateAsc, ToneDesc, ToneAsc
-  } = opts;
+// Theme names are GKG taxonomy codes. Broad World Bank tags such as WB_2165_HEALTH_EMERGENCIES
+// and EPU_ECONOMY are excluded because they label unrelated stories.
+const CATEGORIES = {
+  conflicts: /^(ARMEDCONFLICT|TERROR|MILITARY|REBELLION|PROTEST|UNREST_.+|WB_2433_CONFLICT_AND_VIOLENCE|CYBER_ATTACK|TAX_TERROR_GROUP(_.+)?)$/,
+  economy: /^(ECON_(INFLATION|TRADE_DISPUTE|BANKRUPTCY|STOCKMARKET|INTEREST_RATES|DEBT|OILPRICE|CENTRALBANK|UNEMPLOYMENT)|SANCTIONS)$/,
+  health: /^(HEALTH_PANDEMIC|WB_2167_PANDEMICS|TAX_DISEASE_(OUTBREAK|EPIDEMIC|PANDEMIC|\w*VIRUS|EBOLA|CHOLERA|MEASLES))$/,
+  crisis: /^(NATURAL_DISASTER(_.+)?|DISASTER_.+|REFUGEES|FAMINE|EVACUATION|STATE_OF_EMERGENCY)$/,
+};
 
-  // If no query, use broad geopolitical terms
-  const q = query || 'conflict OR crisis OR military OR sanctions OR war OR economy';
-  const params = new URLSearchParams({
-    query: q,
-    mode,
-    maxrecords: String(maxRecords),
-    timespan,
-    format,
-    sort: sortBy,
+const failure = error => ({ source: 'GDELT', timestamp: new Date().toISOString(), error, allArticles: [], geoPoints: [] });
+
+const ENTITIES = { quot: '"', apos: "'", lt: '<', gt: '>', nbsp: ' ', amp: '&' };
+function decodeEntities(text) {
+  return text.replace(/&(?:#(\d{1,7})|#x([0-9a-f]{1,6})|(amp|quot|apos|lt|gt|nbsp));/gi, (_match, decimal, hex, name) => {
+    if (name) return ENTITIES[name.toLowerCase()];
+    const code = decimal ? Number(decimal) : parseInt(hex, 16);
+    return code > 0 && code <= 0x10ffff && !(code >= 0xd800 && code <= 0xdfff) ? String.fromCodePoint(code) : '';
   });
-
-  return safeFetch(`${BASE}/doc/doc?${params}`, { retryDelay: 5000 });
 }
 
-// Get tone/sentiment timeline for a topic
-export async function toneTrend(query, timespan = '7d') {
-  const params = new URLSearchParams({
-    query,
-    mode: 'TimelineTone',
-    timespan,
-    format: 'json',
-  });
-  return safeFetch(`${BASE}/doc/doc?${params}`, { retryDelay: 5000 });
+// Titles come from third-party pages: drop control and bidi-override characters, bound the length.
+function cleanTitle(raw) {
+  return decodeEntities(raw)
+    .replace(/[\u0000-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩]/g, '')
+    .replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE);
 }
 
-// Get volume timeline for a topic (how much coverage)
-export async function volumeTrend(query, timespan = '7d') {
-  const params = new URLSearchParams({
-    query,
-    mode: 'TimelineVol',
-    timespan,
-    format: 'json',
-  });
-  return safeFetch(`${BASE}/doc/doc?${params}`, { retryDelay: 5000 });
+// GDELT stamps are YYYYMMDDHHMMSS (UTC); the dashboard reads them as YYYYMMDDTHHMMSSZ.
+const isoTime = d => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}T${d.slice(8, 10)}:${d.slice(10, 12)}:${d.slice(12, 14)}Z`;
+const compactTime = d => providerTime(isoTime(d)) ? `${d.slice(0, 8)}T${d.slice(8, 14)}Z` : null;
+
+function safeUrl(raw) {
+  if (!raw || raw.length > 2000) return null;
+  try { return ['http:', 'https:'].includes(new URL(raw).protocol) ? raw : null; } catch { return null; }
 }
 
-// GEO API — geographic event mapping
-export async function geoEvents(query = '', opts = {}) {
-  const {
-    mode = 'PointData',
-    timespan = '24h',
-    format = 'GeoJSON',
-    maxPoints = 500,
-  } = opts;
-
-  const q = query || 'conflict OR military OR protest OR explosion';
-  const params = new URLSearchParams({
-    query: q,
-    mode,
-    timespan,
-    format,
-    maxpoints: String(maxPoints),
-  });
-
-  return safeFetch(`${BASE}/geo/geo?${params}`);
+// Only cities (type 3 US, 4 world) are mapped: country, state and province rows are
+// centroids that would plot events at points where nothing happened.
+function places(raw) {
+  const found = new Map();
+  for (const entry of raw.split(';')) {
+    const [type, name, , , , lat, lon] = entry.split('#');
+    const latitude = Number(lat), longitude = Number(lon);
+    if (!['3', '4'].includes(type) || !name || lat === '' || lon === ''
+      || !Number.isFinite(latitude) || !Number.isFinite(longitude)
+      || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) continue;
+    found.set(`${latitude},${longitude}`, { lat: latitude, lon: longitude, name: name.slice(0, 120) });
+  }
+  return [...found.values()];
 }
 
-// Compact article for briefing
-function compactArticle(a) {
+function parseRow(line) {
+  const columns = line.split('\t');
+  if (columns.length < 27) return null;
+  const url = safeUrl(columns[4]);
+  const extras = columns[26];
+  const title = cleanTitle(extras.match(/<PAGE_TITLE>([\s\S]*?)<\/PAGE_TITLE>/)?.[1] ?? '');
+  const seendate = /^\d{14}$/.test(columns[1]) ? compactTime(columns[1]) : null;
+  if (!url || !title || !seendate) return null;
+  // The publication time is page metadata. An article cannot be published after GDELT saw it,
+  // so a later (or invalid) value is dropped rather than shown as a provider time.
+  const published = extras.match(/<PAGE_PRECISEPUBTIMESTAMP>(\d{14})<\/PAGE_PRECISEPUBTIMESTAMP>/)?.[1];
+  const publishedAt = published && compactTime(published);
+  const plausible = publishedAt && Date.parse(isoTime(published)) <= Date.parse(isoTime(columns[1])) + PUBLISHED_SKEW_MS;
+  // V2Themes lists one "THEME,charoffset" entry per occurrence, so the number of entries in a
+  // category measures how much the article is about it; one mention is not coverage.
+  const occurrences = columns[8].split(';').map(entry => entry.split(',')[0]);
+  const counts = Object.entries(CATEGORIES).map(([name, pattern]) => [name, occurrences.filter(theme => pattern.test(theme)).length]);
+  const categories = counts.filter(([, count]) => count >= MIN_THEME_HITS);
+  const tone = Number.parseFloat(columns[15]);
   return {
-    title: a.title,
-    url: a.url,
-    date: a.seendate,
-    domain: a.domain,
-    language: a.language,
-    country: a.sourcecountry,
+    article: {
+      title, url, seendate, domain: columns[3].slice(0, 253),
+      ...(plausible ? { date: publishedAt } : {}),
+    },
+    categories: categories.map(([name]) => name),
+    hits: categories.reduce((sum, [, count]) => sum + count, 0),
+    intensity: Number.isFinite(tone) ? Math.abs(tone) : 0,
+    places: places(columns[10]),
   };
 }
 
-// GDELT rate limit: 1 request per 5 seconds
-function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-// Briefing mode — get top global events summary (sequential due to rate limit)
+// Briefing mode — most intense coverage of conflict, economy, health and crisis themes
+// in the latest 15-minute GKG file, plus the cities and states those stories mention.
 export async function briefing() {
-  // Single broad query to stay within rate limits
-  const all = await searchEvents(
-    'conflict OR military OR economy OR crisis OR war OR sanctions OR tariff OR strike OR outbreak',
-    { maxRecords: 50, timespan: '24h' }
-  );
-  if (all.error) return { source: 'GDELT', timestamp: new Date().toISOString(), error: all.error, allArticles: [], geoPoints: [] };
+  const deadline = Date.now() + 27000;
+  const left = () => Math.max(1000, deadline - Date.now());
 
-  const articles = (all?.articles || []).map(compactArticle);
+  const index = await safeFetch(`${BASE}/lastupdate.txt`, { format: 'text', timeout: Math.min(5000, left()), retries: 1, retryDelay: 1000, maxBytes: 65536 });
+  if (index.error) return failure(`GDELT feed index unavailable (${index.error})`);
+  const label = index.rawText.split('\n').map(line => line.trim().split(/\s+/)[2]?.match(INDEX_LINE)?.[1]).find(Boolean);
+  const feedTimestamp = label && providerTime(isoTime(label));
+  if (!feedTimestamp) return failure('GDELT feed index did not list a GKG file');
 
-  // Categorize by keyword matching in titles
-  const categorize = (keywords) => articles.filter(a =>
-    keywords.some(k => a.title?.toLowerCase().includes(k))
-  );
+  const age = Date.now() - Date.parse(feedTimestamp);
+  if (age > MAX_FEED_AGE_MS || age < -FEED_LABEL_LEAD_MS) {
+    return { source: 'GDELT', timestamp: new Date().toISOString(), stale: true, feedTimestamp,
+      message: `GDELT feed ${label} is older than ${MAX_FEED_AGE_MS / 3600000} hours or has an implausible time`, allArticles: [], geoPoints: [] };
+  }
 
-  // Geo events — get mapped event locations (separate API, respects rate limit)
-  await delay(5500);
-  let geoPoints = [];
-  try {
-    const geo = await geoEvents('conflict OR military OR protest OR crisis', { maxPoints: 30, timespan: '24h' });
-    geoPoints = (geo?.features || []).filter(f => f.geometry?.coordinates).map(f => ({
-      lat: f.geometry.coordinates[1],
-      lon: f.geometry.coordinates[0],
-      name: f.properties?.name || f.properties?.html || '',
-      count: f.properties?.count || 1,
-      type: f.properties?.type || 'event',
-    }));
-  } catch (e) { /* geo endpoint optional — don't break briefing */ }
+  const archive = await safeFetch(`${BASE}/${label}.gkg.csv.zip`, { format: 'buffer', timeout: Math.min(15000, left()), retries: 0, maxBytes: MAX_ARCHIVE_BYTES });
+  if (archive.error) return failure(`GDELT feed archive unavailable (${archive.error})`);
+  let csv;
+  try { csv = readZipEntry(archive.rawBuffer, { maxBytes: MAX_CSV_BYTES }).toString('utf8'); }
+  catch { return failure('GDELT feed archive could not be read'); }
+
+  const rows = csv.split('\n').map(line => parseRow(line.replace(/\r$/, ''))).filter(Boolean);
+  if (!rows.length) return failure('GDELT feed contained no usable articles');
+
+  // Outlets repeat the same headline, so identical headlines collapse into their most focused
+  // copy. Stories rank by theme density, then by how many outlets carry them, then by tone.
+  const matched = rows.filter(row => row.categories.length).sort((a, b) => b.hits - a.hits || b.intensity - a.intensity);
+  if (!matched.length) return failure('GDELT feed contained no matching conflict, economy, health or crisis articles');
+  const stories = new Map();
+  for (const row of matched) {
+    const key = row.article.title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    const story = stories.get(key);
+    if (!story) stories.set(key, { ...row, categories: new Set(row.categories), outlets: new Set([row.article.domain]) });
+    else { row.categories.forEach(name => story.categories.add(name)); story.outlets.add(row.article.domain); }
+  }
+  const ranked = [...stories.values()].sort((a, b) => b.hits - a.hits || b.outlets.size - a.outlets.size || b.intensity - a.intensity);
+  const articles = ranked.slice(0, MAX_ARTICLES).map(story => story.article);
+  const mentions = new Map();
+  for (const row of matched) {
+    for (const place of row.places) {
+      const key = `${place.lat},${place.lon}`;
+      const point = mentions.get(key) ?? { ...place, count: 0, type: 'event' };
+      point.count++;
+      mentions.set(key, point);
+    }
+  }
+  const inCategory = name => ranked.filter(story => story.categories.has(name)).slice(0, MAX_ARTICLES).map(story => story.article);
 
   return {
     source: 'GDELT',
     timestamp: new Date().toISOString(),
+    feed: 'GKG 2.0',
+    feedTimestamp,
+    scannedArticles: rows.length,
+    matchedArticles: matched.length,
     totalArticles: articles.length,
     allArticles: articles,
-    geoPoints,
-    conflicts: categorize(['military', 'conflict', 'war', 'strike', 'missile', 'attack', 'bomb', 'troops']),
-    economy: categorize(['economy', 'recession', 'inflation', 'market', 'sanctions', 'tariff', 'trade', 'gdp']),
-    health: categorize(['pandemic', 'outbreak', 'epidemic', 'disease', 'virus', 'health']),
-    crisis: categorize(['crisis', 'disaster', 'emergency', 'refugee', 'famine']),
+    geoPoints: [...mentions.values()].sort((a, b) => b.count - a.count).slice(0, MAX_POINTS),
+    conflicts: inCategory('conflicts'),
+    economy: inCategory('economy'),
+    health: inCategory('health'),
+    crisis: inCategory('crisis'),
   };
 }
 

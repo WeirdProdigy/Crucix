@@ -1977,7 +1977,7 @@ function esc(value){return String(value??'').replace(/&/g,'&amp;').replace(/</g,
 function plainText(value){return String(value??'').replace(/&#39;/g,"'").replace(/&#33;/g,'!').replace(/&amp;/g,'&').replace(/<[^>]+>/g,'')}
 function cleanText(value){return esc(plainText(value))}
 function ideaTypeClass(value){return ['long','short','hedge','watch','avoid'].includes(String(value).toLowerCase())?String(value).toLowerCase():'watch'}
-function safeExternalUrl(raw){try{const u=new URL(raw,location.href);return u.protocol==='http:'||u.protocol==='https:'?u.toString():null}catch{return null}}
+function safeExternalUrl(raw){if(typeof raw!=='string'||!raw.trim())return null;try{const u=new URL(raw,location.href);return u.protocol==='http:'||u.protocol==='https:'?u.toString():null}catch{return null}}
 
 // === BOOT SEQUENCE ===
 function runBoot(){
@@ -2345,7 +2345,7 @@ function init(){
   if(!uiEventsBound){
     uiEventsBound=true;
     document.getElementById('mapContainer').addEventListener('click',event=>{if(!event.target.closest('.map-popup'))closePopup();});
-    const openCard=card=>{if(card?.dataset.eventId)CrucixIntelligence.openEvent(card.dataset.eventId);else{const url=safeExternalUrl(card?.dataset.url);if(url)window.open(url,'_blank','noopener');}};
+    const openCard=card=>{if(!card)return;if(card.dataset.eventId)CrucixIntelligence.openEvent(card.dataset.eventId);else{const url=safeExternalUrl(card.dataset.url);if(url)window.open(url,'_blank','noopener');}};
     document.addEventListener('click',event=>openCard(event.target.closest('.tk-card[data-event-id],.tk-card[data-url]')));
     document.addEventListener('keydown',event=>{const card=event.target.closest('.tk-card[data-event-id]');if(card&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openCard(card);}});
     document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!document.getElementById('settingsOverlay').classList.contains('show'))closeGlossary();});

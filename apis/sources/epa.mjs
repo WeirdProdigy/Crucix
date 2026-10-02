@@ -130,7 +130,7 @@ export async function briefing() {
 
   // Fetch recent analytical results (broad pull)
   const recentData = await getAnalyticalResults({ rows: 100 });
-  if (recentData.error) return { source: 'EPA RadNet', timestamp: new Date().toISOString(), error: recentData.error, readings: [], signals: ['Radiation readings unavailable'] };
+  if (recentData.error) return { source: 'EPA RadNet', timestamp: new Date().toISOString(), error: recentData.status === 403 ? 'EPA RadNet provider access denied (HTTP 403)' : recentData.error, readings: [], signals: ['Radiation readings unavailable'] };
   const recentRecords = Array.isArray(recentData) ? recentData : [];
 
   // Compact all readings

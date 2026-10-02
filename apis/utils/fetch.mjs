@@ -6,9 +6,9 @@ export function retryAfterMs(value, now = Date.now()) {
   return Number.isFinite(delay) ? Math.max(0, delay) : null;
 }
 
-export async function readBoundedText(response, maxBytes = 10 * 1024 * 1024) {
+export async function readBoundedBytes(response, maxBytes = 10 * 1024 * 1024) {
   const reader = response.body?.getReader();
-  if (!reader) return '';
+  if (!reader) return Buffer.alloc(0);
   let bytes = 0;
   const chunks = [];
   try {
@@ -19,11 +19,15 @@ export async function readBoundedText(response, maxBytes = 10 * 1024 * 1024) {
       if (bytes > maxBytes) throw new Error(`Response exceeds ${maxBytes} byte limit`);
       chunks.push(value);
     }
-    return new TextDecoder().decode(Buffer.concat(chunks));
+    return Buffer.concat(chunks);
   } catch (error) {
     await reader.cancel().catch(() => {});
     throw error;
   } finally { reader.releaseLock(); }
+}
+
+export async function readBoundedText(response, maxBytes = 10 * 1024 * 1024) {
+  return new TextDecoder().decode(await readBoundedBytes(response, maxBytes));
 }
 
 export async function safeFetch(url, opts = {}) {
@@ -52,6 +56,7 @@ export async function safeFetch(url, opts = {}) {
         await response.body?.cancel();
         throw new Error(`HTTP ${response.status}`); // upstream bodies may echo credentials
       }
+      if (format === 'buffer') return { rawBuffer: await readBoundedBytes(response, maxBytes) };
       const text = await readBoundedText(response, maxBytes);
       if (format === 'text') return { rawText: text };
       try { return JSON.parse(text); }
