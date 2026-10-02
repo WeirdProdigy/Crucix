@@ -858,9 +858,10 @@
       "measurementStatus": "Measurement status",
       "targetHost": "Target host",
       "blockingConfirmed": "Blocking confirmed",
-      "transitCalls": "Ship transits (day)",
-      "baseline28d": "28-day median transits",
-      "changePct": "Change vs 28-day median (%)",
+      "transitCalls": "Ship transits (that day)",
+      "mean7d": "7-day mean transits",
+      "baseline28d": "Previous 28-day median transits",
+      "changePct": "7-day mean vs previous 28-day median (%)",
       "magnitude": "Magnitude",
       "depthKm": "Depth (km)"
     }

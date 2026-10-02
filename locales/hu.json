@@ -858,9 +858,10 @@
       "measurementStatus": "Mérés állapota",
       "targetHost": "Célhoszt",
       "blockingConfirmed": "Blokkolás megerősítve",
-      "transitCalls": "Hajóáthaladások (nap)",
-      "baseline28d": "28 napos medián áthaladás",
-      "changePct": "Változás a 28 napos mediánhoz képest (%)",
+      "transitCalls": "Hajóáthaladások (aznap)",
+      "mean7d": "7 napos átlagos áthaladás",
+      "baseline28d": "Megelőző 28 napos medián áthaladás",
+      "changePct": "7 napos átlag a megelőző 28 napos mediánhoz képest (%)",
       "magnitude": "Magnitúdó",
       "depthKm": "Mélység (km)"
     }

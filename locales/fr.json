@@ -858,9 +858,10 @@
       "measurementStatus": "Statut de la mesure",
       "targetHost": "Hôte cible",
       "blockingConfirmed": "Blocage confirmé",
-      "transitCalls": "Transits de navires (jour)",
-      "baseline28d": "Médiane des transits sur 28 jours",
-      "changePct": "Variation par rapport à la médiane sur 28 jours (%)",
+      "transitCalls": "Transits de navires (ce jour-là)",
+      "mean7d": "Transits moyens sur 7 jours",
+      "baseline28d": "Médiane des transits des 28 jours précédents",
+      "changePct": "Moyenne sur 7 jours par rapport à la médiane des 28 jours précédents (%)",
       "magnitude": "Magnitude",
       "depthKm": "Profondeur (km)"
     }

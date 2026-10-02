@@ -11,9 +11,14 @@ const DAILY_URL = `${SERVICES}/Daily_Chokepoints_Data/FeatureServer/0/query`;
 const PLACES_URL = `${SERVICES}/PortWatch_chokepoints_database/FeatureServer/0/query`;
 const PAGE_URL = 'https://portwatch.imf.org/pages/';
 const DAY = 86400000;
-const HISTORY_DAYS = 40; // the latest published day (up to 10 days old) plus its 28-day baseline
+// The latest published day (up to ~10 days of provider lag), its 7-day window and the 28-day baseline before the window.
+// At most 12 names x 47 days = 564 rows: under the layer's 1000-record page and MAX_EXAMINED.
+const HISTORY_DAYS = 46;
+const WINDOW_DAYS = 7;
+const MIN_WINDOW_DAYS = 5;
 const BASELINE_DAYS = 28;
 const MIN_BASELINE_DAYS = 14;
+const MIN_RATED_BASELINE = 3; // below 3 transits a day the percentages are noise, so no severity is rated
 const MAX_CHOKEPOINTS = 12;
 const MAX_EXAMINED = 2000;
 const FUTURE_SKEW_MS = 300000;
@@ -26,9 +31,8 @@ const DEFAULTS = [['Strait of Hormuz', 'hormuz'], ['Bab el-Mandeb Strait', 'bab_
   ['Bosporus Strait', 'bosporus'], ['Panama Canal', 'panama'], ['Gibraltar Strait', 'gibraltar'], ['Dover Strait', 'dover']];
 const SLUGS = new Map(DEFAULTS.map(([name, slug]) => [name.toLowerCase(), slug]));
 const NAME = /^[A-Za-z][A-Za-z .-]{1,59}$/;
-const METRIC_SLUGS = new Set(['hormuz', 'bab_el_mandeb', 'suez']);
 const RANK = { high: 0, moderate: 1, info: 2 };
-const SUMMARY = 'Daily ship transit counts at the watched maritime chokepoints for the latest day the IMF has published (weekly refresh, a delay of several days). Counts are AIS-visible transits only: dark or AIS-off ships are not counted. These are estimates, not live positions.';
+const SUMMARY = 'Daily ship transit counts at the watched maritime chokepoints for the latest day the IMF has published (weekly refresh, a delay of several days), rated by the 7-day mean against the previous 28-day median. Counts are AIS-visible transits only: dark or AIS-off ships are not counted. These are estimates, not live positions.';
 const EXTRAS = {
   attribution: 'Sources: UN Global Platform; IMF PortWatch (portwatch.imf.org)',
   rights: 'IMF terms of use: personal, noncommercial usage only, without any right to resell or redistribute. Transit counts are AIS-based estimates provided "as is", without warranty.',
@@ -43,22 +47,31 @@ function median(values) {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 // Transport errors become a short reason; a URL or an upstream message never reaches the result.
+// Every regex in this file runs on text that was cut to a fixed length first: unbounded input never reaches one.
 function failure(error) {
   if (error && typeof error === 'object') return Number.isInteger(error.code) ? `ArcGIS error ${error.code}` : 'ArcGIS error';
-  const reason = typeof error === 'string' ? error.replace(/https?:\/\/\S*/gi, '').trim().slice(0, 120) : '';
+  const reason = typeof error === 'string' ? error.slice(0, 300).replace(/https?:\/\/\S*/gi, '').trim().slice(0, 120) : '';
   return `IMF PortWatch request failed${reason ? `: ${reason}` : ''}`;
 }
 
 // Configured names go into an ArcGIS where clause: plain letters, spaces, dots and hyphens only.
+// A custom name gets a derived slug that never collides with the eight fixed ones or an earlier custom slug (suffix _2, _3, ...).
 function watched(list) {
   const names = list === undefined ? DEFAULTS.map(([name]) => name) : Array.isArray(list) ? list : [];
-  const seen = new Set();
+  const seen = new Set(), used = new Set(DEFAULTS.map(([, slug]) => slug));
   return names.slice(0, 50).flatMap(raw => {
-    const name = typeof raw === 'string' ? raw.trim() : '';
+    const name = typeof raw === 'string' && raw.length <= 80 ? raw.trim() : '';
     const key = name.toLowerCase();
     if (!NAME.test(name) || seen.has(key)) return [];
     seen.add(key);
-    return [{ name, key, slug: SLUGS.get(key) || key.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') }];
+    let slug = SLUGS.get(key);
+    if (!slug) {
+      const base = key.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+      slug = base;
+      for (let n = 2; used.has(slug); n++) slug = `${base}_${n}`;
+      used.add(slug);
+    }
+    return [{ name, key, slug }];
   }).slice(0, MAX_CHOKEPOINTS);
 }
 
@@ -81,7 +94,7 @@ function collect(features, specs, now) {
   for (const feature of features.slice(0, MAX_EXAMINED)) {
     const attributes = feature?.attributes;
     if (!attributes || typeof attributes !== 'object') continue;
-    const spec = specs.get(typeof attributes.portname === 'string' ? attributes.portname.trim().toLowerCase() : '');
+    const spec = specs.get(typeof attributes.portname === 'string' && attributes.portname.length <= 80 ? attributes.portname.trim().toLowerCase() : '');
     const id = portId(attributes.portid);
     const day = typeof attributes.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(attributes.date) ? providerTime(attributes.date) : null;
     const count = attributes.n_total;
@@ -95,21 +108,27 @@ function collect(features, specs, now) {
   return groups;
 }
 
+// Rated on the 7-day mean ending at the latest day against the median of the 28 days before that window: a single day
+// is far too noisy at single-digit counts. `transitCalls` stays the latest day's own count.
 function observation(group, places) {
-  const latest = [...group.days.keys()].sort().at(-1), count = group.days.get(latest), latestMs = Date.parse(latest);
-  const baselineValues = [...group.days].filter(([day]) => Date.parse(day) >= latestMs - BASELINE_DAYS * DAY && Date.parse(day) < latestMs).map(([, value]) => value);
-  const baseline = baselineValues.length >= MIN_BASELINE_DAYS ? round1(median(baselineValues)) : null;
-  const change = baseline > 0 ? round1((count - baseline) / baseline * 100) : null;
-  const severity = change !== null && change <= -50 ? 'high' : change !== null && change <= -25 ? 'moderate' : 'info';
-  const dayLabel = latest.slice(0, 10);
-  const comparison = baseline === null ? 'fewer than 14 baseline days are available, so no change is computed'
-    : `the median of the previous 28 days is ${baseline}${change === null ? '' : ` (${change > 0 ? '+' : ''}${change}%)`}`;
+  const latest = [...group.days.keys()].sort().at(-1), latestMs = Date.parse(latest), count = group.days.get(latest);
+  const between = (oldest, newest) => [...group.days].filter(([day]) => Date.parse(day) >= latestMs - oldest * DAY && Date.parse(day) <= latestMs - newest * DAY).map(([, value]) => value);
+  const recent = between(WINDOW_DAYS - 1, 0), before = between(WINDOW_DAYS - 1 + BASELINE_DAYS, WINDOW_DAYS);
+  const mean7d = recent.length >= MIN_WINDOW_DAYS ? round1(recent.reduce((sum, value) => sum + value, 0) / recent.length) : null;
+  const baseline = before.length >= MIN_BASELINE_DAYS ? round1(median(before)) : null;
+  const change = mean7d !== null && baseline > 0 ? round1((mean7d - baseline) / baseline * 100) : null;
+  const severity = change === null || baseline < MIN_RATED_BASELINE ? 'info' : change <= -50 ? 'high' : change <= -25 ? 'moderate' : 'info';
+  const dayLabel = latest.slice(0, 10), plural = count === 1 ? '' : 's';
+  const comparison = mean7d === null ? 'fewer than 5 of the last 7 days are available, so no change is computed'
+    : baseline === null ? 'fewer than 14 baseline days are available, so no change is computed'
+    : `the 7-day mean is ${mean7d} against a median of ${baseline} over the previous 28 days${change === null ? '' : ` (${change > 0 ? '+' : ''}${change}%)`}${baseline < MIN_RATED_BASELINE ? '; the baseline is below 3 transits a day, too low to rate a change' : ''}`;
   const place = Object.hasOwn(places, group.id) ? places[group.id] : null;
   return { kind: 'maritime', providerId: `${group.spec.slug}:${dayLabel}`, chokepoint: group.spec.slug,
-    title: `${group.name}: ${count} ship transit${count === 1 ? '' : 's'} on ${dayLabel}`,
-    summary: `${group.name} logged ${count} AIS-visible ship transit${count === 1 ? '' : 's'} on ${dayLabel} (UTC); ${comparison}. Counts include only ships whose AIS signal is received: dark or AIS-off ships are not counted. IMF PortWatch estimate, refreshed weekly.`,
-    source: SOURCE, url: `${PAGE_URL}${group.id}`, observedAt: latest, severity,
-    transitCalls: count, ...(baseline === null ? {} : { baseline28d: baseline }), ...(change === null ? {} : { changePct: change }),
+    title: `${group.name}: ${count} ship transit${plural} on ${dayLabel}`,
+    summary: `${group.name} logged ${count} AIS-visible ship transit${plural} on ${dayLabel} (UTC); ${comparison}. Counts include only ships whose AIS signal is received: dark or AIS-off ships are not counted. IMF PortWatch estimate, refreshed weekly.`,
+    // The date makes the deep link specific to the day, so history keeps one record per chokepoint and day.
+    source: SOURCE, url: `${PAGE_URL}${group.id}?date=${dayLabel}`, observedAt: latest, severity,
+    transitCalls: count, ...(mean7d === null ? {} : { mean7d }), ...(baseline === null ? {} : { baseline28d: baseline }), ...(change === null ? {} : { changePct: change }),
     ...(place ? { lat: place.lat, lon: place.lon, locationMethod: 'provider', locationPrecision: 'approximate' } : {}) };
 }
 
@@ -123,7 +142,8 @@ export function parsePortwatch(payload, { now = Date.now(), chokepoints, locatio
   // Most severe first, then the configured order; at most one row per chokepoint, so the cap never bites.
   const rows = names.flatMap(spec => groups.has(spec.key) ? [observation(groups.get(spec.key), places)] : []).sort((a, b) => RANK[a.severity] - RANK[b.severity]);
   const out = freshResult(SOURCE, rows.map(row => row.observedAt).sort().at(-1) ?? null, rows, EXTRAS, now);
-  out.metrics = Object.fromEntries(out.observations.filter(row => METRIC_SLUGS.has(row.chokepoint)).map(row => [`${row.chokepoint}_transits`, row.transitCalls]));
+  // The alert registry reads these: the 7-day mean, not the noisy single day; absent when the window is too thin.
+  out.metrics = Object.fromEntries(out.observations.filter(row => row.mean7d !== undefined).map(row => [`${row.chokepoint}_transits`, row.mean7d]));
   return out;
 }
 

@@ -1,8 +1,10 @@
 // EMSC-CSEM SeismicPortal FDSN event service: earthquakes of magnitude 4.5 or larger reported in the last 24 hours.
 // https://www.seismicportal.eu/fdsn-wsevent.html - preliminary parameters that the provider revises afterwards.
-// The service has no feed time. The newest event time stands in for it, so a 6 hour gap without any M4.5+ event
-// (about 1% of the time) reads as an expired feed. An empty answer (HTTP 204, no body) therefore has no provider time
-// at all and is a stale result, never an ok list of zero events.
+// The service has no feed time. The newest event time stands in for it, so a gap of more than 12 hours without any
+// M4.5+ event reads as an expired feed (in 48.7 days of real events, about 20 a day, the longest gap was 9.2 h; a 6 hour
+// limit would have expired the feed about 0.8% of the time). An empty answer (HTTP 204, no body) therefore has no
+// provider time at all and is a stale result, never an ok list of zero events.
+// Every regex below runs on text that was cut to a fixed length first: unbounded input never reaches one.
 import { safeFetch } from '../utils/fetch.mjs';
 import { providerTime, freshness, freshResult, unavailableResult, POLICIES } from '../utils/freshness.mjs';
 
@@ -11,6 +13,7 @@ const ENDPOINT = 'https://www.seismicportal.eu/fdsnws/event/1/query';
 const EVENT_PAGE = 'https://www.seismicportal.eu/eventdetails.html?unid=';
 const WINDOW_MS = 24 * 3600000;
 const MAX_ROWS = 100;
+const REQUEST_LIMIT = MAX_ROWS + 1; // one more than we keep, so a cut made by the provider itself shows in truncatedRecords
 const MAX_EXAMINED = 1000;
 const FUTURE_SKEW_MS = 300000;
 const REQUEST = Object.freeze({ timeout: 10000, retries: 0, maxBytes: 2 * 1024 * 1024 });
@@ -23,13 +26,14 @@ const EXTRAS = {
 };
 
 // Provider text becomes inert plain text: markup, control, bidi and zero-width characters go, whitespace collapses.
+// The input is cut to 400 characters BEFORE any regex runs and the tag pattern cannot rescan: linear on hostile text.
 const clean = (value, cap) => typeof value === 'string'
-  ? value.replace(/<[^>]*>/g, '').replace(/\p{Cf}/gu, '').replace(/[\p{Cc}\s]+/gu, ' ').replace(/[<>]/g, '').trim().slice(0, cap).trim() : '';
-const tag = value => typeof value === 'string' && /^[A-Za-z0-9 ._-]{1,20}$/.test(value.trim()) ? value.trim() : '';
+  ? value.slice(0, 400).replace(/<[^<>]*>/g, '').replace(/\p{Cf}/gu, '').replace(/[\p{Cc}\s]+/gu, ' ').replace(/[<>]/g, '').trim().slice(0, cap).trim() : '';
+const tag = value => typeof value === 'string' && value.length <= 40 && /^[A-Za-z0-9 ._-]{1,20}$/.test(value.trim()) ? value.trim() : '';
 const validPoint = (lat, lon) => typeof lat === 'number' && typeof lon === 'number' && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
 // Transport errors become a short reason; a URL or an upstream message never reaches the result.
 function failure(error) {
-  const reason = typeof error === 'string' ? error.replace(/https?:\/\/\S*/gi, '').trim().slice(0, 120) : '';
+  const reason = typeof error === 'string' ? error.slice(0, 300).replace(/https?:\/\/\S*/gi, '').trim().slice(0, 120) : '';
   return `EMSC request failed${reason ? `: ${reason}` : ''}`;
 }
 const severityOf = magnitude => magnitude >= 7 ? 'critical' : magnitude >= 6 ? 'high' : magnitude >= 5 ? 'moderate' : 'low';
@@ -79,7 +83,7 @@ export async function briefing(options = {}) {
   const fetcher = options.fetcher || safeFetch;
   const request = { ...REQUEST, timeout: Math.max(1, Math.min(10000, Number(options.timeout) || 10000)) };
   // Largest first, so the 100-event limit can only cut the smallest quakes of a very busy day.
-  const query = new URLSearchParams({ format: 'json', minmag: '4.5', limit: String(MAX_ROWS), orderby: 'magnitude', start: new Date(now - WINDOW_MS).toISOString() });
+  const query = new URLSearchParams({ format: 'json', minmag: '4.5', limit: String(REQUEST_LIMIT), orderby: 'magnitude', start: new Date(now - WINDOW_MS).toISOString() });
   let payload;
   try { payload = await fetcher(`${ENDPOINT}?${query}`, request); } catch { payload = { error: 'network error' }; }
   // "No event in the window" is HTTP 204 with an empty body, which the fetch helper reports as invalid JSON.

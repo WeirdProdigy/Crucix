@@ -71,9 +71,15 @@ test('an empty list has no provider time and is never presented as current', () 
   const empty = parseEmsc(collection([]), { now });
   assert.equal(empty.status, 'stale'); assert.equal(empty.observedAt, null); assert.deepEqual(empty.observations, []);
   assert.equal(empty.freshness.reason, 'unknown-provider-time');
-  const quiet = parseEmsc(collection([quake(1, { time: iso(now - 7 * HOUR) })]), { now });
-  assert.equal(quiet.status, 'stale', 'a 6 hour gap without any M4.5+ event expires the feed'); assert.deepEqual(quiet.observations, []); assert.equal(quiet.freshness.reason, 'expired-provider-time');
-  assert.equal(parseEmsc(collection([quake(1, { time: iso(now - 5 * HOUR) })]), { now }).status, 'ok');
+  // The feed time is the newest event time and the feed limit is 12 h (a real quiet stretch of 9.2 h must not read as expired).
+  for (const gap of [7 * HOUR, 9.2 * HOUR, 11 * HOUR + 59 * 60000, 12 * HOUR]) {
+    const quiet = parseEmsc(collection([quake(1, { time: iso(now - gap) })]), { now });
+    assert.equal(quiet.status, 'ok', `a ${gap / HOUR} h gap is still current`); assert.equal(quiet.observations.length, 1);
+  }
+  for (const gap of [12 * HOUR + 1000, 13 * HOUR, 20 * HOUR]) {
+    const quiet = parseEmsc(collection([quake(1, { time: iso(now - gap) })]), { now });
+    assert.equal(quiet.status, 'stale', `a ${gap / HOUR} h gap expires the feed`); assert.deepEqual(quiet.observations, []); assert.equal(quiet.freshness.reason, 'expired-provider-time');
+  }
 });
 
 test('wrong shapes and provider errors never throw and give an error result', () => {
@@ -119,6 +125,27 @@ test('hostile provider text is cleaned to inert plain text and capped', () => {
   for (const value of [undefined, null, 5, {}, []]) assert.equal(first(collection([quake(1, { flynn_region: value })])).title, 'M5.8 Unknown region');
 });
 
+// Standing rule for every adapter: cut the text to a fixed length first, then run regexes (a tag pattern that rescans from every '<' is quadratic).
+test('hostile oversized provider text is cleaned in linear time', { timeout: 5000 }, () => {
+  const started = Date.now();
+  const floods = { lt: '<'.repeat(1000000), openTag: '<a '.repeat(300000), gt: '>'.repeat(1000000), nested: '<<>'.repeat(300000), spaces: ' '.repeat(1000000) + 'COAST', words: 'A'.repeat(1000000),
+    controls: (bell + zero).repeat(500000), http: 'http://'.repeat(150000) };
+  for (const [name, region] of Object.entries(floods)) {
+    const row = first(collection([quake(1, { flynn_region: region, auth: region, magtype: region })]));
+    assert.match(row.title, /^M5\.8 /, name); assert.doesNotMatch(row.title, /[<>]/, name); assert.ok(row.title.length <= 130, `${name} title length ${row.title.length}`);
+    assert.ok(row.summary.length <= 500, name); assert.doesNotMatch(row.summary, /Solution from/, 'an oversized author tag is dropped');
+  }
+  assert.deepEqual(parseEmsc(collection([quake(1, { unid: 'a'.repeat(1000000) }), quake(2, { time: 'x'.repeat(1000000) }), quake(3, { evtype: 'k'.repeat(1000000) }), quake(4, { lastupdate: '9'.repeat(1000000) })]), { now }).observations.map(r => r.providerId), ['20261002_0000004'], 'only the oversized update time is merely dropped');
+  assert.equal(first(collection([quake(1, { flynn_region: floods.lt })])).title, 'M5.8 Unknown region');
+  assert.match(first(collection([quake(1, { flynn_region: floods.openTag })])).title, /^M5\.8 a a a /);
+  assert.equal(first(collection([quake(1, { flynn_region: floods.words })])).region.length, 120);
+  for (const error of ['http://'.repeat(150000), '<'.repeat(1000000), 'x'.repeat(1000000)]) {
+    const failed = parseEmsc({ error }, { now });
+    assert.equal(failed.status, 'error'); assert.ok(failed.error.length <= 300); assert.doesNotMatch(failed.error, /https?:/);
+  }
+  assert.ok(Date.now() - started < 2000, `took ${Date.now() - started} ms`);
+});
+
 test('old, future and undated events are excluded and never fill the cap or set the feed time', () => {
   const fresh = Array.from({ length: 120 }, (_, i) => quake(i + 1, { mag: 5, time: iso(now - (i + 1) * 60000) }));
   const old = Array.from({ length: 60 }, (_, i) => quake(200 + i, { mag: 8, time: iso(now - 27 * HOUR - i * 60000) }));
@@ -146,6 +173,9 @@ test('150 earthquakes are ranked by magnitude then time and capped at 100 before
   assert.equal(result.rejectedObservations, 0); assert.equal(result.truncatedRecords, 50); assert.equal(result.examinedRecords, 150);
   const shuffled = parseEmsc(collection([...payload.features].reverse()), { now });
   assert.deepEqual(shuffled.observations.map(r => r.providerId), expected, 'the order of the payload does not matter');
+  const exactly = n => parseEmsc(collection(Array.from({ length: n }, (_, i) => quake(i + 1, { mag: 5, time: iso(now - 60000) }))), { now });
+  assert.equal(exactly(100).observations.length, 100); assert.equal(exactly(100).truncatedRecords, 0, 'a provider answer of exactly 100 events is complete');
+  assert.equal(exactly(101).observations.length, 100); assert.equal(exactly(101).truncatedRecords, 1, 'the 101st event (the request asks for 101) shows that the provider cut the list');
   const huge = parseEmsc(collection(Array.from({ length: 1200 }, (_, i) => quake(i + 1, { mag: 5, time: iso(now - 60000) }))), { now });
   assert.equal(huge.examinedRecords, 1000); assert.equal(huge.observations.length, 100); assert.ok(huge.truncatedRecords >= 200);
 });
@@ -208,7 +238,7 @@ test('a missing or invalid update time is left out and never replaced', () => {
 test('observations survive the server normalization with facts, location, severity and the registered home and policy', () => {
   assert.deepEqual(FACT_FIELDS.EMSC, ['magnitude', 'depthKm']);
   assert.equal(HOME.EMSC, 'https://www.seismicportal.eu/');
-  assert.deepEqual(POLICIES.EMSC, { maxAgeMs: 6 * HOUR, observationMaxAgeMs: 26 * HOUR });
+  assert.deepEqual(POLICIES.EMSC, { maxAgeMs: 12 * HOUR, observationMaxAgeMs: 26 * HOUR });
   const [out] = normalizeLiveSources({ EMSC: parseEmsc(LIVE, { now }) }, now);
   assert.equal(out.status, 'ok'); assert.equal(out.url, 'https://www.seismicportal.eu/'); assert.equal(out.observations.length, 4);
   const row = out.observations[0];
@@ -230,7 +260,7 @@ test('briefing asks for the last 24 hours of M4.5+ events largest first in one b
   assert.equal(result.status, 'ok'); assert.equal(seen.length, 1);
   const { url, options } = seen[0];
   assert.equal(url.origin + url.pathname, 'https://www.seismicportal.eu/fdsnws/event/1/query');
-  assert.equal(url.searchParams.get('format'), 'json'); assert.equal(url.searchParams.get('minmag'), '4.5'); assert.equal(url.searchParams.get('limit'), '100');
+  assert.equal(url.searchParams.get('format'), 'json'); assert.equal(url.searchParams.get('minmag'), '4.5'); assert.equal(url.searchParams.get('limit'), '101', 'one more than we keep');
   assert.equal(url.searchParams.get('orderby'), 'magnitude'); assert.equal(url.searchParams.get('start'), iso(now - 24 * HOUR));
   assert.deepEqual({ ...options }, { timeout: 10000, retries: 0, maxBytes: 2 * MIB });
   assert.deepEqual(result.observations.map(r => r.magnitude), [5.8, 5.1, 5, 4.5]);

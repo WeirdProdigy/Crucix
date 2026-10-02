@@ -3,7 +3,12 @@ import assert from 'node:assert/strict';
 import { parsePortwatch, parsePortwatchPlaces, briefing } from '../apis/sources/portwatch.mjs';
 import { POLICIES } from '../apis/utils/freshness.mjs';
 import { FACT_FIELDS, HOME, normalizeLiveSources } from '../lib/intelligence/live-sources.mjs';
+import { HistoryStore } from '../lib/intelligence/history.mjs';
+import { buildEvents } from '../lib/intelligence/events.mjs';
 import config from '../crucix.config.mjs';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const now = Date.parse('2026-10-02T19:00:00Z');
 const DAY = 86400000;
@@ -46,7 +51,7 @@ async function withFetch(impl, run) {
 const reply = (body, init) => new Response(typeof body === 'string' ? body : JSON.stringify(body), { status: 200, ...init });
 const route = (url, dailyBody = daily(), placesBody = PLACES) => String(url).includes('PortWatch_chokepoints_database') ? placesBody : dailyBody;
 
-test('parse turns the latest day of each chokepoint into a maritime observation with its 28-day baseline', () => {
+test('parse turns the latest day of each chokepoint into a maritime observation with its 7-day mean and 28-day baseline', () => {
   const result = parsePortwatch(daily(), { now, chokepoints: ['Suez Canal', 'Bab el-Mandeb Strait', 'Strait of Hormuz'] });
   assert.equal(result.status, 'ok'); assert.equal(result.source, 'IMF-PortWatch');
   assert.equal(result.observedAt, '2026-09-27T00:00:00.000Z');
@@ -54,31 +59,42 @@ test('parse turns the latest day of each chokepoint into a maritime observation 
   const row = hormuz(result);
   assert.equal(row.kind, 'maritime'); assert.equal(row.source, 'IMF-PortWatch');
   assert.equal(row.providerId, 'hormuz:2026-09-27'); assert.equal(row.observedAt, '2026-09-27T00:00:00.000Z');
-  assert.equal(row.transitCalls, 1); assert.equal(row.baseline28d, 3); assert.equal(row.changePct, -66.7);
-  assert.equal(row.severity, 'high');
-  assert.equal(row.url, 'https://portwatch.imf.org/pages/chokepoint6');
+  // Real Hormuz series: 1 transit on the latest day, but a 7-day mean of 3.1 against a median of 3: no alarm (the single day alone looked like -66.7 %).
+  assert.equal(row.transitCalls, 1); assert.equal(row.mean7d, 3.1); assert.equal(row.baseline28d, 3); assert.equal(row.changePct, 3.3);
+  assert.equal(row.severity, 'info');
+  assert.equal(row.url, 'https://portwatch.imf.org/pages/chokepoint6?date=2026-09-27');
   assert.equal(row.title, 'Strait of Hormuz: 1 ship transit on 2026-09-27');
   const suez = result.observations.find(r => r.chokepoint === 'suez');
-  assert.equal(suez.transitCalls, 37); assert.equal(suez.baseline28d, 41); assert.equal(suez.changePct, -9.8); assert.equal(suez.severity, 'info');
+  assert.equal(suez.transitCalls, 37); assert.equal(suez.mean7d, 40); assert.equal(suez.baseline28d, 40.5); assert.equal(suez.changePct, -1.2); assert.equal(suez.severity, 'info');
   const bab = result.observations.find(r => r.chokepoint === 'bab_el_mandeb');
-  assert.equal(bab.baseline28d, 25.5); assert.equal(bab.changePct, 5.9); assert.equal(bab.severity, 'info');
-  assert.equal(bab.url, 'https://portwatch.imf.org/pages/chokepoint4');
-  assert.deepEqual(result.observations.map(r => r.chokepoint), ['hormuz', 'suez', 'bab_el_mandeb'], 'the most severe observation first, then the configured order');
+  assert.equal(bab.transitCalls, 27); assert.equal(bab.mean7d, 27.1); assert.equal(bab.baseline28d, 25); assert.equal(bab.changePct, 8.4); assert.equal(bab.severity, 'info');
+  assert.equal(bab.url, 'https://portwatch.imf.org/pages/chokepoint4?date=2026-09-27');
+  assert.deepEqual(result.observations.map(r => r.chokepoint), ['suez', 'bab_el_mandeb', 'hormuz'], 'equal severities keep the configured order');
   for (const key of ['lat', 'lon', 'locationMethod', 'publishedAt']) assert.equal(key in row, false, `${key} is not invented`);
+});
+
+test('the most severe observation comes first, then the configured order', () => {
+  const series = { 'chokepoint1|Suez Canal': flat(100, 35), 'chokepoint4|Bab el-Mandeb Strait': [...flat(100, 28), ...flat(70, 7)], 'chokepoint6|Strait of Hormuz': [...flat(100, 28), ...flat(40, 7)], 'chokepoint2|Panama Canal': flat(100, 35) };
+  const result = parsePortwatch(daily(series), { now, chokepoints: ['Suez Canal', 'Bab el-Mandeb Strait', 'Panama Canal', 'Strait of Hormuz'] });
+  assert.deepEqual(result.observations.map(r => `${r.chokepoint}:${r.severity}`), ['hormuz:high', 'bab_el_mandeb:moderate', 'suez:info', 'panama:info']);
 });
 
 test('rows and the feed explain that counts are AIS-visible transits and that dark ships are missing', () => {
   const result = parsePortwatch(daily(), { now, chokepoints: ['Strait of Hormuz'] });
   assert.match(result.summary, /AIS/); assert.match(result.summary, /dark|AIS-off/i); assert.match(result.summary, /not counted/i);
+  assert.match(result.summary, /7-day mean against the previous 28-day median/);
   assert.match(hormuz(result).summary, /AIS-visible/); assert.match(hormuz(result).summary, /dark or AIS-off ships are not counted/i);
-  assert.match(hormuz(result).summary, /median of the previous 28 days is 3/);
+  assert.match(hormuz(result).summary, /7-day mean is 3\.1 against a median of 3 over the previous 28 days \(\+3\.3%\)/);
 });
 
-test('metrics carry the latest transits of hormuz, bab_el_mandeb and suez only', () => {
+test('metrics carry the 7-day mean of every configured chokepoint and nothing when the window is thin', () => {
   const result = parsePortwatch(daily(), { now, chokepoints: ['Strait of Hormuz', 'Suez Canal', 'Bab el-Mandeb Strait', 'Dover Strait', 'Panama Canal'] });
-  assert.deepEqual(result.metrics, { hormuz_transits: 1, suez_transits: 37, bab_el_mandeb_transits: 27 });
-  assert.deepEqual(parsePortwatch(daily(), { now, chokepoints: ['Dover Strait'] }).metrics, {});
+  assert.deepEqual(result.metrics, { hormuz_transits: 3.1, suez_transits: 40, bab_el_mandeb_transits: 27.1, dover_transits: 172.3, panama_transits: 27 });
+  assert.deepEqual(parsePortwatch(daily(), { now, chokepoints: ['Dover Strait'] }).metrics, { dover_transits: 172.3 });
   assert.deepEqual(parsePortwatch({ features: [] }, { now }).metrics, {});
+  assert.deepEqual(parsePortwatch(one(flat(10, 4)), { now, chokepoints: ['Suez Canal'] }).metrics, {}, 'fewer than 5 days: no metric, not a guess');
+  assert.deepEqual(parsePortwatch(one(flat(10, 5)), { now, chokepoints: ['Suez Canal'] }).metrics, { suez_transits: 10 });
+  assert.deepEqual(parsePortwatch(one(flat(10, 40), '2026-09-21'), { now, chokepoints: ['Suez Canal'] }).metrics, {}, 'an expired series has no metric');
 });
 
 test('licence, rights and attribution come from the IMF terms and the PortWatch citation', () => {
@@ -165,41 +181,88 @@ test('a name from the layer is matched case-insensitively and shown as the provi
   assert.equal(result.observations.length, 1); assert.equal(result.observations[0].providerId, 'hormuz:2026-09-27');
   assert.equal(result.observations[0].title, 'Strait of Hormuz: 1 ship transit on 2026-09-27');
   const custom = parsePortwatch(one(flat(120, 31), LAST, 'Korea Strait', 'chokepoint12'), { now, chokepoints: ['Korea Strait'] });
-  assert.equal(custom.observations[0].providerId, 'korea_strait:2026-09-27'); assert.equal(custom.observations[0].url, 'https://portwatch.imf.org/pages/chokepoint12');
+  assert.equal(custom.observations[0].providerId, 'korea_strait:2026-09-27'); assert.equal(custom.observations[0].url, 'https://portwatch.imf.org/pages/chokepoint12?date=2026-09-27');
 });
 
-test('severity follows the change against the 28-day median at the exact boundaries', () => {
+// Seven daily values after 28 baseline days: the window is the last 7 calendar days, the baseline the 28 before it.
+const rate = (mean, base = 100) => parseOne([...flat(base, 28), ...flat(mean, 7)]).observations[0];
+
+test('severity follows the 7-day mean against the previous 28-day median at the exact boundaries', () => {
   const cases = [[50, -50, 'high'], [49, -51, 'high'], [0, -100, 'high'], [51, -49, 'moderate'], [75, -25, 'moderate'], [76, -24, 'info'], [100, 0, 'info'], [250, 150, 'info']];
-  for (const [latest, pct, severity] of cases) {
-    const row = parseOne([...flat(100), latest]).observations[0];
-    assert.equal(row.baseline28d, 100); assert.equal(row.changePct, pct, `latest ${latest}`); assert.equal(row.severity, severity, `latest ${latest}`);
-    assert.equal(row.transitCalls, latest);
+  for (const [mean, pct, severity] of cases) {
+    const row = rate(mean);
+    assert.equal(row.baseline28d, 100); assert.equal(row.mean7d, mean); assert.equal(row.changePct, pct, `mean ${mean}`); assert.equal(row.severity, severity, `mean ${mean}`);
+    assert.equal(row.transitCalls, mean);
   }
-  assert.match(parseOne([...flat(100), 0]).observations[0].title, /0 ship transits/);
+  assert.match(rate(0).title, /0 ship transits/);
 });
 
-test('the baseline is the median of exactly the previous 28 days', () => {
+test('one bad day does not rate a chokepoint: the window mean does', () => {
+  const row = parseOne([...flat(100, 28), ...flat(100, 6), 0]).observations[0];
+  assert.equal(row.transitCalls, 0); assert.equal(row.mean7d, 85.7); assert.equal(row.changePct, -14.3); assert.equal(row.severity, 'info');
+  assert.match(row.title, /0 ship transits/);
+  const week = parseOne([...flat(100, 28), 100, 100, 0, 0, 0, 0, 0]).observations[0];
+  assert.equal(week.transitCalls, 0); assert.equal(week.mean7d, 28.6); assert.equal(week.severity, 'high');
+});
+
+test('no severity is rated when the baseline is below 3 transits a day', () => {
+  const low = [[3, 1, -66.7, 'high'], [2.5, 0, -100, 'info'], [2, 0, -100, 'info'], [1, 0, -100, 'info']];
+  for (const [baseline, mean, pct, severity] of low) {
+    const base = baseline === 2.5 ? [...flat(2, 14), ...flat(3, 14)] : flat(baseline, 28);
+    const row = parseOne([...base, ...flat(mean, 7)]).observations[0];
+    assert.equal(row.baseline28d, baseline); assert.equal(row.changePct, pct, `baseline ${baseline}`); assert.equal(row.severity, severity, `baseline ${baseline}`);
+    if (severity === 'info') assert.match(row.summary, /baseline is below 3 transits a day, too low to rate a change/);
+    else assert.doesNotMatch(row.summary, /too low to rate/);
+  }
+  assert.equal(parseOne([...flat(3, 28), ...flat(2, 7)]).observations[0].severity, 'moderate', 'a baseline of exactly 3 is rated');
+});
+
+test('the window is the last 7 calendar days and the baseline the 28 days before it', () => {
+  const edge = parseOne([...flat(100, 27), 10000, ...flat(10, 7)]).observations[0];
+  assert.equal(edge.mean7d, 10, 'the day just before the window belongs to the baseline'); assert.equal(edge.baseline28d, 100); assert.equal(edge.changePct, -90);
   const base = [...flat(100, 14), ...flat(0, 14)];
-  const row = parseOne([100, ...base, 40]).observations[0];
-  assert.equal(row.baseline28d, 50, 'even count averages the middle pair; the 29th day back is not part of it');
-  assert.equal(row.changePct, -20);
-  assert.equal(parseOne([...flat(10, 27), 90, 10]).observations[0].baseline28d, 10, 'median, not mean');
-  const withGap = one([...flat(100, 20), 50]); // 21 consecutive days
-  withGap.features = withGap.features.filter(f => f.attributes.date !== '2026-09-20');
+  const row = parseOne([100, ...base, ...flat(40, 7)]).observations[0];
+  assert.equal(row.baseline28d, 50, 'even count averages the middle pair; the 35th day back is not part of the baseline');
+  assert.equal(row.mean7d, 40); assert.equal(row.changePct, -20);
+  assert.equal(parseOne([...flat(10, 27), 90, ...flat(10, 7)]).observations[0].baseline28d, 10, 'median, not mean');
+  const withGap = one([...flat(100, 20), ...flat(100, 7)]);
+  withGap.features = withGap.features.filter(f => f.attributes.date !== '2026-09-10');
   assert.equal(parsePortwatch(withGap, { now, chokepoints: ['Suez Canal'] }).observations[0].baseline28d, 100, 'missing days shrink the sample instead of counting as zero');
 });
 
-test('with fewer than 14 baseline days or a zero baseline no change is computed and the severity is info', () => {
+test('a window needs at least 5 of its 7 days and a baseline at least 14 days, else nothing is computed', () => {
+  const drop = (series, ...days) => { const payload = one(series); payload.features = payload.features.filter(f => !days.includes(f.attributes.date)); return payload; };
+  const parse = payload => parsePortwatch(payload, { now, chokepoints: ['Suez Canal'] }).observations[0];
+  const full = [...flat(100, 28), ...flat(10, 7)];
+  const five = parse(drop(full, '2026-09-26', '2026-09-24'));
+  assert.equal(five.mean7d, 10); assert.equal(five.severity, 'high');
+  const four = parse(drop(full, '2026-09-26', '2026-09-24', '2026-09-23'));
+  assert.equal('mean7d' in four, false); assert.equal('changePct' in four, false); assert.equal(four.baseline28d, 100); assert.equal(four.severity, 'info');
+  assert.equal(four.transitCalls, 10); assert.match(four.summary, /fewer than 5 of the last 7 days/);
   for (const baseline of [flat(100, 13), []]) {
-    const row = parseOne([...baseline, 1]).observations[0];
-    assert.equal(row.severity, 'info'); assert.equal(row.transitCalls, 1);
+    const row = parseOne([...baseline, ...flat(1, 7)]).observations[0];
+    assert.equal(row.severity, 'info'); assert.equal(row.transitCalls, 1); assert.equal(row.mean7d, 1);
     assert.equal('baseline28d' in row, false); assert.equal('changePct' in row, false);
     assert.match(row.summary, /fewer than 14 baseline days/);
   }
-  const enough = parseOne([...flat(100, 14), 1]).observations[0];
+  const enough = parseOne([...flat(100, 14), ...flat(1, 7)]).observations[0];
   assert.equal(enough.severity, 'high'); assert.equal(enough.baseline28d, 100); assert.equal(enough.changePct, -99);
-  const zero = parseOne([...flat(0, 28), 5]).observations[0];
-  assert.equal(zero.severity, 'info'); assert.equal(zero.baseline28d, 0); assert.equal('changePct' in zero, false);
+  const zero = parseOne([...flat(0, 28), ...flat(5, 7)]).observations[0];
+  assert.equal(zero.severity, 'info'); assert.equal(zero.baseline28d, 0); assert.equal(zero.mean7d, 5); assert.equal('changePct' in zero, false);
+});
+
+test('custom slugs never collide with the fixed ones or with each other', () => {
+  const series = {
+    'chokepoint6|Strait of Hormuz': flat(10, 35), 'chokepoint21|Hormuz': flat(11, 35), 'chokepoint22|Foo-Bar': flat(12, 35), 'chokepoint23|Foo Bar': flat(13, 35), 'chokepoint24|Foo.Bar': flat(14, 35),
+  };
+  const names = ['Hormuz', 'Strait of Hormuz', 'Foo-Bar', 'Foo Bar', 'Foo.Bar'];
+  const result = parsePortwatch(daily(series), { now, chokepoints: names });
+  const ids = result.observations.map(row => row.providerId);
+  assert.deepEqual(ids, ['hormuz_2:2026-09-27', 'hormuz:2026-09-27', 'foo_bar:2026-09-27', 'foo_bar_2:2026-09-27', 'foo_bar_3:2026-09-27'], 'the fixed slug stays with the real Hormuz even when a custom name comes first');
+  assert.equal(new Set(ids).size, 5);
+  assert.deepEqual(Object.keys(result.metrics), ['hormuz_2_transits', 'hormuz_transits', 'foo_bar_transits', 'foo_bar_2_transits', 'foo_bar_3_transits']);
+  assert.equal(result.metrics.hormuz_transits, 10, 'the hormuz metric is the real Strait of Hormuz');
+  assert.deepEqual(parsePortwatch(daily(series), { now, chokepoints: names }).observations.map(row => row.providerId), ids, 'deterministic');
 });
 
 test('provider ids are stable across parses and change only with the day', () => {
@@ -215,10 +278,10 @@ test('provider ids are stable across parses and change only with the day', () =>
 });
 
 test('a duplicated day keeps the first value and never doubles the sample', () => {
-  const payload = one([...flat(100), 60]);
+  const payload = one([...flat(100, 34), 60]);
   payload.features.push(feature('chokepoint1', 'Suez Canal', LAST, 5), feature('chokepoint1', 'Suez Canal', '2026-09-26', 5));
   const row = parsePortwatch(payload, { now, chokepoints: ['Suez Canal'] }).observations[0];
-  assert.equal(row.transitCalls, 60); assert.equal(row.baseline28d, 100);
+  assert.equal(row.transitCalls, 60); assert.equal(row.mean7d, 94.3); assert.equal(row.baseline28d, 100);
 });
 
 test('coordinates come from the provider chokepoint layer only and are optional', () => {
@@ -237,22 +300,24 @@ test('coordinates come from the provider chokepoint layer only and are optional'
 });
 
 test('observations survive the server normalization with their facts, location and the registered facts and home', () => {
-  assert.deepEqual(FACT_FIELDS['IMF-PortWatch'], ['transitCalls', 'baseline28d', 'changePct']);
+  assert.deepEqual(FACT_FIELDS['IMF-PortWatch'], ['transitCalls', 'mean7d', 'baseline28d', 'changePct']);
   assert.equal(HOME['IMF-PortWatch'], 'https://portwatch.imf.org/');
   assert.deepEqual(POLICIES['IMF-PortWatch'], { maxAgeMs: 240 * 3600000, observationMaxAgeMs: 240 * 3600000 });
   const keys = Object.keys(POLICIES); assert.equal(keys.indexOf('EMSC'), keys.indexOf('IMF-PortWatch') + 1, 'registered in the fixed order, IMF-PortWatch then EMSC');
-  const raw = parsePortwatch(daily(), { now, chokepoints: ['Strait of Hormuz'], locations: parsePortwatchPlaces(PLACES) });
+  const raw = parsePortwatch(one([...flat(100, 28), ...flat(40, 7)], LAST, 'Strait of Hormuz', 'chokepoint6'), { now, chokepoints: ['Strait of Hormuz'], locations: parsePortwatchPlaces(PLACES) });
   const [out] = normalizeLiveSources({ 'IMF-PortWatch': raw }, now);
   assert.equal(out.status, 'ok'); assert.equal(out.url, 'https://portwatch.imf.org/');
   assert.equal(out.observations.length, 1);
   const row = out.observations[0];
   assert.equal(row.kind, 'maritime'); assert.equal(row.severity, 'high'); assert.equal(row.lat, 26.29685349);
-  assert.deepEqual(row.facts, [{ label: 'transitCalls', value: 1 }, { label: 'baseline28d', value: 3 }, { label: 'changePct', value: -66.7 }]);
-  assert.deepEqual(out.metrics, { hormuz_transits: 1 });
+  assert.equal(row.url, 'https://portwatch.imf.org/pages/chokepoint6?date=2026-09-27');
+  assert.deepEqual(row.facts, [{ label: 'transitCalls', value: 40 }, { label: 'mean7d', value: 40 }, { label: 'baseline28d', value: 100 }, { label: 'changePct', value: -60 }]);
+  assert.deepEqual(out.metrics, { hormuz_transits: 40 });
   assert.match(out.attribution, /IMF PortWatch/); assert.match(out.license, /non-?commercial/i); assert.equal(out.licenseUrl, 'https://www.imf.org/external/terms.htm');
   assert.equal('chokepoint' in row, false, 'internal fields are dropped');
-  const [thin] = normalizeLiveSources({ 'IMF-PortWatch': parseOne([...flat(100, 5), 7]) }, now);
-  assert.deepEqual(thin.observations[0].facts, [{ label: 'transitCalls', value: 7 }]);
+  const [thin] = normalizeLiveSources({ 'IMF-PortWatch': parseOne([...flat(100, 3), 7]) }, now);
+  assert.deepEqual(thin.observations[0].facts, [{ label: 'transitCalls', value: 7 }], 'no mean, baseline or change from a thin series');
+  assert.deepEqual(thin.metrics, {});
 });
 
 test('the default chokepoints in the config are the eight named ones, with the names the layer really uses', () => {
@@ -273,17 +338,17 @@ test('briefing asks the layers for the watched chokepoints in two bounded reques
     assert.deepEqual({ ...options }, { timeout: 10000, retries: 0, maxBytes: 2 * MIB });
   }
   const where = dailyCall.url.searchParams.get('where');
-  assert.match(where, /^portname IN \('Strait of Hormuz','Suez Canal'\) AND date >= DATE '2026-08-23'$/, '40 days back from the request time');
+  assert.match(where, /^portname IN \('Strait of Hormuz','Suez Canal'\) AND date >= DATE '2026-08-17'$/, '46 days back from the request time: 7-day window + 28-day baseline + up to ~10 days of provider lag');
   assert.equal(dailyCall.url.searchParams.get('outFields'), 'date,portid,portname,n_total');
   assert.equal(placesCall.url.searchParams.get('where'), "portname IN ('Strait of Hormuz','Suez Canal')");
   assert.equal(hormuz(result).lat, 26.29685349); assert.equal(hormuz(result).providerId, 'hormuz:2026-09-27');
-  assert.deepEqual(result.metrics, { hormuz_transits: 1, suez_transits: 37 });
+  assert.deepEqual(result.metrics, { hormuz_transits: 3.1, suez_transits: 40 });
   assert.equal((await briefing({ now, fetcher: async url => route(url) })).observations.length, 5, 'no option -> the eight defaults, five of them are in the fixture');
 });
 
 test('briefing rejects an invalid or empty chokepoint list before any request', async () => {
   let requests = 0; const fetcher = async () => { requests++; return daily(); };
-  for (const chokepoints of [[], ['x'], ["Suez' OR 1=1"], 'Suez Canal', null, {}]) {
+  for (const chokepoints of [[], ['x'], ["Suez' OR 1=1"], ["Foo' OR 'a"], ["Foo'Bar"], ['Foo" OR "a'], 'Suez Canal', null, {}]) {
     const result = await briefing({ now, fetcher, chokepoints });
     assert.equal(result.status, 'error', JSON.stringify(chokepoints)); assert.deepEqual(result.observations, []);
   }
@@ -380,18 +445,91 @@ test('failures and stale results are not cached, and an injected fetcher bypasse
   assert.equal(requests - beforeOther, 2, 'a different fetcher does not read another fetcher\'s entry');
 });
 
-test('the cache is bounded and evicts the oldest entries first', async () => {
+test('the cache holds exactly 16 entries (8 chokepoint lists of two layers) and evicts the oldest first', async () => {
   const name = i => `Test Strait ${String.fromCharCode(65 + (i % 26))}${String.fromCharCode(65 + Math.floor(i / 26))}`;
   let requests = 0;
   const fetcher = async url => {
     requests++;
     const listed = /'([^']+)'/.exec(new URL(url).searchParams.get('where'))[1];
-    return String(url).includes('PortWatch_chokepoints_database') ? { features: [{ attributes: { portid: 'chokepoint1', lat: 1, lon: 2 } }] } : daily({ [`chokepoint1|${listed}`]: flat(10, 31) });
+    return String(url).includes('PortWatch_chokepoints_database') ? { features: [{ attributes: { portid: 'chokepoint1', lat: 1, lon: 2 } }] } : daily({ [`chokepoint1|${listed}`]: flat(10, 35) });
   };
-  for (let i = 0; i < 40; i++) assert.equal((await briefing({ now, useCache: true, fetcher, chokepoints: [name(i)] })).status, 'ok');
+  const call = i => briefing({ now, useCache: true, fetcher, chokepoints: [name(i)] });
+  for (let i = 0; i < 9; i++) assert.equal((await call(i)).status, 'ok');
+  assert.equal(requests, 18);
   requests = 0;
-  await briefing({ now, useCache: true, fetcher, chokepoints: [name(39)] });
-  assert.equal(requests, 0, 'the newest list is still cached');
-  await briefing({ now, useCache: true, fetcher, chokepoints: [name(0)] });
-  assert.ok(requests > 0, 'the oldest list was evicted');
+  for (let i = 1; i < 9; i++) await call(i);
+  assert.equal(requests, 0, 'the eight newest lists (16 entries) are all still cached: the bound is not smaller than 16');
+  await call(0);
+  assert.equal(requests, 2, 'the oldest list was evicted by the ninth: the bound is not larger than 16');
+});
+
+test('a failing or empty coordinates answer is not cached and the next call asks again', async () => {
+  const names = ['Gibraltar Strait'], log = [];
+  let places = { error: 'HTTP 503' };
+  const fetcher = async url => {
+    const layer = String(url).includes('PortWatch_chokepoints_database') ? 'places' : 'daily'; log.push(layer);
+    return layer === 'places' ? places : daily({ 'chokepoint8|Gibraltar Strait': flat(100, 35) });
+  };
+  const call = () => briefing({ now, fetcher, useCache: true, chokepoints: names });
+  const first = await call();
+  assert.equal(first.status, 'ok'); assert.equal('lat' in first.observations[0], false); assert.deepEqual(log.sort(), ['daily', 'places']);
+  log.length = 0; places = { features: [] };
+  const second = await call();
+  assert.equal(second.status, 'ok'); assert.equal('lat' in second.observations[0], false); assert.deepEqual(log, ['places'], 'the daily answer is cached, the failed coordinates are asked again');
+  log.length = 0; places = { features: [{ attributes: { portid: 'chokepoint8', lat: 35.94227416, lon: -5.754895722 } }] };
+  const third = await call();
+  assert.equal(third.observations[0].lat, 35.94227416); assert.deepEqual(log, ['places']);
+  log.length = 0;
+  const fourth = await call();
+  assert.equal(fourth.observations[0].lat, 35.94227416); assert.deepEqual(log, [], 'the good coordinates are cached now');
+});
+
+test('twelve watched chokepoints over the whole history window stay under the layer page size and the examined cap', async () => {
+  const names = Array.from({ length: 12 }, (_, i) => `Test ${String.fromCharCode(65 + i)} Strait`);
+  let since;
+  const series = {};
+  names.forEach((name, i) => { series[`chokepoint${i + 1}|${name}`] = flat(20 + i, 47); });
+  const payload = daily(series, '2026-10-02');
+  const result = await briefing({ now, chokepoints: names, fetcher: async url => {
+    const where = new URL(url).searchParams.get('where'); since ??= /date >= DATE '([\d-]+)'/.exec(where)?.[1];
+    return route(url, payload);
+  } });
+  const days = (Date.parse('2026-10-02') - Date.parse(since)) / DAY + 1;
+  assert.equal(days, 47); assert.equal(payload.features.length, 12 * days);
+  assert.ok(payload.features.length < 1000, 'under the layer page size (maxRecordCount 1000)'); assert.ok(payload.features.length < 2000, 'under the examined cap');
+  assert.equal(result.status, 'ok'); assert.equal(result.observations.length, 12);
+  assert.ok(result.observations.every(row => row.mean7d !== undefined && row.baseline28d !== undefined), 'every chokepoint has its full window and baseline');
+});
+
+test('history keeps one record per chokepoint and day: the deep link and the identity are day-specific', t => {
+  const dir = mkdtempSync(join(tmpdir(), 'crucix-portwatch-')); t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const clock = { value: now + 5 * DAY };
+  const history = new HistoryStore(dir, { now: () => clock.value });
+  const series = { 'chokepoint1|Suez Canal': flat(40, 35), 'chokepoint2|Panama Canal': flat(25, 35) };
+  const eventsFor = (last, at) => {
+    const raw = parsePortwatch(daily(series, last), { now: at, chokepoints: ['Suez Canal', 'Panama Canal'] });
+    return buildEvents({ meta: { timestamp: new Date(at).toISOString() }, liveSources: normalizeLiveSources({ 'IMF-PortWatch': raw }, at) }, { now: at });
+  };
+  const dayOne = eventsFor('2026-09-27', now), dayTwo = eventsFor('2026-09-28', now + DAY), sameDayLater = eventsFor('2026-09-28', now + DAY + 3600000);
+  assert.equal(dayOne.length, 2); assert.equal(dayTwo.length, 2);
+  assert.deepEqual(dayOne.map(event => event.source.url).sort(), ['https://portwatch.imf.org/pages/chokepoint1?date=2026-09-27', 'https://portwatch.imf.org/pages/chokepoint2?date=2026-09-27']);
+  assert.equal(new Set([...dayOne, ...dayTwo].map(event => event.id)).size, 4, 'four different event ids');
+  assert.equal(new Set([...dayOne, ...dayTwo].map(event => event.source.url)).size, 4, 'four different deep links');
+  assert.deepEqual(history.add(dayOne), { added: 2, updated: 0, ignored: 0, total: 2 });
+  assert.deepEqual(history.add(dayTwo), { added: 2, updated: 0, ignored: 0, total: 4 }, 'the next day adds records instead of overwriting the first');
+  assert.deepEqual(history.add(sameDayLater), { added: 0, updated: 2, ignored: 0, total: 4 }, 'the same day again updates the same two records');
+  assert.equal(history.query({ source: 'IMF-PortWatch' }).total, 4);
+  assert.deepEqual(sameDayLater.map(event => event.id).sort(), dayTwo.map(event => event.id).sort(), 'the event id of a day is stable across sweeps');
+});
+
+test('hostile oversized strings cannot stall the parser', { timeout: 10000 }, () => {
+  const started = Date.now();
+  const huge = 2000000;
+  parsePortwatch({ error: 'http://'.repeat(huge / 7) }, { now });
+  parsePortwatch({ error: '<'.repeat(huge) }, { now });
+  parsePortwatch({ error: 'x'.repeat(huge) }, { now });
+  const features = [feature('chokepoint1', 'Suez Canal' + ' '.repeat(huge), LAST, 5), feature('chokepoint1', '_'.repeat(huge), LAST, 5), feature('chokepoint1', '<a '.repeat(huge / 3), LAST, 5)];
+  assert.equal(parsePortwatch({ features }, { now, chokepoints: ['Suez Canal'] }).status, 'stale');
+  for (const name of ['_'.repeat(huge) + 'a', '<a '.repeat(huge / 3), 'a'.repeat(huge), ' '.repeat(huge) + 'Suez Canal']) assert.equal(parsePortwatch(daily(), { now, chokepoints: [name] }).status, 'error');
+  assert.ok(Date.now() - started < 2000, `took ${Date.now() - started} ms`);
 });
