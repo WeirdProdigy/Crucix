@@ -863,7 +863,10 @@
       "baseline28d": "Previous 28-day median transits",
       "changePct": "7-day mean vs previous 28-day median (%)",
       "magnitude": "Magnitude",
-      "depthKm": "Depth (km)"
+      "depthKm": "Depth (km)",
+      "countries": "Countries",
+      "hazard": "Hazard",
+      "fir": "Flight information region"
     }
   }
 }

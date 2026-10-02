@@ -60,6 +60,8 @@ import { briefing as metNorway } from './sources/met-norway.mjs';
 import { briefing as ooni } from './sources/ooni.mjs';
 import { briefing as portwatch } from './sources/portwatch.mjs';
 import { briefing as emsc } from './sources/emsc.mjs';
+import { briefing as copernicusEms } from './sources/copernicus-ems.mjs';
+import { briefing as sigmet } from './sources/sigmet.mjs';
 import config from '../crucix.config.mjs';
 
 const SOURCE_TIMEOUT_MS = 30_000; // 30s max per individual source
@@ -156,6 +158,8 @@ export async function fullBriefing() {
     runSource('OONI', ooni, { countries: config.publicSources.ooniCountries }),
     runSource('IMF-PortWatch', portwatch, { chokepoints: config.publicSources.portwatchChokepoints }),
     runSource('EMSC', emsc),
+    runSource('Copernicus-EMS', copernicusEms),
+    runSource('Aviation-SIGMET', sigmet),
   ];
 
   console.error(`[Crucix] Starting intelligence sweep — ${allPromises.length} sources...`);

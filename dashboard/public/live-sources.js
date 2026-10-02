@@ -1,7 +1,7 @@
 (function(window){
   'use strict';
   const HOUR=3600000;
-  const policies={Meteoalarm:{maxAgeMs:3*HOUR,observationMaxAgeMs:48*HOUR},GDACS:{maxAgeMs:6*HOUR,observationMaxAgeMs:72*HOUR},'NOAA-SWPC':{maxAgeMs:HOUR},ECB:{maxAgeMs:120*HOUR},'NASA-EONET':{maxAgeMs:72*HOUR},RIPEstat:{maxAgeMs:8*HOUR},'FIRST-EPSS':{maxAgeMs:48*HOUR},'MET-Norway':{maxAgeMs:8*HOUR},OONI:{maxAgeMs:24*HOUR},'IMF-PortWatch':{maxAgeMs:240*HOUR,observationMaxAgeMs:240*HOUR},EMSC:{maxAgeMs:12*HOUR,observationMaxAgeMs:26*HOUR}};
+  const policies={Meteoalarm:{maxAgeMs:3*HOUR,observationMaxAgeMs:48*HOUR},GDACS:{maxAgeMs:6*HOUR,observationMaxAgeMs:72*HOUR},'NOAA-SWPC':{maxAgeMs:HOUR},ECB:{maxAgeMs:120*HOUR},'NASA-EONET':{maxAgeMs:72*HOUR},RIPEstat:{maxAgeMs:8*HOUR},'FIRST-EPSS':{maxAgeMs:48*HOUR},'MET-Norway':{maxAgeMs:8*HOUR},OONI:{maxAgeMs:24*HOUR},'IMF-PortWatch':{maxAgeMs:240*HOUR,observationMaxAgeMs:240*HOUR},EMSC:{maxAgeMs:12*HOUR,observationMaxAgeMs:26*HOUR},'Copernicus-EMS':{maxAgeMs:720*HOUR,observationMaxAgeMs:720*HOUR},'Aviation-SIGMET':{maxAgeMs:3*HOUR,observationMaxAgeMs:24*HOUR}};
   const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   function time(value){
     if(typeof value!=='string'||value.length>128)return NaN;

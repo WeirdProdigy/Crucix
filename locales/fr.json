@@ -863,7 +863,10 @@
       "baseline28d": "Médiane des transits des 28 jours précédents",
       "changePct": "Moyenne sur 7 jours par rapport à la médiane des 28 jours précédents (%)",
       "magnitude": "Magnitude",
-      "depthKm": "Profondeur (km)"
+      "depthKm": "Profondeur (km)",
+      "countries": "Pays",
+      "hazard": "Phénomène",
+      "fir": "Région d’information de vol (FIR)"
     }
   }
 }

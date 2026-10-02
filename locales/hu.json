@@ -863,7 +863,10 @@
       "baseline28d": "Megelőző 28 napos medián áthaladás",
       "changePct": "7 napos átlag a megelőző 28 napos mediánhoz képest (%)",
       "magnitude": "Magnitúdó",
-      "depthKm": "Mélység (km)"
+      "depthKm": "Mélység (km)",
+      "countries": "Országok",
+      "hazard": "Veszélytípus",
+      "fir": "Repüléstájékoztató körzet (FIR)"
     }
   }
 }
