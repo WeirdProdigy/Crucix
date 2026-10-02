@@ -184,8 +184,8 @@ test('LEVELS is the ordered four-level scale and levelRank orders it', () => {
 });
 
 test('eventLevel maps the event severity scale onto the alert levels', () => {
-  const words = ['unknown', 'monitor', 'low', 'moderate', 'elevated', 'high', 'critical', 'Red', 'Orange', 'banana'];
-  assert.deepEqual(words.map(severity => levels.eventLevel({ severity })), [null, 'info', 'info', 'watch', 'high', 'high', 'critical', 'critical', 'high', null]);
+  const words = ['unknown', 'monitor', 'low', 'moderate', 'elevated', 'high', 'critical', 'Red', 'Orange', 'Extreme', 'Severe', 'Moderate', 'Minor', 'banana'];
+  assert.deepEqual(words.map(severity => levels.eventLevel({ severity })), [null, 'info', 'info', 'watch', 'high', 'high', 'critical', 'critical', 'high', 'critical', 'high', 'watch', 'info', null]);
   for (const notEvent of [null, undefined, 'critical', 42, [], {}, { severity: null }, { severity: 7 }]) assert.equal(levels.eventLevel(notEvent), null, JSON.stringify(notEvent));
 });
 

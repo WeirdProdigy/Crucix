@@ -16,6 +16,8 @@ test('severityLevel matches the server vocabulary',()=>{
   const R=load(),display={critical:'critical',high:'high',elevated:'high',moderate:'watch',low:'info',monitor:'info',unknown:'unknown'};
   for (const word of ['Critical','Extreme','Severe','Red','High','Elevated','Orange','Moderate','Medium','Yellow','Monitor','Low','Minor','Info','Green','unknown','banana','',null,7])
     assert.equal(R.severityLevel(word),display[normalizeSeverity(word)??'unknown'],String(word));
+  // CAP Extreme > Severe: Severe (an NWS Flood Warning) is High, only Extreme and Red are Critical.
+  assert.deepEqual(['Severe','severe','Extreme','Red'].map(R.severityLevel),['high','high','critical','critical']);
   assert.deepEqual(plain(R.LEVELS),['critical','high','watch','info','unknown']);
   assert.deepEqual(plain(R.GLYPH),{critical:'◆',high:'▲',watch:'●',info:'○',unknown:'–'});
 });
@@ -29,7 +31,7 @@ test('filter and sort',()=>{
     {providerId:'d',title:'No time',severity:'Yellow'},
     {providerId:'e',title:'Info row',severity:'green',observedAt:at(now-HOUR/2)},
     {providerId:'f',title:'Critical newer',severity:'critical',publishedAt:at(now-HOUR/4)},
-    {providerId:'g',title:'Critical no time',severity:'Severe'}];
+    {providerId:'g',title:'Critical no time',severity:'Extreme'}];
   const recs=R.toRecords(rows,'GDACS'),before=JSON.stringify(recs);
   const titles=list=>plain(list.map(rec=>rec.title));
   assert.equal(recs.length,7); assert.equal(recs[3].time,null); assert.equal(recs[5].time,now-HOUR/4);

@@ -6,8 +6,9 @@
   const GLYPH=Object.freeze({critical:'◆',high:'▲',watch:'●',info:'○',unknown:'–'});
   const SORTS=['severity','time','title'],WINDOWS=[0,1,6,24],WIN={'1':1,'6':6,'24':24,all:0};
   const EVENT_ID=/^event-[0-9a-f]{32}$/;
-  // The event scale and provider aliases of lib/intelligence/events.mjs, folded onto the four displayed levels.
-  const SEVERITY={critical:'critical',extreme:'critical',severe:'critical',red:'critical',high:'high',elevated:'high',orange:'high',moderate:'watch',medium:'watch',yellow:'watch',monitor:'info',low:'info',minor:'info',info:'info',green:'info'};
+  // The event scale and provider aliases of lib/intelligence/events.mjs, folded onto the four displayed levels. CAP Severe is
+  // High (only Extreme and Red are Critical), as on the server.
+  const SEVERITY={critical:'critical',extreme:'critical',red:'critical',high:'high',elevated:'high',severe:'high',orange:'high',moderate:'watch',medium:'watch',yellow:'watch',monitor:'info',low:'info',minor:'info',info:'info',green:'info'};
   // No lookbehind (a parse error on Safari before 16.4): an intact pair matches first and is kept, any other half is dropped.
   const SURROGATE=/[\uD800-\uDBFF][\uDC00-\uDFFF]|[\uD800-\uDFFF]/g;
 
