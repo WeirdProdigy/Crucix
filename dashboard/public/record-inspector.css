@@ -35,6 +35,8 @@
 .ri-row{display:flex;align-items:center;gap:8px;min-height:44px;padding:6px 8px;border-bottom:1px solid var(--border);cursor:pointer;content-visibility:auto;contain-intrinsic-size:auto 56px}
 .ri-row:hover{background:rgba(100,240,200,.05)}
 .ri-row[aria-selected="true"]{background:rgba(100,240,200,.1);box-shadow:inset 3px 0 0 var(--accent)}
+/* On the .1 tint --dim drops to 4.25:1; this lighter dim keeps secondary text at 6.3:1. */
+.ri-row[aria-selected="true"] :is(.ri-place,.ri-age),.rb-source[aria-current="true"] .rb-count{color:#8aa9a1}
 .ri-text{flex:1;min-width:0;display:flex;flex-direction:column}
 .ri-title,.ri-place{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ri-place{color:var(--dim);font-size:11px}
 .ri-empty,.ri-reason p{margin:12px 0 0;color:var(--dim);overflow-wrap:anywhere}
@@ -75,7 +77,8 @@
 .rb-name{flex:1;min-width:0;font-family:var(--mono);font-size:11px;overflow-wrap:anywhere}
 .rb-count{color:var(--dim);font-variant-numeric:tabular-nums}
 .rb-state{width:100%;color:var(--warn);font-size:10px}
-.rb-source .sev{font-size:10px}
+/* Opaque badge ground: the critical count would fall to 4.14:1 on the current-source tint, it stays 5.02:1 here. */
+.rb-source .sev{font-size:10px;background:#060e16}
 .rb-list{display:flex;flex-direction:column}
 .rb-list .ri-list{flex:none;min-height:0;overflow:visible}
 .rb-detail .ri-detail{max-height:none;margin:0;padding:0;border:0;overflow:visible}
