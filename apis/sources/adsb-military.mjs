@@ -24,7 +24,8 @@ import { freshness, freshResult, unavailableResult, POLICIES } from '../utils/fr
 const SOURCE = 'ADSB-Military';
 const API = 'https://api.adsb.lol/v2';
 const MIL_URL = `${API}/mil`;
-// The map page (a tar1090 fork; globe.adsb.lol redirects here and keeps the query): ?icao=<hex> selects an aircraft, ?lat&lon&zoom centres the map.
+// The map page (a tar1090 fork; globe.adsb.lol redirects here and keeps the query): ?icao=<hex> selects an aircraft, ?lat&lon&zoom centres the map;
+// the script reads only the parameters it knows, so the extra ?theater=<id> of an aggregate row (a unique link per row) changes nothing.
 const MAP_PAGE = 'https://adsb.lol/';
 // The emergency codes in request order (the serious ones first, see briefing): meaning and row severity. 7600 is a radio failure, no attack.
 const CODES = new Map([['7700', ['general emergency', 'high']], ['7500', ['unlawful interference (hijacking)', 'high']], ['7600', ['radio failure (lost communications)', 'moderate']]]);
@@ -44,6 +45,8 @@ const REQUEST = Object.freeze({ timeout: 10000, retries: 0, maxBytes: 2 * 1024 *
 const BURST = 3; // requests the provider lets through at once: the military list and the first two emergency codes
 const PAUSE_MS = 10000; // the wait before every further request
 const BUDGET_MS = 26000; // runSource gives a source 30 s; a request that cannot finish within this is not started
+const STALLED_EMPTY = 'ADSB-Military received an empty military list: feed stalled?';
+const STALLED_NONE = 'ADSB-Military received no airborne aircraft with a current position: feed stalled?';
 const RANK = { high: 0, moderate: 1, monitor: 2, info: 3 };
 const NOT_AIRCRAFT = new Set(['GND', 'TWR']); // type designators of ground vehicles and tower beacons
 const SURFACE_CATEGORIES = ['C1', 'C2', 'C3', 'C4', 'C5']; // ADS-B emitter categories: surface vehicles and obstacles
@@ -57,7 +60,7 @@ const EXTRAS = {
 };
 
 // The default theaters, the same as publicSources.adsbTheaters in crucix.config.mjs (which documents the boxes and the rules).
-const DEFAULT_THEATERS = Object.freeze([
+export const DEFAULT_THEATERS = Object.freeze([
   { id: 'black-sea', label: 'Black Sea and Ukraine', latMin: 40.5, latMax: 52.5, lonMin: 24, lonMax: 42 },
   { id: 'east-med', label: 'Eastern Mediterranean', latMin: 30, latMax: 38, lonMin: 22, lonMax: 36.5 },
   { id: 'middle-east-gulf', label: 'Middle East and Gulf', latMin: 12, latMax: 38, lonMin: 34, lonMax: 62 },
@@ -92,11 +95,11 @@ const recent = a => Number.isFinite(a.seen_pos) && a.seen_pos >= 0 && a.seen_pos
 const surface = a => SURFACE_CATEGORIES.includes(a.category) || typeof a.t === 'string' && a.t.length <= 8 && NOT_AIRCRAFT.has(a.t.trim().toUpperCase());
 const isObject = value => value && typeof value === 'object' && !Array.isArray(value);
 
-// Theaters: boxes with an id, a label and edges. A box with lonMin > lonMax crosses the antimeridian. Invalid entries are skipped; a box whose
-// map link (centre and zoom) equals that of an earlier box is skipped too, because history merges rows with the same link.
+// Theaters: boxes with an id, a label and edges. A box with lonMin > lonMax crosses the antimeridian. Invalid entries and repeated ids are skipped.
+// History merges rows with the same kind and link, so every row link carries the theater id (the map ignores the unknown parameter).
 function theaterList(list) {
   const input = list === undefined ? DEFAULT_THEATERS : Array.isArray(list) ? list : [];
-  const ids = new Set(), urls = new Set(), out = [];
+  const ids = new Set(), out = [];
   for (const raw of input.slice(0, MAX_CONFIGURED)) {
     if (out.length >= MAX_THEATERS) break;
     if (!isObject(raw)) continue;
@@ -111,15 +114,23 @@ function theaterList(list) {
     lon = round3(lon);
     // A map about 1000 px wide shows about 1400 / 2^zoom degrees of longitude.
     const zoom = Math.min(9, Math.max(2, Math.floor(Math.log2(1400 / Math.max(lonSpan, (latMax - latMin) * 1.6)))));
-    const url = `${MAP_PAGE}?${new URLSearchParams({ lat: String(lat), lon: String(lon), zoom: String(zoom) })}`;
-    if (urls.has(url)) continue;
-    ids.add(id); urls.add(url);
+    const url = `${MAP_PAGE}?${new URLSearchParams({ lat: String(lat), lon: String(lon), zoom: String(zoom), theater: id })}`;
+    ids.add(id);
     out.push({ id, label: clean(raw.label, 60) || id, latMin, latMax, lonMin, lonMax, lat, lon, key: `${id}|${latMin},${latMax},${lonMin},${lonMax}`, index: out.length, url });
   }
   return out;
 }
 const inside = (box, lat, lon) => lat >= box.latMin && lat <= box.latMax && (box.lonMin < box.lonMax ? lon >= box.lonMin && lon <= box.lonMax : lon >= box.lonMin || lon <= box.lonMax);
 
+// The aircraft of the military list that count, one per ICAO address (listed twice: the fresher position).
+function census(list) {
+  const examined = list.slice(0, MAX_AIRCRAFT), unique = new Map();
+  for (const a of examined) {
+    const item = counted(a);
+    if (item && (!unique.has(item.hex) || item.seen < unique.get(item.hex).seen)) unique.set(item.hex, item);
+  }
+  return { examined, unique };
+}
 // One aircraft of the military list that counts: airborne, with a fresh position, a usable address, and not a surface vehicle or a beacon.
 function counted(a) {
   if (!isObject(a)) return null;
@@ -196,12 +207,11 @@ export function parseAdsbMilitary(milPayload, squawkPayloads = [], { now = Date.
   const feedAt = feedTime(milPayload.now), feedMs = feedAt ? Date.parse(feedAt) : NaN;
   const memory = previous instanceof Map ? previous : null;
 
-  const examined = milPayload.ac.slice(0, MAX_AIRCRAFT);
-  const unique = new Map();
-  for (const a of examined) {
-    const item = counted(a);
-    if (item && (!unique.has(item.hex) || item.seen < unique.get(item.hex).seen)) unique.set(item.hex, item); // listed twice: the fresher position
-  }
+  // A stalled feed: the list is empty (it normally holds 200 aircraft or more), or nothing in it is airborne with a current position. That is no
+  // "zero aircraft" to publish as a metric or to remember as a count: the result is an error and the memory is not touched.
+  const { examined, unique } = census(milPayload.ac);
+  if (!examined.length) return unavailableResult(SOURCE, STALLED_EMPTY, EXTRAS, now);
+  if (!unique.size) return unavailableResult(SOURCE, STALLED_NONE, EXTRAS, now);
   const members = specs.map(() => []);
   for (const item of unique.values()) { const theater = specs.findIndex(spec => inside(spec, item.lat, item.lon)); if (theater >= 0) members[theater].push(item); }
 
@@ -245,8 +255,9 @@ export async function briefing(options = {}) {
   const settings = { now, theaters: options.theaters, previous: options.previous ?? MEMORY };
   // The military list first, alone: if the provider is going to refuse a request of the burst, it must not be this one.
   const mil = await get(MIL_URL);
-  // Without a usable military list (an error, another shape, no provider time) there is no result to add emergency rows to: ask no further.
-  if (!isObject(mil) || mil.error || !Array.isArray(mil.ac) || feedTime(mil.now) === null) return parseAdsbMilitary(mil, [], settings);
+  // Without a usable military list (an error, another shape, no provider time, a stalled feed: empty or nothing current in it) there is no result
+  // to add emergency rows to: ask no further (no three requests, no pause).
+  if (!isObject(mil) || mil.error || !Array.isArray(mil.ac) || feedTime(mil.now) === null || !census(mil.ac).unique.size) return parseAdsbMilitary(mil, [], settings);
   const urls = [...CODES.keys()].map(code => `${API}/sqk/${code}`);
   const squawks = await Promise.all(urls.slice(0, BURST - 1).map(get));
   // Further lists wait, one by one, and are skipped (counted as failed) when they could not finish within the time a source has.

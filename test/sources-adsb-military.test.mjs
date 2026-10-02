@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseAdsbMilitary, briefing } from '../apis/sources/adsb-military.mjs';
+import { parseAdsbMilitary, briefing, DEFAULT_THEATERS } from '../apis/sources/adsb-military.mjs';
 import { POLICIES } from '../apis/utils/freshness.mjs';
 import { FACT_FIELDS, HOME, normalizeLiveSources } from '../lib/intelligence/live-sources.mjs';
 import { HistoryStore } from '../lib/intelligence/history.mjs';
@@ -66,7 +66,10 @@ const SPOT = { 'black-sea': [46, 33], 'east-med': [34, 28], 'middle-east-gulf': 
 const crowd = (id, n, from = 0) => Array.from({ length: n }, (_, i) => plane(from + i + 1, SPOT[id][0] + (i % 7) / 100, SPOT[id][1] + (i % 5) / 100));
 // Custom theaters for the border tests: a square, a second square that overlaps it, and a box across the antimeridian.
 const BOXES = [{ id: 'one', label: 'One', latMin: 10, latMax: 20, lonMin: 30, lonMax: 40 }, { id: 'two', label: 'Two', latMin: 15, latMax: 25, lonMin: 35, lonMax: 45 }, { id: 'pacific', label: 'Pacific', latMin: -10, latMax: 10, lonMin: 170, lonMax: -170 }];
-const total = result => result.metrics.mil_aircraft_total;
+// A result without a single counted aircraft is an error (a stalled feed) and has no metric: the helper reads that as zero.
+const total = result => result.metrics?.mil_aircraft_total ?? 0;
+// One aircraft over Alaska, outside every theater: the list of a working feed is never empty, and the emergency tests need a good list around their rows.
+const ELSEWHERE = [plane(777, 68.6, -165.2)];
 
 test('parse turns the live military list into one aggregate row per theater and counts everything else only in the metric', () => {
   const result = parseAdsbMilitary(LIVE, [EMPTY_SQUAWK, EMPTY_SQUAWK, EMPTY_SQUAWK], { now });
@@ -122,6 +125,7 @@ test('theater boxes include their edges, the first box in the configured order w
   // The link opens the globe on the centre, so the rows of different boxes differ.
   const url = new URL(row(parseAdsbMilitary(LIVE, [], { now }), 'mil:middle-east-gulf').url);
   assert.equal(url.origin + url.pathname, 'https://adsb.lol/'); assert.equal(url.searchParams.get('lat'), '25'); assert.equal(url.searchParams.get('lon'), '48'); assert.match(url.searchParams.get('zoom'), /^[2-9]$/);
+  assert.equal(url.searchParams.get('theater'), 'middle-east-gulf', 'the id makes the link unique per row (the map ignores it)'); assert.deepEqual([...url.searchParams.keys()], ['lat', 'lon', 'zoom', 'theater']);
   assert.equal(new Set(parseAdsbMilitary(mil(Object.keys(SPOT).flatMap(id => crowd(id, 1, Object.keys(SPOT).indexOf(id) * 10))), [], { now }).observations.map(r => r.url)).size, 7, 'seven theaters, seven links');
 });
 
@@ -256,8 +260,8 @@ test('the previous-count memory is updated by good sweeps only, cleaned by age a
 });
 
 test('emergency squawks become one row each with the real position, 7700 and 7500 high, 7600 moderate', () => {
-  const result = run([], [squawks([alarm(1, '7700')]), squawks([alarm(2, '7600')]), squawks([alarm(3, '7500')])]);
-  assert.equal(result.status, 'ok'); assert.deepEqual(result.metrics, { mil_aircraft_total: 0 });
+  const result = run(ELSEWHERE, [squawks([alarm(1, '7700')]), squawks([alarm(2, '7600')]), squawks([alarm(3, '7500')])]);
+  assert.equal(result.status, 'ok'); assert.deepEqual(result.metrics, { mil_aircraft_total: 1 });
   assert.equal(result.observations.length, 3);
   const [a, b, c] = ['sqk:' + alarm(1, '7700').hex + ':7700', 'sqk:' + alarm(2, '7600').hex + ':7600', 'sqk:' + alarm(3, '7500').hex + ':7500'];
   assert.deepEqual(result.observations.map(r => r.providerId).sort(), [a, b, c].sort());
@@ -272,17 +276,17 @@ test('emergency squawks become one row each with the real position, 7700 and 750
   assert.deepEqual(result.observations.map(r => r.severity), ['high', 'high', 'moderate'], 'high first, then moderate');
   assert.equal('aircraft' in x, false); assert.equal('types' in x, false);
   // No callsign: the hex stands in; an aircraft on the ground with an emergency code is still an emergency.
-  const bare = run([], [squawks([alarm(4, '7700', { flight: '        ', alt_baro: 'ground' })]), EMPTY_SQUAWK, EMPTY_SQUAWK]).observations[0];
+  const bare = run(ELSEWHERE, [squawks([alarm(4, '7700', { flight: '        ', alt_baro: 'ground' })]), EMPTY_SQUAWK, EMPTY_SQUAWK]).observations[0];
   assert.equal(bare.title, `Emergency squawk 7700: ${alarm(4, '7700').hex}`); assert.match(bare.summary, /on the ground/);
   // The code comes from the aircraft, whichever list it arrived in.
-  assert.equal(run([], [squawks([alarm(5, '7500')]), EMPTY_SQUAWK, EMPTY_SQUAWK]).observations[0].providerId, `sqk:${alarm(5, '7500').hex}:7500`);
+  assert.equal(run(ELSEWHERE, [squawks([alarm(5, '7500')]), EMPTY_SQUAWK, EMPTY_SQUAWK]).observations[0].providerId, `sqk:${alarm(5, '7500').hex}:7500`);
 });
 
 test('emergency rows are ranked by severity and then newest first, capped at 20, and duplicates by hex and code collapse', () => {
   const old7700 = Array.from({ length: 5 }, (_, i) => alarm(i + 1, '7700', { seen_pos: 100 - i }));
   const mid7500 = Array.from({ length: 5 }, (_, i) => alarm(i + 11, '7500', { seen_pos: 60 - i }));
   const new7600 = Array.from({ length: 15 }, (_, i) => alarm(i + 21, '7600', { seen_pos: 1 + i }));
-  const result = run([], [squawks(old7700), squawks(new7600), squawks(mid7500)]);
+  const result = run(ELSEWHERE, [squawks(old7700), squawks(new7600), squawks(mid7500)]);
   assert.equal(result.observations.length, 20, '25 emergency aircraft, 20 rows'); assert.equal(result.truncatedRecords, 5);
   assert.deepEqual(result.observations.slice(0, 10).map(r => r.severity), Array(10).fill('high'), 'the serious codes are never cut for newer radio failures');
   assert.deepEqual(result.observations.slice(10).map(r => r.severity), Array(10).fill('moderate'));
@@ -291,27 +295,28 @@ test('emergency rows are ranked by severity and then newest first, capped at 20,
   assert.deepEqual(result.observations.slice(0, 5).map(r => r.providerId.slice(-4)), Array(5).fill('7500'));
   assert.equal(result.observations[10].providerId, `sqk:${alarm(21, '7600').hex}:7600`, 'the newest radio failure first');
   assert.equal(result.observations.length, new Set(result.observations.map(r => r.providerId)).size);
-  assert.deepEqual(run([], [squawks(new7600), squawks(old7700), squawks(mid7500)]).observations.map(r => r.providerId), result.observations.map(r => r.providerId), 'the order of the lists does not matter');
+  assert.deepEqual(run(ELSEWHERE, [squawks(new7600), squawks(old7700), squawks(mid7500)]).observations.map(r => r.providerId), result.observations.map(r => r.providerId), 'the order of the lists does not matter');
   // The same aircraft twice with the same code is one row, the fresher position wins; two codes are two rows.
-  const dup = run([], [squawks([alarm(1, '7700', { seen_pos: 50, lat: 40 }), alarm(1, '7700', { seen_pos: 5, lat: 41 })]), squawks([alarm(1, '7700', { seen_pos: 30, lat: 42 }), alarm(1, '7600', { seen_pos: 30 })]), EMPTY_SQUAWK]);
+  const dup = run(ELSEWHERE, [squawks([alarm(1, '7700', { seen_pos: 50, lat: 40 }), alarm(1, '7700', { seen_pos: 5, lat: 41 })]), squawks([alarm(1, '7700', { seen_pos: 30, lat: 42 }), alarm(1, '7600', { seen_pos: 30 })]), EMPTY_SQUAWK]);
   assert.equal(dup.observations.length, 2); const kept = dup.observations.find(r => r.providerId.endsWith(':7700'));
   assert.equal(kept.lat, 41); assert.equal(kept.observedAt, iso(PAYLOAD_NOW + 500 - 5000));
   assert.equal(dup.observations.find(r => r.providerId.endsWith(':7600')).providerId, `sqk:${alarm(1, '7600').hex}:7600`);
-  assert.deepEqual(run([], [squawks([alarm(1, '7700', { seen_pos: 5 }), alarm(1, '7700', { seen_pos: 50 })]), EMPTY_SQUAWK, EMPTY_SQUAWK]).observations.map(r => r.observedAt), [iso(PAYLOAD_NOW + 500 - 5000)], 'the fresher one wins in either order');
+  assert.deepEqual(run(ELSEWHERE, [squawks([alarm(1, '7700', { seen_pos: 5 }), alarm(1, '7700', { seen_pos: 50 })]), EMPTY_SQUAWK, EMPTY_SQUAWK]).observations.map(r => r.observedAt), [iso(PAYLOAD_NOW + 500 - 5000)], 'the fresher one wins in either order');
 });
 
 test('squawk aircraft that are not usable emergencies are skipped one by one', () => {
   const good = alarm(1, '7700');
   const skipped = [alarm(2, '1200'), alarm(3, '7777'), alarm(4, '7701'), alarm(5, '7700 '), alarm(6, 7700), alarm(7, undefined), alarm(8, '7700', { hex: undefined }), alarm(9, '7700', { hex: 'xyz' }), alarm(10, '7700', { lat: undefined }), alarm(11, '7700', { lon: NaN }),
     alarm(12, '7700', { lat: 0, lon: 0 }), alarm(13, '7700', { seen_pos: 121 }), alarm(14, '7700', { seen_pos: undefined }), alarm(15, '7700', { category: 'C2' }), alarm(16, '7700', { t: 'TWR' }), null, 'x', 7, [], {}, alarm(17, '__proto__'), alarm(18, 'constructor')];
-  const result = run([], [squawks([...skipped, good]), EMPTY_SQUAWK, EMPTY_SQUAWK]);
+  const result = run(ELSEWHERE, [squawks([...skipped, good]), EMPTY_SQUAWK, EMPTY_SQUAWK]);
   assert.deepEqual(result.observations.map(r => r.providerId), [`sqk:${good.hex}:7700`]);
-  assert.equal(run([], [squawks([alarm(1, '7700', { seen_pos: 120 })]), EMPTY_SQUAWK, EMPTY_SQUAWK]).observations.length, 1, '120 s old is the limit, as for the aircraft counts');
+  assert.equal(run(ELSEWHERE, [squawks([alarm(1, '7700', { seen_pos: 120 })]), EMPTY_SQUAWK, EMPTY_SQUAWK]).observations.length, 1, '120 s old is the limit, as for the aircraft counts');
   // Emergency aircraft are not part of the military count and do not need to be military.
-  assert.equal(total(run([], [squawks([alarm(1, '7700')]), EMPTY_SQUAWK, EMPTY_SQUAWK])), 0);
+  assert.equal(total(run(ELSEWHERE, [squawks([alarm(1, '7700')]), EMPTY_SQUAWK, EMPTY_SQUAWK])), 1, 'only the aircraft of the military list');
   // A position time that is in the future of the collection time, or older than the 15 minute limit, never becomes a row.
-  assert.equal(run([], [squawks([alarm(1, '7700')], { now: PAYLOAD_NOW + 20 * MINUTE }), EMPTY_SQUAWK, EMPTY_SQUAWK]).observations.length, 0, 'a position from 20 minutes in the future');
-  assert.equal(run([], [squawks([alarm(1, '7700')], { now: PAYLOAD_NOW - 20 * MINUTE }), EMPTY_SQUAWK, EMPTY_SQUAWK]).observations.length, 0, 'a position from 20 minutes ago');
+  assert.equal(run(ELSEWHERE, [squawks([alarm(1, '7700')], { now: PAYLOAD_NOW + 30 * MINUTE }), EMPTY_SQUAWK, EMPTY_SQUAWK]).observations.length, 0, 'a position from 30 minutes in the future');
+  assert.equal(run(ELSEWHERE, [squawks([alarm(1, '7700')], { now: PAYLOAD_NOW - 30 * MINUTE }), EMPTY_SQUAWK, EMPTY_SQUAWK]).observations.length, 0, 'a position from 30 minutes ago');
+  assert.equal(run(ELSEWHERE, [squawks([alarm(1, '7700')], { now: PAYLOAD_NOW - 20 * MINUTE }), EMPTY_SQUAWK, EMPTY_SQUAWK]).observations.length, 1, 'but one from 20 minutes ago is inside the 25 minute limit');
 });
 
 test('what the result holds is theaters with aircraft plus emergency rows and never a row for an ordinary military aircraft', () => {
@@ -341,13 +346,12 @@ test('the provider time is the payload now in milliseconds: missing, in seconds,
   const absent = mil(crowd('korea', 2)); delete absent.now;
   const result = parseAdsbMilitary(absent, [], { now });
   assert.equal(result.status, 'stale'); assert.equal(result.observedAt, null); assert.deepEqual(result.observations, []); assert.ok(!('error' in result), 'stale, not an error');
-  // 15 minutes is the limit.
-  assert.equal(at(now - 15 * MINUTE).status, 'ok', '15 minutes old'); assert.equal(at(now - 15 * MINUTE - 1).status, 'stale', 'one millisecond more'); assert.equal(at(now - 15 * MINUTE - 1).freshness.reason, 'expired-provider-time');
+  // 25 minutes is the limit (a little more than the default refresh interval of 15 minutes, so a row never reads expired between two sweeps).
+  assert.equal(at(now - 25 * MINUTE).status, 'ok', '25 minutes old'); assert.equal(at(now - 25 * MINUTE - 1).status, 'stale', 'one millisecond more'); assert.equal(at(now - 25 * MINUTE - 1).freshness.reason, 'expired-provider-time'); assert.equal(at(now - 20 * MINUTE).status, 'ok');
   // Five minutes of clock skew are tolerated, more is a future feed.
   assert.equal(at(now + 5 * MINUTE).status, 'ok'); assert.equal(at(now + 5 * MINUTE + 1).status, 'stale'); assert.equal(at(now + 5 * MINUTE + 1).freshness.reason, 'future-provider-time');
   // An old answer carries no rows and its aircraft are not counted anywhere.
   assert.equal(at(now - HOUR).observations.length, 0);
-  assert.equal(parseAdsbMilitary(mil([]), [], { now }).status, 'ok', 'a good time with no aircraft at all is a good empty answer');
 });
 
 test('wrong shapes and provider errors give an error result, never throw and never show a URL', () => {
@@ -371,6 +375,60 @@ test('wrong shapes and provider errors give an error result, never throw and nev
   assert.equal(parseAdsbMilitary(LIVE, [EMPTY_SQUAWK, EMPTY_SQUAWK, EMPTY_SQUAWK, squawks([alarm(1, '7700')]), { error: 'x' }], { now }).observations.length, 3);
 });
 
+test('a stalled feed is an error and no zero is published or remembered: an empty list, or one with nothing airborne and current in it', () => {
+  const rows = [squawks([alarm(1, '7700')]), EMPTY_SQUAWK, EMPTY_SQUAWK];
+  const stalled = {
+    'an empty list': mil([]),
+    'an empty list without a time': mil([], { now: undefined }),
+    'only stale positions': mil([...crowd('korea', 3), ...crowd('baltic', 2, 50)].map(a => ({ ...a, seen_pos: 121 }))),
+    'only aircraft on the ground': mil([PARKED, TAXIING, plane(1, 25, 50, { alt_baro: 'ground' })]),
+    'only aircraft without a position': mil([NO_POSITION, LAST_POSITION, GROUND_NO_POSITION, ODD_TYPE]),
+    'only vehicles and beacons': mil([OBSTACLE, TOWER, plane(1, 25, 50, { category: 'C2' })]),
+    'only junk entries': mil([null, 'x', 7, [], {}, plane(1, 25, 50, { hex: 'nothex' })]),
+  };
+  for (const [name, payload] of Object.entries(stalled)) {
+    const memory = new Map([['x', { count: 4, at: PAYLOAD_NOW - MINUTE }]]);
+    const result = parseAdsbMilitary(payload, rows, { now, previous: memory });
+    assert.equal(result.status, 'error', name); assert.match(result.error, /feed stalled[?]$/, name); assert.deepEqual(result.observations, [], `${name}: no theater row and no emergency row`);
+    assert.ok(!('metrics' in result), `${name}: no mil_aircraft_total, not even 0`); assert.equal(result.observedAt, null); assert.doesNotMatch(result.error, /https?:/);
+    assert.equal(result.licenseUrl, 'https://opendatacommons.org/licenses/odbl/1-0/', name);
+    assert.deepEqual([...memory], [['x', { count: 4, at: PAYLOAD_NOW - MINUTE }]], `${name}: nothing is remembered`);
+  }
+  assert.match(parseAdsbMilitary(mil([]), [], { now }).error, /empty military list/); assert.match(parseAdsbMilitary(stalled['only stale positions'], [], { now }).error, /no airborne aircraft with a current position/);
+  // The aircraft that do count are not hidden by the ones that do not: one good aircraft anywhere is a working feed.
+  const alive = parseAdsbMilitary(mil([...stalled['only aircraft on the ground'].ac, plane(9, 68.6, -165.2)]), [], { now });
+  assert.equal(alive.status, 'ok'); assert.deepEqual(alive.metrics, { mil_aircraft_total: 1 });
+  // Server side the error stays an error with no metric and no rows.
+  const [out] = normalizeLiveSources({ 'ADSB-Military': parseAdsbMilitary(mil([]), rows, { now }) }, now);
+  assert.equal(out.status, 'error'); assert.deepEqual(out.observations, []); assert.deepEqual(out.metrics, {});
+  // A stalled sweep in the middle leaves the earlier counts in place: the next good sweep is compared with the last good one, not with a zero.
+  const memory = new Map();
+  const at = (minutes, ac) => parseAdsbMilitary(mil(ac, { now: PAYLOAD_NOW + minutes * MINUTE }), [], { now: now + minutes * MINUTE, previous: memory });
+  at(0, crowd('korea', 3)); at(15, []); at(30, crowd('korea', 4).map(a => ({ ...a, seen_pos: 500 })));
+  const after = at(45, crowd('korea', 11, 100));
+  assert.equal(row(after, 'mil:korea').severity, 'monitor', '11 is more than three times the 3 of the last good sweep'); assert.match(row(after, 'mil:korea').summary, /Previous sweep [(]45 min earlier[)]: 3 aircraft/);
+});
+
+test('a duplicated aircraft in the military list is counted once, at its freshest position', () => {
+  const old = plane(1, 25, 50, { seen_pos: 50 }), fresh = plane(1, 37, 127, { seen_pos: 5 });
+  for (const list of [[old, fresh], [fresh, old], [old, plane(2, 1, 1, { seen_pos: 1 }), fresh]]) {
+    const result = run(list);
+    assert.deepEqual(theaterIds(result), ['mil:korea'], 'the position of the fresher listing decides the theater'); assert.equal(row(result, 'mil:korea').aircraft, 1); assert.equal(total(result), list.length === 3 ? 2 : 1);
+  }
+  const tie = run([plane(1, 25, 50, { seen_pos: 5 }), plane(1, 37, 127, { seen_pos: 5 })]);
+  assert.equal(total(tie), 1, 'equal ages: still one aircraft');
+});
+
+test('stale emergency rows never push a fresh one out of the 20-row cap', () => {
+  const stale = Array.from({ length: 25 }, (_, i) => alarm(i + 1, '7700'));
+  const result = run(ELSEWHERE, [squawks(stale, { now: PAYLOAD_NOW - 40 * MINUTE }), squawks([alarm(40, '7600')]), EMPTY_SQUAWK]);
+  assert.deepEqual(result.observations.map(r => r.providerId), [`sqk:${alarm(40, '7600').hex}:7600`], 'the 25 old high-severity rows are dropped before the cap, the fresh moderate one stays');
+  assert.equal(result.truncatedRecords, 0, 'rows that were never current are not counted as cut');
+  // 22 fresh 7700 rows and a fresh 7600 compete for 20 places; the 25 stale ones play no part (23 candidates, 3 cut, and the cut ones are the radio failure and the two oldest).
+  const mixed = run(ELSEWHERE, [squawks(stale, { now: PAYLOAD_NOW - 40 * MINUTE }), squawks(Array.from({ length: 22 }, (_, i) => alarm(i + 50, '7700', { seen_pos: i + 1 }))), squawks([alarm(40, '7600')])]);
+  assert.equal(mixed.observations.length, 20); assert.ok(mixed.observations.every(r => r.severity === 'high')); assert.equal(mixed.truncatedRecords, 3);
+});
+
 test('theaters from the configuration are validated one by one; a bad entry is skipped, none usable is an error', () => {
   const run1 = theaters => parseAdsbMilitary(mil([plane(1, 15, 35)]), [], { now, theaters });
   assert.deepEqual(theaterIds(run1([{ id: 'one', label: 'One', latMin: 10, latMax: 20, lonMin: 30, lonMax: 40 }])), ['mil:one']);
@@ -381,17 +439,19 @@ test('theaters from the configuration are validated one by one; a bad entry is s
     { id: 'x'.repeat(41), label: 'L', latMin: 10, latMax: 20, lonMin: 30, lonMax: 40 }, { id: 'a:b', label: 'L', latMin: 10, latMax: 20, lonMin: 30, lonMax: 40 }, { id: '-lead', label: 'L', latMin: 10, latMax: 20, lonMin: 30, lonMax: 40 }];
   const good = { id: 'good', label: 'Good', latMin: 10, latMax: 20, lonMin: 30, lonMax: 40 };
   assert.deepEqual(theaterIds(run1([...bad, good])), ['mil:good']);
-  // A repeated id keeps the first; a box with the same map link (centre and zoom) as an earlier one is dropped, so every row has a link of its own.
+  // A repeated id keeps the first, so no two rows share an identity.
   assert.deepEqual(theaterIds(run1([good, { ...good, latMin: 0 }])), ['mil:good']);
-  assert.deepEqual(theaterIds(parseAdsbMilitary(mil([plane(1, 15, 35), plane(2, 5, 35)]), [], { now, theaters: [good, { ...good, latMin: 0, latMax: 8 }] })), ['mil:good'], 'a second box with a used id is skipped, so no two rows share an identity');
-  assert.deepEqual(theaterIds(run1([{ ...good, id: 'a' }, { ...good, id: 'b' }])), ['mil:a'], 'the same box twice would only duplicate the link');
-  assert.deepEqual(theaterIds(parseAdsbMilitary(mil([plane(1, 15, 35), plane(2, 11, 31)]), [], { now, theaters: [{ ...good, id: 'a' }, { ...good, id: 'b', latMax: 30 }] })), ['mil:a'], 'the second box has no aircraft the first did not take');
-  // Concentric boxes: a very different size is another zoom and so another link (both rows), nearly the same size is the same link (the later box is skipped).
+  assert.deepEqual(theaterIds(parseAdsbMilitary(mil([plane(1, 15, 35), plane(2, 5, 35)]), [], { now, theaters: [good, { ...good, latMin: 0, latMax: 8 }] })), ['mil:good'], 'a second box with a used id is skipped');
+  // Boxes with the same centre or even the same box are all valid: every row link carries its theater id, so no row is skipped and no two rows share a link
+  // (history merges rows of one kind and one link).
+  assert.deepEqual(theaterIds(run1([{ ...good, id: 'a' }, { ...good, id: 'b' }])), ['mil:a'], 'the same box twice: the first takes every aircraft');
+  const twin = parseAdsbMilitary(mil([plane(1, 15, 35), plane(2, 9.5, 35)]), [], { now, theaters: [{ ...good, id: 'a' }, { ...good, id: 'b', latMin: 9, latMax: 21, lonMin: 29, lonMax: 41 }] });
+  assert.deepEqual(twin.observations.map(r => [r.providerId, r.aircraft]), [['mil:a', 1], ['mil:b', 1]], 'same centre, same zoom: both rows are there'); assert.equal(total(twin), 2);
+  assert.notEqual(twin.observations[0].url, twin.observations[1].url); assert.equal(new URL(twin.observations[0].url).searchParams.get('lat'), new URL(twin.observations[1].url).searchParams.get('lat'));
+  assert.deepEqual(twin.observations.map(r => new URL(r.url).searchParams.get('theater')), ['a', 'b']);
   const inner = { id: 'inner', label: 'Inner', latMin: 14, latMax: 16, lonMin: 34, lonMax: 36 }, outer = { id: 'outer', label: 'Outer', latMin: 0, latMax: 30, lonMin: 20, lonMax: 50 };
   const nested = parseAdsbMilitary(mil([plane(1, 15, 35), plane(2, 5, 25)]), [], { now, theaters: [inner, outer] }).observations;
   assert.deepEqual(nested.map(r => [r.providerId, r.aircraft]), [['mil:inner', 1], ['mil:outer', 1]]); assert.notEqual(nested[0].url, nested[1].url); assert.equal(nested[0].lat, nested[1].lat);
-  const sibling = parseAdsbMilitary(mil([plane(1, 15, 35), plane(2, 9.5, 35)]), [], { now, theaters: [{ ...good, id: 'a' }, { ...good, id: 'b', latMin: 9, latMax: 21, lonMin: 29, lonMax: 41 }] });
-  assert.deepEqual(sibling.observations.map(r => [r.providerId, r.aircraft]), [['mil:a', 1]], 'the same centre and zoom: the second box is skipped, so the aircraft only the second would have taken count in the metric alone'); assert.equal(total(sibling), 2);
   for (const theaters of [[], null, 'x', 5, {}, bad]) {
     const result = run1(theaters);
     assert.equal(result.status, 'error', JSON.stringify(theaters).slice(0, 40)); assert.match(result.error, /theater/i); assert.deepEqual(result.observations, []);
@@ -409,7 +469,8 @@ test('the default theaters are the configured ones: seven boxes, the first match
   const configured = config.publicSources.adsbTheaters;
   assert.deepEqual(configured.map(box => box.id), ['black-sea', 'east-med', 'middle-east-gulf', 'baltic', 'south-china-sea-taiwan', 'korea', 'central-europe']);
   for (const box of configured) { assert.equal(typeof box.label, 'string'); for (const key of ['latMin', 'latMax', 'lonMin', 'lonMax']) assert.equal(typeof box[key], 'number', `${box.id} ${key}`); assert.ok(box.latMin < box.latMax && box.lonMin < box.lonMax, box.id); }
-  // The adapter default and the configuration agree: the same answer with and without the option.
+  // The adapter default and the configuration agree box by box, so the two copies cannot drift apart: the same list, and the same answer with and without the option.
+  assert.deepEqual(DEFAULT_THEATERS, configured);
   const live = mil([...LIVE_AC, ...Object.entries(SPOT).flatMap(([id], i) => crowd(id, 2, 400 + i * 10)), plane(900, 33, 35.5), plane(901, 53.5, 20), plane(902, 48, 24)]);
   assert.deepEqual(parseAdsbMilitary(live, [], { now }), parseAdsbMilitary(live, [], { now, theaters: configured }));
   const result = parseAdsbMilitary(live, [], { now });
@@ -454,7 +515,7 @@ test('hostile oversized provider text and payloads are handled in linear time', 
       assert.ok(result.observations.length <= 1, `${flood} ${field}`);
       const gulf = row(result, 'mil:middle-east-gulf');
       if (gulf) { assert.ok(gulf.summary.length <= 900, `${flood} ${field} summary length`); assert.doesNotMatch(gulf.summary + gulf.title, /[<>]/, `${flood} ${field}`); }
-      const sq = run([], [squawks([alarm(1, '7700', { [field]: value }), alarm(2, '7600')]), EMPTY_SQUAWK, EMPTY_SQUAWK]);
+      const sq = run(ELSEWHERE, [squawks([alarm(1, '7700', { [field]: value }), alarm(2, '7600')]), EMPTY_SQUAWK, EMPTY_SQUAWK]);
       assert.ok(sq.observations.length >= 1 && sq.observations.length <= 2, `${flood} ${field} squawk`); for (const o of sq.observations) assert.doesNotMatch(o.summary + o.title, /[<>]/);
     }
     const tail = parseAdsbMilitary(mil([plane(1, 25, 50)], { now: value, msg: value }), [{ ac: [alarm(1, '7700')], now: value }, { error: value }, value], { now });
@@ -475,7 +536,7 @@ test('hostile oversized provider text and payloads are handled in linear time', 
 test('observations survive the server normalization with facts, location and the registered home and policy', () => {
   assert.deepEqual(FACT_FIELDS['ADSB-Military'], ['aircraft', 'types']);
   assert.equal(HOME['ADSB-Military'], 'https://adsb.lol/');
-  assert.deepEqual(POLICIES['ADSB-Military'], { maxAgeMs: 15 * MINUTE, observationMaxAgeMs: 15 * MINUTE });
+  assert.deepEqual(POLICIES['ADSB-Military'], { maxAgeMs: 25 * MINUTE, observationMaxAgeMs: 25 * MINUTE });
   const keys = Object.keys(POLICIES); assert.equal(keys.indexOf('ADSB-Military'), keys.indexOf('Aviation-SIGMET') + 1, 'registered in the fixed order, Aviation-SIGMET then ADSB-Military');
   const [out] = normalizeLiveSources({ 'ADSB-Military': parseAdsbMilitary(LIVE, [squawks([alarm(1, '7700')]), EMPTY_SQUAWK, EMPTY_SQUAWK], { now }) }, now);
   assert.equal(out.status, 'ok'); assert.equal(out.url, 'https://adsb.lol/'); assert.equal(out.observations.length, 4);
@@ -495,8 +556,8 @@ test('observations survive the server normalization with facts, location and the
   const later = mil([...LIVE_AC, plane(1, 25, 50)], { now: PAYLOAD_NOW + 15 * MINUTE });
   const laterIds = buildEvents({ meta: { timestamp: iso(now + 15 * MINUTE) }, liveSources: normalizeLiveSources({ 'ADSB-Military': parseAdsbMilitary(later, [EMPTY_SQUAWK], { now: now + 15 * MINUTE }) }, now + 15 * MINUTE) }, { now: now + 15 * MINUTE });
   assert.equal(laterIds.find(event => event.title.startsWith('Middle East and Gulf')).id, top.id, 'the theater keeps its identity while its count changes'); assert.match(laterIds.find(event => event.title.startsWith('Middle East and Gulf')).title, /: 4 military aircraft/);
-  // Fresh time from the policy: a quarter of an hour after the provider time the rows are gone again.
-  const gone = normalizeLiveSources({ 'ADSB-Military': parseAdsbMilitary(LIVE, [], { now }) }, PAYLOAD_NOW + 16 * MINUTE)[0];
+  // Fresh time from the policy: 25 minutes after the provider time the rows are gone again.
+  const gone = normalizeLiveSources({ 'ADSB-Military': parseAdsbMilitary(LIVE, [], { now }) }, PAYLOAD_NOW + 26 * MINUTE)[0];
   assert.equal(gone.status, 'stale'); assert.deepEqual(gone.observations, []); assert.deepEqual(gone.metrics, {});
 });
 
@@ -641,4 +702,15 @@ test('the last emergency code is skipped when it could not finish within the tim
   asked.length = 0;
   const slow = await briefing({ now, pause: 5, budget: 150, timeout: 50, previous: new Map(), fetcher: async (url, options) => { if (url.endsWith('/mil')) await new Promise(resolve => setTimeout(resolve, 120)); return fetcher(url, options); } });
   assert.ok(!asked.includes('7600'), 'after 120 ms of a 150 ms budget the last code is not started'); assert.equal(slow.status, 'ok'); assert.match(slow.summary, /1 of 3/);
+});
+
+test('briefing asks for nothing more when the military list is a stalled feed: no emergency requests and no pause', async () => {
+  const stalled = [mil([]), mil([...crowd('korea', 3)].map(a => ({ ...a, seen_pos: 300 }))), mil([PARKED, NO_POSITION, OBSTACLE])];
+  for (const payload of stalled) {
+    const asked = [], started = Date.now();
+    // The default pause is ten seconds: a result within a moment shows that nothing waited.
+    const result = await briefing({ now, previous: new Map(), fetcher: async url => { asked.push(url); return clone(payload); } });
+    assert.deepEqual(asked, ['https://api.adsb.lol/v2/mil']); assert.ok(Date.now() - started < 2000, 'no pause');
+    assert.equal(result.status, 'error'); assert.match(result.error, /feed stalled[?]$/); assert.ok(!('metrics' in result)); assert.deepEqual(result.observations, []);
+  }
 });

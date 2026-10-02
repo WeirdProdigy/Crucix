@@ -68,7 +68,7 @@ export default {
     portwatchChokepoints: ['Strait of Hormuz', 'Bab el-Mandeb Strait', 'Suez Canal', 'Malacca Strait', 'Bosporus Strait', 'Panama Canal', 'Gibraltar Strait', 'Dover Strait'],
     // Military air activity (adsb.lol, apis/sources/adsb-military.mjs): one aggregate row per theater, never one row per aircraft. A theater is a
     // box (degrees; edges included; lonMin > lonMax crosses the antimeridian). An aircraft counts in the FIRST box of this list that contains it,
-    // so overlaps and shared borders belong to the earlier box. Two boxes must not give the same map link (centre and zoom): the later one is skipped. At most 12.
+    // so overlaps and shared borders belong to the earlier box. Ids must be unique (a repeated id is skipped); the row link carries the id. At most 12.
     //   black-sea         Ukraine, Belarus south, Moldova, east Romania, the Black Sea and Azov, Crimea, Russia west of 42 E (Kursk to Rostov).
     //                     West edge 24 E: eastern Poland, Slovakia, Hungary and Romania west of it are in central-europe (Anatolia, 38-40.5 N, is in no box).
     //   east-med          Greece south of 38 N and Crete, the Turkish south coast, Cyprus, Syria and Lebanon coast, Israel, Nile delta, east Libya coast.

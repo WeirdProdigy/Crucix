@@ -10,7 +10,7 @@ export const POLICIES = Object.freeze({
   EMSC: { maxAgeMs: 12*HOUR, observationMaxAgeMs: 26*HOUR },
   'Copernicus-EMS': { maxAgeMs: 1080*HOUR, observationMaxAgeMs: 720*HOUR },
   'Aviation-SIGMET': { maxAgeMs: 3*HOUR, observationMaxAgeMs: 24*HOUR },
-  'ADSB-Military': { maxAgeMs: HOUR/4, observationMaxAgeMs: HOUR/4 },
+  'ADSB-Military': { maxAgeMs: 25*60000, observationMaxAgeMs: 25*60000 },
 });
 
 // Never use collection time as a replacement for a missing provider date.

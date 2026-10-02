@@ -65,7 +65,7 @@ test('the browser keeps as many sources as there are policies', () => {
   for (const name of ['Extra-A', 'Extra-B', 'Extra-C']) api.policies[name] = { maxAgeMs: 3600000 };
   const count = Object.keys(api.policies).length, names = Object.keys(api.policies).filter(name => name !== 'MET-Norway');
   assert(names.length > 9, 'more sources than the old limit');
-  // Five minutes old: the shortest policy (ADSB-Military) lets a row live for 15 minutes.
+  // Five minutes old: the shortest policy (ADSB-Military) lets a row live for 25 minutes.
   const sources = names.map((name, i) => ({ source: name, status: 'ok', observedAt: '2026-10-01T20:55:00Z', observations: [{ providerId: 'r' + i, kind: 'disaster', title: 'Row ' + i, observedAt: '2026-10-01T20:55:00Z' }] }));
   assert.equal(api.observations(sources, now).length, names.length);
   assert.equal(api.renderPanel(sources, t, [], now).match(/data-live-source="/g).length, names.length);
