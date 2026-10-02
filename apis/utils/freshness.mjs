@@ -6,6 +6,8 @@ export const POLICIES = Object.freeze({
   'NASA-EONET': { maxAgeMs: 72*HOUR }, RIPEstat: { maxAgeMs: 8*HOUR },
   'FIRST-EPSS': { maxAgeMs: 48*HOUR }, 'MET-Norway': { maxAgeMs: 8*HOUR },
   OONI: { maxAgeMs: 24*HOUR },
+  'IMF-PortWatch': { maxAgeMs: 240*HOUR, observationMaxAgeMs: 240*HOUR },
+  EMSC: { maxAgeMs: 6*HOUR, observationMaxAgeMs: 26*HOUR },
 });
 
 // Never use collection time as a replacement for a missing provider date.

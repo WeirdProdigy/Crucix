@@ -857,7 +857,12 @@
       "countryCode": "Országkód",
       "measurementStatus": "Mérés állapota",
       "targetHost": "Célhoszt",
-      "blockingConfirmed": "Blokkolás megerősítve"
+      "blockingConfirmed": "Blokkolás megerősítve",
+      "transitCalls": "Hajóáthaladások (nap)",
+      "baseline28d": "28 napos medián áthaladás",
+      "changePct": "Változás a 28 napos mediánhoz képest (%)",
+      "magnitude": "Magnitúdó",
+      "depthKm": "Mélység (km)"
     }
   }
 }

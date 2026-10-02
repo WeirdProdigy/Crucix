@@ -857,7 +857,12 @@
       "countryCode": "Code pays",
       "measurementStatus": "Statut de la mesure",
       "targetHost": "Hôte cible",
-      "blockingConfirmed": "Blocage confirmé"
+      "blockingConfirmed": "Blocage confirmé",
+      "transitCalls": "Transits de navires (jour)",
+      "baseline28d": "Médiane des transits sur 28 jours",
+      "changePct": "Variation par rapport à la médiane sur 28 jours (%)",
+      "magnitude": "Magnitude",
+      "depthKm": "Profondeur (km)"
     }
   }
 }

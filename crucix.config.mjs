@@ -64,6 +64,8 @@ export default {
     routingASNs: ['AS5483'],
     weatherLocations: [{ label: 'Budapest', lat: 47.4979, lon: 19.0402 }],
     ooniCountries: ['HU'],
+    // Names exactly as the IMF PortWatch layer spells them.
+    portwatchChokepoints: ['Strait of Hormuz', 'Bab el-Mandeb Strait', 'Suez Canal', 'Malacca Strait', 'Bosporus Strait', 'Panama Canal', 'Gibraltar Strait', 'Dover Strait'],
   },
 
   llm: {
