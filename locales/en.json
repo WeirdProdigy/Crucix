@@ -868,7 +868,11 @@
       "hazard": "Hazard",
       "fir": "Flight information region",
       "aircraft": "Military aircraft",
-      "types": "Most common aircraft types"
+      "types": "Most common aircraft types",
+      "thingCount": "Listed entries (people, companies, vessels)",
+      "deltaSinceLast": "Change in entries since the previous sweep",
+      "docType": "Document type",
+      "agency": "Agency"
     }
   }
 }

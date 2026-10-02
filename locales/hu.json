@@ -868,7 +868,11 @@
       "hazard": "Veszélytípus",
       "fir": "Repüléstájékoztató körzet (FIR)",
       "aircraft": "Katonai repülőgépek száma",
-      "types": "Leggyakoribb repülőgéptípusok"
+      "types": "Leggyakoribb repülőgéptípusok",
+      "thingCount": "Listázott tételek (személyek, cégek, hajók)",
+      "deltaSinceLast": "Tételszám változása az előző lekérdezés óta",
+      "docType": "Dokumentumtípus",
+      "agency": "Hatóság"
     }
   }
 }

@@ -868,7 +868,11 @@
       "hazard": "Phénomène",
       "fir": "Région d’information de vol (FIR)",
       "aircraft": "Nombre d’aéronefs militaires",
-      "types": "Types d’aéronefs les plus fréquents"
+      "types": "Types d’aéronefs les plus fréquents",
+      "thingCount": "Entrées listées (personnes, sociétés, navires)",
+      "deltaSinceLast": "Variation du nombre d’entrées depuis le scan précédent",
+      "docType": "Type de document",
+      "agency": "Agence"
     }
   }
 }
