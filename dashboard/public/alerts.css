@@ -1,0 +1,109 @@
+/* Alert strip, tray and toasts. Severity colours are the --sev-* tokens of record-inspector.css (loaded globally, as are its
+   .ri-sr, .ri-glyph and .ri-icon); colour always comes with a glyph and a spoken level name. Every text sits on the opaque
+   #060e16 ground, so the contrast ratios do not depend on what is behind (all >= 4.5:1, see the Task 7 report). */
+
+/* ===== Strip: one line under the top bar, wraps on narrow screens ===== */
+#alertStrip{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;min-height:36px;padding:5px 12px;background:#060e16;border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:11px;line-height:1.4}
+#alertStrip[hidden]{display:none}
+.as-threat{flex:none;min-height:26px;padding:0 10px;background:#060e16;border:1px solid currentColor;border-radius:3px;font:inherit;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+.as-threat-1{color:var(--dim)}.as-threat-2{color:var(--sev-info)}.as-threat-3{color:var(--sev-watch)}.as-threat-4{color:var(--sev-high)}.as-threat-5{color:var(--sev-critical)}
+.as-threat[aria-expanded="true"]{box-shadow:inset 0 -2px 0 currentColor}
+.as-counts{display:inline-flex;flex-wrap:wrap;gap:4px}
+.as-count{background:#060e16}
+.as-calm{color:var(--dim)}
+/* The top alert takes the room that is left and is cut with an ellipsis rather than pushing the buttons off the line. */
+.as-top{flex:1 1 200px;min-width:0;display:inline-flex;align-items:baseline;gap:6px}
+.as-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--sans);font-size:12px}
+.as-age,.at-age{flex:none;color:var(--dim);font-variant-numeric:tabular-nums}
+.al-more{flex:none;color:var(--dim)}
+.as-actions{display:inline-flex;flex-wrap:wrap;gap:6px}
+
+/* ===== Buttons shared by strip, tray and toasts ===== */
+.al-btn{display:inline-flex;align-items:center;gap:4px;min-height:26px;padding:0 10px;background:#060e16;border:1px solid var(--border-bright,rgba(100,240,200,.3));border-radius:4px;color:var(--text);font-family:var(--sans);font-size:11px;cursor:pointer}
+.al-btn:hover{border-color:var(--accent);color:var(--accent)}
+.al-snooze{display:inline-flex;flex-wrap:wrap;gap:4px}
+.al-snooze-menu{display:inline-flex;gap:4px}
+.al-snooze-menu[hidden]{display:none}
+.al-btn[aria-expanded="true"]{border-color:var(--accent);color:var(--accent)}
+:is(#alertStrip,#alertTray,#alertToasts) :focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
+
+/* ===== Tray: a non-modal panel docked right (480 px, under the top bar and the strip via --at-top), a bottom sheet under 700 px ===== */
+#alertTray{position:fixed;top:var(--at-top,76px);right:0;bottom:0;z-index:950;width:480px;max-width:100%;display:flex;flex-direction:column;overflow:hidden;padding:14px 16px 10px;background:#060e16;border-left:1px solid var(--border-bright,rgba(100,240,200,.3));box-shadow:-12px 0 40px rgba(0,0,0,.5);color:var(--text);font-family:var(--sans);font-size:12px;line-height:1.5;animation:al-slide-left .22s ease-out}
+#alertTray[hidden]{display:none}
+@keyframes al-slide-left{from{transform:translateX(100%)}to{transform:none}}
+@keyframes al-slide-up{from{transform:translateY(100%)}to{transform:none}}
+@keyframes al-fade-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.at-head{flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.at-head h2{margin:0;font-family:var(--mono);font-size:14px;letter-spacing:.08em;text-transform:uppercase}
+.at-drivers{flex:none;margin:10px 0 0;padding:8px 10px;border:1px solid var(--border)}
+.at-drivers h3{margin:0 0 6px;color:var(--dim);font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.at-drivers ul{display:flex;flex-direction:column;gap:4px;margin:0;padding:0;list-style:none}
+.at-drivers li{display:flex;align-items:baseline;gap:6px;min-width:0}
+.at-driver-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.at-tabs{flex:none;display:flex;flex-wrap:wrap;gap:2px;margin:10px 0 0;border-bottom:1px solid var(--border)}
+.at-tab{min-height:32px;padding:0 10px;background:#060e16;border:0;border-bottom:2px solid transparent;color:var(--dim);font:inherit;font-size:11px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+.at-tab:hover{color:var(--text)}
+.at-tab[aria-selected="true"]{border-bottom-color:var(--accent);color:var(--text);font-weight:600}
+.at-tab-count{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.at-panel{flex:1 1 0;min-height:0;padding:8px 0 0;overflow:auto;overscroll-behavior:contain}
+.at-bulk{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}
+.at-list,.at-group-list{margin:0;padding:0;list-style:none}
+.at-group-list{padding-left:12px;border-left:1px solid var(--border)}
+/* A 3 px severity rule on the left of every row; the glyph and the spoken level carry the same meaning. */
+.at-alert{display:flex;align-items:flex-start;gap:8px;padding:8px 8px 8px 6px;border-bottom:1px solid var(--border);border-left:3px solid var(--sev-unknown);content-visibility:auto;contain-intrinsic-size:auto 120px}
+.at-critical{border-left-color:var(--sev-critical)}.at-high{border-left-color:var(--sev-high)}.at-watch{border-left-color:var(--sev-watch)}.at-info{border-left-color:var(--sev-info)}
+.at-alert>.ri-glyph{padding-top:2px}
+.at-body{flex:1;min-width:0;overflow-wrap:anywhere}
+.at-body p{margin:0 0 3px}
+.at-title{font-weight:600}
+.at-meta,.at-status{display:flex;flex-wrap:wrap;gap:2px 10px;color:var(--dim);font-size:11px}
+.at-rule{color:var(--dim)}
+.at-count{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.at-state-firing{color:var(--text)}
+.at-badge{padding:0 6px;border:1px dashed var(--warn);border-radius:3px;color:var(--warn);font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+.at-summary{white-space:pre-wrap}
+.at-evidence{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;margin:2px 0 4px;font-size:11px}
+.at-label{color:var(--dim);font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+.at-evidence ul{display:flex;flex-direction:column;gap:2px;margin:0;padding:0;list-style:none}
+.at-evidence li{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 6px}
+.at-evidence-link{padding:0;background:none;border:0;color:var(--accent);font:inherit;text-align:left;cursor:pointer}
+.at-evidence-link:hover,#alertTray a:hover{text-decoration:underline}
+#alertTray a{color:var(--accent);text-decoration:none}
+.at-source{color:var(--dim);font-family:var(--mono);font-size:10px}
+.at-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.at-group{border-bottom:1px solid var(--border)}
+.at-group-head{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:4px 0}
+.at-group-toggle{display:flex;align-items:center;gap:8px;flex:1;min-width:0;min-height:36px;padding:0 8px;background:#060e16;border:1px solid transparent;border-radius:4px;color:var(--text);font:inherit;font-weight:600;text-align:left;cursor:pointer}
+.at-group-toggle:hover{border-color:var(--border-bright,rgba(100,240,200,.3))}
+.at-group-toggle::after{content:'▸';margin-left:auto;color:var(--dim)}
+.at-group-toggle[aria-expanded="true"]::after{content:'▾'}
+.at-group-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.at-group-count{font-family:var(--mono);color:var(--dim);font-variant-numeric:tabular-nums}
+.at-overflow{display:flex;flex-wrap:wrap;gap:4px 10px;padding:6px 8px;border-bottom:1px solid var(--border);font-size:11px}
+.at-empty{margin:12px 0 0;color:var(--dim)}
+.at-rules{min-height:0}
+
+/* ===== Toasts: a stack in the bottom-right corner (at most three, kept by the controller), above the tray ===== */
+#alertToasts{position:fixed;right:16px;bottom:16px;z-index:1150;display:flex;flex-direction:column;gap:8px;width:min(380px,calc(100vw - 32px));pointer-events:none}
+#alertToasts:empty{display:none}
+.al-toast{position:relative;display:flex;align-items:flex-start;gap:8px;padding:10px 10px 10px 12px;background:#060e16;border:1px solid var(--border-bright,rgba(100,240,200,.3));border-left:4px solid var(--sev-unknown);border-radius:4px;box-shadow:0 12px 32px rgba(0,0,0,.6);color:var(--text);font-family:var(--sans);font-size:12px;line-height:1.45;pointer-events:auto;animation:al-fade-in .2s ease-out}
+.al-toast-critical{border-left-color:var(--sev-critical)}.al-toast-high{border-left-color:var(--sev-high)}.al-toast-watch{border-left-color:var(--sev-watch)}.al-toast-info{border-left-color:var(--sev-info)}
+.al-toast-body{flex:1;min-width:0;overflow-wrap:anywhere}
+.al-toast-body p{margin:0 0 4px}
+.al-toast-kicker{color:var(--dim);font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+.al-toast-title{display:flex;align-items:baseline;gap:6px;font-weight:600}
+.al-toast-rule{color:var(--dim);font-size:11px}
+.al-toast-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.al-toast-close{flex:none;width:28px;height:28px;font-size:14px}
+
+/* ===== Narrow screens: the tray becomes a bottom sheet, toasts span the width, every target is 44 px ===== */
+@media(max-width:700px){
+  #alertStrip{padding:6px 10px}
+  .as-top{flex-basis:100%}
+  #alertTray{top:auto;left:0;width:100%;max-height:75vh;max-height:75dvh;border-left:0;border-top:1px solid var(--border-bright,rgba(100,240,200,.3));border-radius:12px 12px 0 0;box-shadow:0 -12px 40px rgba(0,0,0,.5);animation-name:al-slide-up}
+  #alertToasts{right:8px;left:8px;bottom:8px;width:auto}
+  .as-threat,.al-btn,.at-tab,.at-group-toggle,.at-evidence-link{min-height:44px}
+  .at-evidence-link{padding:0 4px}
+  .al-toast-close{width:44px;height:44px}
+}
+@media(prefers-reduced-motion:reduce){#alertTray,.al-toast{animation:none}}

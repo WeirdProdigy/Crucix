@@ -2,21 +2,37 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { FACT_FIELDS } from '../lib/intelligence/live-sources.mjs';
+import { DEFAULT_RULES } from '../lib/alerts/rules.mjs';
 
 const LANGS = ['en', 'hu', 'fr'];
 const locale = lang => JSON.parse(fs.readFileSync(new URL(`../locales/${lang}.json`, import.meta.url), 'utf8'));
 const flatten = (value, prefix) => Object.entries(value || {}).flatMap(([key, item]) => item && typeof item === 'object' ? flatten(item, `${prefix}.${key}`) : [[`${prefix}.${key}`, item]]);
-const flat = lang => { const data = locale(lang); return new Map([...flatten(data.liveSources, 'liveSources'), ...flatten(data.inspector, 'inspector')]); };
+const flat = lang => { const data = locale(lang); return new Map([...flatten(data.liveSources, 'liveSources'), ...flatten(data.inspector, 'inspector'), ...flatten(data.alerts, 'alerts')]); };
 const factKeys = [...new Set(Object.values(FACT_FIELDS).flat())];
+const BUILTIN_RULES = DEFAULT_RULES.map(rule => rule.id);
+const ALERT_UI_KEYS = ['title', 'threat', 'calm', 'lastEval', 'ack', 'snooze', 'resolve', 'open', 'close', 'ackAll', 'tabActive', 'tabHandled', 'tabResolved', 'tabRules', 'empty',
+  'firing', 'acked', 'snoozedUntil', 'resolvedAt', 'count', 'rule', 'evidence', 'drivers', 'snooze1h', 'snooze8h', 'snooze24h', 'more', 'errorLoad', 'errorAction', 'silent', 'toastNew'];
 
-test('liveSources and inspector strings have identical keys, in the same order, in en, hu and fr', () => {
+test('liveSources, inspector and alerts strings have identical keys, in the same order, in en, hu and fr', () => {
   const [en, ...others] = LANGS.map(lang => [...flat(lang).keys()]);
   assert.ok(en.length > 60, 'the inspector group is present');
+  assert.ok(en.includes('alerts.calm') && en.includes('alerts.tiers.flash.label'), 'the alerts group is covered');
   for (const keys of others) assert.deepEqual(keys, en);
 });
 
-test('every liveSources and inspector value is a non-empty string', () => {
+test('every liveSources, inspector and alerts value is a non-empty string', () => {
   for (const lang of LANGS) for (const [key, value] of flat(lang)) assert.ok(typeof value === 'string' && value.trim() !== '', `${lang}: ${key}`);
+});
+
+test('the alert UI has every string it renders, a name for each built-in rule and the inspector level words', () => {
+  assert.equal(BUILTIN_RULES.length, 8, 'the built-in rule pack');
+  for (const lang of LANGS) {
+    const strings = flat(lang);
+    for (const key of ALERT_UI_KEYS) assert.ok(strings.has(`alerts.${key}`), `${lang}: alerts.${key}`);
+    for (const id of BUILTIN_RULES) assert.ok(strings.has(`alerts.ruleNames.${id}`), `${lang}: alerts.ruleNames.${id}`);
+    for (const level of ['critical', 'high', 'watch', 'info']) assert.equal(strings.get(`alerts.level.${level}`), strings.get(`inspector.level.${level}`), `${lang}: alerts.level.${level}`);
+  }
+  assert.equal(flat('en').get('alerts.calm'), 'No active alerts');
 });
 
 test('liveSources.showRecords is retired and the new record labels exist', () => {
