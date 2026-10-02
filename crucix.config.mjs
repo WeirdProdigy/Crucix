@@ -33,6 +33,22 @@ function envUrlOrNull(name) {
   }
 }
 
+// A comma-separated list from the environment: trimmed, lower-cased, each entry once, in order. Entries that `accept`
+// refuses are dropped with one warning that names the variable only, never an entry (it may be a mistyped secret).
+function envList(name, accept, expected) {
+  const entries = [];
+  let rejected = false;
+  for (const raw of (process.env[name] || '').split(',')) {
+    const entry = raw.trim().toLowerCase();
+    if (entry === '') continue;
+    if (!accept(entry)) rejected = true;
+    else if (!entries.includes(entry)) entries.push(entry);
+  }
+  if (rejected) console.warn(`[Config] ${name} has entries that are not ${expected}; they are ignored`);
+  return entries;
+}
+const HOST_NAME = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/;
+
 export default {
   port: envInteger('PORT', 3117, 1, 65535),
   host: process.env.HOST || '127.0.0.1',
@@ -82,10 +98,15 @@ export default {
 
   // Alert engine: notification channels exist only when their variable is set (see .env.example)
   alerts: {
-    notifyMinSeverity: (process.env.ALERT_NOTIFY_MIN_SEVERITY || '').trim().toLowerCase() || 'high', // critical | high | watch | info; the notifier validates it
+    // Telegram and Discord carry engine alerts only when listed here (their bots already send the delta alerts)
+    notifyChannels: envList('ALERT_NOTIFY_CHANNELS', entry => entry === 'telegram' || entry === 'discord', 'telegram or discord'),
+    notifyMinSeverity:(process.env.ALERT_NOTIFY_MIN_SEVERITY || '').trim().toLowerCase() || 'high', // critical | high | watch | info; the notifier validates it
     quietHours: (process.env.ALERT_QUIET_HOURS || '').trim() || null, // HH:MM-HH:MM local time; the notifier validates it
     maxNotificationsPerSweep: envInteger('ALERT_MAX_NOTIFICATIONS_PER_SWEEP', 5, 1, 50),
-    publicUrl: envUrlOrNull('ALERT_PUBLIC_URL'), // dashboard link added to notifications
+    publicUrl: envUrlOrNull('ALERT_PUBLIC_URL'), // dashboard link added to notifications; its origin may change alerts too
+    // Without AUTH_USER/AUTH_PASSWORD, alert changes are taken only through these host names, an IP address, localhost or
+    // the ALERT_PUBLIC_URL host (a guard against DNS rebinding)
+    allowedHosts: envList('ALERT_ALLOWED_HOSTS', entry => entry.length <= 253 && HOST_NAME.test(entry), 'host names'),
     ntfy: { url: envUrlOrNull('ALERT_NTFY_URL'), token: process.env.ALERT_NTFY_TOKEN || null },
     webhook: { url: envUrlOrNull('ALERT_WEBHOOK_URL') },
     maxActivePerRule: envInteger('ALERT_MAX_ACTIVE_PER_RULE', 50, 1, 500),

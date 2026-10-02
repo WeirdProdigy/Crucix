@@ -23,7 +23,7 @@ test('port accepts five digits and rejects malformed/out-of-range values', () =>
 });
 
 // The config module reads process.env when it is evaluated, so each case imports a fresh copy (own query string).
-const ALERT_KEYS = ['ALERT_NOTIFY_MIN_SEVERITY', 'ALERT_QUIET_HOURS', 'ALERT_MAX_NOTIFICATIONS_PER_SWEEP', 'ALERT_PUBLIC_URL', 'ALERT_NTFY_URL', 'ALERT_NTFY_TOKEN', 'ALERT_WEBHOOK_URL', 'ALERT_MAX_ACTIVE_PER_RULE'];
+const ALERT_KEYS = ['ALERT_NOTIFY_CHANNELS', 'ALERT_NOTIFY_MIN_SEVERITY', 'ALERT_QUIET_HOURS', 'ALERT_MAX_NOTIFICATIONS_PER_SWEEP', 'ALERT_PUBLIC_URL', 'ALERT_ALLOWED_HOSTS', 'ALERT_NTFY_URL', 'ALERT_NTFY_TOKEN', 'ALERT_WEBHOOK_URL', 'ALERT_MAX_ACTIVE_PER_RULE'];
 let freshConfigs = 0;
 async function loadConfig(env = {}) {
   const saved = Object.fromEntries(ALERT_KEYS.map(key => [key, process.env[key]]));
@@ -44,7 +44,7 @@ async function loadConfig(env = {}) {
 test('alerts config defaults', async () => {
   const { config, warnings } = await loadConfig();
   assert.deepEqual(JSON.parse(JSON.stringify(config)), {
-    notifyMinSeverity: 'high', quietHours: null, maxNotificationsPerSweep: 5, publicUrl: null,
+    notifyChannels: [], notifyMinSeverity: 'high', quietHours: null, maxNotificationsPerSweep: 5, publicUrl: null, allowedHosts: [],
     ntfy: { url: null, token: null }, webhook: { url: null }, maxActivePerRule: 50,
   });
   assert.deepEqual(warnings, []);
@@ -55,13 +55,13 @@ test('alerts config defaults', async () => {
 
 test('alerts config reads every ALERT_* variable', async () => {
   const { config, warnings } = await loadConfig({
-    ALERT_NOTIFY_MIN_SEVERITY: ' Watch ', ALERT_QUIET_HOURS: '22:00-07:00', ALERT_MAX_NOTIFICATIONS_PER_SWEEP: '12',
-    ALERT_PUBLIC_URL: 'https://dash.example.test/crucix/', ALERT_NTFY_URL: 'https://ntfy.example.test/topic', ALERT_NTFY_TOKEN: 'tk_example',
+    ALERT_NOTIFY_CHANNELS: 'telegram,discord', ALERT_NOTIFY_MIN_SEVERITY: ' Watch ', ALERT_QUIET_HOURS: '22:00-07:00', ALERT_MAX_NOTIFICATIONS_PER_SWEEP: '12',
+    ALERT_PUBLIC_URL: 'https://dash.example.test/crucix/', ALERT_ALLOWED_HOSTS: 'crucix.lan', ALERT_NTFY_URL: 'https://ntfy.example.test/topic', ALERT_NTFY_TOKEN: 'tk_example',
     ALERT_WEBHOOK_URL: 'http://hooks.example.test:8080/in', ALERT_MAX_ACTIVE_PER_RULE: '200',
   });
   assert.deepEqual(JSON.parse(JSON.stringify(config)), {
-    notifyMinSeverity: 'watch', quietHours: '22:00-07:00', maxNotificationsPerSweep: 12, publicUrl: 'https://dash.example.test/crucix',
-    ntfy: { url: 'https://ntfy.example.test/topic', token: 'tk_example' }, webhook: { url: 'http://hooks.example.test:8080/in' }, maxActivePerRule: 200,
+    notifyChannels: ['telegram', 'discord'], notifyMinSeverity: 'watch', quietHours: '22:00-07:00', maxNotificationsPerSweep: 12, publicUrl: 'https://dash.example.test/crucix',
+    allowedHosts: ['crucix.lan'], ntfy: { url: 'https://ntfy.example.test/topic', token: 'tk_example' }, webhook: { url: 'http://hooks.example.test:8080/in' }, maxActivePerRule: 200,
   });
   assert.deepEqual(warnings, []);
 });
@@ -80,6 +80,24 @@ test('alert URLs with credentials, other schemes or garbage are treated as unset
       assert.ok(!line.includes('hunter2') && !line.includes(value), line);
     }
   }
+});
+
+test('ALERT_NOTIFY_CHANNELS: telegram and discord in any case and order, once each; other tokens are ignored with a warning that does not echo them', async () => {
+  const { config, warnings } = await loadConfig({ ALERT_NOTIFY_CHANNELS: ' Discord , telegram,,TELEGRAM, ntfy, s3cr3t-token ' });
+  assert.deepEqual(config.notifyChannels, ['discord', 'telegram']);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /ALERT_NOTIFY_CHANNELS/);
+  assert.ok(!warnings[0].includes('s3cr3t') && !warnings[0].includes('ntfy'), warnings[0]);
+  assert.deepEqual((await loadConfig({ ALERT_NOTIFY_CHANNELS: 'telegram' })).config.notifyChannels, ['telegram']);
+  assert.deepEqual((await loadConfig({ ALERT_NOTIFY_CHANNELS: ' , ' })).warnings, [], 'separators alone are no channel and no warning');
+});
+
+test('ALERT_ALLOWED_HOSTS: lower-cased host names, once each; anything else is ignored with a warning that does not echo it', async () => {
+  const { config, warnings } = await loadConfig({ ALERT_ALLOWED_HOSTS: ' Crucix.LAN ,nas-01.home.arpa,crucix.lan,, bad host,http://x.example,x.example:3117,s3cr3t_value,-lead.example ' });
+  assert.deepEqual(config.allowedHosts, ['crucix.lan', 'nas-01.home.arpa']);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /ALERT_ALLOWED_HOSTS/);
+  for (const value of ['bad host', 'x.example', 's3cr3t', 'lead']) assert.ok(!warnings[0].includes(value), warnings[0]);
 });
 
 test('alert integer settings accept their bounds and reject everything else', async () => {

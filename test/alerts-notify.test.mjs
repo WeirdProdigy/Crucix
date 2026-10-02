@@ -56,7 +56,8 @@ function fakeFetch(responder = () => ({ ok: true, status: 200 })) {
   return fn;
 }
 
-// A notifier with all four channels over fakes; any option (even `undefined`) replaces its default.
+// A notifier with all four channels over fakes (Telegram and Discord opted in, no pause between Discord messages); any
+// option (even `undefined`) replaces its default.
 function setup(options = {}) {
   const pick = (key, fallback) => (key in options ? options[key] : fallback);
   const logger = pick('logger', recorder());
@@ -66,6 +67,7 @@ function setup(options = {}) {
   const fetch = pick('fetch', fakeFetch());
   const notifier = new AlertNotifier({
     ntfy: { url: NTFY_URL, token: TOKEN }, webhook: { url: HOOK_URL }, now: () => clock.now,
+    notifyChannels: ['telegram', 'discord'], sleep: async () => {},
     ...options, telegram, discord, fetch, logger,
   });
   const callsTo = url => (fetch?.calls ?? []).filter(call => call.url === url);
@@ -183,6 +185,73 @@ test('escalation re-notifies; an alert listed twice is sent once', async () => {
 test('no channel configured: nothing to do, nothing held', async () => {
   const notifier = new AlertNotifier({ quietHours: '00:00-23:59', now: () => at(12), logger: recorder() });
   assert.deepEqual(await notifier.dispatch(batch([alert({ severity: 'critical' })])), { sent: [], digest: null, skipped: 1 });
+});
+
+// ─── Telegram and Discord: opt-in, mute, Discord pacing ───────────────────────
+
+test('Telegram and Discord carry engine alerts only when notifyChannels lists them', async () => {
+  for (const notifyChannels of [undefined, null, [], 'telegram,discord', ['bogus', 'ntfy', 'Telegram']]) {
+    const env = setup({ notifyChannels });
+    assert.deepEqual(env.notifier.channels(), ['ntfy', 'webhook'], JSON.stringify(notifyChannels));
+    const result = await env.notifier.dispatch(batch([alert({ severity: 'critical' })]));
+    assert.deepEqual(result.sent[0].channels, ['ntfy', 'webhook']);
+    assert.deepEqual([env.telegram.calls.length, env.discord.calls.length], [0, 0], 'configured but not listed: nothing is sent there');
+  }
+  const discordOnly = setup({ notifyChannels: ['discord'] });
+  assert.deepEqual(discordOnly.notifier.channels(), ['discord', 'ntfy', 'webhook']);
+  await discordOnly.notifier.dispatch(batch([alert()]));
+  assert.deepEqual([discordOnly.telegram.calls.length, discordOnly.discord.calls.length], [0, 1]);
+  assert.deepEqual(setup({ notifyChannels: ['telegram'], telegram: fakeTelegram({ configured: false }) }).notifier.channels(), ['ntfy', 'webhook'], 'listed but not configured is no channel either');
+});
+
+// A fake alerter with the mute switch of TelegramAlerter / DiscordAlerter (_isMuted()).
+const mutable = (fake, muted = true) => Object.assign(fake, { muted, _isMuted() { return this.muted; } });
+
+test('a muted Telegram or Discord alerter is skipped for every severity and the digest, until the mute ends', async () => {
+  const telegram = mutable(fakeTelegram()), discord = mutable(fakeDiscord());
+  const env = setup({ telegram, discord, maxPerSweep: 1 });
+  const result = await env.notifier.dispatch(batch([alert({ severity: 'critical' }), alert({ severity: 'high' })]));
+  assert.deepEqual([telegram.calls.length, discord.calls.length], [0, 0]);
+  assert.deepEqual(result.sent[0].channels, ['ntfy', 'webhook'], 'a muted channel is not reported as sent');
+  assert.deepEqual(result.digest.channels, ['ntfy', 'webhook']);
+  assert.ok(!env.logger.lines.some(line => /did not accept|failed/.test(line)), 'a mute is not a failure');
+
+  telegram.muted = false;
+  const after = await env.notifier.dispatch(batch([alert({ severity: 'critical' })]));
+  assert.deepEqual(after.sent[0].channels, ['telegram', 'ntfy', 'webhook']);
+  assert.deepEqual([telegram.calls.length, discord.calls.length], [1, 0], 'nothing was queued for the muted time');
+});
+
+test('the /mute state of the real alerters stops engine notifications', async t => {
+  const original = globalThis.fetch;
+  const urls = [];
+  globalThis.fetch = async url => { urls.push(String(url)); return { ok: true, status: 204, json: async () => ({ result: { message_id: 1 } }) }; };
+  t.after(() => { globalThis.fetch = original; });
+  const telegram = new TelegramAlerter({ botToken: '123:abc', chatId: '42' });
+  const discord = new DiscordAlerter({ webhookUrl: 'https://discord.example.test/api/webhooks/1/token' });
+  telegram._muteUntil = Date.now() + 3600000;
+  discord._muteUntil = Date.now() + 3600000;
+  const notifier = new AlertNotifier({ telegram, discord, notifyChannels: ['telegram', 'discord'], sleep: async () => {}, logger: recorder() });
+  assert.deepEqual(await notifier.dispatch(batch([alert({ severity: 'critical' })])), { sent: [], digest: null, skipped: 0 });
+  assert.deepEqual(urls, []);
+  telegram._muteUntil = null;
+  discord._muteUntil = Date.now() - 1;
+  assert.deepEqual((await notifier.dispatch(batch([alert({ severity: 'critical' })]))).sent[0].channels, ['telegram', 'discord']);
+  assert.equal(urls.length, 2);
+});
+
+test('Discord messages are paced 500 ms apart for its webhook rate limit; the other channels are not', async () => {
+  const steps = [];
+  const discord = Object.assign(fakeDiscord(), { async sendMessage(...args) { discord.calls.push(args); steps.push('send'); return true; } });
+  const env = setup({ discord, maxPerSweep: 3, sleep: async ms => { steps.push(ms); } });
+  const result = await env.notifier.dispatch(batch(Array.from({ length: 4 }, () => alert())));
+  assert.deepEqual(steps, ['send', 500, 'send', 500, 'send', 500, 'send'], 'three alerts and the digest, a pause before each but the first');
+  assert.equal(result.digest.count, 1);
+  assert.deepEqual(result.digest.channels, CHANNELS);
+
+  const pauses = [];
+  await setup({ discord: undefined, sleep: async ms => { pauses.push(ms); } }).notifier.dispatch(batch([alert(), alert()]));
+  assert.deepEqual(pauses, [], 'no Discord, no pause');
 });
 
 // ─── cap and digest ───────────────────────────────────────────────────────────

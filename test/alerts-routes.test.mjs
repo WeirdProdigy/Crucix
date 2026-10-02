@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
+import { request as httpRequest } from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -31,7 +32,7 @@ function ev(severity) {
 const userRule = (overrides = {}) => ({ name: 'VIX above 40', kind: 'threshold', severity: 'high', params: { metric: 'vix', op: '>', value: 40 }, ...overrides });
 
 // An engine with one firing critical and one firing high alert behind the real Basic auth, on a random port.
-async function setup(t, { auth = AUTH, engine: custom, onChange } = {}) {
+async function setup(t, { auth = AUTH, engine: custom, onChange, security } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'crucix-alert-routes-'));
   const clock = { now: T0 };
   const engine = custom ?? new AlertEngine(dir, { now: () => clock.now, logger: quiet });
@@ -48,6 +49,7 @@ async function setup(t, { auth = AUTH, engine: custom, onChange } = {}) {
     engine,
     getSnapshot: () => ({ markets: { vix: { value: 22 } } }),
     onChange: onChange ?? ((summary, newIds) => changes.push({ summary, newIds })),
+    security,
   });
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
@@ -70,6 +72,20 @@ async function setup(t, { auth = AUTH, engine: custom, onChange } = {}) {
     critical: firing.find(alert => alert.severity === 'critical'),
     high: firing.find(alert => alert.severity === 'high'),
   };
+}
+
+// A request with a Host header of our choosing (fetch always sends the real one), as a DNS-rebinding page would make it.
+function raw(url, path, { method = 'POST', headers = {}, body = '{}' } = {}) {
+  return new Promise((resolve, reject) => {
+    const request = httpRequest(url + path, { method, headers: { 'Content-Type': 'application/json', ...headers } }, response => {
+      let text = '';
+      response.setEncoding('utf8');
+      response.on('data', chunk => { text += chunk; });
+      response.on('end', () => resolve({ status: response.statusCode, type: response.headers['content-type'], body: text ? JSON.parse(text) : null }));
+    });
+    request.on('error', reject);
+    request.end(body);
+  });
 }
 
 async function assertJsonError(response, status, code, field) {
@@ -401,4 +417,99 @@ test('without configured credentials the guard still applies', async t => {
   assert.equal((await call('/api/alerts/summary', { credentials: false })).status, 200);
   await assertJsonError(await post(`/api/alerts/${critical.id}/ack`, {}, { Origin: 'http://evil.example' }), 403, 'CROSS_ORIGIN');
   assert.equal((await call(`/api/alerts/${critical.id}/ack`, { method: 'POST', body: '{}', credentials: false, headers: { Origin: url, 'Content-Type': 'text/plain' } })).status, 415);
+});
+
+// ─── DNS rebinding, reverse proxies and the origin leniency ─────────────────────
+
+test('DNS rebinding: without credentials configured, a change through a foreign host name is refused even from its own origin', async t => {
+  const { url, engine, critical, changes } = await setup(t, { auth: {} });
+  const port = new URL(url).port;
+  for (const host of [`attacker.example:${port}`, 'attacker.example', `localhost.attacker.example:${port}`, `127.0.0.1.nip.io:${port}`, `xn--80ak6aa92e.com:${port}`]) {
+    for (const headers of [{ Host: host, Origin: `http://${host}` }, { Host: host }]) {
+      const response = await raw(url, `/api/alerts/${critical.id}/ack`, { headers });
+      assert.equal(response.status, 403, JSON.stringify(headers));
+      assert.match(response.type, /^application\/json/);
+      assert.deepEqual([response.body.code, response.body.field, typeof response.body.error], ['HOST_NOT_ALLOWED', null, 'string']);
+    }
+  }
+  const disable = await raw(url, '/api/alerts/rules/events-critical', { method: 'PUT', body: '{"enabled":false}', headers: { Host: `attacker.example:${port}`, Origin: `http://attacker.example:${port}` } });
+  assert.equal(disable.status, 403);
+  assert.equal(disable.body.code, 'HOST_NOT_ALLOWED');
+  assert.equal(engine.get(critical.id).state, 'firing');
+  assert.equal(engine.rules().find(rule => rule.id === 'events-critical').enabled, true, 'the rule stays on');
+  assert.equal(changes.length, 0);
+  // The other refusals keep their order and codes: a wrong body type is still 415, a foreign origin still CROSS_ORIGIN.
+  assert.equal((await raw(url, '/api/alerts/ack-all', { headers: { Host: 'attacker.example', 'Content-Type': 'text/plain' } })).status, 415);
+  assert.equal((await raw(url, '/api/alerts/ack-all', { headers: { Host: 'attacker.example', Origin: 'http://evil.example' } })).body.code, 'CROSS_ORIGIN');
+});
+
+test('without credentials configured, IP addresses, localhost, *.localhost, the ALERT_PUBLIC_URL host and ALERT_ALLOWED_HOSTS may change alerts', async t => {
+  const { url, engine } = await setup(t, { auth: {}, security: { publicUrl: 'https://dash.example.test/crucix', allowedHosts: ['crucix.lan'] } });
+  const port = new URL(url).port;
+  const hosts = ['localhost', `localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`, '[::1]', `app.localhost:${port}`, `192.168.1.20:${port}`, '[fe80::1]',
+    `[::ffff:127.0.0.1]:${port}`, 'dash.example.test', `crucix.lan:${port}`, 'CRUCIX.LAN'];
+  for (const host of hosts) {
+    // A browser sends the origin lower-cased.
+    for (const headers of [{ Host: host, Origin: `http://${host.toLowerCase()}` }, { Host: host }]) {
+      assert.equal((await raw(url, '/api/alerts/ack-all', { headers })).status, 200, JSON.stringify(headers));
+    }
+  }
+  assert.equal(engine.list().filter(alert => alert.state === 'acked').length, 2);
+  for (const host of ['dash.example.test.evil.example', 'lan', 'crucix.lan.evil.example', 'example.test', '[::1', '127.0.0.1:99999x', 'a b', 'x@127.0.0.1']) {
+    assert.equal((await raw(url, '/api/alerts/ack-all', { headers: { Host: host } })).status, 403, host);
+  }
+});
+
+test('with credentials configured the host check is skipped: a rebound origin carries no credentials', async t => {
+  const { url } = await setup(t);
+  const port = new URL(url).port;
+  const headers = { Host: `attacker.example:${port}`, Origin: `http://attacker.example:${port}` };
+  assert.equal((await raw(url, '/api/alerts/ack-all', { headers })).status, 401, 'no credentials, no change');
+  assert.equal((await raw(url, '/api/alerts/ack-all', { headers: { ...headers, Authorization: BASIC } })).status, 200);
+});
+
+test('the origin may be the https form of the same host or the ALERT_PUBLIC_URL origin, nothing else', async t => {
+  const { url, post } = await setup(t, { security: { publicUrl: 'https://dash.example.test:8443/crucix' } });
+  const host = new URL(url).host;
+  for (const origin of [url, `https://${host}`, 'https://dash.example.test:8443']) {
+    assert.equal((await post('/api/alerts/ack-all', {}, { Origin: origin })).status, 200, origin);
+  }
+  for (const origin of ['https://other.example', `https://${host}.evil.example`, `https://${new URL(url).hostname}`, 'http://dash.example.test:8443', 'https://dash.example.test',
+    'https://dash.example.test:8443.evil.example', 'https://dash.example.test:8443/crucix']) {
+    await assertJsonError(await post('/api/alerts/ack-all', {}, { Origin: origin }), 403, 'CROSS_ORIGIN', null);
+  }
+  // Without ALERT_PUBLIC_URL that origin is a foreign one.
+  const plain = await setup(t);
+  await assertJsonError(await plain.post('/api/alerts/ack-all', {}, { Origin: 'https://dash.example.test:8443' }), 403, 'CROSS_ORIGIN');
+});
+
+test('behind a reverse proxy that rewrites Host, the ALERT_PUBLIC_URL origin still changes alerts without credentials', async t => {
+  const { url } = await setup(t, { auth: {}, security: { publicUrl: 'https://crucix.example.com' } });
+  const proxied = { Host: `127.0.0.1:${new URL(url).port}`, Origin: 'https://crucix.example.com', 'Sec-Fetch-Site': 'same-origin' };
+  assert.equal((await raw(url, '/api/alerts/ack-all', { headers: proxied })).status, 200);
+  const preserved = { Host: 'crucix.example.com', Origin: 'https://crucix.example.com', 'Sec-Fetch-Site': 'same-origin' };
+  assert.equal((await raw(url, '/api/alerts/ack-all', { headers: preserved })).status, 200, 'a proxy that keeps Host works too');
+});
+
+// ─── Express's own errors ────────────────────────────────────────────────────────
+
+test('a path that cannot be decoded is a JSON 400 without a stack, logged as one line', async t => {
+  const logged = t.mock.method(console, 'error', () => {});
+  const { post, send, call, engine } = await setup(t);
+  const responses = [await post('/api/alerts/%E0%A4%A/ack'), await send('PUT', '/api/alerts/rules/%E0%A4%A', userRule()), await send('DELETE', '/api/alerts/rules/%zz')];
+  for (const response of responses) {
+    const text = await response.text();
+    assert.equal(response.status, 400);
+    assert.match(response.headers.get('content-type'), /^application\/json/);
+    assert.deepEqual(JSON.parse(text), { error: 'Invalid request', code: 'INVALID_REQUEST', field: null });
+  }
+  assert.equal(engine.rules().length, 8);
+  assert.equal(logged.mock.callCount(), 3);
+  for (const { arguments: args } of logged.mock.calls) {
+    const line = args.map(String).join(' ');
+    assert.ok(!line.includes('\n') && !/\bat\s/.test(line), line);
+    assert.match(line, /^\[Alerts\] /);
+  }
+  // Other paths keep their own handling.
+  assert.equal((await call('/api/alerts/summary')).status, 200);
 });

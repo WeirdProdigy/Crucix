@@ -68,7 +68,7 @@ const llmProvider = createLLMProvider(config.llm);
 const telegramAlerter = new TelegramAlerter(config.telegram);
 const discordAlerter = new DiscordAlerter(config.discord || {});
 const alertNotifier = new AlertNotifier({
-  telegram: telegramAlerter, discord: discordAlerter, ntfy: config.alerts.ntfy, webhook: config.alerts.webhook,
+  telegram: telegramAlerter, discord: discordAlerter, notifyChannels: config.alerts.notifyChannels, ntfy: config.alerts.ntfy, webhook: config.alerts.webhook,
   minSeverity: config.alerts.notifyMinSeverity, quietHours: config.alerts.quietHours,
   maxPerSweep: config.alerts.maxNotificationsPerSweep, publicUrl: config.alerts.publicUrl,
 });
@@ -303,7 +303,7 @@ installIntelligenceRoutes(app, { getSnapshot: () => freshLiveSnapshot(currentDat
 installAlertRoutes(app, { engine: alertEngine, getSnapshot: () => currentData, onChange: (summary, newIds) => {
   if (currentData) currentData.alerts = summary;
   broadcast({ type: 'alerts', data: summary, newIds });
-} });
+}, security: { publicUrl: config.alerts.publicUrl, allowedHosts: config.alerts.allowedHosts } });
 
 // API: health check
 app.get('/api/health', (req, res) => {

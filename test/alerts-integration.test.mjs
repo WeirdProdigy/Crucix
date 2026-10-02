@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
+import { request as httpRequest } from 'node:http';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -219,6 +220,31 @@ test('the real server serves the alert API behind its authentication', { timeout
   const accepted = await ackAll(base);
   assert.equal(accepted.status, 200);
   assert.deepEqual((await accepted.json()).alerts, []);
+});
+
+test('the real server without credentials takes changes only through allowed host names and answers bad paths in JSON', { timeout: 20000 }, async t => {
+  const { base, logs } = await startServer(t, { env: { ALERT_ALLOWED_HOSTS: 'crucix.lan', ALERT_PUBLIC_URL: 'https://crucix.example.com' } });
+  const port = new URL(base).port;
+  // fetch always sends the real Host header; a DNS-rebinding page sends its own name.
+  const post = (path, headers) => new Promise((resolve, reject) => {
+    const request = httpRequest(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers } }, response => {
+      let text = '';
+      response.on('data', chunk => { text += chunk; });
+      response.on('end', () => resolve({ status: response.statusCode, type: response.headers['content-type'], body: JSON.parse(text) }));
+    });
+    request.on('error', reject);
+    request.end('{}');
+  });
+  const rebound = await post('/api/alerts/ack-all', { Host: `attacker.example:${port}`, Origin: `http://attacker.example:${port}` });
+  assert.deepEqual([rebound.status, rebound.body.code], [403, 'HOST_NOT_ALLOWED']);
+  for (const host of [`crucix.lan:${port}`, `127.0.0.1:${port}`, 'crucix.example.com']) assert.equal((await post('/api/alerts/ack-all', { Host: host })).status, 200, host);
+  assert.equal((await post('/api/alerts/ack-all', { Host: `127.0.0.1:${port}`, Origin: 'https://crucix.example.com' })).status, 200, 'the ALERT_PUBLIC_URL origin');
+
+  const malformed = await post('/api/alerts/%E0%A4%A/ack', {});
+  assert.equal(malformed.status, 400);
+  assert.match(malformed.type, /^application\/json/);
+  assert.deepEqual(malformed.body, { error: 'Invalid request', code: 'INVALID_REQUEST', field: null });
+  assert.ok(!/URIError: |\n\s+at /.test(logs()), 'no stack in the log');
 });
 
 test('the real server starts with a corrupt alerts file and an empty alert state', { timeout: 20000 }, async t => {
