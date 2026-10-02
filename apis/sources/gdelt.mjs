@@ -17,6 +17,7 @@ const MAX_FEED_AGE_MS = 3 * 3600000;
 const FEED_LABEL_LEAD_MS = 20 * 60000; // files are labelled ~10 minutes ahead of when they are written
 const PUBLISHED_SKEW_MS = 5 * 60000;
 const MIN_THEME_HITS = 2;
+const THEME_CAP = 3;
 const MAX_ARTICLES = 50;
 const MAX_POINTS = 30;
 const MAX_TITLE = 300;
@@ -87,19 +88,27 @@ function parseRow(line) {
   const published = extras.match(/<PAGE_PRECISEPUBTIMESTAMP>(\d{14})<\/PAGE_PRECISEPUBTIMESTAMP>/)?.[1];
   const publishedAt = published && compactTime(published);
   const plausible = publishedAt && Date.parse(isoTime(published)) <= Date.parse(isoTime(columns[1])) + PUBLISHED_SKEW_MS;
-  // V2Themes lists one "THEME,charoffset" entry per occurrence, so the number of entries in a
-  // category measures how much the article is about it; one mention is not coverage.
-  const occurrences = columns[8].split(';').map(entry => entry.split(',')[0]);
-  const counts = Object.entries(CATEGORIES).map(([name, pattern]) => [name, occurrences.filter(theme => pattern.test(theme)).length]);
-  const categories = counts.filter(([, count]) => count >= MIN_THEME_HITS);
+  // V2Themes lists one "THEME,charoffset" entry per occurrence, so the entries of a category
+  // measure how much the article is about it; one mention is not coverage. The focus score adds
+  // each distinct theme up to THEME_CAP mentions: an event touches several themes, while a
+  // market tip repeats a single one (ECON_STOCKMARKET) dozens of times.
+  const mentions = new Map();
+  for (const entry of columns[8].split(';')) {
+    const theme = entry.split(',')[0];
+    mentions.set(theme, (mentions.get(theme) || 0) + 1);
+  }
+  const qualified = Object.entries(CATEGORIES).map(([name, pattern]) => {
+    const counts = [...mentions].filter(([theme]) => pattern.test(theme)).map(([, count]) => count);
+    return { name, total: counts.reduce((sum, count) => sum + count, 0), focus: counts.reduce((sum, count) => sum + Math.min(count, THEME_CAP), 0) };
+  }).filter(category => category.total >= MIN_THEME_HITS);
   const tone = Number.parseFloat(columns[15]);
   return {
     article: {
       title, url, seendate, domain: columns[3].slice(0, 253),
       ...(plausible ? { date: publishedAt } : {}),
     },
-    categories: categories.map(([name]) => name),
-    hits: categories.reduce((sum, [, count]) => sum + count, 0),
+    categories: qualified.map(category => category.name),
+    focus: qualified.reduce((sum, category) => sum + category.focus, 0),
     intensity: Number.isFinite(tone) ? Math.abs(tone) : 0,
     places: places(columns[10]),
   };
@@ -133,8 +142,8 @@ export async function briefing() {
   if (!rows.length) return failure('GDELT feed contained no usable articles');
 
   // Outlets repeat the same headline, so identical headlines collapse into their most focused
-  // copy. Stories rank by theme density, then by how many outlets carry them, then by tone.
-  const matched = rows.filter(row => row.categories.length).sort((a, b) => b.hits - a.hits || b.intensity - a.intensity);
+  // copy. Stories rank by theme focus, then by how many outlets carry them, then by tone.
+  const matched = rows.filter(row => row.categories.length).sort((a, b) => b.focus - a.focus || b.intensity - a.intensity);
   if (!matched.length) return failure('GDELT feed contained no matching conflict, economy, health or crisis articles');
   const stories = new Map();
   for (const row of matched) {
@@ -143,7 +152,7 @@ export async function briefing() {
     if (!story) stories.set(key, { ...row, categories: new Set(row.categories), outlets: new Set([row.article.domain]) });
     else { row.categories.forEach(name => story.categories.add(name)); story.outlets.add(row.article.domain); }
   }
-  const ranked = [...stories.values()].sort((a, b) => b.hits - a.hits || b.outlets.size - a.outlets.size || b.intensity - a.intensity);
+  const ranked = [...stories.values()].sort((a, b) => b.focus - a.focus || b.outlets.size - a.outlets.size || b.intensity - a.intensity);
   const articles = ranked.slice(0, MAX_ARTICLES).map(story => story.article);
   const mentions = new Map();
   for (const row of matched) {

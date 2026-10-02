@@ -1,5 +1,7 @@
 # Changelog / Változásnapló
 
+- [2.8.0 — Megbízható Safecast és pontosabb GDELT / Reliable Safecast and sharper GDELT](docs/releases/v2.8.0.md) — 2026-10-02
+
 - [2.7.2 — CI javítás és karbantartás / CI fix and maintenance](docs/releases/v2.7.2.md) — 2026-10-02
 
 - [2.7.1 — GDELT javítás és megbízhatóság / GDELT fix and reliability](docs/releases/v2.7.1.md) — 2026-10-02

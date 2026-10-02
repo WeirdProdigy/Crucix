@@ -211,6 +211,22 @@ test('GDELT ranks by how much an article is about a theme and ignores passing me
   assert.equal(result.conflicts.length, 0, 'One protest mention does not make a conflict story');
 });
 
+test('GDELT ranks breadth of themes above one theme repeated, so market tips do not outrank events', async t => {
+  feedFetch(t, {
+    rows: [
+      gkgRow({ title: 'Stock hits new 52-week low, time to sell?', domain: 'tips.example', url: 'https://tips.example/1', themes: ['ECON_STOCKMARKET'], mentions: 20, tone: -9 }),
+      gkgRow({ title: 'Insider sells shares of a small company', domain: 'tips2.example', url: 'https://tips2.example/1', themes: ['ECON_STOCKMARKET'], mentions: 16, tone: -8 }),
+      gkgRow({ title: 'Border clashes escalate as troops advance', domain: 'wire.example', url: 'https://wire.example/1', themes: ['ARMEDCONFLICT', 'MILITARY', 'TERROR'], mentions: 3, tone: -2 }),
+      gkgRow({ title: 'Quake leaves thousands displaced', domain: 'wire2.example', url: 'https://wire2.example/1', themes: ['NATURAL_DISASTER_EARTHQUAKE', 'REFUGEES'], mentions: 3, tone: -1 }),
+    ],
+  });
+  const result = await gdelt();
+  assert.deepEqual(result.allArticles.map(a => a.title), [
+    'Border clashes escalate as troops advance', 'Quake leaves thousands displaced',
+    'Stock hits new 52-week low, time to sell?', 'Insider sells shares of a small company',
+  ], 'Each theme counts at most three mentions (9, 6, 3, 3), so distinct themes decide before repetition does');
+});
+
 test('GDELT treats a populated feed with no matching coverage as a visible failure', async t => {
   feedFetch(t, { rows: [gkgRow({ title: 'Band announces tour', themes: ['MEDIA_SOCIAL'], tone: 4 })] });
   const result = await gdelt();

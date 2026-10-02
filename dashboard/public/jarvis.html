@@ -980,11 +980,12 @@ function buildSensorGridPanel(){
 }
 
 function buildNuclearWatchPanel(){
-  const allNormal=D.nuke.every(s=>!s.anom);
-  const nukeHtml=D.nuke.map(s=>`<div class="site-row"><span>${esc(s.site)}</span><span class="site-val">${s.n>0?(s.cpm?.toFixed(1)||'--')+' CPM':'No data'}</span></div>`).join('');
+  const live=D.nuke.filter(s=>s.n>0);
+  const allNormal=live.length>0&&live.every(s=>!s.anom);
+  const nukeHtml=D.nuke.map(s=>`<div class="site-row"><span>${esc(s.site)}</span><span class="site-val">${s.n>0?(s.cpm?.toFixed(1)||'--')+' CPM'+(s.last?' · '+esc(getAge(s.last)):''):'No data'}</span></div>`).join('');
   return `<div class="g-panel">
     <div class="sec-head"><h3>${t('panels.nuclearWatch','Nuclear Watch')}</h3><span class="badge">${t('badges.radiation','RADIATION')}</span></div>
-    <div class="nuke-ok">${!D.nuke.length?t('status.noNuclear','No radiation readings in this snapshot'):allNormal?'&#9679; '+t('nuclear.allSitesNormal','ALL SITES NORMAL'):'&#9888; '+t('nuclear.anomalyDetected','ANOMALY DETECTED')}</div>
+    <div class="nuke-ok">${!live.length?t('status.noNuclear','No radiation readings in this snapshot'):allNormal?'&#9679; '+t('nuclear.allSitesNormal','ALL SITES NORMAL'):'&#9888; '+t('nuclear.anomalyDetected','ANOMALY DETECTED')}</div>
     ${nukeHtml}
   </div>`;
 }

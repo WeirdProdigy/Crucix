@@ -72,6 +72,20 @@ test('partial OpenSky failures preserve successful current hotspots', async t =>
   assert.equal(data.airMeta.fallback, false);
 });
 
+test('nuclear watch carries the reading status and measurement time from Safecast', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'crucix-nuke-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const sites = [
+    { site: 'Zaporizhzhia NPP (Ukraine)', anomaly: false, avgCPM: 28.1, recentReadings: 25, status: 'cached', lastReading: '2026-10-02T10:00:00.000Z', ageMinutes: 20 },
+    { site: 'Bushehr NPP (Iran)', anomaly: false, avgCPM: null, recentReadings: 0, status: 'pending', lastReading: null, ageMinutes: null },
+  ];
+  const data = await synthesize({ crucix: { timestamp: '2026-10-02T12:00:00Z' }, sources: { Safecast: { sites } } }, { news: [], runsDir: dir });
+  assert.deepEqual(data.nuke, [
+    { site: 'Zaporizhzhia NPP (Ukraine)', anom: false, cpm: 28.1, n: 25, status: 'cached', last: '2026-10-02T10:00:00.000Z' },
+    { site: 'Bushehr NPP (Iran)', anom: false, cpm: null, n: 0, status: 'pending', last: null },
+  ]);
+});
+
 test('persisted source health prevents repeated degradation and metals remain comparable', t => {
   const dir = mkdtempSync(join(tmpdir(), 'crucix-memory-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));

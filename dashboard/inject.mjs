@@ -512,7 +512,8 @@ export async function synthesize(data, options = {}) {
     label: c.label || c.name, note: c.note || '', lat: c.lat || 0, lon: c.lon || 0
   }));
   const nuke = (data.sources.Safecast?.sites || []).map(s => ({
-    site: s.site, anom: s.anomaly || false, cpm: s.avgCPM, n: s.recentReadings || 0
+    site: s.site, anom: s.anomaly || false, cpm: s.avgCPM, n: s.recentReadings || 0,
+    status: s.status, last: s.lastReading ?? null
   }));
   const nukeSignals = (data.sources.Safecast?.signals || []).filter(s => s);
   const sdrData = data.sources.KiwiSDR || {};

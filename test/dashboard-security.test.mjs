@@ -37,6 +37,22 @@ test('external links escape attribute delimiters and reject active protocols', (
   assert.ok(!safe('https://example.com/?x=" onmouseover="alert(1)').includes('"'));
 });
 
+test('nuclear panel never calls the sites normal without current readings and shows how old a reading is', () => {
+  const render = nuke => helper('buildNuclearWatchPanel', { D: { nuke }, t: (_key, fallback) => fallback, esc: escape, getAge: value => `age(${value})` })();
+  const none = render([{ site: 'A', anom: false, cpm: null, n: 0, status: 'unavailable' }, { site: 'B', anom: false, cpm: null, n: 0, status: 'pending' }]);
+  assert.match(none, /No radiation readings in this snapshot/);
+  assert.doesNotMatch(none, /ALL SITES NORMAL/, 'Missing data is not a normal reading');
+  const some = render([{ site: 'A', anom: false, cpm: 28.14, n: 25, status: 'cached', last: '2026-10-01T17:00:33.000Z' }, { site: 'B', anom: false, cpm: null, n: 0, status: 'pending' }]);
+  assert.match(some, /ALL SITES NORMAL/);
+  assert.match(some, /28\.1 CPM · age\(2026-10-01T17:00:33\.000Z\)/);
+  assert.match(some, /No data/);
+  const alarm = render([{ site: 'A', anom: true, cpm: 150, n: 2, status: 'fresh', last: '2026-10-02T10:00:00.000Z' }, { site: 'B', anom: false, cpm: null, n: 0 }]);
+  assert.match(alarm, /ANOMALY DETECTED/);
+  const legacy = render([{ site: 'A', anom: false, cpm: 30, n: 3 }]);
+  assert.match(legacy, /30\.0 CPM/, 'Snapshots saved before this change still render');
+  assert.doesNotMatch(legacy, /CPM ·/);
+});
+
 test('missing external links never become local undefined or null routes', () => {
   const safe = helper('safeExternalUrl', { URL, location: { href: 'http://localhost:3117/' } });
   for (const value of [undefined, null, '', ' \t\n ', false, 0, {}, []]) {

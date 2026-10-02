@@ -165,7 +165,7 @@ A self-contained Jarvis-style HUD with:
 - **News ticker** — merged RSS + GDELT headlines + Telegram posts, auto-scrolling
 - **Sweep delta** — live panel showing what changed since last sweep (new signals, escalations, de-escalations with severity)
 - **Cross-source signals** — correlated intelligence across satellite, economic, conflict, and social domains
-- **Nuclear watch** — real-time radiation readings from Safecast + EPA RadNet
+- **Nuclear watch** — recent (72 h) radiation readings from Safecast, shown with their age, plus EPA RadNet when reachable
 - **Space watch** — CelesTrak satellite tracking: recent launches, ISS, military constellations, Starlink/OneWeb counts
 - **Leverageable ideas** — AI-generated trade ideas (with LLM) or signal-correlated ideas (without)
 
@@ -392,11 +392,11 @@ crucix/
 
 | Source | What It Tracks | Auth |
 |--------|---------------|------|
-| **GDELT** | Conflict, economy, health and crisis stories from the 15-minute GKG news feed (100+ languages), ranked by theme focus, with city-level map points | None |
+| **GDELT** | Conflict, economy, health and crisis stories from the 15-minute GKG news feed (100+ languages), ranked by theme focus (distinct themes count more than one repeated theme), with city-level map points | None |
 | **OpenSky** | ADS-B observations across 10 hotspots; fallback expires after one hour | None |
 | **NASA FIRMS** | Satellite fire/thermal anomaly detection (3hr latency) | Free key |
 | **Maritime** | Reference chokepoints; the briefing adapter does not connect to live AIS | None for reference data |
-| **Safecast** | Citizen-science radiation monitoring near 6 nuclear sites | None |
+| **Safecast** | Citizen-science radiation readings near 6 nuclear sites; two sites are refreshed per sweep and the rest come from a cache of at most 3 hours with its age shown | None |
 | **ACLED** | Armed conflict events: battles, explosions, protests | Free (OAuth2) |
 | **ReliefWeb** | UN humanitarian crisis tracking | None |
 | **WHO** | Disease outbreaks and health emergencies | None |
