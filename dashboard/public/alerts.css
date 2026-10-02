@@ -91,11 +91,11 @@
 /* Read-only (file: page, offline shell): nothing to change, so no change buttons. */
 .al-readonly :is([data-alert-action="ack"],[data-alert-action="resolve"],[data-alert-action="ack-all"],.al-snooze){display:none}
 
-/* ===== Bell in the top bar: the firing count, coloured by the threat level (over the page's .guide-btn, which loads later) ===== */
+/* ===== Bell in the top bar: the firing count, coloured by the threat level (the id outweighs the page's later .guide-btn and its :hover) ===== */
 .al-bell{display:inline-flex;align-items:center;gap:6px}
 .al-bell-icon{flex:none}
 .al-bell-count{font-variant-numeric:tabular-nums}
-.guide-btn.al-bell-3{border-color:var(--sev-watch);color:var(--sev-watch)}.guide-btn.al-bell-4{border-color:var(--sev-high);color:var(--sev-high)}.guide-btn.al-bell-5{border-color:var(--sev-critical);color:var(--sev-critical)}
+#alertBell.al-bell-3{border-color:var(--sev-watch);color:var(--sev-watch)}#alertBell.al-bell-4{border-color:var(--sev-high);color:var(--sev-high)}#alertBell.al-bell-5{border-color:var(--sev-critical);color:var(--sev-critical)}
 
 /* ===== Toasts: a stack in the bottom-right corner (at most three, kept by the controller), above the tray ===== */
 #alertToasts{position:fixed;right:16px;bottom:16px;z-index:1150;display:flex;flex-direction:column;gap:8px;width:min(380px,calc(100vw - 32px));pointer-events:none}

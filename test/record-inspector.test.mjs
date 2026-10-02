@@ -121,14 +121,16 @@ test('robustness',()=>{
 });
 
 // A minimal DOM: just enough for mount/refresh to run; dialog.showModal throws like a browser that refuses a modal.
-function dom(hash,files=['record-core.js','live-sources.js','record-inspector.js']){
-  const errors=[],window={addEventListener(){}},el=tag=>({tag,hidden:false,open:false,dataset:{},style:{setProperty(){}},attrs:{},
+// `bars` maps element ids (topbar, alertStrip) to {hidden?, bottom} for the dock offset; `created` lists the made elements.
+function dom(hash,files=['record-core.js','live-sources.js','record-inspector.js'],bars={}){
+  const errors=[],created=[],window={addEventListener(){}},el=tag=>{const node={tag,hidden:false,open:false,dataset:{},props:{},style:{setProperty(k,v){node.props[k]=v;}},attrs:{},
     setAttribute(k,v){this.attrs[k]=v;},removeAttribute(){},hasAttribute(){return false;},addEventListener(){},append(){},contains(){return false;},querySelector(){return null;},
-    showModal(){throw new Error('showModal refused');},close(){}});
-  const document={body:el('body'),createElement:el,getElementById(){return null;},querySelectorAll(){return [];},addEventListener(){},activeElement:null};
+    showModal(){throw new Error('showModal refused');},close(){}};created.push(node);return node;};
+  const byId=id=>Object.hasOwn(bars,id)?{hidden:bars[id].hidden===true,getBoundingClientRect:()=>({bottom:bars[id].bottom})}:null;
+  const document={body:el('body'),createElement:el,getElementById:byId,querySelectorAll(){return [];},addEventListener(){},activeElement:null};
   const context=vm.createContext({window,document,location:{hash,pathname:'/',search:''},history:{replaceState(){}},console:{error:(...args)=>errors.push(args)},Date,URL});
   for(const file of files)vm.runInContext(read(file),context);
-  return {window,errors};
+  return {window,errors,created};
 }
 const options={getSources:()=>[{...gdacs,source:'GDACS',status:'ok',observations:[]}],getEvents:()=>[],t,now:()=>now};
 
@@ -139,6 +141,16 @@ test('an inspector error never escapes mount or refresh',()=>{
   const before=errors.length;
   assert.doesNotThrow(()=>I.refresh(),'a failing re-render must not abort the SSE update'); assert(errors.length>before);
   assert.doesNotThrow(()=>dom('').window.CrucixRecordInspector.refresh(),'refresh before mount is a no-op');
+});
+
+test('the docked panel starts below the alert strip, else below the top bar',()=>{
+  for(const [bars,expected] of [[{topbar:{bottom:123}},'123px'],[{topbar:{bottom:123},alertStrip:{bottom:170}},'170px'],
+    [{topbar:{bottom:123},alertStrip:{bottom:0,hidden:true}},'123px'],[{topbar:{bottom:-40},alertStrip:{bottom:-4}},'0px']]){
+    const {window,errors,created}=dom('#src=GDACS',undefined,bars);
+    window.CrucixRecordInspector.mount(options);
+    const aside=created.find(node=>node.tag==='aside');
+    assert.equal(aside.hidden,false); assert.equal(aside.props['--ri-top'],expected,JSON.stringify(bars)); assert.deepEqual(errors,[]);
+  }
 });
 
 test('mount does nothing without the live source module',()=>{

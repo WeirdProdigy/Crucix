@@ -238,6 +238,16 @@ async function inspectorChecks() {
       const marker = page.locator('.markers [aria-label="' + title.replace(/"/g, '\\"') + '"]'); await marker.waitFor({ state: 'attached' });
       await marker.click({ force: true }); await page.waitForSelector('#ci-dialog'); assert.equal(await page.locator('#ci-title').innerText(), title); await page.keyboard.press('Escape');
       if (!legacy) {
+        // The alert tray docks where the inspector does: an inspector that opens closes the tray and is the panel on top;
+        // a tray opened over the inspector leaves it open. (The card sits under the open tray: reached with the keyboard.)
+        const alertTray = page.locator('#alertTray');
+        await page.locator('#alertBell').click(); await alertTray.waitFor({ state: 'visible' });
+        await card.focus(); await page.keyboard.press('Enter'); await aside.waitFor({ state: 'visible' });
+        assert(await alertTray.isHidden(), 'Opening the inspector closes the alert tray'); assert(await focused(page, '#record-inspector .ri-row'), 'The focus is in the visible inspector');
+        const panel = await aside.boundingBox();
+        assert(await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('#record-inspector'), [panel.x + panel.width / 2, panel.y + 40]), 'The inspector is the panel on top');
+        await page.locator('#alertBell').click(); await alertTray.waitFor({ state: 'visible' }); assert(await aside.isVisible(), 'A tray opened over the inspector leaves it open');
+        await alertTray.locator('[data-alert-action="close"]').click(); await alertTray.waitFor({ state: 'hidden' });
         // Expand with 'e', switch to all sources, collapse back with Escape, close with Escape.
         await card.click(); await aside.waitFor({ state: 'visible' }); await page.keyboard.press('e');
         const browserDialog = page.locator('#record-browser[open]'); await browserDialog.waitFor();
@@ -323,6 +333,7 @@ async function alertChecks() {
       await tray.locator('[data-alert-action="close"]').click(); await tray.waitFor({ state: 'hidden' }); assert.equal(await tray.getAttribute('aria-hidden'), 'true');
       // The bell opens the tray: firing alerts, most severe first; the acknowledged one is under Handled.
       await bell.click(); await tray.waitFor({ state: 'visible' }); assert.equal(await bell.getAttribute('aria-expanded'), 'true');
+      assert.equal(await bell.evaluate(node => getComputedStyle(node).color), await strip.locator('.as-threat').evaluate(node => getComputedStyle(node).color), 'The hovered bell keeps the threat colour');
       await page.waitForFunction(() => document.querySelectorAll('#alertTray .at-alert').length === 3);
       assert.deepEqual(await tray.locator('.at-alert').evaluateAll(rows => rows.map(row => row.dataset.alertId)), [ids.critical, ids.high, ids.watch], 'Sorted by severity');
       assert.match(await tray.locator('#at-tab-handled').innerText(), /1/); assert(await focused(page, '#alertTray #at-tab-active'), 'Opening moves focus to the active tab');

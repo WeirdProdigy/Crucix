@@ -157,7 +157,7 @@
   const ALERT_ID=/^alert-[0-9a-f]{32}$/,EVENT_ID=/^event-[0-9a-f]{32}$/,TAB_IDS=TABS.map(([id])=>id),MAX_TOASTS=3,SCROLLERS=['.at-panel','.at-drivers'];
   const FOCUS_ATTRS=['data-alert-action','data-alert-id','data-minutes','data-severity','data-rule-id','data-event-id'];
   const BELL='<svg class="al-bell-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false"><path d="M8 1.75a4 4 0 0 0-4 4v2.5l-1.25 2.5h10.5L12 8.25v-2.5a4 4 0 0 0-4-4zM6.5 12.75a1.5 1.5 0 0 0 3 0" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
-  let opts={},strip=null,tray=null,toasts=null,announcer=null,summary={},alerts=[],loaded=false,primed=false,readOnly=false;
+  let opts={},strip=null,tray=null,toasts=null,announcer=null,errorLive=null,summary={},alerts=[],loaded=false,primed=false,readOnly=false;
   let tab='active',threatOpen=false,expandedGroups=[],notice=null,opener=null,loadSeq=0,loadTimer=null,lastLevel=0;
   const seen=new Set(),busy=new Set();
   const log=error=>{try{console.error('[alerts]',error);}catch{}};
@@ -166,6 +166,8 @@
   // Unescaped text for textContent and attributes set through the DOM.
   const say=(key,fallback)=>{try{const value=typeof opts.t==='function'?opts.t(key,fallback):fallback;return typeof value==='string'&&value?value:fallback;}catch{return fallback;}};
   const firingCount=s=>LEVELS.reduce((sum,level)=>sum+count(obj(s.counts)?.[level]),0);
+  // A summary as the server builds it: anything else never replaces the one shown.
+  const validSummary=value=>{const s=obj(value);return s&&obj(s.counts)&&obj(s.threat)?s:null;};
   const trayOpen=()=>!!tray&&!tray.hidden;
   const attr=(node,name)=>node?.getAttribute?.(name)||'';
   const make=(tag,id)=>{const node=document.createElement(tag);node.id=id;return node;};
@@ -192,7 +194,16 @@
     SCROLLERS.forEach((selector,i)=>{const node=el.querySelector(selector);if(node&&scroll[i])node.scrollTop=scroll[i];});
     if(active)((key&&el.querySelector(key))||el.querySelector(fallback))?.focus({preventScroll:true});
   }
-  const noticeHtml=tag=>notice?`<${tag} class="al-notice" role="alert">${translator(opts.t)(notice.key,notice.fallback)}</${tag}>`:'';
+  // A failure is drawn without a role (redraws would repeat it) and spoken once through the persistent #alertError node.
+  const noticeHtml=tag=>notice?`<${tag} class="al-notice">${translator(opts.t)(notice.key,notice.fallback)}</${tag}>`:'';
+  function fail(where,key,fallback,always){
+    const repeat=notice?.where===where&&notice.key===key;
+    notice={where,key,fallback};
+    if(!errorLive||(repeat&&!always))return;
+    // Emptied first, so the same message twice in a row is spoken twice.
+    const message=say(key,fallback);errorLive.textContent='';
+    setTimeout(()=>{errorLive.textContent=message;},50);
+  }
   function drawStrip(){
     if(!strip)return;
     paint(strip,renderStrip(summary,opts.t,clock(),threatOpen&&trayOpen())+(notice?.where==='strip'?noticeHtml('span'):''),'.as-threat');
@@ -214,47 +225,60 @@
   // The strip's live region: a change of the threat level is spoken once (the strip itself is re-rendered too often to be live).
   function announce(){const level=threatLevel(summary);if(announcer&&lastLevel&&level!==lastLevel)announcer.textContent=`${say('alerts.threat','Threat')} ${level}/5`;lastLevel=level;}
 
-  // Toasts: firing critical/high alerts not seen in this session; whatever fires at the first summary counts as seen.
-  function toast(){
-    const fresh=primed?newAlertToasts(summary,seen):[];
+  // Toasts: firing critical/high alerts not seen in this session that were first seen after the summary shown before
+  // (`since`). summary.top holds only five alerts, so an old alert that moves up into it (another one was acknowledged, a
+  // snooze ran out) is not new. Whatever fires at the first summary counts as seen. At most three, the oldest leaves first.
+  function toast(since){
+    const after=Number.isFinite(since)?since:-Infinity;
+    const fresh=primed?newAlertToasts(summary,seen).filter(alert=>Number.isFinite(alert.firstSeenAt)&&alert.firstSeenAt>after):[];
     for(const alert of list(summary.top))if(text(alert.id))seen.add(alert.id);
     primed=true;
     for(const alert of fresh)toasts.insertAdjacentHTML('beforeend',renderToast(alert,opts.t));
     const stack=[...toasts.querySelectorAll('.al-toast')];
-    for(const node of stack.slice(0,Math.max(0,stack.length-MAX_TOASTS)))node.remove();
+    stack.slice(0,Math.max(0,stack.length-MAX_TOASTS)).forEach(removeToast);
   }
-  function dropToasts(selector){
-    for(const node of toasts?[...toasts.querySelectorAll(selector)]:[]){
-      if(node.contains(document.activeElement))document.getElementById('alertBell')?.focus();
-      node.remove();
-    }
+  // A toast that leaves with the focus in it hands the focus to the bell.
+  function removeToast(node){
+    if(node.contains(document.activeElement))document.getElementById('alertBell')?.focus();
+    node.remove();
   }
+  function dropToasts(selector){for(const node of toasts?[...toasts.querySelectorAll(selector)]:[])removeToast(node);}
   const dropToast=id=>dropToasts(`.al-toast[data-alert-id="${CSS.escape(id)}"]`);
 
-  // Requests: same origin, JSON both ways (the server refuses any other shape for a change), 10 s deadline.
-  async function request(url,body){
-    const init={method:body===undefined?'GET':'POST',credentials:'same-origin',headers:{Accept:'application/json'}};
-    if(body!==undefined){init.headers['Content-Type']='application/json';init.body=JSON.stringify(body);}
-    if(typeof opts.fetchJson==='function')return opts.fetchJson(url,init);
-    if(typeof AbortSignal!=='undefined'&&typeof AbortSignal.timeout==='function')init.signal=AbortSignal.timeout(10000);
-    const response=await fetch(url,{cache:'no-store',...init});
-    const data=await response.json().catch(()=>null);
-    if(!response.ok)throw new Error('HTTP '+response.status);
+  // Requests: same origin, JSON both ways, 10 s deadline. Every method but GET sends Content-Type: application/json, DELETE
+  // too (the server refuses any other shape for a change); the body is optional. The answer must be a JSON object: an HTML
+  // login page or other garbage behind a 2xx is a failure. Also CrucixAlerts.request(url, body, method) for the rule editor.
+  async function request(url,body,method){
+    if(readOnly)throw new Error('Read-only');
+    const verb=typeof method==='string'?method.toUpperCase():body===undefined?'GET':'POST';
+    if(!['GET','POST','PUT','DELETE'].includes(verb))throw new Error('Unsupported method');
+    const init={method:verb,credentials:'same-origin',headers:{Accept:'application/json'}};
+    if(verb!=='GET'){init.headers['Content-Type']='application/json';if(body!==undefined)init.body=JSON.stringify(body);}
+    let data;
+    if(typeof opts.fetchJson==='function')data=await opts.fetchJson(url,init);
+    else{
+      if(typeof AbortSignal!=='undefined'&&typeof AbortSignal.timeout==='function')init.signal=AbortSignal.timeout(10000);
+      const response=await fetch(url,{cache:'no-store',...init});
+      data=await response.json().catch(()=>null);
+      if(!response.ok)throw new Error('HTTP '+response.status);
+    }
+    if(!obj(data))throw new Error('Not a JSON object');
     return data;
   }
-  // The tray's list: every state in one request (the tab counts are those of the fetched alerts).
+  // The tray's list: every state in one request (the tab counts are those of the fetched alerts). Its ids count as seen.
   async function load(){
     if(readOnly||!trayOpen())return;
     const seq=++loadSeq;
     try{
       const data=await request('/api/alerts?state=all&limit=200');
+      if(!Array.isArray(data.alerts))throw new Error('No alert list');
       if(seq!==loadSeq)return;
-      alerts=list(data?.alerts);loaded=true;
+      alerts=list(data.alerts);loaded=true;
       if(notice?.key==='alerts.errorLoad')notice=null;
-      for(const alert of alerts)if(alert.state!=='firing'&&text(alert.id))dropToast(alert.id);
+      for(const alert of alerts){if(!text(alert.id))continue;seen.add(alert.id);if(alert.state!=='firing')dropToast(alert.id);}
     }catch(error){
       if(seq!==loadSeq)return;
-      notice={where:'tray',key:'alerts.errorLoad',fallback:'Could not load alerts'};
+      fail('tray','alerts.errorLoad','Could not load alerts',false);
     }
     drawTray();
   }
@@ -266,10 +290,10 @@
     try{
       const data=await request('/api/alerts/'+path,body);
       notice=null;drop?.();
-      if(!update(data?.summary)){drawStrip();drawTray();}
+      if(!update(data.summary)){drawStrip();drawTray();}
       scheduleLoad();
     }catch(error){
-      notice={where:trayOpen()?'tray':'strip',key:'alerts.errorAction',fallback:'Action failed'};
+      fail(trayOpen()?'tray':'strip','alerts.errorAction','Action failed',true);
       drawStrip();drawTray();
     }finally{busy.delete(path);}
   }
@@ -291,14 +315,16 @@
     drawTray();drawStrip();syncBell();focusRow(focusId);
     if(!readOnly)load().then(()=>{if(focusId&&trayOpen()&&attr(document.activeElement?.closest?.('.at-alert'),'data-alert-id')!==focusId)focusRow(focusId);}).catch(log);
   }
-  function close(returnFocus=true){
+  // focus: 'return' (Esc, × : back to the opener), 'inside' (the bell: only when the focus was in the tray), 'none' (another
+  // panel takes over and places the focus itself).
+  function close(focus='return'){
     if(!trayOpen())return;
     const inside=tray.contains(document.activeElement);
     tray.hidden=true;tray.setAttribute('aria-hidden','true');threatOpen=false;
     if(notice?.where==='tray')notice=null;
     for(const toggle of openToggles())setMenu(toggle,false);
     drawStrip();syncBell();
-    if(returnFocus||inside)restoreOpener();
+    if(focus==='return'||(focus==='inside'&&inside))restoreOpener();
     opener=null;
   }
   function selectTab(id,focus){
@@ -310,6 +336,8 @@
   function onClick(event){
     const node=event.target?.closest?.('[data-alert-action],[data-alert-tab]');if(!node)return;
     const root=event.currentTarget;
+    // The next click in the alert UI clears an action failure (a load failure stays until a load succeeds).
+    if(notice&&notice.key!=='alerts.errorLoad'){const where=notice.where;notice=null;if(where==='strip')drawStrip();else drawTray();}
     if(node.hasAttribute('data-alert-tab'))return selectTab(attr(node,'data-alert-tab'));
     const action=attr(node,'data-alert-action'),id=attr(node,'data-alert-id'),valid=ALERT_ID.test(id);
     if(action!=='snooze-menu')for(const toggle of openToggles())if(action!=='snooze'||!toggle.closest?.('.al-snooze')?.contains(node))setMenu(toggle,false);
@@ -323,7 +351,7 @@
     else if(action==='group'){const rule=attr(node,'data-rule-id');expandedGroups=expandedGroups.includes(rule)?expandedGroups.filter(item=>item!==rule):[...expandedGroups,rule];drawTray();}
     else if(action==='evidence'){const eventId=attr(node,'data-event-id');if(EVENT_ID.test(eventId))window.CrucixIntelligence?.openEvent(eventId);}
     else if(action==='dismiss'&&id)dropToast(id);
-    else if(action==='close')close(true);
+    else if(action==='close')close('return');
   }
   // Esc closes an open snooze menu first, then the tray (focus back to the opener); arrows move along the tabs.
   function onKey(event){
@@ -332,7 +360,7 @@
     if(key==='Escape'){
       const toggle=root.querySelector('[data-alert-action="snooze-menu"][aria-expanded="true"]');
       if(toggle){event.preventDefault();setMenu(toggle,false);toggle.focus();}
-      else if(root===tray){event.preventDefault();close(true);}
+      else if(root===tray){event.preventDefault();close('return');}
       return;
     }
     const current=event.target?.closest?.('[data-alert-tab]');
@@ -346,7 +374,7 @@
     const target=event.target;
     if(!target?.closest?.('.al-snooze'))for(const toggle of openToggles())setMenu(toggle,false);
     const bell=target?.closest?.('#alertBell');
-    if(bell){if(trayOpen())close(false);else open({from:bell});}
+    if(bell){if(trayOpen())close('inside');else open({from:bell});}
   }
 
   // The bell for the top bar: the firing count, coloured by the threat level. Empty before mount.
@@ -356,14 +384,17 @@
       return `<button type="button" class="guide-btn al-bell al-bell-${threatLevel(summary)}" id="alertBell" aria-controls="alertTray" aria-expanded="${trayOpen()}">${BELL}${translator(opts.t)('alerts.title','Alerts')} <span class="al-bell-count">${firingCount(summary)}</span></button>`;
     }catch(error){log(error);return '';}
   }
-  // A new summary (snapshot, SSE `alerts`, action response). An older one than shown is ignored; true when applied.
+  // A new summary (snapshot, SSE `alerts`, action response). An older one than shown, or one without counts and threat, is
+  // ignored; true when applied. It also clears a failure shown in the strip.
   function update(next){
     try{
-      const s=obj(next);
+      const s=validSummary(next);
       if(!strip||!s)return false;
       if(Number.isFinite(summary.generatedAt)&&Number.isFinite(s.generatedAt)&&s.generatedAt<summary.generatedAt)return false;
+      const since=summary.generatedAt;
       summary=s;
-      toast();drawStrip();syncBell();syncTitle();announce();
+      if(notice?.where==='strip')notice=null;
+      toast(since);drawStrip();syncBell();syncTitle();announce();
       if(trayOpen()){drawTray();scheduleLoad();}
       return true;
     }catch(error){log(error);return false;}
@@ -378,9 +409,10 @@
       strip=make('div','alertStrip');strip.setAttribute('role','region');strip.setAttribute('aria-label',say('alerts.strip','Alert summary'));
       announcer=make('p','alertAnnounce');announcer.className='ri-sr';announcer.setAttribute('role','status');announcer.setAttribute('aria-live','polite');
       tray=make('aside','alertTray');tray.hidden=true;tray.setAttribute('aria-hidden','true');tray.setAttribute('role','region');tray.setAttribute('aria-labelledby','at-heading');
+      errorLive=make('p','alertError');errorLive.className='ri-sr';errorLive.setAttribute('role','alert');
       toasts=make('div','alertToasts');
       for(const node of [strip,tray,toasts]){node.classList.toggle('al-readonly',readOnly);node.addEventListener('click',guarded(onClick));node.addEventListener('keydown',guarded(onKey));}
-      bar.after(strip);document.body.append(tray,toasts,announcer);
+      bar.after(strip);document.body.append(tray,toasts,announcer,errorLive);
       document.addEventListener('click',guarded(onDocumentClick));
       // The page scrolls <body>, whose scroll events do not bubble: listen in the capture phase.
       document.addEventListener('scroll',event=>{if(!tray.contains(event.target))guarded(dockTray)();},{capture:true,passive:true});
@@ -388,12 +420,14 @@
       window.addEventListener('resize',guarded(dockTray));
       // Ages ("12m") move on between sweeps.
       setInterval(guarded(drawStrip),60000);
-      let initial=null;try{initial=obj(opts.getSummary?.());}catch(error){log(error);}
+      let initial=null;try{initial=validSummary(opts.getSummary?.());}catch(error){log(error);}
       if(initial){summary=initial;toast();}
       drawStrip();syncTitle();lastLevel=threatLevel(summary);
     }catch(error){log(error);}
   }
   // ===== End controller =====
 
-  window.CrucixAlerts={renderStrip,renderTray,renderToast,mount,update,bell,open:guarded(options=>open(obj(options)||{})),close:guarded(()=>close(true))};
+  // close({focus:false}) hides the tray without moving the focus (the record inspector opening over it places its own).
+  window.CrucixAlerts={renderStrip,renderTray,renderToast,mount,update,bell,request:(url,body,method)=>request(url,body,method),
+    open:guarded(options=>open(obj(options)||{})),close:guarded(options=>close(obj(options)?.focus===false?'none':'return'))};
 })(window);

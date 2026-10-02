@@ -276,18 +276,22 @@ test('robustness: garbage summaries, views and translators never throw',()=>{
 });
 
 // ===== Controller =====
-// A minimal DOM: elements keep their attributes, listeners and innerHTML; queries find nothing. Enough for mount/update/open
-// and for driving the delegated click listener with a fake button.
+// A minimal DOM: elements keep their attributes, listeners and innerHTML; queries find nothing, except the toast nodes that
+// insertAdjacentHTML adds (one per call, matched by class, level class or data-alert-id). Enough for mount/update/open, the
+// toast stack and for driving the delegated click listener with a fake button.
+const TOAST_SELECTOR=/^\.al-toast(-[a-z]+)?(?:\[data-alert-id="([^"]*)"\])?$/;
 function dom({protocol='http:',topbar=true,fetch,offline=false}={}){
   const ids=new Map(),errors=[],calls=[],opened=[];
-  const el=tag=>{const node={tag,id:'',hidden:false,className:'',innerHTML:'',textContent:'',attrs:{},handlers:{},isConnected:true,
+  const el=tag=>{const node={tag,id:'',hidden:false,className:'',innerHTML:'',textContent:'',attrs:{},handlers:{},kids:[],isConnected:true,focused:0,
     style:{setProperty(k,v){node.style[k]=v;}},classList:{set:new Set(),add(c){this.set.add(c);},remove(c){this.set.delete(c);},toggle(c,on){if(on)this.set.add(c);else this.set.delete(c);},contains(c){return this.set.has(c);}},
     setAttribute(k,v){node.attrs[k]=String(v);},getAttribute(k){return Object.hasOwn(node.attrs,k)?node.attrs[k]:null;},hasAttribute(k){return Object.hasOwn(node.attrs,k);},removeAttribute(k){delete node.attrs[k];},
-    addEventListener(type,fn){node.handlers[type]=fn;},after(...nodes){nodes.forEach(add);},append(...nodes){nodes.forEach(add);},insertAdjacentHTML(_,html){node.innerHTML+=html;},
-    querySelector(){return null;},querySelectorAll(){return [];},contains(){return false;},closest(){return null;},getBoundingClientRect(){return {top:40,bottom:80};},focus(){}};return node;};
+    addEventListener(type,fn){node.handlers[type]=fn;},after(...nodes){nodes.forEach(add);},append(...nodes){nodes.forEach(add);},
+    insertAdjacentHTML(_,html){node.innerHTML+=html;const kid={html,inner:{},contains:x=>x===kid.inner,remove(){node.kids=node.kids.filter(item=>item!==kid);node.innerHTML=node.innerHTML.replace(html,'');}};node.kids.push(kid);},
+    querySelector(){return null;},querySelectorAll(selector){const m=TOAST_SELECTOR.exec(selector);return m?node.kids.filter(kid=>(!m[1]||kid.html.includes('al-toast'+m[1]+'"'))&&(m[2]===undefined||kid.html.includes(`data-alert-id="${m[2]}"`))):[];},
+    contains(){return false;},closest(){return null;},getBoundingClientRect(){return {top:40,bottom:80};},focus(){node.focused++;}};return node;};
   const add=node=>{if(node.id)ids.set(node.id,node);};
   const document={title:'Crucix',activeElement:null,body:el('body'),createElement:el,getElementById:id=>ids.get(id)||null,querySelector(){return null;},addEventListener(){}};
-  if(topbar){const bar=el('div');bar.id='topbar';add(bar);}
+  if(topbar){const bar=el('div');bar.id='topbar';add(bar);const bell=el('button');bell.id='alertBell';add(bell);}
   const spy=fetch||(async(url,init)=>{calls.push([url,init]);return {ok:true,status:200,json:async()=>({alerts:[]})};});
   const window={addEventListener(){},CrucixIntelligence:{openEvent:id=>opened.push(id)},...(offline?{__CRUCIX_OFFLINE_SHELL__:true}:{})};
   const context=vm.createContext({window,document,location:{protocol},console:{error:(...args)=>errors.push(args)},fetch:(...args)=>spy(...args),CSS:{escape:value=>String(value)},Date,URL,JSON,setTimeout,clearTimeout,setInterval:()=>0});
@@ -369,20 +373,76 @@ test('controller: actions post same-origin JSON, invalid ids and event ids go no
   assert.deepEqual(plain(opened),[EVENT],'only a well-formed event id opens the event detail');
 });
 
-test('controller: a failed action shows the error in the tray, never throws',async()=>{
-  const {A,byId,errors}=dom({fetch:async url=>url.includes('/ack')?{ok:false,status:403,json:async()=>({error:'Forbidden'})}:{ok:true,status:200,json:async()=>({alerts:[]})}}),alerts=firing();
+const forbidden=async url=>url.includes('/ack')?{ok:false,status:403,json:async()=>({error:'Forbidden'})}:{ok:true,status:200,json:async()=>({alerts:[]})};
+const speech=()=>new Promise(resolve=>setTimeout(resolve,80));
+test('controller: a failed action is shown without a role and spoken once; redraws never repeat it',async()=>{
+  const {A,byId,errors}=dom({fetch:forbidden}),alerts=firing(),tray=byId.bind(null,'alertTray');
   A.mount({getSummary:()=>summaryOf(alerts),t,now:()=>now});
+  const live=byId('alertError');
+  assert.deepEqual([live.getAttribute('role'),live.textContent],['alert',''],'one persistent, empty alert region');
   A.open();await ticks();
-  click(byId('alertTray'),{'data-alert-action':'ack','data-alert-id':alerts[0].id});await ticks();
-  assert.match(byId('alertTray').innerHTML,/role="alert"[^>]*>Action failed</);
+  click(tray(),{'data-alert-action':'ack','data-alert-id':alerts[0].id});await speech();
+  assert.match(tray().innerHTML,/class="al-notice">Action failed</); assert(!tray().innerHTML.includes('role="alert"'),'the drawn notice has no role');
+  assert.equal(live.textContent,'Action failed','spoken once through the live region');
+  live.textContent='spoken';
+  A.update(summaryOf(alerts,{generatedAt:now+1}));A.update(summaryOf(alerts,{generatedAt:now+2}));await speech();
+  assert.equal(live.textContent,'spoken','redraws do not speak it again'); assert(!tray().innerHTML.includes('role="alert"'));
+  click(tray(),{'data-alert-tab':'handled'});assert(!tray().innerHTML.includes('Action failed'),'the next click clears it');
+  // The same failure from the strip (tray closed): shown at the end of the strip, cleared by the next summary.
+  A.close();click(byId('alertStrip'),{'data-alert-action':'ack','data-alert-id':alerts[0].id});await speech();
+  assert.match(byId('alertStrip').innerHTML,/Action failed/); assert.equal(live.textContent,'Action failed','a repeated action failure is spoken again');
+  A.update(summaryOf(alerts,{generatedAt:now+3}));
+  assert(!byId('alertStrip').innerHTML.includes('Action failed'),'a new summary clears the strip notice');
   assert.equal(errors.length,0);
+});
+
+test('controller: a non-object or list-less answer is a failure, a summary without counts and threat is ignored',async()=>{
+  for(const body of ['<html>login</html>',null,[],{alerts:'x'}]){
+    const {A,byId}=dom({fetch:async()=>({ok:true,status:200,json:async()=>body})});
+    A.mount({getSummary:()=>summaryOf(firing()),t,now:()=>now});A.open();await ticks();
+    assert.match(byId('alertTray').innerHTML,/Could not load alerts/,JSON.stringify(body));
+  }
+  const {A,byId}=dom(),alerts=firing();
+  A.mount({getSummary:()=>summaryOf(alerts),t,now:()=>now});
+  for(const garbage of [{},{counts:{}},{threat:{level:5}},{counts:[],threat:{}}])assert.equal(A.update({...garbage,generatedAt:now+1}),false);
+  assert.match(byId('alertStrip').innerHTML,/Threat 5\/5/,'the real summary stays');
+});
+
+test('controller: request() sends JSON for every change, DELETE included, and nothing on read-only pages',async()=>{
+  const {A,calls}=dom();
+  A.mount({getSummary:()=>summaryOf([]),t,now:()=>now});
+  await A.request('/api/alerts/rules/my-rule',{enabled:false},'PUT');await A.request('/api/alerts/rules/my-rule',undefined,'DELETE');
+  assert.deepEqual(plain(calls.map(([url,init])=>[url,init.method,init.credentials,init.headers['Content-Type'],init.body??null])),
+    [['/api/alerts/rules/my-rule','PUT','same-origin','application/json','{"enabled":false}'],['/api/alerts/rules/my-rule','DELETE','same-origin','application/json',null]]);
+  await assert.rejects(A.request('/api/alerts','x','PATCH'));
+  const file=dom({protocol:'file:'});file.A.mount({});
+  await assert.rejects(file.A.request('/api/alerts/ack-all',{},'POST')); assert.equal(file.calls.length,0);
+});
+
+test('controller: an old alert moving up into summary.top is not new',()=>{
+  const {A,byId}=dom(),alerts=Array.from({length:6},(_,i)=>alert({title:'Old critical '+i}));
+  A.mount({getSummary:()=>summaryOf(alerts),t,now:()=>now});
+  const acked=[{...alerts[0],state:'acked',ack:{at:now}},...alerts.slice(1)];
+  A.update(summaryOf(acked,{generatedAt:now+1}));
+  assert.equal(byId('alertToasts').innerHTML,'','the sixth alert, first seen two hours ago, does not toast');
+});
+
+test('controller: at most three toasts, the oldest leaves first and hands its focus to the bell',()=>{
+  const {A,byId,document}=dom();
+  A.mount({getSummary:()=>summaryOf([]),t,now:()=>now});
+  const stack=byId('alertToasts'),fresh=n=>alert({title:'Fresh '+n,firstSeenAt:now+n,lastSeenAt:now+n});
+  A.update(summaryOf([fresh(1)],{generatedAt:now+1}));
+  document.activeElement=stack.kids[0].inner;
+  A.update(summaryOf([fresh(2),fresh(3),fresh(4)],{generatedAt:now+5}));
+  assert.equal(stack.kids.length,3); assert(!stack.innerHTML.includes('Fresh 1')&&stack.innerHTML.includes('Fresh 4'),'the oldest toast left');
+  assert.equal(byId('alertBell').focused,1,'its focus went to the bell');
 });
 
 test('controller: toasts only for new critical/high alerts after the first summary, once each',()=>{
   const {A,byId}=dom(),alerts=firing();
   A.mount({getSummary:()=>summaryOf(alerts),t,now:()=>now});
   assert.equal(byId('alertToasts').innerHTML,'','alerts already firing at load do not toast');
-  const fresh=[alert({title:'New one'}),alert({severity:'high',title:'New two'}),alert({severity:'watch',title:'Watch only'}),alert({title:'Silent',silent:true})];
+  const fresh=[alert({title:'New one'}),alert({severity:'high',title:'New two'}),alert({severity:'watch',title:'Watch only'}),alert({title:'Silent',silent:true})].map(a=>({...a,firstSeenAt:now+1}));
   A.update(summaryOf([...fresh,...alerts],{generatedAt:now+1}));
   const html=byId('alertToasts').innerHTML;
   assert(html.includes('New one')&&html.includes('New two'),'new critical and high alerts toast');

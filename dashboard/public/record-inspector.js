@@ -173,7 +173,11 @@
     for(const node of document.querySelectorAll('.live-source[data-live-source]'))if(open&&node.dataset.liveSource===state.source)node.setAttribute('data-selected','true');else node.removeAttribute('data-selected');
     if(!open)lastRec=null;
     const v=open?view(state,now,browser):null,t=opts.t;
+    const wasHidden=aside.hidden;
     aside.hidden=!open||browser;aside.setAttribute('aria-hidden',String(aside.hidden));
+    // The alert tray docks in the same place, above this panel: an inspector that opens closes it (the inspector places the
+    // focus itself). A tray opened while the inspector is shown stays on top, as asked.
+    if(wasHidden&&!aside.hidden)window.CrucixAlerts?.close?.({focus:false});
     if(!aside.hidden){paint(aside,renderInspector(v,t,now));dock();}
     if(browser){paint(dialog,renderBrowser(v,t,now));if(!dialog.open)dialog.showModal();}
     else if(dialog.open)dialog.close();
