@@ -250,8 +250,9 @@ async function inspectorChecks() {
         // Activating the records card while the inspector is already open closes the tray too (it was only closed on closed -> open before).
         await card.focus(); await page.keyboard.press('Enter'); await alertTray.waitFor({ state: 'hidden'});
         assert(await aside.isVisible() && await focused(page, '#record-inspector .ri-row'), 'The card puts the focus into the inspector and the tray steps aside');
-        // Expand with 'e', switch to all sources, collapse back with Escape, close with Escape.
-        await card.click(); await aside.waitFor({ state: 'visible' }); await page.keyboard.press('e');
+        // Expand with 'e', switch to all sources, collapse back with Escape, close with Escape. The docked inspector covers the card
+        // (before the domain groups too: card at x 1101, inspector from x 960 at 1440 px), so the card is reached with the keyboard.
+        await card.focus(); await page.keyboard.press('Enter'); await aside.waitFor({ state: 'visible' }); await page.keyboard.press('e');
         const browserDialog = page.locator('#record-browser[open]'); await browserDialog.waitFor();
         assert.equal(await page.locator('#record-browser').getAttribute('aria-labelledby'), 'rb-heading'); assert.match(hash(page), /view=browser/); assert(await aside.isHidden());
         await browserDialog.locator('[data-ri-source="all"]').click(); assert.match(hash(page), /src=all/);
@@ -320,9 +321,23 @@ async function liveChecks() {
         const sources = await page.evaluate(() => Object.keys(CrucixLiveSources.policies)), panel = page.locator('.live-sources-panel');
         assert.equal(sources.length, 19, 'nineteen sources in the browser policy copy');
         await panel.scrollIntoViewIfNeeded();
-        assert.deepEqual(await panel.locator('.live-source').evaluateAll(nodes => nodes.map(node => [node.dataset.liveSource, node.dataset.liveState])), sources.map(source => [source, 'ok']), 'one current card per source, in policy order');
+        // The cards sit in domain groups (lens-core.js): at most eight, a header button each, open by default only when the group needs
+        // attention (here hazards: the GDACS Orange and SIGMET high records). Collapsed, the panel stays short; expanded, every card is reachable.
+        const heads = panel.locator('button.live-group-head'), domains = await heads.evaluateAll(nodes => nodes.map(node => node.dataset.liveGroup));
+        assert(domains.length > 0 && domains.length <= 8, 'the cards are grouped by domain');
+        assert.deepEqual(await heads.evaluateAll(nodes => nodes.map(node => [node.getAttribute('aria-controls'), node.closest('.live-group').dataset.attention === 'true', node.getAttribute('aria-expanded') === 'true'])),
+          domains.map(domain => ['live-group-' + domain, domain === 'hazards', domain === 'hazards']), 'only the attention group starts open');
+        const setGroups = async open => { for (const domain of domains) { const head = panel.locator(`button.live-group-head[data-live-group="${domain}"]`); if (await head.getAttribute('aria-expanded') !== String(open)) await head.click(); } };
+        await setGroups(false);
+        const collapsed = (await panel.boundingBox()).height;
+        if (size === 'desktop') assert(collapsed <= 420, 'the collapsed live panel is at most 420 px tall: ' + collapsed);
+        assert.equal(await panel.locator('button.live-open:visible').count(), 0, 'collapsed groups hide their cards');
+        await panel.screenshot({ path: path.join(artifacts, `live-panel-${size}-collapsed.png`) });
+        await setGroups(true);
+        const grouped = await page.evaluate(names => CrucixDomains.DOMAIN_IDS.flatMap(id => names.filter(name => CrucixDomains.domainOfSource(name) === id)), sources);
+        assert.deepEqual(await panel.locator('.live-source').evaluateAll(nodes => nodes.map(node => [node.dataset.liveSource, node.dataset.liveState])), grouped.map(source => [source, 'ok']), 'one current card per source, grouped by domain, in policy order inside a group');
         assert.match(await panel.locator('.sec-head .badge').innerText(), /^19\/19$/);
-        assert.equal(await panel.locator('button.live-open').count(), 19, 'every current source can open its records');
+        assert.equal(await panel.locator('button.live-open:visible').count(), 19, 'every current source can open its records once its group is open');
         assert(await panel.evaluate(node => node.scrollWidth <= node.clientWidth + 1), 'no card is clipped sideways');
         assert(await page.evaluate(() => document.body.scrollWidth <= innerWidth && document.documentElement.scrollWidth <= innerWidth), 'no horizontal page scroll');
         // The page scrolls <body>, so an element screenshot paints only the first screen of a panel this tall: one viewport shot per screen instead.
@@ -332,7 +347,7 @@ async function liveChecks() {
           await page.screenshot({ path: path.join(artifacts, `live-panel-${size}-${part}.png`) });
         }
         await page.evaluate(() => { document.body.scrollTop = 0; });
-        if (size === 'mobile') { console.log('LIVE mobile PASS', { cards: sources.length }); continue; }
+        if (size === 'mobile') { console.log('LIVE mobile PASS', { cards: sources.length, groups: domains.length, collapsed }); continue; }
         // History: the type filter offers the new kinds, labelled; one maritime record however often the fixture re-sends the row.
         assert(await page.evaluate(() => CrucixIntelligence.openHistory())); await page.waitForSelector('#ci-history-kind');
         const kinds = await page.locator('#ci-history-kind option').evaluateAll(nodes => Object.fromEntries(nodes.map(node => [node.value, node.textContent])));
@@ -365,7 +380,7 @@ async function liveChecks() {
         await page.locator('.region-btn[data-region="middleEast"]').click(); await page.waitForTimeout(1500);
         await page.locator('#mapContainer').screenshot({ path: path.join(artifacts, 'live-map-globe.png') });
         assert.equal(await page.evaluate(() => window.__liveXss), undefined, 'hostile live titles stay inert');
-        console.log('LIVE desktop PASS', { cards: sources.length, markers: Object.keys(MARKERS), kinds: NEW_KINDS });
+        console.log('LIVE desktop PASS', { cards: sources.length, groups: domains.length, collapsed, markers: Object.keys(MARKERS), kinds: NEW_KINDS });
       } finally { await context.close(); }
     }
   } finally { await owner.close(); await fetch(target.origin + '/control?liveSources=false'); }
@@ -391,7 +406,7 @@ async function alertChecks() {
       const strip = page.locator('#alertStrip'), tray = page.locator('#alertTray'), bell = page.locator('#alertBell');
       const ids = await page.evaluate(() => Object.fromEntries(D.alerts.top.map(alert => [alert.severity, alert.id])));
       assert(ids.critical && ids.high && ids.watch, 'The fixture seeded a firing alert of each level');
-      assert.deepEqual(await strip.evaluate(node => [node.previousElementSibling?.id, node.nextElementSibling?.className, node.getAttribute('role'), !!node.getAttribute('aria-label')]), ['topbar', 'grid', 'region', true], 'The strip is a named region between the top bar and the grid');
+      assert.deepEqual(await strip.evaluate(node => [node.previousElementSibling?.id, node.nextElementSibling?.id, node.nextElementSibling?.nextElementSibling?.className, node.getAttribute('role'), !!node.getAttribute('aria-label')]), ['topbar', 'lensBar', 'grid', 'region', true], 'The strip is a named region between the top bar and the lens bar, which sits on the grid');
       assert.match(await threat(page), /5\/5/); assert.match(await strip.innerText(), /Fixture critical alert/);
       assert.match(await page.title(), /^\(2\) /, 'The tab title counts firing critical + high alerts'); assert.match(await bell.innerText(), /3/, 'The bell shows the firing count');
       await page.evaluate(() => renderTopbar()); assert.equal(await strip.count(), 1); assert.equal(await bell.count(), 1, 'Strip and bell survive a top bar re-render');

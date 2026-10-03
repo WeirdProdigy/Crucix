@@ -59,6 +59,32 @@
     const counts=R.countByLevel(recs);
     return R.LEVELS.filter(level=>level!=='unknown'&&counts[level]).map(level=>{const name=esc(t('inspector.level.'+level,level[0].toUpperCase()+level.slice(1)));return `<span class="sev sev-${level}" title="${name}"><i aria-hidden="true">${R.GLYPH[level]}</i>${counts[level]}<span class="ri-sr"> ${name}</span></span>`;}).join('');
   }
+  // Domain groups (domains.js + lens-core.js; without them the flat card list). Under the `all` lens each group has a header button whose
+  // state CrucixLens keeps (by default open when the group needs attention); another lens shows only its own group, open, with a plain
+  // header. The cards inside are the cards of the flat list, unchanged. Rows without a domain stay ungrouped (all lens only).
+  const GLYPHS={critical:'◆',high:'▲',watch:'●',info:'○'},CHIP_LIMIT=3;
+  function grouped(cards,t,tr){
+    const core=window.CrucixLensCore,domains=window.CrucixDomains,lens=window.CrucixLens;
+    if(!core||!domains)return null;
+    const active=core.normalize(lens&&typeof lens.get==='function'?lens.get():'all');
+    const say=(key,fallback,count)=>esc(String(t('lenses.'+key,fallback)??fallback).split('{count}').join(String(count)));
+    const groups=core.groupSources(cards,domains.domainOfSource).filter(group=>active==='all'?true:group.domain===active);
+    if(!groups.length)return `<div class="empty-state">${say('noLiveSources','No live source belongs to this domain.')}</div>`;
+    return groups.map(group=>{
+      const body=group.rows.map(row=>row.html).join('');
+      if(group.domain===null)return body;
+      const id=esc(group.domain),sources=group.rows.length,records=group.rows.reduce((sum,row)=>sum+row.count,0);
+      const counts=(sources===1?say('sourceCountOne','{count} source',sources):say('sourceCount','{count} sources',sources))+' · '+(records===1?say('recordCountOne','{count} record',records):say('recordCount','{count} records',records));
+      const worst=group.worst?`<span class="lg-worst sev-${group.worst}"><i aria-hidden="true">${GLYPHS[group.worst]}</i> ${esc(t('inspector.level.'+group.worst,group.worst[0].toUpperCase()+group.worst.slice(1)))}</span>`:'';
+      const off=group.rows.filter(row=>row.state!=='ok');
+      const chips=off.slice(0,CHIP_LIMIT).map(row=>`<span class="lg-chip lg-${row.state}">${esc(row.source)}: ${tr(row.state,row.state==='error'?'Unavailable':'Expired')}</span>`).join('')+(off.length>CHIP_LIMIT?`<span class="lg-chip lg-more">${say('moreSources','+{count} more',off.length-CHIP_LIMIT)}</span>`:'');
+      const attention=group.attention?`<span class="lg-sr">${say('attention','Needs attention')}</span>`:'';
+      const parts=`<span class="lg-line"><span class="lg-caret" aria-hidden="true">▸</span><span class="lg-name">${say(group.domain,group.domain)}</span>${worst}</span><span class="lg-line lg-sub"><span class="lg-counts">${counts}</span>${chips}</span>${attention}`;
+      if(active!=='all')return `<section class="live-group" data-live-domain="${id}" data-attention="${group.attention}"><div class="live-group-head">${parts}</div><div class="live-group-body" id="live-group-${id}">${body}</div></section>`;
+      const open=lens&&typeof lens.expanded==='function'?lens.expanded(group.domain,group.attention)===true:group.attention;
+      return `<section class="live-group" data-live-domain="${id}" data-attention="${group.attention}"><button type="button" class="live-group-head" data-live-group="${id}" aria-expanded="${open}" aria-controls="live-group-${id}">${parts}</button><div class="live-group-body" id="live-group-${id}"${open?'':' hidden'}>${body}</div></section>`;
+    }).join('');
+  }
   // `events` is unused (the inspector pairs records by eventId); it stays so `now` keeps its position.
   function renderPanel(sources,t,events,now=nowMs()){
     const R=window.CrucixRecords,tr=(key,fallback)=>esc(t('liveSources.'+key,fallback));
@@ -73,9 +99,10 @@
       const overview=count?`<div class="live-meta"><span>${count} ${tr('records','current records')}</span>${R?badges(R,recs,t):''}</div>${top?`<ul class="live-top" aria-label="${tr('topRecords','Top records')}">${top}</ul>`:''}`:'';
       const open=status==='ok'?`<button type="button" class="live-open" data-open-records="${esc(source.source)}" aria-controls="record-inspector">${tr('openRecords','Open records')}</button>`:'';
       const licenseUrl=safeUrl(source.licenseUrl);
-      return `<article class="live-source" data-live-source="${esc(source.source)}" data-live-state="${status}"${R?.store.get().source===source.source?' data-selected="true"':''}><div class="live-source-head"><h4>${url?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(source.source)} ↗</a>`:esc(source.source)}</h4><span class="source-state ${status}">${tr(status,status==='ok'?'Current':status==='error'?'Unavailable':'Expired')}</span></div><small>${tr('providerTime','Provider time')}: ${esc(stamp(source.observedAt))}</small>${content}${overview}${open}${source.attribution||source.rights?`<small class="live-attribution">${esc(source.attribution)} ${esc(source.rights)}</small>`:''}${source.license?`<small>${licenseUrl?'<a href="'+esc(licenseUrl)+'" target="_blank" rel="noopener noreferrer">'+esc(source.license)+'</a>':esc(source.license)}</small>`:''}</article>`;
-    }).join('');
-    return `<div class="g-panel live-sources-panel"><div class="sec-head"><h3>${tr('title','Current public data')}</h3><span class="badge">${providers.filter(row=>state(row,now)==='ok').length}/${providers.length}</span></div><p class="live-help">${tr('help','Only records within each provider’s freshness window are shown. Forecasts and model estimates are labelled.')}</p><div class="live-source-list">${cards||'<div class="empty-state">'+tr('waiting','Waiting for the first collection')+'</div>'}</div></div>`;
+      return {source:source.source,state:status,count,levels:R?R.countByLevel(recs):{},html:`<article class="live-source" data-live-source="${esc(source.source)}" data-live-state="${status}"${R?.store.get().source===source.source?' data-selected="true"':''}><div class="live-source-head"><h4>${url?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(source.source)} ↗</a>`:esc(source.source)}</h4><span class="source-state ${status}">${tr(status,status==='ok'?'Current':status==='error'?'Unavailable':'Expired')}</span></div><small>${tr('providerTime','Provider time')}: ${esc(stamp(source.observedAt))}</small>${content}${overview}${open}${source.attribution||source.rights?`<small class="live-attribution">${esc(source.attribution)} ${esc(source.rights)}</small>`:''}${source.license?`<small>${licenseUrl?'<a href="'+esc(licenseUrl)+'" target="_blank" rel="noopener noreferrer">'+esc(source.license)+'</a>':esc(source.license)}</small>`:''}</article>`};
+    });
+    const list=cards.length?grouped(cards,t,tr)??cards.map(card=>card.html).join(''):'<div class="empty-state">'+tr('waiting','Waiting for the first collection')+'</div>';
+    return `<div class="g-panel live-sources-panel"><div class="sec-head"><h3>${tr('title','Current public data')}</h3><span class="badge">${cards.filter(card=>card.state==='ok').length}/${cards.length}</span></div><p class="live-help">${tr('help','Only records within each provider’s freshness window are shown. Forecasts and model estimates are labelled.')}</p><div class="live-source-list">${list}</div></div>`;
   }
   window.CrucixLiveSources={policies,state,observations,markerRows,renderPanel};
 })(window);

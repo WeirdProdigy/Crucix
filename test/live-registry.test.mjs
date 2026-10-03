@@ -122,7 +122,10 @@ test('a located live row takes the colour of the layer it is drawn in, on the gl
   assert.deepEqual(['earthquake', 'disaster', 'maritime', 'aviation', 'weather', 'forecast', 'energy', '__proto__', undefined].map(kind => color(kind, 0.8)),
     ['rgba(255,112,67,0.8)', 'rgba(255,112,67,0.8)', 'rgba(179,136,255,0.8)', 'rgba(100,240,200,0.8)', 'rgba(100,200,255,0.8)', 'rgba(100,200,255,0.8)', 'rgba(100,200,255,0.8)', 'rgba(100,200,255,0.8)', 'rgba(100,200,255,0.8)']);
   assert.equal(html.match(/liveMarkerColor\(row\.kind,/g)?.length, 3, 'the globe colour and the flat fill and stroke');
-  assert.equal(html.match(/CrucixLiveSources\.markerRows\(D\.liveSources,D\.earthquakes\)/g)?.length, 2, 'both maps draw the de-duplicated rows');
+  // Both maps draw the de-duplicated rows, narrowed to the active domain lens by lensMarkerRows().
+  assert.match(html, /function lensMarkerRows\(\)\{return CrucixLiveSources\.markerRows\(D\.liveSources,D\.earthquakes\)\.filter\(/);
+  assert.equal(html.match(/CrucixLiveSources\.markerRows\(D\.liveSources,D\.earthquakes\)/g)?.length, 1, 'read in one place');
+  assert.equal(html.match(/lensMarkerRows\(\)\.forEach\(row=>points\.push|for\(const row of lensMarkerRows\(\)\)/g)?.length, 2, 'both maps draw the de-duplicated rows');
 });
 
 test('the earthquake layer toggle names both catalogues it draws (USGS and EMSC)', () => {

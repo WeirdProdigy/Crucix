@@ -90,12 +90,14 @@
     const actions=`<div class="ri-actions"><button type="button" class="ri-icon" data-ri-action="expand" aria-label="${tx('inspector.expand','Expand to full screen')}" title="${tx('inspector.expand','Expand to full screen')}"><span aria-hidden="true">⤢</span></button><button type="button" class="ri-icon" data-ri-action="close" aria-label="${tx('inspector.close','Close')}" title="${tx('inspector.close','Close')}"><span aria-hidden="true">×</span></button></div>`;
     return `<header class="ri-head">${head}${actions}</header>${body({...v,all:false},source,tx,now,'ri')}${detail(v.selected,tx)}${keys(tx)}`;
   }
-  // Inner HTML of <dialog id="record-browser">: sources | list | detail. `source` is null when `all`.
+  // Inner HTML of <dialog id="record-browser">: sources | list | detail. `source` is null when `all`. view.lens (the active domain
+  // lens, lens-core.js) hides the sources of other domains from the list; the one open stays, counts are unchanged.
   function renderBrowser(view,t,now){
-    const v=obj(view)||{},tx=translator(t),all=v.all===true,source=all?null:obj(v.source);
+    const v=obj(view)||{},tx=translator(t),all=v.all===true,source=all?null:obj(v.source),core=window.CrucixLensCore;
+    const inLens=name=>!core||core.matchesSource(v.lens,name)||name===source?.name;
     const pick=(name,label,current)=>`<li><button type="button" class="rb-source" data-ri-source="${esc(name)}"${current?' aria-current="true"':''}>${label}</button></li>`;
     const badges=levels=>CHIPS.filter(level=>Number.isFinite(levels?.[level])&&levels[level]>0).map(level=>`<span class="sev sev-${level}"><i aria-hidden="true">${GLYPH[level]}</i>${levels[level]}<span class="ri-sr"> ${levelName(tx,level)}</span></span>`).join('');
-    const sources=(Array.isArray(v.sources)?v.sources:[]).filter(item=>obj(item)&&text(item.name)).map(item=>{const state=stateOf(item);return pick(item.name,`<span class="rb-name">${esc(item.name)}</span><span class="rb-count">${Number.isFinite(item.count)?item.count:0}</span>${state==='ok'?'':`<span class="rb-state">${tx('liveSources.'+state,STATE_TEXT[state])}</span>`}${badges(obj(item.levels))}`,source?.name===item.name);}).join('');
+    const sources=(Array.isArray(v.sources)?v.sources:[]).filter(item=>obj(item)&&text(item.name)&&inLens(item.name)).map(item=>{const state=stateOf(item);return pick(item.name,`<span class="rb-name">${esc(item.name)}</span><span class="rb-count">${Number.isFinite(item.count)?item.count:0}</span>${state==='ok'?'':`<span class="rb-state">${tx('liveSources.'+state,STATE_TEXT[state])}</span>`}${badges(obj(item.levels))}`,source?.name===item.name);}).join('');
     const head=`<header class="rb-head"><h2 id="rb-heading">${tx('inspector.browserTitle','Record browser')}</h2><div class="ri-actions"><button type="button" class="rb-collapse" data-ri-action="collapse">${tx('inspector.collapse','Back to panel')}</button><button type="button" class="ri-icon" data-ri-action="close" aria-label="${tx('inspector.close','Close')}" title="${tx('inspector.close','Close')}"><span aria-hidden="true">×</span></button></div></header>`;
     const nav=`<nav class="rb-sources" aria-label="${tx('inspector.sourceLabel','Source')}"><ul>${pick('all',`<span class="rb-name">${tx('inspector.allSources','All sources')}</span>`,all)}${sources}</ul></nav>`;
     return `${head}<div class="rb-cols">${nav}<div class="rb-list">${source?sourceInfo(source,tx,now,'h3',''):''}${body({...v,all},source,tx,now,'rb')}</div><div class="rb-detail">${detail(v.selected,tx)}</div></div>${keys(tx,true)}`;
@@ -127,7 +129,7 @@
   function view(state,now,browser){
     const events=arrayOf(opts.getEvents),byId=R.indexEvents(events),recs=recordsOf(state.source,now,events,byId),f=state.filters,picked=R.reconcileSelection(state.record,lastRec,recs);
     if(picked.record&&!picked.outdated)lastRec=picked.record;
-    const out={source:info(sources().find(item=>item.source===state.source),now),all:state.source==='all',records:R.sortRecords(R.filterRecords(recs,f,now),f.sort),total:recs.length,filters:f,limit:state.limit,selected:picked.record?picked:null};
+    const out={source:info(sources().find(item=>item.source===state.source),now),all:state.source==='all',records:R.sortRecords(R.filterRecords(recs,f,now),f.sort),total:recs.length,filters:f,limit:state.limit,selected:picked.record?picked:null,lens:window.CrucixLens?.get?.()};
     if(browser)out.sources=sources().map(source=>{const rows=source.source===state.source?recs:recordsOf(source.source,now,events,byId);return {name:source.source,state:live().state(source,now),count:rows.length,levels:R.countByLevel(rows)};});
     return out;
   }

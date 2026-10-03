@@ -1,0 +1,11 @@
+/* Domain lens bar (lens.js) under the top bar. It wraps on wide screens and is one row that scrolls sideways on phones instead of
+   widening the page; the pressed lens is marked by weight and an underline as well as colour. */
+.lens-host{margin-top:10px;min-width:0;max-width:100%}
+.lens-bar{display:flex;flex-wrap:wrap;gap:6px;padding:2px 2px 4px;max-width:100%;box-sizing:border-box}
+.lens-btn{flex:0 0 auto;min-height:30px;padding:4px 10px;font-family:var(--mono,monospace);font-size:10px;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;border:1px solid var(--border,rgba(255,255,255,.12));background:var(--panel,rgba(5,10,16,.7));color:var(--dim,#8aa0a8);cursor:pointer}
+.lens-btn:hover{border-color:var(--border-bright,rgba(100,240,200,.3));color:var(--text,#e8f4f0)}
+.lens-btn[aria-pressed="true"]{border-color:var(--accent,#64f0c8);color:var(--accent,#64f0c8);background:rgba(100,240,200,.08);font-weight:700;box-shadow:inset 0 -2px 0 currentColor}
+.lens-btn:focus-visible{outline:2px solid var(--accent,#64f0c8);outline-offset:2px}
+.lens-status{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+@media(max-width:700px){.lens-bar{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin}.lens-btn{min-height:44px}}
+@media(prefers-reduced-motion:reduce){.lens-btn{transition:none}}

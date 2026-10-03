@@ -912,7 +912,16 @@
     "economy": "Piacok és gazdaság",
     "supply": "Energia és ellátási lánc",
     "sanctions": "Szankciók és szabályozás",
-    "health": "Egészség és környezet"
+    "health": "Egészség és környezet",
+    "sourceCount": "{count} forrás",
+    "sourceCountOne": "{count} forrás",
+    "recordCount": "{count} rekord",
+    "recordCountOne": "{count} rekord",
+    "attention": "Figyelmet igényel",
+    "moreSources": "és még {count}",
+    "noLiveSources": "Ebben a témában nincs élő forrás.",
+    "noSources": "Ebben a lekérdezésben nem jelentett forrás ebből a témából.",
+    "status": "Témalencse: {name}"
   },
   "replay": {
     "button": "Visszajátszás",

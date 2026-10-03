@@ -15,6 +15,9 @@
 <script src="clock.js"></script>
 <script src="replay-core.js"></script>
 <script src="replay.js"></script>
+<script src="domains.js"></script>
+<script src="lens-core.js"></script>
+<script src="lens.js"></script>
 <script src="record-core.js"></script>
 <script src="live-sources.js"></script>
 <script src="record-inspector.js"></script>
@@ -25,6 +28,7 @@
 <link rel="stylesheet" href="record-inspector.css">
 <link rel="stylesheet" href="alerts.css">
 <link rel="stylesheet" href="replay.css">
+<link rel="stylesheet" href="lens.css">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#020408">
 <script src="pwa.js"></script>
@@ -413,6 +417,7 @@ body.low-perf .ticker-wrap::-webkit-scrollbar-thumb{background:rgba(100,240,200,
 <div class="scanline" id="scanline"></div>
 <div id="main">
   <div class="topbar" id="topbar"></div>
+  <div class="lens-host" id="lensBar"></div>
   <div class="grid">
     <div class="col" id="leftRail"></div>
     <div class="col" id="centerCol">
@@ -961,12 +966,14 @@ function sourceState(source){
   if(source.err||source.error||['error','failed'].includes(source.status))return 'error';
   return 'ok';
 }
+// The active domain lens (lens.js) narrows the source-health rows: the badge then says how many of all are shown.
 function buildSourceHealthPanel(){
-  const rows=D.health.map(source=>{
+  const shown=D.health.filter(source=>lensMatchesSource(source.n||source.name));
+  const rows=shown.map(source=>{
     const state=sourceState(source);const label=t('status.'+state,{ok:'Available',error:'Failed',stale:'Stale / cached',disabled:'Not configured'}[state]);
     return `<div class="source-row" data-source-state="${state}"><div>${esc(source.n||source.name||'Source')}${source.message||source.error?`<small>${esc(source.message||source.error)}</small>`:''}${source.timestamp?`<small>${esc(getAge(source.timestamp))}</small>`:''}</div><span class="source-state ${state}">${esc(label)}</span></div>`;
   }).join('');
-  return `<div class="g-panel"><div class="sec-head"><h3>${t('panels.sourceHealth','Source health')}</h3><span class="badge">${D.health.length}</span></div>${rows||`<div class="empty-state">${t('status.noHealth','Source status is not available yet')}</div>`}</div>`;
+  return `<div class="g-panel source-health-panel"><div class="sec-head"><h3>${t('panels.sourceHealth','Source health')}</h3><span class="badge">${shown.length===D.health.length?D.health.length:shown.length+'/'+D.health.length}</span></div>${rows||`<div class="empty-state">${D.health.length?t('lenses.noSources','No source of this domain reported in this sweep.'):t('status.noHealth','Source status is not available yet')}</div>`}</div>`;
 }
 
 // === DASHBOARD PANELS ===
@@ -1528,7 +1535,7 @@ function plotMarkers(){
   });
 
   // === NOAA severe weather alerts (orange) ===
-  CrucixLiveSources.markerRows(D.liveSources,D.earthquakes).forEach(row=>points.push({lat:row.lat,lng:row.lon,size:.22,alt:.01,color:liveMarkerColor(row.kind,.8),type:liveMarkerType(row.kind),priority:2,popHead:row.title,popMeta:row.source,popText:row.summary}));
+  lensMarkerRows().forEach(row=>points.push({lat:row.lat,lng:row.lon,size:.22,alt:.01,color:liveMarkerColor(row.kind,.8),type:liveMarkerType(row.kind),priority:2,popHead:row.title,popMeta:row.source,popText:row.summary}));
   (D.noaa?.alerts||[]).forEach(a=>{
     points.push({
       lat:a.lat, lng:a.lon, size:0.22, alt:0.01,
@@ -1673,6 +1680,16 @@ function plotMarkers(){
   onGlobeZoom();
 }
 
+// Domain lens (lens-core.js, lens.js): without the modules every source matches. Items without a domain match only the `all` lens.
+function lensMatchesSource(name){return !window.CrucixLensCore||window.CrucixLensCore.matchesSource(window.CrucixLens?window.CrucixLens.get():'all',name)}
+// The located live rows both maps draw, narrowed to the active lens (the legacy layers keep their own toggles).
+function lensMarkerRows(){return CrucixLiveSources.markerRows(D.liveSources,D.earthquakes).filter(row=>lensMatchesSource(row.source))}
+// A lens change redraws through the normal render path: panels (live groups, source health), the open inspector and the live markers.
+function applyLens(){
+  closePopup();rerenderDashboard();
+  window.CrucixRecordInspector?.refresh();
+  plotMarkers();if(flatG){flatG.selectAll('.markers,.corridors-layer').remove();plotFlatMarkers();}
+}
 function currentSnapshot(){
   const rows=CrucixLiveSources.observations(D.liveSources);
   const names=new Set(Object.keys(CrucixLiveSources.policies)),ids=new Set(rows.map(row=>row.eventId).filter(Boolean));
@@ -1688,7 +1705,7 @@ function refreshLiveFreshness(){
   window.CrucixRecordInspector?.refresh();
   const panel=document.querySelector('.live-sources-panel');
   if(panel)panel.outerHTML=CrucixLiveSources.renderPanel(D.liveSources,t,currentSnapshot().events);
-  const healthPanel=document.querySelector('[data-source-state]')?.closest('.g-panel');
+  const healthPanel=document.querySelector('.source-health-panel');
   if(healthPanel)healthPanel.outerHTML=buildSourceHealthPanel();
   plotMarkers();if(flatG){flatG.selectAll('.markers,.corridors-layer').remove();plotFlatMarkers();}
 }
@@ -1891,7 +1908,7 @@ function plotFlatMarkers(){
   // NOAA weather
   // Without record-core.js (a script that failed to load) rows pair by source + title + observedAt, as 2.8.0 did.
   const snapshotEvents=currentSnapshot().events,eventsById=window.CrucixRecords?.indexEvents(snapshotEvents);
-  for(const row of CrucixLiveSources.markerRows(D.liveSources,D.earthquakes)){
+  for(const row of lensMarkerRows()){
     flatMarkerType=liveMarkerType(row.kind);
     const event=window.CrucixRecords?CrucixRecords.eventForRow(row,eventsById,snapshotEvents):snapshotEvents.find(e=>e.source?.name===row.source&&e.title===row.title&&e.observedAt===row.observedAt);
     const marker=addPt(row.lat,row.lon,4,liveMarkerColor(row.kind,.8),liveMarkerColor(row.kind,.3),ev=>event?CrucixIntelligence.openEvent(event.id):showPopup(ev,row.title,row.summary,row.source),2);
@@ -2420,6 +2437,8 @@ document.addEventListener('DOMContentLoaded',()=>{
   // Before init: the first top bar already carries the replay button. Not on file pages or the offline shell (no archive there).
   if(location.protocol!=='file:'&&!window.__CRUCIX_OFFLINE_SHELL__)window.CrucixReplay?.mount({root:document.getElementById('replayBar'),fetchJson:fetchJsonNoStore,
     applySnapshot:applyReplaySnapshot,restoreLive:restoreLiveSnapshot,redrive:redriveClock,getLive:()=>D,t,locale:L.meta?.code==='hu'?'hu-HU':L.meta?.code==='fr'?'fr-FR':'en-US'});
+  // The lens bar under the top bar and the live panel's group headers; the first render below already reads the stored lens.
+  window.CrucixLens?.mount(document.getElementById('lensBar'),{t});window.CrucixLens?.onChange(applyLens);
   init();
   if(location.protocol!=='file:')CrucixPWA.init({getSnapshot:()=>D,applySnapshot:data=>!D.meta.timestamp&&applySnapshot(data,{cached:true}),t});
   if(location.protocol!=='file:'){

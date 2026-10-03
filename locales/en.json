@@ -912,7 +912,16 @@
     "economy": "Markets and economy",
     "supply": "Energy and supply chain",
     "sanctions": "Sanctions and regulation",
-    "health": "Health and environment"
+    "health": "Health and environment",
+    "sourceCount": "{count} sources",
+    "sourceCountOne": "{count} source",
+    "recordCount": "{count} records",
+    "recordCountOne": "{count} record",
+    "attention": "Needs attention",
+    "moreSources": "+{count} more",
+    "noLiveSources": "No live source belongs to this domain.",
+    "noSources": "No source of this domain reported in this sweep.",
+    "status": "Domain lens: {name}"
   },
   "replay": {
     "button": "Replay",

@@ -912,7 +912,16 @@
     "economy": "Marchés et économie",
     "supply": "Énergie et chaîne d’approvisionnement",
     "sanctions": "Sanctions et réglementation",
-    "health": "Santé et environnement"
+    "health": "Santé et environnement",
+    "sourceCount": "{count} sources",
+    "sourceCountOne": "{count} source",
+    "recordCount": "{count} données",
+    "recordCountOne": "{count} donnée",
+    "attention": "Demande votre attention",
+    "moreSources": "et {count} de plus",
+    "noLiveSources": "Aucune source en direct dans ce thème.",
+    "noSources": "Aucune source de ce thème n’a répondu lors de ce scan.",
+    "status": "Lentille thématique : {name}"
   },
   "replay": {
     "button": "Relecture",

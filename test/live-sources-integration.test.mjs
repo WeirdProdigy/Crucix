@@ -62,6 +62,21 @@ test('browser policy matches backend and expired PWA data is suppressed without 
   const bare=load('live-sources.js').CrucixLiveSources.renderPanel([mixed],t,[],now);
   assert(bare.includes('data-open-records="GDACS"')); assert(!bare.includes('class="sev')); assert(!bare.includes('<li>')); assert(bare.includes('5 current records'));
 });
+test('the grouped panel (the page loads domains.js and the lens modules) keeps escaping, selection and the records button',()=>{
+  const window={},context=vm.createContext({window,Date,URL,Object,Array,Number,JSON,Set,Map,String});
+  for(const file of ['record-core.js','domains.js','lens-core.js','lens.js','live-sources.js'])vm.runInContext(readFileSync(new URL('../dashboard/public/'+file,import.meta.url),'utf8'),context);
+  const api=window.CrucixLiveSources,t=(_,fallback)=>fallback,current=normalizeLiveSources({'MET-Norway':source},now);
+  const html=api.renderPanel([{...current[0],observations:[{...current[0].observations[0],title:'<img onerror="evil()">'}]}],t,[],now);
+  assert(html.includes('data-live-group="hazards"'),'grouped'); assert(!html.includes('<img')); assert(html.includes('&lt;img'));
+  assert.doesNotThrow(()=>api.renderPanel([null,{...current[0],observations:[null]}],t,[],now));
+  const card=api.renderPanel(current,t,[],now);
+  assert(card.includes('data-open-records="MET-Norway"')); assert(card.includes('aria-controls="record-inspector"')); assert(card.includes('data-live-state="ok"'));
+  window.CrucixRecords.store.set({source:'MET-Norway'}); assert(api.renderPanel(current,t,[],now).includes('data-selected="true"')); window.CrucixRecords.store.set({source:null});
+  // A failed source opens its group (it needs attention) and loses its records button, as before.
+  const failed=api.renderPanel([{...current[0],status:'error'}],t,[],now);
+  assert(!failed.includes('data-open-records')); assert(failed.includes('aria-expanded="true"')); assert(failed.includes('MET-Norway: Unavailable'));
+  assert.match(api.renderPanel([],t,[],now),/Waiting for the first collection/);
+});
 test('expired forecast metrics and summaries cannot outlive the forecast target',()=>{
   const past={...source,summary:'15C forecast',observations:[{...source.observations[0],forecastAt:'2026-10-01T19:00:00Z',validUntil:'2026-10-01T20:00:00Z'}]};
   const [out]=normalizeLiveSources({'MET-Norway':past},now);

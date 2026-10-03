@@ -10,4 +10,20 @@
 .live-open:focus-visible,.live-source a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .live-source[data-selected="true"]{outline:2px solid var(--accent);outline-offset:4px;border-radius:2px}
 .live-attribution{margin-top:8px;opacity:.75}.live-source[data-live-state="stale"]{opacity:.8}
-@media(max-width:700px){.live-open{min-height:44px}}
+/* Domain groups: one header row per group (a button under the `all` lens); the cards inside are the flat list's cards. */
+.live-group{border-top:1px solid var(--border,rgba(255,255,255,.1))}.live-group:first-child{border-top:0}
+.live-group-head{display:block;width:100%;box-sizing:border-box;margin:0;padding:4px;line-height:1.35;background:none;border:0;color:var(--text,#e8f4f0);font:inherit;text-align:left}
+button.live-group-head{cursor:pointer}button.live-group-head:hover{background:rgba(100,240,200,.06)}
+button.live-group-head:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.live-group[data-attention="true"]>.live-group-head{box-shadow:inset 2px 0 0 var(--warn,#ffb84c)}
+.lg-line{display:flex;align-items:center;gap:6px;min-width:0}
+.lg-caret{flex:0 0 8px;font-size:9px;color:var(--dim);transition:transform .15s}div.live-group-head .lg-caret{visibility:hidden}
+button.live-group-head[aria-expanded="true"] .lg-caret{transform:rotate(90deg)}
+.lg-name{flex:1 1 auto;min-width:0;font-size:12px;font-weight:600;letter-spacing:.02em;overflow-wrap:anywhere}
+.lg-worst{flex:0 0 auto;font-size:10px;font-weight:600;white-space:nowrap}.lg-worst i{font-style:normal}
+.lg-sub{flex-wrap:wrap;gap:3px 6px;margin-top:1px;padding-left:14px;font-size:10px;line-height:1.4;color:var(--dim)}
+.lg-chip{padding:0 5px;border:1px solid currentColor;border-radius:8px;color:var(--warn,#ffb84c);overflow-wrap:anywhere}.lg-chip.lg-error{color:var(--danger,#ff5f63)}.lg-chip.lg-more{color:var(--dim)}
+.lg-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.live-group-body{padding:0 0 4px 14px}.live-group-body[hidden]{display:none}
+@media(max-width:700px){.live-open{min-height:44px}button.live-group-head{min-height:44px}}
+@media(prefers-reduced-motion:reduce){.lg-caret{transition:none}}
