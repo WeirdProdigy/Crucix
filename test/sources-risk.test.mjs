@@ -109,6 +109,12 @@ test('INFORM-Risk: the newest published release, ISO3 scores, attribution; a cha
   assert.equal((await inform({ fetcher, now: now + 2 * 900000, useCache: true })).status, 'ok');
   assert.equal(urls.length, 0, 'the release scores are cached for 7 days');
 
+  // A failed refresh keeps the last good result, marked stale, for 45 days (the scores were fetched at `now`); then it is an error.
+  const stale = await inform({ fetcher: failing(502), now: now + 2 * DAY, useCache: true });
+  assert.deepEqual([stale.status, stale.stale, stale.release, stale.staleSince, stale.timestamp], ['ok', true, 'INFORM Risk 2026', new Date(now).toISOString(), new Date(now + 2 * DAY).toISOString()]);
+  assert.ok(/502/.test(stale.staleReason) && !/https?:/.test(stale.staleReason) && Object.keys(stale.countries).length === 3);
+  assert.equal((await inform({ fetcher: failing(502), now: now + 46 * DAY, useCache: true })).status, 'error');
+
   const down = await inform({ fetcher: failing(502), now: NOW });
   assert.equal(down.status, 'error');
   assert.ok(/502/.test(down.error) && !/https?:/.test(down.error));

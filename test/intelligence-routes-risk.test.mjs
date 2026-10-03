@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { installHttpSecurity } from '../lib/http-security.mjs';
 import { installApiErrorHandler } from '../lib/api-errors.mjs';
+import { COUNTRIES } from '../lib/intelligence/countries.mjs';
 import { EntityStore } from '../lib/intelligence/entities.mjs';
 import { PredictionJournal } from '../lib/intelligence/predictions.mjs';
 import { viewsMonthId } from '../lib/intelligence/risk.mjs';
@@ -36,7 +37,7 @@ function raw({ stale = false } = {}) {
   return { sources: {
     'VIEWS-Forecast': { source: 'VIEWS-Forecast', status: 'ok', run: 'fatalities003_2026_08_t01', months: [month - 1, month, month + 1], attribution: 'Conflict forecasts: VIEWS', license: 'No data licence stated', ...(stale ? { stale: true } : {}),
       countries: { JPN: { name: 'Japan', months: [{ month_id: month - 1, main_dich: 0.9 }, { month_id: month, main_dich: 0.25, main_mean: 3 }, { month_id: month + 1, main_dich: 0.8 }] } } },
-    'INFORM-Risk': { source: 'INFORM-Risk', status: 'ok', release: 'INFORM Risk Mid 2026', published: '2026-09-02', attribution: 'INFORM Risk Index', license: 'open-source', countries: { JPN: { score: 2.4 }, HUN: { score: 2.2 } } },
+    'INFORM-Risk': { source: 'INFORM-Risk', status: 'ok', release: 'INFORM Risk Mid 2026', published: '2026-09-02', attribution: 'INFORM Risk Index', license: 'open-source', ...(stale ? { stale: true } : {}), countries: { JPN: { score: 2.4 }, HUN: { score: 2.2 } } },
   } };
 }
 
@@ -62,7 +63,7 @@ async function serve(t, options) {
 
 const post = (url, body, headers = {}) => fetch(`${url}/api/briefing`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
 
-test('the risk step never throws on a hostile or empty snapshot and sets snapshot.risk otherwise, from current VIEWS/INFORM only', t => {
+test('the risk step never throws on a hostile or empty snapshot and sets snapshot.risk otherwise, from the VIEWS/INFORM results (a stale last good one still counts)', t => {
   const { store, journal } = stores(t);
   const throwing = new Proxy({}, { get() { throw new Error('hostile getter'); }, has() { throw new Error('hostile'); } });
   const broken = { ingest() { throw new Error('disk on fire'); } };
@@ -90,9 +91,9 @@ test('the risk step never throws on a hostile or empty snapshot and sets snapsho
   assert.equal(japan.components.baseline.value, 24, 'INFORM x 10');
   assert.ok(result.scores.some(row => row.iso3 === 'HUN'));
   assert.ok(journal.recent(50).some(row => row.iso3 === 'JPN'), 'today\'s prediction is logged');
-  // A stale VIEWS payload (the last good one) still gives its forecast; a missing one drops the component and the coverage shows it.
+  // A stale VIEWS or INFORM payload (the last good one) still gives its forecast and baseline; a missing one drops the component and the coverage shows it.
   const stale = runRiskStep({ store, snapshot: { events: events() }, raw: raw({ stale: true }), now: NOW + HOUR, log: quiet }).scores.find(row => row.iso3 === 'JPN');
-  assert.equal(stale.components.forecast.value, 25);
+  assert.deepEqual([stale.components.forecast.value, stale.components.baseline.value], [25, 24]);
   const none = runRiskStep({ store, snapshot: { events: events() }, raw: { sources: {} }, now: NOW + HOUR, log: quiet }).scores.find(row => row.iso3 === 'JPN');
   assert.equal(none.components.forecast.value, null);
   assert.ok(none.coverage < japan.coverage);
@@ -104,7 +105,7 @@ test('the read-only routes over real HTTP: list, profile and predictions shapes;
   const state = runRiskStep({ store, journal, snapshot, raw: raw(), now: NOW, log: quiet });
   // The current snapshot no longer holds event 2: its title comes from the history store.
   const current = { events: events().filter(event => event.id !== id(2)) };
-  const history = { get: key => key === id(2) ? { id: key, title: 'Typhoon warning (history)' } : null };
+  const history = { getMany: keys => new Map(keys.filter(key => key === id(2)).map(key => [key, { id: key, title: 'Typhoon warning (history)' }])) };
   let broken = false;
   const url = await serve(t, { store, journal, getSnapshot: () => current, getState: () => { if (broken) throw new Error('state at C:\\secret\\path'); return state; }, history, briefing: null, security: {} });
 
@@ -194,6 +195,58 @@ test('POST /api/briefing is guarded and validated, keeps only cited bullets from
   assert.ok(cut.length <= 400 && cut.endsWith('…') && !/[\ud800-\udbff]…$/.test(cut), 'cut at 400 characters without splitting a surrogate pair');
   await post(url, { scope: 'global' });
   assert.equal(calls, 1, 'cached for the sweep');
+});
+
+test('the briefing service keeps a whole sweep (70 scopes > 64), calls the model at most once per scope and never more than 2 at a time', async () => {
+  const sweepA = { meta: { timestamp: at(NOW) }, events: events() };
+  // Every country scope has the same one reference, so each scope has a row and costs one model call.
+  const store = { events: new Map(), countryEvents: () => [{ id: id(1), m: 'l', l: 'high', k: 'earthquake', o: null, t: NOW, time: NOW }] };
+  const scopes = COUNTRIES.slice(0, 70).map(country => country.iso3);
+  const calls = new Map();
+  let running = 0;
+  let peak = 0;
+  let hold = null;
+  const provider = { isConfigured: true, config: {}, async complete(_system, user) {
+    const scope = /^SCOPE: .*\(([A-Z]{3})\)$/m.exec(user)[1];
+    calls.set(scope, (calls.get(scope) ?? 0) + 1);
+    peak = Math.max(peak, ++running);
+    try { await (hold ?? new Promise(resolve => setImmediate(resolve))); } finally { running--; }
+    return { text: JSON.stringify({ bullets: [{ text: 'Quake near Tokyo', refs: [1] }] }) };
+  } };
+  const make = getSnapshot => createBriefingService({ provider, language: 'en', store, getSnapshot, now: () => NOW, log: quiet });
+
+  // One at a time, twice: all 70 stay cached for the sweep (the cache held 64), so a scope costs one call.
+  const steady = make(() => sweepA);
+  for (let round = 0; round < 2; round++) for (const scope of scopes) assert.equal((await steady.generate(scope)).source, 'llm', scope);
+  assert.deepEqual([calls.size, [...calls.values()].every(count => count === 1)], [70, true]);
+
+  // A burst of 70 at once, twice: never more than 2 calls in flight, the rest answer with rules (`busy`, not cached), a scope costs at most one call.
+  calls.clear(); peak = 0;
+  const burst = make(() => sweepA);
+  const answers = [...await Promise.all(scopes.map(scope => burst.generate(scope))), ...await Promise.all(scopes.map(scope => burst.generate(scope)))];
+  assert.ok(peak >= 1 && peak <= 2, `peak ${peak}`);
+  assert.ok([...calls.values()].every(count => count === 1) && calls.size <= 4);
+  const busy = answers.filter(answer => answer.busy === true);
+  assert.ok(busy.length > 100 && busy.every(answer => answer.source === 'rules' && answer.bullets.length > 0 && answer.bullets.every(bullet => bullet.refs.length > 0)));
+  assert.ok(answers.filter(answer => answer.busy !== true).every(answer => answer.source === 'llm'));
+
+  // A generation that ends after a newer sweep began is answered but neither kept nor allowed to evict the newer sweep's entries.
+  calls.clear();
+  let sweep = sweepA;
+  const moving = make(() => sweep);
+  let release;
+  hold = new Promise(resolve => { release = resolve; });
+  const slow = moving.generate('JPN');
+  sweep = { meta: { timestamp: at(NOW + HOUR) }, events: events() };
+  hold = null;
+  await moving.generate('KOR');
+  release();
+  assert.equal((await slow).source, 'llm');
+  assert.equal(calls.size, 2);
+  await moving.generate('KOR');
+  assert.equal(calls.get('KOR'), 1, 'the newer sweep kept its entry');
+  await moving.generate('JPN');
+  assert.equal(calls.get('JPN'), 2, 'the older sweep\'s late result was not kept');
 });
 
 test('the briefing falls back to rules when the model throws or answers junk, and every rule bullet cites a real row', async () => {

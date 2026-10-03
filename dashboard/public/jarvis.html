@@ -1873,12 +1873,17 @@ function drawFlatMap(){
     flatG.selectAll('.world-geometry').remove();
     const base=flatG.insert('g',':first-child').attr('class','world-geometry');
     // A country shape opens its country sheet (risk.js resolves the shape's ISO numeric id as the server does; country.js says why it is
-    // off during a replay). Without the live API (file pages, offline shell) the shapes stay plain.
+    // off during a replay). Without the live API (file pages, offline shell) or without a risk summary (RISK_ENABLED=false, a replayed sweep
+    // archived before 2.13) the shapes stay plain: risk.js dialogsEnabled() is asked at click time and keeps the pointer cursor in step.
     const sheet=!!window.CrucixCountry?.mounted?.();
-    base.selectAll('path.land').data(countries.features).enter().append('path').attr('class',sheet?'land land-open':'land').attr('d',flatPath)
-      .on('click',sheet?(event,feature)=>{const iso3=window.CrucixRisk?.shapeIso3?.(feature.id,feature.properties?.name);if(!iso3)return;event.stopPropagation();closePopup();window.CrucixCountry.open(iso3);}:null);
+    base.selectAll('path.land').data(countries.features).enter().append('path').attr('class','land').attr('d',flatPath)
+      .on('click',sheet?(event,feature)=>{if(!window.CrucixRisk?.dialogsEnabled?.())return;const iso3=window.CrucixRisk?.shapeIso3?.(feature.id,feature.properties?.name);if(!iso3)return;event.stopPropagation();closePopup();window.CrucixCountry.open(iso3);}:null);
+    syncCountryShapes();
     base.append('path').datum(topojson.mesh(world,world.objects.countries,(a,b)=>a!==b)).attr('class','border').attr('d',flatPath);
   });
+}
+function syncCountryShapes(){
+  if(flatG)flatG.selectAll('path.land').classed('land-open',!!window.CrucixCountry?.mounted?.()&&!!window.CrucixRisk?.dialogsEnabled?.());
 }
 function earthquakeDescription(q){
   return (q.place||'')+'\n'+t('earthquakes.depth','Depth')+': '+(q.depth??'?')+' km'+(q.tsunamiPotential===true||q.tsunamiFlag===true?'\n'+t('earthquakes.tsunamiPotential','Tsunami potential flag · not an issued warning'):'');
@@ -2407,6 +2412,7 @@ function syncResponsiveLayout(force=false){
 function reinit(){
   window.CrucixChanges?.update(D.changes);
   window.CrucixRisk?.update(D.risk);
+  syncCountryShapes();
   window.CrucixAlerts?.update(D.alerts);
   window.CrucixIntelligence?.update(currentSnapshot());
   window.CrucixRecordInspector?.refresh();

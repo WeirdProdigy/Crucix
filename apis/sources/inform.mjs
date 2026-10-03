@@ -18,13 +18,14 @@ const MAX_WORKFLOWS = 500;
 const MAX_ROWS = 1000;
 const MAX_CACHE = 6;
 const DAY = 24 * 3600000;
+const STALE_MS = 45 * DAY; // the last good result outlives a failing provider for 45 days (like VIEWS)
 
 const ATTRIBUTION = release => `INFORM Risk Index, European Commission Joint Research Centre (DRMKC) / INFORM partnership, ${release}.`;
 const LICENSE = 'INFORM states "INFORM is open-source"; no licence text is published on the pages checked, so cite the source';
 const RIGHTS = 'The INFORM Risk Index (European Commission Joint Research Centre, DRMKC, with the INFORM partnership) describes itself as "INFORM is open-source" (a "universal public good"). The terms and results pages checked on 2026-10-03 state no licence, and no key is needed; Crucix cites the source and the release and states no licence beyond that wording. The score is a 0-10 index of the risk of a humanitarian crisis or disaster (higher is worse): a yearly baseline, not a forecast of events.';
 
-// Two small maps: the release lists by data year (24 h) and the scores by WorkflowId (7 days).
-const state = { lists: new Map(), scores: new Map() };
+// Two small maps: the release lists by data year (24 h) and the scores by WorkflowId (7 days), and the last good result.
+const state = { lists: new Map(), scores: new Map(), good: null };
 
 class Failure extends Error {}
 const failure = message => new Failure(message);
@@ -94,7 +95,8 @@ function reply(response) {
 // Two requests per call when cold: the release list of the current data year, then the scores. Releases of a data year
 // appear late (the current year's list is empty until the mid-year release, measured: January to August), so an empty
 // list falls back to the previous year's list: three requests in that case. The lists are cached for 24 hours and the
-// scores for 7 days, so a warm call makes none.
+// scores for 7 days, so a warm call makes none. A later failure returns the last good result for 45 days, marked stale
+// (stale, staleSince, staleReason), so that a flaky provider host does not drop the baseline from every country score.
 export async function briefing(options = {}) {
   const now = options.now ?? Date.now();
   const fetcher = options.fetcher || safeFetch;
@@ -120,11 +122,16 @@ export async function briefing(options = {}) {
       scores = reply(await fetcher(`${BASE}/Countries/Scores/?WorkflowId=${release.id}&IndicatorId=INFORM`, REQUEST));
       const result = parseInform(workflows, scores, now);
       if (result.status !== 'ok') throw failure(result.error);
-      if (useCache) remember(state.scores, release.id, scores, now);
+      if (useCache) { remember(state.scores, release.id, scores, now); state.good = { payload: result, at: now }; }
       return result;
     }
     return parseInform(workflows, scores, now);
   } catch (error) {
-    return unavailable(error instanceof Failure ? error.message : 'INFORM request failed', now);
+    const message = error instanceof Failure ? error.message : 'INFORM request failed';
+    const good = useCache ? state.good : null;
+    if (good && now >= good.at && now - good.at < STALE_MS) {
+      return { ...good.payload, timestamp: iso(now), stale: true, staleSince: iso(good.at), staleReason: message };
+    }
+    return unavailable(message, now);
   }
 }

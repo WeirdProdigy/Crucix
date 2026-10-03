@@ -13,6 +13,8 @@
   //   isReplay()                   a sweep replay holds the page
   //   openCountry(iso3), openBriefing(scope)  the dialogs (default: CrucixCountry.open / CrucixBriefing.open)
   //   fetchJson(url)               reads GET /api/countries for the palette's country names (without it the dialogs are off: file pages, offline shell)
+  // The dialogs, the palette items and the map click work only while getRisk() gives an object (asked at click time): with RISK_ENABLED=false the
+  // API routes do not exist (404) and snapshots carry no `risk` (nor does a replayed sweep archived before 2.13); the panel then says so.
   // update(risk) runs before every render of the page (it keeps the focus of a panel row across the re-render); paletteItems() gives the
   // command palette its "Open country: <name>" and briefing actions; shapeIso3(id, name) resolves a flat-map shape to its ISO3 code.
   const ISO3=/^[A-Z]{3}$/,TOP=10,TRACK_MIN=30,MAX_NAME=120;
@@ -23,7 +25,7 @@
   const SHAPE_NAMES={'N. Cyprus':'CYP',Somaliland:'SOM',Kosovo:'XKX'};
   const BY_NUM=new Map(SHAPES.split(' ').map(entry=>[entry.slice(0,3),entry.slice(3)]));
   const COPY={title:'Country risk',version:'Model v{version}',summary:'{scored} countries scored · {high} at 70 or above',intro:'A heuristic 0–100 index from recorded events, VIEWS forecasts and INFORM baselines; not filtered by the domain lens.',
-    waiting:'Country risk appears after the first sweep.',empty:'No country has a risk score yet.',rankLabel:'Countries by risk score',briefing:'Briefing',score:'Score {score} of 100',
+    unavailable:'Country risk is not available.',empty:'No country has a risk score yet.',rankLabel:'Countries by risk score',briefing:'Briefing',score:'Score {score} of 100',
     changeUp:'Up {value} in 24 h',changeDown:'Down {value} in 24 h',changeFlat:'No change in 24 h',changeNone:'No history yet',coverage:'{percent}% coverage',
     coverageHelp:'The components with data carry {percent}% of the model weight; missing ones are left out, not guessed. The country sheet lists them.',
     convergence:'Convergence',convergenceHelp:'Several event types at high or above within 24 h: {kinds}',trackTitle:'Track record',
@@ -42,6 +44,8 @@
   function inReplay(){try{return !!(opts&&typeof opts.isReplay==='function'&&opts.isReplay());}catch{return false;}}
   // The dialogs need the live API (GET /api/countries/:iso3, POST /api/briefing): not on file pages and in the offline shell.
   const dialogs=()=>!!opts&&typeof opts.fetchJson==='function';
+  // ... and the risk step: the page has a risk summary (spec: RISK_ENABLED=false leaves no routes and no `risk`). Asked when used, never cached.
+  function ready(){if(!dialogs())return false;try{return typeof opts.getRisk==='function'&&isObject(opts.getRisk());}catch{return false;}}
   function number(value,digits,signed){
     const sign=signed&&value>0?'+':'';
     try{return sign+new Intl.NumberFormat(opts&&opts.locale||undefined,{minimumFractionDigits:digits,maximumFractionDigits:digits}).format(value);}catch{return sign+value.toFixed(digits);}
@@ -109,7 +113,7 @@
     const head=`<div class="sec-head"><h3 id="countryRiskTitle" tabindex="-1">${esc(say('title'))}</h3>${data&&data.version!==null?`<span class="rk-ver">${esc(say('version',{version:data.version}))}</span>`:''}${data?brief:''}</div>`;
     const note=replay?`<p class="rk-note rk-replay" id="countryRiskReplay">${esc(say('replayNote'))}</p>`:'';
     let main;
-    if(!data)main=`<p class="rk-calm" data-risk-state="waiting">${esc(say('waiting'))}</p>`;
+    if(!data)main=`<p class="rk-calm" data-risk-state="unavailable">${esc(say('unavailable'))}</p>`;
     else{
       const summary=data.scored!==null&&data.high!==null?`<p class="rk-sum">${esc(say('summary',{scored:data.scored,high:data.high}))}</p>`:'';
       const list=data.top.length?`<ol class="rk-list" aria-label="${esc(say('rankLabel'))}">${data.top.map((item,index)=>rowHtml(item,index,replay)).join('')}</ol>`:`<p class="rk-calm" data-risk-state="empty">${esc(say('empty'))}</p>`;
@@ -161,7 +165,7 @@
     return list;
   }
   function paletteItems(){
-    if(!dialogs()||inReplay())return [];
+    if(!ready()||inReplay())return [];
     const items=[{id:'briefing',group:'action',label:tx('briefing.paletteAction','Country risk briefing'),hint:'',keywords:[tx('briefing.title','Briefing'),say('title')],run:()=>openBriefing('global')}];
     let top=[];try{const data=read(typeof opts.getRisk==='function'?opts.getRisk():null);top=data?data.top:[];}catch(error){log(error);}
     const seen=new Map();
@@ -194,7 +198,7 @@
     const rowNode=target.closest('[data-risk-country]'),brief=rowNode?null:target.closest('[data-risk-briefing]'),node=rowNode||brief;
     if(!node)return;
     // A replay holds the page: the entry points are off (the note under the heading says why).
-    if(inReplay()||node.getAttribute('aria-disabled')==='true'||!dialogs())return;
+    if(inReplay()||node.getAttribute('aria-disabled')==='true'||!ready())return;
     if(rowNode){const code=rowNode.getAttribute('data-risk-country');if(typeof code==='string'&&ISO3.test(code))Promise.resolve(openCountry(code)).catch(log);return;}
     Promise.resolve(openBriefing('global')).catch(log);
   }
@@ -204,5 +208,5 @@
     document.addEventListener('click',guarded(onClick));
     return true;
   }
-  window.CrucixRisk=Object.freeze({mount,panelHtml,update:guarded(update),paletteItems:()=>{try{return paletteItems();}catch(error){log(error);return [];}},shapeIso3,dialogsEnabled:()=>dialogs()});
+  window.CrucixRisk=Object.freeze({mount,panelHtml,update:guarded(update),paletteItems:()=>{try{return paletteItems();}catch(error){log(error);return [];}},shapeIso3,dialogsEnabled:()=>ready()});
 })(window,document);

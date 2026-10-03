@@ -92,7 +92,7 @@ test('the panel ranks the top 10 with score, change, coverage and convergence, e
   assert.ok(html.includes('data-risk-state="notEnough"') && html.includes('Not enough resolved predictions yet (n=12; 30 needed).'));
   const scored = R.panelHtml({ version: 1, top: [], counts: { scored: 0, high: 0 }, calibration: { n: 40, brier: 0.1234, skill: -0.05 } });
   assert.ok(scored.includes('Resolved: 40 · Brier 0.123 · skill -0.05') && scored.includes('data-risk-state="empty"'));
-  assert.ok(R.panelHtml(undefined).includes('data-risk-state="waiting"'), 'no risk yet: a calm note');
+  assert.ok(R.panelHtml(undefined).includes('data-risk-state="unavailable">Country risk is not available.'), 'no risk summary (not yet, or RISK_ENABLED=false): a neutral note');
   assert.ok(R.panelHtml({ top: [], calibration: null }).includes('(n=0; 30 needed)'), 'no journal yet');
 });
 

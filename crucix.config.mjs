@@ -112,6 +112,8 @@ export default {
     ideasTimeoutMs: envInteger('LLM_IDEAS_TIMEOUT_MS', 90000, 1000, 360000),
     alertMaxTokens: envInteger('LLM_ALERT_MAX_TOKENS', 800, 128, 4096),
     alertTimeoutMs: envInteger('LLM_ALERT_TIMEOUT_MS', 30000, 1000, 360000),
+    briefingMaxTokens: envInteger('LLM_BRIEFING_MAX_TOKENS', 1200, 128, 8192), // cited briefings (getLLMBudget(config, 'briefing'))
+    briefingTimeoutMs: envInteger('LLM_BRIEFING_TIMEOUT_MS', 60000, 1000, 360000),
     everyNSweeps: envInteger('LLM_IDEAS_EVERY_N_SWEEPS', 1, 1, 96),
     tradeIdeasLang: process.env.TRADE_IDEAS_LANG || process.env.CRUCIX_LANG || 'en',
   },

@@ -181,6 +181,25 @@ test('predictions resolve from events first seen after them; resolved rows never
   assert.deepEqual(reloaded.rows, journal.rows);
 });
 
+test('an event that happened inside the horizon but was first seen after it (the server was down) still resolves the row to 1', t => {
+  const dir = tempDir(t);
+  let clock = NOW;
+  const store = new EntityStore(dir, { now: () => clock, retentionDays: 90 });
+  const journal = new PredictionJournal(dir, { now: () => clock });
+  store.load(); journal.load();
+  const SEOUL = [37.57, 126.98];
+  assert.equal(journal.log([{ iso3: 'JPN', score: 60 }, { iso3: 'KOR', score: 60 }], store), 2);
+  clock = NOW + 9 * DAY; // two days after the 7-day horizon, the first sweep after the downtime
+  store.ingest([
+    at('earthquake', ...TOKYO, 'high', NOW + 3 * DAY, 9101),   // provider time inside the horizon
+    at('earthquake', ...SEOUL, 'high', NOW + 8 * DAY, 9102),   // provider time after the horizon: no event inside it
+  ]);
+  assert.equal(journal.resolve(store), 2);
+  const outcome = Object.fromEntries(journal.recent(2).map(row => [row.iso3, [row.outcome, row.evidence]]));
+  assert.deepEqual(outcome.JPN, [1, `event-${(9101).toString(16).padStart(32, '0')}`]);
+  assert.deepEqual(outcome.KOR, [0, null]);
+});
+
 test('the chain ingest -> score -> log -> resolve is deterministic', t => {
   const run = () => {
     const dir = tempDir(t);

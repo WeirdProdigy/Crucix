@@ -2,7 +2,7 @@
   'use strict';
   // The cited briefing: a modal <dialog> with a scope selector (Global and the top countries of the snapshot's risk ranking, plus a preset
   // country), a Generate button and the answer of POST /api/briefing {scope} (lib/llm/briefing.mjs: {scope, generatedAt, language,
-  // source: 'llm'|'rules', bullets:[{text, refs:[{n, id, title}]}]}). Every bullet keeps only its citations whose id is a real event id;
+  // source: 'llm'|'rules', busy?: true, bullets:[{text, refs:[{n, id, title}]}]}). Every bullet keeps only its citations whose id is a real event id;
   // a bullet left without one is not shown (the server already drops those). A citation chip [n] opens the record in the inspector.
   // The answer is labelled "AI-generated from the cited records" or "Rule-based summary"; the model's text is plain text (escaped here).
   // mount(options):
@@ -17,6 +17,7 @@
   const COPY={title:'Briefing',close:'Close',scope:'Scope',global:'Global (last 24 hours)',generate:'Generate',intro:'Pick a scope and generate: every statement cites the records it is based on.',
     loading:'Generating the briefing… With an AI model this can take up to a minute.',error:'Could not generate the briefing. Try again.',errorStatus:'Could not generate the briefing (HTTP {status}). Try again.',
     sourceLlm:'AI-generated from the cited records',sourceRules:'Rule-based summary',rulesHelp:'No AI model gave a usable cited answer (or none is configured), so template sentences summarise the most significant records.',
+    busy:'The AI model was busy with other briefings, so this is the rule-based summary. Generate again in a moment for an AI one.',
     checked:'Citations are checked against real records: a statement without a valid citation is dropped.',empty:'Nothing to summarise: no record in this scope.',generated:'Generated {time}',
     citations:'Sources',cite:'Open record {n}: {title}',paletteAction:'Country risk briefing'};
   let opts=null,nodes=null,seq=0,opener=null,finished=true,loading=false;
@@ -48,7 +49,7 @@
   function render(result){
     if(!isObject(result)||!Array.isArray(result.bullets))return '';
     const llm=result.source==='llm',bullets=bulletsOf(result),at=typeof result.generatedAt==='string'&&ISO_TIME.test(result.generatedAt)?Date.parse(result.generatedAt):NaN;
-    const label=`<p class="bf-source" data-source="${llm?'llm':'rules'}"><i aria-hidden="true">${llm?'✦':'≡'}</i> ${esc(say(llm?'sourceLlm':'sourceRules'))}</p>${llm?'':`<p class="bf-help">${esc(say('rulesHelp'))}</p>`}`;
+    const label=`<p class="bf-source" data-source="${llm?'llm':'rules'}"><i aria-hidden="true">${llm?'✦':'≡'}</i> ${esc(say(llm?'sourceLlm':'sourceRules'))}</p>${llm?'':`<p class="bf-help">${esc(say(result.busy===true?'busy':'rulesHelp'))}</p>`}`;
     const list=bullets.length
       ?`<ol class="bf-list">${bullets.map(bullet=>`<li class="bf-item"><p class="bf-text">${esc(bullet.text)}</p><p class="bf-refs"><span class="bf-sr">${esc(say('citations'))}: </span>${bullet.refs.map(chip).join(' ')}</p></li>`).join('')}</ol>`
       :`<p class="bf-calm">${esc(say('empty'))}</p>`;
