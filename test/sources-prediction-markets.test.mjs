@@ -2,11 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parsePredictionMarkets, briefing, DEFAULT_QUERIES } from '../apis/sources/prediction-markets.mjs';
 import { POLICIES } from '../apis/utils/freshness.mjs';
-import { FACT_FIELDS, HOME, normalizeLiveSources } from '../lib/intelligence/live-sources.mjs';
+import { FACT_FIELDS, HOME, normalizeLiveSources, freshLiveSnapshot } from '../lib/intelligence/live-sources.mjs';
 import { buildEvents } from '../lib/intelligence/events.mjs';
 import { HistoryStore } from '../lib/intelligence/history.mjs';
 import config from '../crucix.config.mjs';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import vm from 'node:vm';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -31,10 +32,16 @@ const CONCEDE = real('yLI9ss8PE6', 'Will the US concede Taiwan to the PRC before
 const NOTHING = real('Egh5858OU0', 'Nothing Ever Happens 2026', 'nothing-ever-happens-2026', { closeTime: 1798779540000, probability: 0.8377531271924297, volume: 881.2621748038356, volume24Hours: 29.31688076485507, lastUpdatedTime: 1790934648080, lastBetTime: 1790934648080 });
 const UKRAINE = real('UtgtL9ORLq', 'Ukraine war ends in 2026?', 'ukraine-war-ends-in-2026', { closeTime: 1798761540000, probability: 0.0756367790553753, volume: 2220.563607658758, volume24Hours: 105.6866643819333, lastUpdatedTime: 1790979288326, lastBetTime: 1790979288326 });
 const RECESSION = real('Qgg9Rc8PIy', 'Will the U.S. enter a recession in Trump\'s second term?', 'will-the-us-enter-a-recession-in-tr', { closeTime: 1895201940000, probability: 0.37, volume: 296370.30719417235, volume24Hours: 708.63, lastUpdatedTime: 1790971964730, lastBetTime: 1790971964730 });
-// One answer per default query, in the order of DEFAULT_QUERIES (Hormuz, Ukraine ceasefire, Iran, Taiwan, recession).
+// One answer per default query, in the order of DEFAULT_QUERIES (Hormuz, Ukraine, Iran, Taiwan, recession).
 const REAL = [[BITCOIN, CONCEDE], [UKRAINE], [INVADE], [CONCEDE, NOTHING], [RECESSION]];
 
 const copy = value => JSON.parse(JSON.stringify(value));
+// The browser copy of the freshness rules (the dashboard re-validates a snapshot on every read).
+const browser = () => {
+  const window = {};
+  vm.runInContext(readFileSync(new URL('../dashboard/public/live-sources.js', import.meta.url), 'utf8'), vm.createContext({ window, Date, URL, Object, Array, Number, JSON, Set }));
+  return window.CrucixLiveSources;
+};
 // An invented market (the fixtures above are real); every field a real row has.
 const market = (id, question, over = {}) => ({ id, creatorId: 'creator-id', creatorUsername: 'trader1', creatorName: 'Trader One', createdTime: now - 90 * DAY, closeTime: now + 30 * DAY, question,
   slug: `slug-${id}`, url: `https://manifold.markets/trader1/slug-${id}`, pool: { NO: 100, YES: 100 }, probability: 0.5, p: 0.5, totalLiquidity: 1000, outcomeType: 'BINARY', mechanism: 'cpmm-1',
@@ -49,16 +56,16 @@ const withFetch = async (impl, run) => {
 };
 const reply = (body, init) => new Response(typeof body === 'string' ? body : JSON.stringify(body), { status: 200, ...init });
 const term = url => new URL(url).searchParams.get('term');
-const BY_WORD = { Hormuz: REAL[0], 'Ukraine ceasefire': REAL[1], Iran: REAL[2], Taiwan: REAL[3], recession: REAL[4] };
+const BY_WORD = { Hormuz: REAL[0], Ukraine: REAL[1], Iran: REAL[2], Taiwan: REAL[3], recession: REAL[4] };
 const answersFor = url => BY_WORD[term(url)] ?? [];
 
 test('parse turns the real answers into ranked market rows with provider times and facts', () => {
   const result = parse();
   assert.equal(result.status, 'ok'); assert.equal(result.source, 'Prediction-Markets');
-  // Most traded first. NOTHING (no query word in its question, last bet 14 h ago) and UKRAINE (question lacks "ceasefire") are not listed.
-  assert.deepEqual(ids(result), ['manifold:Qgg9Rc8PIy', 'manifold:q2CZUhn500', 'manifold:yLI9ss8PE6', 'manifold:0tE26608Py']);
-  assert.equal(result.observedAt, '2026-10-02T20:37:10.214Z', 'the feed time is the newest last bet of a market that matches (UKRAINE, bet later, is no match)');
-  const [recession, invade, concede, bitcoin] = result.observations;
+  // Most traded first. NOTHING (no query word in its question, last bet 14 h ago) is not listed.
+  assert.deepEqual(ids(result), ['manifold:Qgg9Rc8PIy', 'manifold:q2CZUhn500', 'manifold:UtgtL9ORLq', 'manifold:yLI9ss8PE6', 'manifold:0tE26608Py']);
+  assert.equal(result.observedAt, '2026-10-02T22:14:48.326Z', 'the feed time is the newest last bet of a market that matches (the Ukraine market)');
+  const [recession, invade, ukraine, concede, bitcoin] = result.observations;
   assert.equal(recession.kind, 'market'); assert.equal(recession.source, 'Prediction-Markets'); assert.equal(recession.severity, 'info');
   assert.equal(recession.title, 'Will the U.S. enter a recession in Trump\'s second term?');
   assert.equal(recession.probabilityPct, 37); assert.equal(recession.volume, 296370); assert.equal(recession.platform, 'Manifold');
@@ -66,15 +73,17 @@ test('parse turns the real answers into ranked market rows with provider times a
   assert.equal(recession.observedAt, '2026-10-02T20:12:44.730Z', 'provider time: the last bet, never the collection time');
   assert.equal(recession.url, 'https://manifold.markets/trader1/will-the-us-enter-a-recession-in-tr');
   assert.equal(invade.probabilityPct, 12.4); assert.equal(invade.volume, 112302); assert.equal(invade.observedAt, '2026-10-02T20:37:10.214Z'); assert.equal(invade.closesAt, '2027-01-01 07:59 UTC');
+  assert.equal(ukraine.title, 'Ukraine war ends in 2026?'); assert.equal(ukraine.probabilityPct, 7.6); assert.equal(ukraine.volume, 2221); assert.equal(ukraine.observedAt, '2026-10-02T22:14:48.326Z'); assert.equal(ukraine.closesAt, '2026-12-31 23:59 UTC');
   assert.equal(concede.probabilityPct, 18.3); assert.equal(concede.volume, 985);
+  assert.equal(invade.validUntil, '2027-01-01T07:59:00.000Z', 'a row is valid until its market closes'); assert.equal(recession.validUntil, '2030-01-21T04:59:00.000Z');
   assert.equal(bitcoin.probabilityPct, 36.8); assert.equal(bitcoin.volume, 817); assert.equal(bitcoin.observedAt, '2026-10-02T14:25:27.816Z');
   assert.match(invade.summary, /12\.4% \(volume 112,302 Mana, closes 2027-01-01\)/);
   assert.match(invade.summary, /Manifold/); assert.match(invade.summary, /opinion of traders, not an event/i); assert.match(invade.summary, /play money/i); assert.match(invade.summary, /Last bet: 2026-10-02 20:37 UTC/);
-  assert.equal(new Set(result.observations.map(row => row.url)).size, 4, 'every market has its own page, so history keeps them apart');
+  assert.equal(new Set(result.observations.map(row => row.url)).size, 5, 'every market has its own page, so history keeps them apart');
   assert.ok(result.observations.every(row => row.severity === 'info' && row.kind === 'market' && !('lat' in row)), 'a probability is not an event and has no place');
   assert.match(result.summary, /opinion of traders, not an event/i); assert.match(result.summary, /play-money/i);
-  assert.match(result.summary, /Watched words: Hormuz; Ukraine ceasefire; Iran; Taiwan; recession\./);
-  assert.match(result.summary, /No current market for: Ukraine ceasefire\./); assert.doesNotMatch(result.summary, /Warning/);
+  assert.match(result.summary, /Watched words: Hormuz; Ukraine; Iran; Taiwan; recession\./);
+  assert.doesNotMatch(result.summary, /No current market/, 'every word has a current market'); assert.doesNotMatch(result.summary, /Warning/);
   assert.equal(result.examinedRecords, 7); assert.equal(result.truncatedRecords, 0);
 });
 
@@ -146,9 +155,12 @@ test('closed markets, stale markets and markets without a trade are never shown 
   // A closed market does not lend its bet time to the feed.
   const mixed = one([market('m-00001', 'Iran a', { closeTime: now - HOUR, lastBetTime: now - MIN }), market('m-00002', 'Iran b', { lastBetTime: now - 20 * HOUR, url: 'https://manifold.markets/trader1/b' })]);
   assert.equal(mixed.status, 'stale'); assert.equal(mixed.observedAt, iso(now - 20 * HOUR));
+  // Not even a market that closes at this very instant (its row would be dropped by validUntil anyway, but the feed time must not come from it).
+  const atClose = one([market('m-00001', 'Iran a', { closeTime: now, lastBetTime: now - MIN }), market('m-00002', 'Iran b', { lastBetTime: now - 20 * HOUR, url: 'https://manifold.markets/trader1/b' })]);
+  assert.equal(atClose.status, 'stale'); assert.equal(atClose.observedAt, iso(now - 20 * HOUR));
   // Every answer empty: a quiet or misspelled watch list, never a healthy feed.
   const none = parse([[], [], [], [], []]);
-  assert.equal(none.status, 'stale'); assert.deepEqual(none.observations, []); assert.equal(none.observedAt, null); assert.match(none.summary, /No current market for: Hormuz; Ukraine ceasefire; Iran; Taiwan; recession\./);
+  assert.equal(none.status, 'stale'); assert.deepEqual(none.observations, []); assert.equal(none.observedAt, null); assert.match(none.summary, /No current market for: Hormuz; Ukraine; Iran; Taiwan; recession\./);
 });
 
 test('close dates far in the future are shown as 2100 or later, never as a year thousands of years away', () => {
@@ -163,6 +175,88 @@ test('close dates far in the future are shown as 2100 or later, never as a year 
     const result = one([market('m-00001', 'Iran a', { closeTime }), market('m-00002', 'Iran b', { url: 'https://manifold.markets/trader1/b' })]);
     assert.deepEqual(ids(result), ['manifold:m-00002'], String(closeTime)); assert.match(result.summary, /1 of the 2 markets could not be read/);
   }
+});
+
+test('every row is valid until its market closes: a snapshot that is read again after the close drops the row', () => {
+  const closing = market('m-00001', 'Iran closes soon', { closeTime: now + 10 * MIN, lastBetTime: now - MIN, volume: 500 });
+  const later = market('m-00002', 'Iran closes later', { closeTime: now + 2 * HOUR, lastBetTime: now - MIN, volume: 400, url: 'https://manifold.markets/trader1/b' });
+  const result = one([closing, later]);
+  assert.deepEqual(result.observations.map(row => row.validUntil), [iso(now + 10 * MIN), iso(now + 2 * HOUR)]);
+  const read = at => normalizeLiveSources({ 'Prediction-Markets': result }, at)[0];
+  const listed = at => read(at).observations.map(row => row.providerId);
+  assert.deepEqual(listed(now), ['manifold:m-00001', 'manifold:m-00002']); assert.deepEqual(listed(now + 9 * MIN), ['manifold:m-00001', 'manifold:m-00002']);
+  // The close itself and everything after it: the row is gone, long before the 12 hours of the last bet are over.
+  assert.deepEqual(listed(now + 10 * MIN), ['manifold:m-00002'], 'the instant of closing is closed');
+  assert.deepEqual(listed(now + 30 * MIN), ['manifold:m-00002']); assert.deepEqual(listed(now + 2 * HOUR), []); assert.deepEqual(listed(now + 3 * HOUR), []); assert.deepEqual(listed(now + 11 * HOUR), []);
+  assert.equal(read(now + 30 * MIN).observations[0].validUntil, iso(now + 2 * HOUR), 'the server keeps the validity of a row');
+  // The dashboard re-checks the same on every read.
+  const api = browser(), served = at => api.observations(normalizeLiveSources({ 'Prediction-Markets': result }, now), at).map(row => row.providerId);
+  assert.deepEqual(served(now + 9 * MIN), ['manifold:m-00001', 'manifold:m-00002']); assert.deepEqual(served(now + 30 * MIN), ['manifold:m-00002']); assert.deepEqual(served(now + 3 * HOUR), []);
+  // So do the events of a stored snapshot.
+  const live = normalizeLiveSources({ 'Prediction-Markets': result }, now);
+  const events = buildEvents({ meta: { timestamp: iso(now) }, liveSources: live }, { now });
+  assert.equal(events.length, 2);
+  const snapshot = { liveSources: live, events };
+  assert.equal(freshLiveSnapshot(snapshot, now + 5 * MIN).events.length, 2); assert.equal(freshLiveSnapshot(snapshot, now + 30 * MIN).events.length, 1); assert.equal(freshLiveSnapshot(snapshot, now + 3 * HOUR).events.length, 0);
+  // A market that closes later than the last bet's 12 hours is limited by the bet, as before.
+  const long = parsePredictionMarkets([[market('m-00003', 'Iran long', { closeTime: now + 30 * DAY, lastBetTime: now - 2 * HOUR })]], { now, queries: ['Iran'] });
+  assert.deepEqual(normalizeLiveSources({ 'Prediction-Markets': long }, now + 9 * HOUR)[0].observations.length, 1); assert.deepEqual(normalizeLiveSources({ 'Prediction-Markets': long }, now + 11 * HOUR)[0].observations.length, 0);
+});
+
+test('a close date in 2100 or later carries no validUntil and the row stays current', () => {
+  const rows = [market('m-00001', 'Iran far', { closeTime: Date.parse('4567-03-12T23:59:00Z') }), market('m-00002', 'Iran year 2100', { closeTime: Date.parse('2100-01-01T00:00:00Z'), url: 'https://manifold.markets/trader1/b' }),
+    market('m-00003', 'Iran year 2099', { closeTime: Date.parse('2099-12-31T23:59:00Z'), url: 'https://manifold.markets/trader1/c' }),
+    // Year 12345: its ISO text starts with a sign and six digits, which neither the server nor the browser reads as a time.
+    market('m-00004', 'Iran year 12345', { closeTime: Date.parse('+012345-06-01T00:00:00Z'), url: 'https://manifold.markets/trader1/d' })];
+  const result = one(rows);
+  const byId = Object.fromEntries(result.observations.map(row => [row.providerId, row]));
+  assert.equal('validUntil' in byId['manifold:m-00001'], false, 'a year above 9999 is no valid time for the server or the browser');
+  assert.equal('validUntil' in byId['manifold:m-00002'], false); assert.equal(byId['manifold:m-00003'].validUntil, '2099-12-31T23:59:00.000Z'); assert.equal('validUntil' in byId['manifold:m-00004'], false);
+  const later = now + 6 * HOUR;
+  assert.equal(result.observations.length, 4);
+  assert.deepEqual(normalizeLiveSources({ 'Prediction-Markets': result }, later)[0].observations.map(row => row.providerId).sort(), ['manifold:m-00001', 'manifold:m-00002', 'manifold:m-00003', 'manifold:m-00004'], 'nothing is dropped on a later read');
+  assert.equal(browser().observations(normalizeLiveSources({ 'Prediction-Markets': result }, now), later).length, 4);
+  // The row is not valid for ever: the last bet still limits it to 12 hours.
+  assert.equal(normalizeLiveSources({ 'Prediction-Markets': result }, now + 13 * HOUR)[0].observations.length, 0);
+});
+
+test('only play-money markets are read: prize cash markets are skipped, any other token is another shape', () => {
+  const play = market('m-00001', 'Iran play'), noToken = market('m-00002', 'Iran no token', { url: 'https://manifold.markets/trader1/b' }); delete noToken.token;
+  const cash = market('m-00003', 'Iran cash', { token: 'CASH', volume: 99999, lastBetTime: now - MIN, url: 'https://manifold.markets/trader1/c' });
+  const mixed = one([cash, play, noToken]);
+  assert.deepEqual(ids(mixed), ['manifold:m-00001', 'manifold:m-00002'], 'the token is optional, CASH is left out'); assert.doesNotMatch(mixed.summary, /Warning/, 'a cash market is no changed shape');
+  assert.equal(mixed.observedAt, iso(now - HOUR), 'a cash market lends no bet time to the feed');
+  const onlyCash = one([cash]);
+  assert.equal(onlyCash.status, 'stale'); assert.equal(onlyCash.observedAt, null); assert.deepEqual(onlyCash.observations, []);
+  // The wording says play money; a value the docs do not list is not trusted to mean that.
+  for (const token of ['mana', 'USD', 'cash', '', 5, null, {}, [], 'MANA ']) {
+    const result = one([market('m-00001', 'Iran a', { token }), market('m-00002', 'Iran b', { url: 'https://manifold.markets/trader1/b' })]);
+    assert.deepEqual(ids(result), ['manifold:m-00002'], JSON.stringify(token)); assert.match(result.summary, /1 of the 2 markets could not be read/);
+  }
+  assert.equal(one([market('m-00001', 'Iran a', { token: 'x'.repeat(100000) })]).status, 'error');
+});
+
+test('a cut never leaves half a character and lone surrogates never reach the output', () => {
+  const emoji = String.fromCodePoint(0x1f600), high = String.fromCharCode(0xd83d), low = String.fromCharCode(0xde00);
+  const wellFormed = text => { assert.ok(text.isWellFormed(), 'no lone surrogate'); assert.doesNotThrow(() => encodeURIComponent(text)); };
+  // 'Iran ' and 294 letters are 299 characters: the cap of 300 would fall between the two halves of the emoji.
+  const cutTitle = one([market('m-00001', `Iran ${'x'.repeat(294)}${emoji}tail`)]).observations[0].title;
+  assert.equal(cutTitle.length, 299); wellFormed(cutTitle); assert.equal(one([market('m-00001', `Iran ${'x'.repeat(293)}${emoji}tail`)]).observations[0].title.length, 300, 'a whole emoji inside the cap stays');
+  assert.equal(one([market('m-00001', `Iran ${'x'.repeat(293)}${emoji}tail`)]).observations[0].title.endsWith(emoji), true);
+  // Halves of characters inside the text go, the text around them stays.
+  const lone = one([market('m-00001', `Iran ${high} x ${low} y ${low}${high} z`)]).observations[0].title;
+  assert.equal(lone, 'Iran x y z'); wellFormed(lone);
+  // The same for the watched word (cap 60) and a failure reason (cap 120), and for the whole result as it is stored and shown.
+  const word = `Iran${'x'.repeat(55)}${emoji}`;
+  const asked = parsePredictionMarkets([[market('m-00001', 'Iran a')], []], { now, queries: ['Iran', word] });
+  wellFormed(asked.summary); assert.match(asked.summary, new RegExp(`Iran${'x'.repeat(55)}\\.`)); assert.doesNotThrow(() => encodeURIComponent(JSON.stringify(asked)));
+  const failed = parsePredictionMarkets([{ error: `${'e'.repeat(119)}${emoji}` }], { now, queries: ['Iran'] });
+  wellFormed(failed.error); assert.doesNotThrow(() => encodeURIComponent(JSON.stringify(failed)));
+  const partly = parsePredictionMarkets([{ error: `${'e'.repeat(119)}${emoji}` }, [market('m-00001', 'Taiwan a')]], { now, queries: ['Iran', 'Taiwan'] });
+  wellFormed(partly.summary);
+  const sent = []; return briefing({ now, queries: [word, `Iran${low}${high}`], fetcher: async url => { sent.push(url); return []; } }).then(result => {
+    wellFormed(result.summary); assert.ok(sent.every(url => { wellFormed(url); return new URL(url).searchParams.get('term').isWellFormed(); }));
+  });
 });
 
 test('duplicate questions are kept, the same market under two words is listed once', () => {
@@ -228,10 +322,10 @@ test('at most 20 rows, the most traded first, cut before the provider-side first
 
 test('a query that fails leaves the others; all failing is an error without a URL', () => {
   const half = parse([{ error: 'HTTP 429', status: 429 }, [UKRAINE], [INVADE], [CONCEDE, NOTHING], [RECESSION]]);
-  assert.equal(half.status, 'ok'); assert.deepEqual(ids(half), ['manifold:Qgg9Rc8PIy', 'manifold:q2CZUhn500', 'manifold:yLI9ss8PE6']);
+  assert.equal(half.status, 'ok'); assert.deepEqual(ids(half), ['manifold:Qgg9Rc8PIy', 'manifold:q2CZUhn500', 'manifold:UtgtL9ORLq', 'manifold:yLI9ss8PE6']);
   assert.match(half.summary, /Warning: the search for Hormuz \(HTTP 429\) failed\./); assert.doesNotMatch(half.summary, /No current market for: Hormuz/, 'a failed search is not a quiet one');
   const several = parse([{ error: 'HTTP 503' }, { error: 'Request timed out after 10000ms' }, [INVADE], 'text', null]);
-  assert.equal(several.status, 'ok'); assert.match(several.summary, /Warning: the search for Hormuz \(HTTP 503\), Ukraine ceasefire \(Request timed out after 10000ms\), Taiwan and recession failed\./);
+  assert.equal(several.status, 'ok'); assert.match(several.summary, /Warning: the search for Hormuz \(HTTP 503\), Ukraine \(Request timed out after 10000ms\), Taiwan and recession failed\./);
   const all = parse([{ error: 'HTTP 503 from https://api.manifold.markets/v0/search-markets?term=Iran&key=secret', status: 503 }, { error: 'HTTP 429' }, { error: 'timeout' }, { error: 'x' }, { error: 'y' }]);
   assert.equal(all.status, 'error'); assert.deepEqual(all.observations, []); assert.equal(all.observedAt, null); assert.doesNotMatch(all.error, /https?:|secret|api\.manifold/i); assert.match(all.error, /Manifold/);
   for (const payload of [{}, [], null, undefined, 'text', 42, true, { results: [] }, { markets: [UKRAINE] }]) {
@@ -290,31 +384,39 @@ test('hostile provider text stays inert and comparison signs in a question survi
   assert.equal(one([market('m-00001', `Iran ${'x'.repeat(1000)}`)]).observations[0].title.length, 300);
 });
 
-// Standing rule for every adapter: bound every input before any pattern or loop runs on it, and prove it fails fast.
+// Standing rule for every adapter: bound every input before any pattern or loop runs on it, and prove it fails fast. A quadratic pattern on 30,000
+// characters takes seconds, so a regression fails these elapsed assertions (one per field) instead of hanging the run.
 test('hostile oversized provider fields are bounded in time and never stall the loop', () => {
-  const n = 200000;
-  const floods = ['<'.repeat(n), '<a '.repeat(n / 3), `${'<'.repeat(n)}Iran`, 'x'.repeat(n), `${' '.repeat(n)}Iran`, `Iran${zero.repeat(n)}`, 'http://'.repeat(n / 7), `Iran ${'\n'.repeat(n)}`];
-  const rowsOf = make => floods.map((text, i) => make(text, i));
+  const n = 30000;
+  const floods = ['<'.repeat(n), '<a '.repeat(n / 3), `${'<'.repeat(n)}Iran`, 'x'.repeat(n), `${' '.repeat(n)}Iran`, `Iran${zero.repeat(n)}`, 'http://'.repeat(n / 7), `Iran ${'\n'.repeat(n)}`, `Iran ${'<a '.repeat(n / 3)}>`, `<${'a'.repeat(n)}`];
+  const timed = (label, run) => { const started = Date.now(), value = run(), ms = Date.now() - started; assert.ok(ms < 500, `${label} took ${ms} ms`); return value; };
+  const safe = result => { for (const row of result.observations) { assert.doesNotMatch(row.title, /[<>]/); assert.ok(row.title.length <= 300); assert.ok(row.summary.length < 700, `summary length ${row.summary.length}`); assert.ok(JSON.stringify(row).length < 3000, 'only whitelisted fields are kept'); } };
+  floods.forEach((text, i) => {
+    safe(timed(`flood ${i} as a question`, () => one([market(`m-q${i}aaaa`, text.includes('Iran') ? text : `Iran ${text}`)])));
+    assert.equal(timed(`flood ${i} as a link`, () => one([market(`m-u${i}aaaa`, 'Iran url', { url: `https://manifold.markets/trader1/${text}` })])).status, 'error');
+    assert.equal(timed(`flood ${i} as an id`, () => one([market(text, 'Iran id')])).status, 'error');
+    safe(timed(`flood ${i} in the fields that are not read`, () => one([market(`m-e${i}aaaa`, 'Iran extra', { creatorUsername: text, creatorName: text, slug: text, description: text, resolution: text })])));
+    const asWord = timed(`flood ${i} as a watched word`, () => parsePredictionMarkets([[market('m-00001', 'Iran a')], []], { now, queries: ['Iran', text] }));
+    assert.deepEqual(ids(asWord), ['manifold:m-00001']); assert.doesNotMatch(asWord.summary, /[<>]/); assert.ok(asWord.summary.length < 1200, `summary length ${asWord.summary.length}`);
+    const asNote = timed(`flood ${i} as an error note`, () => parsePredictionMarkets([{ error: text }, [market('m-00001', 'Taiwan a')]], { now, queries: ['Iran', 'Taiwan'] }));
+    assert.equal(asNote.status, 'ok'); assert.ok(asNote.summary.length < 1200, `summary length ${asNote.summary.length}`); assert.doesNotMatch(asNote.summary, /https?:/);
+    const asError = timed(`flood ${i} as the error`, () => parsePredictionMarkets([{ error: text }], { now, queries: ['Iran'] }));
+    assert.equal(asError.status, 'error'); assert.ok(asError.error.length <= 300); assert.doesNotMatch(asError.error, /https?:/);
+  });
+  // All of them in one answer: of the ten questions one is only spaces before the cut (nothing left: unreadable), one has "Iran" only beyond it (no match).
+  const together = timed('all floods in one answer', () => one(floods.map((text, i) => market(`m-q${i}aaaa`, text.includes('Iran') ? text : `Iran ${text}`, { url: `https://manifold.markets/trader1/q${i}` }))));
+  assert.equal(together.observations.length, 8); assert.match(together.summary, /1 of the 10 markets could not be read/);
+  // Far larger inputs cost the same, because every field is cut before anything looks at it.
   const started = Date.now();
-  const asQuestion = one(rowsOf((text, i) => market(`m-q${i}aaaa`, text.includes('Iran') ? text : `Iran ${text}`, { url: `https://manifold.markets/trader1/q${i}` })));
-  const asUrl = one(rowsOf((text, i) => market(`m-u${i}aaaa`, 'Iran url', { url: `https://manifold.markets/trader1/${text}` })));
-  const asId = one(rowsOf(text => market(text, 'Iran id')));
-  const asExtra = one(rowsOf((text, i) => market(`m-e${i}aaaa`, 'Iran extra', { url: `https://manifold.markets/trader1/e${i}`, creatorUsername: text, creatorName: text, slug: text, description: text, token: text, resolution: text })));
-  assert.ok(Date.now() - started < 1000, `took ${Date.now() - started} ms`);
-  // Of the eight questions one is only spaces before the cut (no question left: unreadable) and one has "Iran" only beyond the cut (no match).
-  assert.equal(asQuestion.observations.length, 6); assert.match(asQuestion.summary, /1 of the 8 markets could not be read/); assert.equal(asUrl.status, 'error'); assert.equal(asId.status, 'error'); assert.equal(asExtra.observations.length, 8);
-  for (const row of [...asQuestion.observations, ...asExtra.observations]) { assert.doesNotMatch(row.title, /[<>]/); assert.ok(row.title.length <= 300); assert.ok(row.summary.length < 700, `summary length ${row.summary.length}`); assert.ok(JSON.stringify(row).length < 3000, 'only whitelisted fields are kept'); }
   const queryFlood = parsePredictionMarkets([[market('m-00001', 'Iran a')]], { now, queries: ['<'.repeat(1000000), 'Iran'] });
-  assert.ok(Date.now() - started < 1500, `took ${Date.now() - started} ms`); assert.deepEqual(ids(queryFlood), ['manifold:m-00001']);
+  assert.deepEqual(ids(queryFlood), ['manifold:m-00001']);
   for (const error of ['http://'.repeat(150000), '<'.repeat(1000000), 'x'.repeat(1000000)]) {
     const failed = parsePredictionMarkets([{ error }], { now, queries: ['Iran'] });
     assert.equal(failed.status, 'error'); assert.ok(failed.error.length <= 300); assert.doesNotMatch(failed.error, /https?:/);
-    const partly = parsePredictionMarkets([{ error }, [market('m-00001', 'Taiwan a')]], { now, queries: ['Iran', 'Taiwan'] });
-    assert.equal(partly.status, 'ok'); assert.ok(partly.summary.length < 1200, `summary length ${partly.summary.length}`); assert.doesNotMatch(partly.summary, /https?:/);
   }
   const huge = one([market('m-00001', 'Iran a', { id: 'x'.repeat(1000000), url: `https://manifold.markets/${'a'.repeat(1000000)}/b` }), market('m-00002', 'Iran b', { url: 'https://manifold.markets/trader1/b' })]);
   assert.deepEqual(ids(huge), ['manifold:m-00002']);
-  assert.ok(Date.now() - started < 2500, `took ${Date.now() - started} ms in all`);
+  assert.ok(Date.now() - started < 2000, `took ${Date.now() - started} ms for the large inputs`);
 });
 
 test('the watched words are validated: strings only, cleaned, cut, no repeats, at most six', () => {
@@ -333,7 +435,7 @@ test('the watched words are validated: strings only, cleaned, cut, no repeats, a
   assert.deepEqual(asked(['', 5, '<>']).status, 'error'); assert.match(asked([]).error, /No valid market queries/); assert.equal(asked(DEFAULT_QUERIES).status, 'stale');
   assert.equal(parsePredictionMarkets([], { now, queries: 'Iran' }).status, 'error', 'a text is no list'); assert.equal(parsePredictionMarkets([], { now, queries: { 0: 'Iran' } }).status, 'error');
   // The default list is the configured one, and an undefined option means the default list.
-  assert.deepEqual(config.publicSources.marketQueries, ['Hormuz', 'Ukraine ceasefire', 'Iran', 'Taiwan', 'recession']); assert.deepEqual([...DEFAULT_QUERIES], config.publicSources.marketQueries);
+  assert.deepEqual(config.publicSources.marketQueries, ['Hormuz', 'Ukraine', 'Iran', 'Taiwan', 'recession']); assert.deepEqual([...DEFAULT_QUERIES], config.publicSources.marketQueries);
   assert.deepEqual(parsePredictionMarkets(REAL, { now }), parsePredictionMarkets(REAL, { now, queries: config.publicSources.marketQueries }));
 });
 
@@ -350,7 +452,7 @@ test('observations survive the server normalization with facts, home and policy;
   assert.equal(HOME['Prediction-Markets'], 'https://manifold.markets/');
   const keys = Object.keys(POLICIES); assert.equal(keys.indexOf('Prediction-Markets'), keys.indexOf('ENTSOG-HU') + 1, 'appended right after the previous last source');
   const [out] = normalizeLiveSources({ 'Prediction-Markets': parse() }, now);
-  assert.equal(out.status, 'ok'); assert.equal(out.url, 'https://manifold.markets/'); assert.equal(out.observations.length, 4);
+  assert.equal(out.status, 'ok'); assert.equal(out.url, 'https://manifold.markets/'); assert.equal(out.observations.length, 5);
   const invade = out.observations.find(row => row.providerId === 'manifold:q2CZUhn500');
   assert.deepEqual(invade.facts, [{ label: 'probabilityPct', value: 12.4 }, { label: 'volume', value: 112302 }, { label: 'closesAt', value: '2027-01-01 07:59 UTC' }, { label: 'platform', value: 'Manifold' }]);
   assert.equal(invade.kind, 'market'); assert.equal(invade.severity, 'info'); assert.equal(invade.observedAt, '2026-10-02T20:37:10.214Z'); assert.equal(invade.url, 'https://manifold.markets/trader1/will-the-us-invade-iran-before-the-zs06u6hptc');
@@ -361,7 +463,7 @@ test('observations survive the server normalization with facts, home and policy;
   const [stale] = normalizeLiveSources({ 'Prediction-Markets': one([market('m-00001', 'Iran a', { lastBetTime: now - 13 * HOUR })]) }, now);
   assert.equal(stale.status, 'stale'); assert.deepEqual(stale.observations, []);
   const events = buildEvents({ meta: { timestamp: iso(now) }, liveSources: [out] }, { now });
-  assert.equal(events.length, 4); assert.ok(events.every(event => event.kind === 'market')); assert.equal(new Set(events.map(event => event.source.url)).size, 4);
+  assert.equal(events.length, 5); assert.ok(events.every(event => event.kind === 'market')); assert.equal(new Set(events.map(event => event.source.url)).size, 5);
   const eventIds = payload => buildEvents({ meta: { timestamp: iso(now) }, liveSources: normalizeLiveSources({ 'Prediction-Markets': payload }, now) }, { now }).map(event => event.id).sort();
   assert.deepEqual(eventIds(parse()), eventIds(parse()), 'event identities are stable across parses');
   const moved = copy(REAL); moved[2][0].probability = 0.4; moved[2][0].lastBetTime = now - MIN;
@@ -375,19 +477,19 @@ test('history keeps one record per market and updates it in place: a new sweep n
   const first = eventsFor(REAL, now);
   const moved = copy(REAL); moved[2][0].probability = 0.5; moved[2][0].volume = 130000; moved[2][0].lastBetTime = now + 10 * MIN; moved[4][0].lastBetTime = now + 5 * MIN;
   const second = eventsFor(moved, now + 15 * MIN);
-  assert.equal(first.length, 4); assert.equal(new Set(first.map(event => event.source.url)).size, 4, 'four markets, four links: history cannot merge them');
-  assert.deepEqual(history.add(first), { added: 4, updated: 0, ignored: 0, total: 4 });
-  assert.deepEqual(history.add(second), { added: 0, updated: 4, ignored: 0, total: 4 }, 'new probabilities update the same records');
-  assert.deepEqual(history.add(eventsFor(moved, now + 20 * MIN)), { added: 0, updated: 4, ignored: 0, total: 4 });
-  assert.equal(history.query({ source: 'Prediction-Markets' }).total, 4);
+  assert.equal(first.length, 5); assert.equal(new Set(first.map(event => event.source.url)).size, 5, 'five markets, five links: history cannot merge them');
+  assert.deepEqual(history.add(first), { added: 5, updated: 0, ignored: 0, total: 5 });
+  assert.deepEqual(history.add(second), { added: 0, updated: 5, ignored: 0, total: 5 }, 'new probabilities update the same records');
+  assert.deepEqual(history.add(eventsFor(moved, now + 20 * MIN)), { added: 0, updated: 5, ignored: 0, total: 5 });
+  assert.equal(history.query({ source: 'Prediction-Markets' }).total, 5);
   assert.deepEqual(second.map(event => event.id).sort(), first.map(event => event.id).sort(), 'the event ids are stable across sweeps');
 });
 
 test('briefing asks Manifold once per watched word with the real parameter names and no other host', async () => {
   const seen = [];
   const result = await briefing({ now, fetcher: async (url, options) => { seen.push({ url: new URL(url), options }); return answersFor(url); } });
-  assert.equal(result.status, 'ok'); assert.equal(seen.length, 5); assert.deepEqual(ids(result), ['manifold:Qgg9Rc8PIy', 'manifold:q2CZUhn500', 'manifold:yLI9ss8PE6', 'manifold:0tE26608Py']);
-  assert.deepEqual(seen.map(item => item.url.searchParams.get('term')), ['Hormuz', 'Ukraine ceasefire', 'Iran', 'Taiwan', 'recession']);
+  assert.equal(result.status, 'ok'); assert.equal(seen.length, 5); assert.deepEqual(ids(result), ['manifold:Qgg9Rc8PIy', 'manifold:q2CZUhn500', 'manifold:UtgtL9ORLq', 'manifold:yLI9ss8PE6', 'manifold:0tE26608Py']);
+  assert.deepEqual(seen.map(item => item.url.searchParams.get('term')), ['Hormuz', 'Ukraine', 'Iran', 'Taiwan', 'recession']);
   for (const { url, options } of seen) {
     assert.equal(url.origin, 'https://api.manifold.markets'); assert.equal(url.pathname, '/v0/search-markets');
     assert.deepEqual([...url.searchParams.keys()].sort(), ['contractType', 'filter', 'limit', 'sort', 'term']);
@@ -416,9 +518,9 @@ test('briefing degrades every transport failure to a result without a URL and ne
   assert.equal(thrown.status, 'error'); assert.doesNotMatch(thrown.error, /https?:|manifold\.markets|secret|ECONNREFUSED/i);
   assert.equal((await briefing({ now, fetcher: () => { throw new Error('sync https://x'); } })).status, 'error');
   const oneDown = await briefing({ now, fetcher: async url => term(url) === 'Iran' ? { error: 'HTTP 429', status: 429 } : answersFor(url) });
-  assert.equal(oneDown.status, 'ok'); assert.deepEqual(ids(oneDown), ['manifold:Qgg9Rc8PIy', 'manifold:yLI9ss8PE6', 'manifold:0tE26608Py']); assert.match(oneDown.summary, /Warning: the search for Iran \(HTTP 429\) failed\./);
+  assert.equal(oneDown.status, 'ok'); assert.deepEqual(ids(oneDown), ['manifold:Qgg9Rc8PIy', 'manifold:UtgtL9ORLq', 'manifold:yLI9ss8PE6', 'manifold:0tE26608Py']); assert.match(oneDown.summary, /Warning: the search for Iran \(HTTP 429\) failed\./);
   const slowOne = await briefing({ now, fetcher: async url => term(url) === 'recession' ? { error: 'Request timed out after 10000ms' } : answersFor(url) });
-  assert.deepEqual(ids(slowOne), ['manifold:q2CZUhn500', 'manifold:yLI9ss8PE6', 'manifold:0tE26608Py']);
+  assert.deepEqual(ids(slowOne), ['manifold:q2CZUhn500', 'manifold:UtgtL9ORLq', 'manifold:yLI9ss8PE6', 'manifold:0tE26608Py']);
 });
 
 test('briefing over the real fetch helper degrades 429, 503, timeout, an oversized body and invalid JSON, and reads a real answer', async () => {
@@ -439,7 +541,7 @@ test('briefing over the real fetch helper degrades 429, 503, timeout, an oversiz
   assert.match((await withFetch(cases.timeout, () => briefing({ now, timeout: 25, queries: ['Iran'], useCache: false }))).error, /timed out/i);
   assert.match((await withFetch(cases.oversized, () => briefing({ now, timeout: 5000, queries: ['Iran'], useCache: false }))).error, /exceeds|limit/i);
   const ok = await withFetch(async url => reply(answersFor(String(url))), () => briefing({ now, useCache: false }));
-  assert.equal(ok.status, 'ok'); assert.deepEqual(ids(ok), ['manifold:Qgg9Rc8PIy', 'manifold:q2CZUhn500', 'manifold:yLI9ss8PE6', 'manifold:0tE26608Py']);
+  assert.equal(ok.status, 'ok'); assert.deepEqual(ids(ok), ['manifold:Qgg9Rc8PIy', 'manifold:q2CZUhn500', 'manifold:UtgtL9ORLq', 'manifold:yLI9ss8PE6', 'manifold:0tE26608Py']);
   const noIran = await withFetch(async url => term(String(url)) === 'Iran' ? reply('Too Many Requests', { status: 429 }) : reply(answersFor(String(url))), () => briefing({ now, useCache: false }));
   assert.equal(noIran.status, 'ok'); assert.match(noIran.summary, /the search for Iran \(HTTP 429\) failed/);
 });
@@ -482,4 +584,18 @@ test('answers are cached for 30 minutes per word with their age visible; errors 
   await briefing({ now: t4 + 101, queries: ['bound39'], fetcher: count, useCache: true }); assert.equal(bounded, 41, 'the newest word is still cached');
   // A clock that went backwards never reads the future.
   await briefing({ now: t4 - 1000, queries: ['bound39'], fetcher: count, useCache: true }); assert.equal(bounded, 42);
+});
+
+test('the cache keeps only the rows that are read, and the number the provider sent is still reported', async () => {
+  const sent = Array.from({ length: 5000 }, (_, i) => market(`m-c${String(i).padStart(4, '0')}`, `Iran cached ${i}`, { volume: i + 1, url: `https://manifold.markets/trader1/c${i}` }));
+  const answer = [...sent];
+  const fetcher = async () => answer;
+  const first = await briefing({ now, queries: ['Iran'], fetcher, useCache: true });
+  assert.equal(first.examinedRecords, 20); assert.equal(first.truncatedRecords, 4980); assert.equal(first.observations.length, 20);
+  answer.length = 0; // the provider's array is emptied: a cache that kept this very array would now hold nothing
+  const second = await briefing({ now: now + MIN, queries: ['Iran'], fetcher, useCache: true });
+  assert.deepEqual(ids(second), ids(first)); assert.equal(second.examinedRecords, 20); assert.equal(second.truncatedRecords, 4980, 'the original length is kept for the report'); assert.equal(second.timestamp, iso(now));
+  // A small answer is reported as it is.
+  const small = await briefing({ now, queries: ['Taiwan'], fetcher: async () => [market('m-00001', 'Taiwan a')], useCache: true });
+  assert.equal(small.truncatedRecords, 0); assert.equal(small.examinedRecords, 1);
 });
