@@ -877,7 +877,11 @@
       "frequencyHz": "Grid frequency (Hz)",
       "renewableSharePct": "Renewable share of generation (%)",
       "physicalFlow": "Physical gas flow",
-      "unit": "Unit"
+      "unit": "Unit",
+      "probabilityPct": "Market probability (%)",
+      "volume": "Traded volume (Mana, play money)",
+      "closesAt": "Market closes",
+      "platform": "Platform"
     }
   }
 }

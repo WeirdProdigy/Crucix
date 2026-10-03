@@ -86,6 +86,11 @@ export default {
       { id: 'korea', label: 'Korean Peninsula', latMin: 33, latMax: 43, lonMin: 124, lonMax: 131.5 },
       { id: 'central-europe', label: 'Central Europe', latMin: 44, latMax: 53.5, lonMin: 8, lonMax: 24 },
     ],
+    // Prediction markets (Manifold, apis/sources/prediction-markets.mjs): the words to look for, one request each. A market is listed when every
+    // word of an entry starts a word of its question (any letter case, accents ignored), it has not closed and it had a bet in the last 12 hours.
+    // Plain text only: entries that are not text, have no word of two characters or repeat an earlier one are skipped, an entry is cut to 60
+    // characters, and at most 6 entries are used (the rest of the list is ignored).
+    marketQueries: ['Hormuz', 'Ukraine ceasefire', 'Iran', 'Taiwan', 'recession'],
   },
 
   llm: {

@@ -15,6 +15,7 @@ export const POLICIES = Object.freeze({
   'Federal-Register': { maxAgeMs: 336*HOUR, observationMaxAgeMs: 336*HOUR },
   'Energy-Charts-HU': { maxAgeMs: 6*HOUR, observationMaxAgeMs: 6*HOUR },
   'ENTSOG-HU': { maxAgeMs: 72*HOUR, observationMaxAgeMs: 72*HOUR },
+  'Prediction-Markets': { maxAgeMs: 12*HOUR, observationMaxAgeMs: 12*HOUR },
 });
 
 // Never use collection time as a replacement for a missing provider date.

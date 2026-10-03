@@ -877,7 +877,11 @@
       "frequencyHz": "Fréquence du réseau (Hz)",
       "renewableSharePct": "Part des renouvelables dans la production (%)",
       "physicalFlow": "Flux physique de gaz",
-      "unit": "Unité"
+      "unit": "Unité",
+      "probabilityPct": "Probabilité du marché (%)",
+      "volume": "Volume échangé (Mana, monnaie fictive)",
+      "closesAt": "Clôture du marché",
+      "platform": "Plateforme"
     }
   }
 }

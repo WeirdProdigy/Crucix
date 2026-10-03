@@ -67,6 +67,7 @@ import { briefing as opensanctionsIndex } from './sources/opensanctions-index.mj
 import { briefing as federalRegister } from './sources/federal-register.mjs';
 import { briefing as energyCharts } from './sources/energy-charts.mjs';
 import { briefing as entsog } from './sources/entsog.mjs';
+import { briefing as predictionMarkets } from './sources/prediction-markets.mjs';
 import config from '../crucix.config.mjs';
 
 const SOURCE_TIMEOUT_MS = 30_000; // 30s max per individual source
@@ -170,6 +171,7 @@ export async function fullBriefing() {
     runSource('Federal-Register', federalRegister),
     runSource('Energy-Charts-HU', energyCharts),
     runSource('ENTSOG-HU', entsog),
+    runSource('Prediction-Markets', predictionMarkets, { queries: config.publicSources.marketQueries }),
   ];
 
   console.error(`[Crucix] Starting intelligence sweep — ${allPromises.length} sources...`);

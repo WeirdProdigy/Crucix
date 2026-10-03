@@ -877,7 +877,11 @@
       "frequencyHz": "Hálózati frekvencia (Hz)",
       "renewableSharePct": "Megújuló részarány a termelésből (%)",
       "physicalFlow": "Fizikai gázáramlás",
-      "unit": "Mértékegység"
+      "unit": "Mértékegység",
+      "probabilityPct": "Piaci valószínűség (%)",
+      "volume": "Kereskedett forgalom (Mana, játékpénz)",
+      "closesAt": "A piac lezárul",
+      "platform": "Platform"
     }
   }
 }
