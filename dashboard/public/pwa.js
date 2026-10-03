@@ -77,7 +77,7 @@
   function renderStatus() {
     const strip = document.querySelector('.status-strip'); if (!strip) return;
     let node = document.getElementById('pwaFreshness'); if (!node) { node=el('span');node.id='pwaFreshness';strip.append(node); }
-    node.textContent = cachedView ? t('cached','Offline snapshot') + ' Â· ' + (options.getSnapshot?.()?.meta?.timestamp || t('unknown','Unknown time')) : '';
+    node.textContent = cachedView ? t('cached','Offline snapshot') + ' · ' + (options.getSnapshot?.()?.meta?.timestamp || t('unknown','Unknown time')) : '';
     node.dataset.offlineSnapshot = String(cachedView);
   }
   async function cacheLive(snapshot) {
@@ -96,7 +96,7 @@
     dialog.append(el('p',t('help','Install from Chrome or Edge on localhost/HTTPS. The interface works offline; fresh collection and history search need the local server.')));
     const label=el('label');const input=el('input');input.type='checkbox';input.id='pwa-save-snapshot';input.checked=enabled;label.append(input,document.createTextNode(' '+t('save','Keep the last snapshot on this browser')));dialog.append(label);
     dialog.append(el('p',t('privacy','Off by default. Enabling stores the displayed intelligence on this browser until you clear it.')));
-    const message=el('p',error || (storedAt ? t('saved','Last local save')+' Â· '+storedAt : t('empty','No local snapshot saved.')));message.id='pwa-message';message.setAttribute('role','status');dialog.append(message);
+    const message=el('p',error || (storedAt ? t('saved','Last local save')+' · '+storedAt : t('empty','No local snapshot saved.')));message.id='pwa-message';message.setAttribute('role','status');dialog.append(message);
     input.onchange=async()=>{input.disabled=true;try{await setOfflineEnabled(input.checked);message.textContent=enabled?t('saved','Snapshot saved locally.'):t('cleared','Local snapshot deleted.');}catch{input.checked=enabled;message.textContent=t('storageError','Local snapshot storage unavailable.');}finally{input.disabled=false;}};
     dialog.append(button(t('clear','Delete local snapshot'),async()=>{await clearSnapshot();input.checked=false;message.textContent=t('cleared','Local snapshot deleted.');},'pwa-clear'));
     const install=button(t('install','Install app'),async()=>{await installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;install.disabled=true;},'pwa-install');install.disabled=!installPrompt;dialog.append(install);

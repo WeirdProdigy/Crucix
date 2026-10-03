@@ -28,11 +28,13 @@ const EXTRAS = {
   rights: 'NWS information is in the public domain and may be used without charge for any lawful purpose, as long as you do not claim it as your own, imply NOAA/NWS endorsement or modify it and present it as official government material (weather.gov/disclaimer). The Aviation Weather Center asks for a custom user agent and at most 100 requests per minute. Decoded SIGMETs are no substitute for the official bulletin; the map position is an approximation.',
   license: 'Public domain (NWS disclaimer)',
   licenseUrl: 'https://www.weather.gov/disclaimer',
-  summary: 'International SIGMETs in force now (significant weather for aircraft: volcanic ash, severe turbulence and icing, tropical cyclones, thunderstorms), ranked by hazard and then newest first. Each row sits at the centroid of the SIGMET area, an approximation; the bulletin text is the authority. SIGMETs that the United States issues in its domestic format are not included.',
+  summary: 'International SIGMETs in force now (significant weather for aircraft: volcanic ash, severe turbulence and icing, tropical cyclones, thunderstorms), ranked by hazard and then newest first; volcanic ash and tropical cyclone SIGMETs are rated moderate (watch level) by design, nothing is rated higher. Each row sits at the centroid of the SIGMET area, an approximation; the bulletin text is the authority. SIGMETs that the United States issues in its domestic format are not included.',
 };
 
 // label, severity and the rank of the hazard: volcanic ash, severe turbulence and icing, cyclones, then the rest (so a cap cuts thunderstorms first).
-const HAZARDS = { VA: ['Volcanic ash', 'high', 0], TURB: ['Severe turbulence', 'moderate', 1], ICE: ['Severe icing', 'moderate', 1], TC: ['Tropical cyclone', 'moderate', 2],
+// Nothing is rated above moderate (watch level) by design: volcanic ash and cyclone SIGMETs are routine aviation products (about two new
+// volcanic ash SIGMETs an hour were issued when checked), and a high row would make the built-in events-high rule notify for each of them.
+const HAZARDS = { VA: ['Volcanic ash', 'moderate', 0], TURB: ['Severe turbulence', 'moderate', 1], ICE: ['Severe icing', 'moderate', 1], TC: ['Tropical cyclone', 'moderate', 2],
   TS: ['Thunderstorm', 'low', 3], MTW: ['Mountain wave', 'low', 3], DS: ['Duststorm', 'low', 3], SS: ['Sandstorm', 'low', 3] };
 const CHANGES = { WKN: 'weakening', INTSF: 'intensifying', NC: 'no change in intensity' };
 

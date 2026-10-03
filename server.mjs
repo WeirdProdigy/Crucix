@@ -300,7 +300,7 @@ app.get('/api/data', (req, res) => {
 
 installIntelligenceRoutes(app, { getSnapshot: () => freshLiveSnapshot(currentData), history, language: currentLanguage });
 // After an operator action the dashboards get the new summary; the next /api/data and page load carry it too.
-installAlertRoutes(app, { engine: alertEngine, getSnapshot: () => currentData, onChange: (summary, newIds) => {
+installAlertRoutes(app, { engine: alertEngine, getSnapshot: () => freshLiveSnapshot(currentData), onChange: (summary, newIds) => {
   if (currentData) currentData.alerts = summary;
   broadcast({ type: 'alerts', data: summary, newIds });
 }, security: { publicUrl: config.alerts.publicUrl, allowedHosts: config.alerts.allowedHosts } });

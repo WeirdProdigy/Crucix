@@ -61,20 +61,22 @@ test('parse turns the live list into weather observations, one per SIGMET, ranke
   assert.equal(result.observedAt, '2026-10-02T19:47:16.700Z', 'the feed time is the newest receipt time');
   // 15 rows in, 12 SIGMETs out: two forecast-area twins and one repeated bulletin are gone.
   assert.deepEqual(result.observations.map(shortId), ['WAAA:13:VA', 'MHTG:1:VA', 'NZKL:29:TURB', 'SAVC:E1:ICE', 'NZKL:32:ICE', 'EGRR:02:TURB', 'EGRR:02:TURB', 'NZKL:29:TURB', 'PHFO:TANGO_9:TC', 'FCBB:N1:TS', 'MHTG:G1:TS', 'UBBB:2:TS']);
-  assert.deepEqual(result.observations.map(row => row.severity), ['high', 'high', 'moderate', 'moderate', 'moderate', 'moderate', 'moderate', 'moderate', 'moderate', 'low', 'low', 'low']);
+  assert.deepEqual(result.observations.map(row => row.severity), ['moderate', 'moderate', 'moderate', 'moderate', 'moderate', 'moderate', 'moderate', 'moderate', 'moderate', 'low', 'low', 'low']);
   const row = result.observations[0];
   assert.equal(row.kind, 'weather'); assert.equal(row.source, 'Aviation-SIGMET');
   assert.match(row.providerId, /^WAAA:13:VA:1790955000:[0-9a-f]{8}$/);
   assert.equal(row.title, 'SIGMET Volcanic ash WAAF UJUNG PANDANG');
   assert.equal(row.observedAt, '2026-10-02T15:30:00.000Z', 'valid from'); assert.equal(row.validUntil, '2026-10-02T21:30:00.000Z', 'valid to'); assert.equal(row.publishedAt, '2026-10-02T15:30:35.691Z', 'received by the provider');
   near(row.lat, -8.068); near(row.lon, 122.676); assert.equal(row.locationMethod, 'polygon-centroid'); assert.equal(row.locationPrecision, 'approximate');
-  assert.equal(row.severity, 'high'); assert.equal(row.hazard, 'Volcanic ash'); assert.equal(row.fir, 'WAAF UJUNG PANDANG'); assert.equal(row.region, 'WAAF UJUNG PANDANG');
+  assert.equal(row.severity, 'moderate'); assert.equal(row.hazard, 'Volcanic ash'); assert.equal(row.fir, 'WAAF UJUNG PANDANG'); assert.equal(row.region, 'WAAF UJUNG PANDANG');
   assert.match(row.summary, /^Volcanic ash SIGMET 13 \(ERUPTION MT LEWOTOLOK\) for WAAF UJUNG PANDANG, issued by WAAA\./);
   assert.match(row.summary, /Valid 2026-10-02 15:30 to 21:30 UTC/); assert.match(row.summary, /SFC to FL060/); assert.match(row.summary, /moving W at 15 kt/); assert.match(row.summary, /no change in intensity/);
   assert.match(row.summary, /bulletin text is the authority/i);
   assert.equal(new Set(result.observations.map(r => r.url)).size, 12, 'every row has its own link');
   assert.equal(new Set(result.observations.map(r => r.providerId)).size, 12);
   assert.match(result.summary, /SIGMET/); assert.match(result.summary, /not included|do not include/i); assert.match(result.summary, /centroid/i);
+  // By design nothing is above moderate: routine aviation products must not open alerts through the built-in events-high rule.
+  assert.match(result.summary, /volcanic ash and tropical cyclone SIGMETs are rated moderate/i); assert.ok(result.observations.every(r => ['moderate', 'low'].includes(r.severity)));
   assert.equal(result.examinedRecords, 15); assert.equal(result.rejectedObservations, 0);
 });
 
@@ -86,9 +88,9 @@ test('licence, rights and attribution come from the NOAA/NWS terms', () => {
   for (const failed of [parseSigmet(null, { now }), parseSigmet([], { now })]) assert.equal(failed.licenseUrl, 'https://www.weather.gov/disclaimer');
 });
 
-test('every hazard code has a label and its severity (cyclones are moderate); an unknown plain code is low and shown as is', () => {
-  const cases = [['VA', 'Volcanic ash', 'high'], ['TURB', 'Severe turbulence', 'moderate'], ['ICE', 'Severe icing', 'moderate'], ['TC', 'Tropical cyclone', 'moderate'], ['TS', 'Thunderstorm', 'low'],
-    ['MTW', 'Mountain wave', 'low'], ['DS', 'Duststorm', 'low'], ['SS', 'Sandstorm', 'low'], ['RDOACT', 'RDOACT', 'low'], ['va', 'Volcanic ash', 'high']];
+test('every hazard code has a label and its severity (volcanic ash and cyclones are moderate, nothing is above moderate); an unknown plain code is low and shown as is', () => {
+  const cases = [['VA', 'Volcanic ash', 'moderate'], ['TURB', 'Severe turbulence', 'moderate'], ['ICE', 'Severe icing', 'moderate'], ['TC', 'Tropical cyclone', 'moderate'], ['TS', 'Thunderstorm', 'low'],
+    ['MTW', 'Mountain wave', 'low'], ['DS', 'Duststorm', 'low'], ['SS', 'Sandstorm', 'low'], ['RDOACT', 'RDOACT', 'low'], ['va', 'Volcanic ash', 'moderate']];
   for (const [code, label, severity] of cases) {
     const row = first([sig(1, { hazard: code })]);
     assert.equal(row.hazard, label, code); assert.equal(row.severity, severity, code); assert.equal(row.title, `SIGMET ${label} XXXX TESTLAND`);
@@ -460,14 +462,14 @@ test('observations survive the server normalization with facts, location, validi
   const [out] = normalizeLiveSources({ 'Aviation-SIGMET': parseSigmet(LIVE, { now }) }, now);
   assert.equal(out.status, 'ok'); assert.equal(out.url, 'https://aviationweather.gov/'); assert.equal(out.observations.length, 12);
   const row = out.observations[0];
-  assert.equal(row.kind, 'weather'); assert.equal(row.severity, 'high'); near(row.lat, -8.068); near(row.lon, 122.676); assert.equal(row.locationMethod, 'polygon-centroid'); assert.equal(row.locationPrecision, 'approximate');
+  assert.equal(row.kind, 'weather'); assert.equal(row.severity, 'moderate'); near(row.lat, -8.068); near(row.lon, 122.676); assert.equal(row.locationMethod, 'polygon-centroid'); assert.equal(row.locationPrecision, 'approximate');
   assert.equal(row.region, 'WAAF UJUNG PANDANG'); assert.match(row.providerId, /^WAAA:13:VA:/); assert.equal(row.validUntil, '2026-10-02T21:30:00.000Z'); assert.equal(row.observedAt, '2026-10-02T15:30:00.000Z');
   assert.deepEqual(row.facts, [{ label: 'hazard', value: 'Volcanic ash' }, { label: 'fir', value: 'WAAF UJUNG PANDANG' }]);
   assert.match(out.license, /public domain/i); assert.match(out.attribution, /Aviation Weather Center/); assert.deepEqual(out.metrics, {});
   const events = buildEvents({ meta: { timestamp: iso(now) }, liveSources: [out] }, { now });
   assert.equal(events.length, 12); assert.ok(events.every(event => event.kind === 'weather' && event.validUntil));
   const top = events.find(event => event.title === 'SIGMET Volcanic ash WAAF UJUNG PANDANG');
-  assert.equal(top.severity, 'high'); assert.equal(top.observedAt, '2026-10-02T15:30:00.000Z'); assert.equal(top.validUntil, '2026-10-02T21:30:00.000Z'); assert.equal(top.location.method, 'polygon-centroid'); assert.equal(top.location.label, 'WAAF UJUNG PANDANG');
+  assert.equal(top.severity, 'moderate'); assert.equal(top.observedAt, '2026-10-02T15:30:00.000Z'); assert.equal(top.validUntil, '2026-10-02T21:30:00.000Z'); assert.equal(top.location.method, 'polygon-centroid'); assert.equal(top.location.label, 'WAAF UJUNG PANDANG');
   assert.equal(new URL(top.source.url).searchParams.get('layers'), 'sigmet');
   const eventIds = payload => buildEvents({ meta: { timestamp: iso(now) }, liveSources: normalizeLiveSources({ 'Aviation-SIGMET': parseSigmet(payload, { now }) }, now) }, { now }).map(event => event.id).sort();
   assert.deepEqual(eventIds(LIVE), eventIds(clone(LIVE))); assert.deepEqual(eventIds([...LIVE].reverse()), eventIds(LIVE), 'event identities are stable across parses'); assert.equal(new Set(eventIds(LIVE)).size, 12);

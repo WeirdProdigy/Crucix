@@ -18,7 +18,8 @@
 //     not used. A row is the latest day for which every direction of the point is complete.
 // Terms: ENTSOG TP Terms and Conditions of Use (TRA0394-16, article 5) allow the automated download through the API when the terms are respected
 // and ask for the source and the date of the download ("ENTSOG TP [DD-MM-YYYY] https://transparency.entsog.eu/"); they forbid usage that reduces the
-// platform's performance, so there is one request per hour at most. Provider text is never shown: the labels are our own, and only a unit and a
+// platform's performance, so a good answer is kept for an hour (one request an hour while the platform answers; an error or an empty answer is not
+// kept and the next sweep asks again). Provider text is never shown: the labels are our own, and only a unit and a
 // status that pass a strict pattern after a length check are read.
 import { safeFetch } from '../utils/fetch.mjs';
 import { providerTime, freshResult, unavailableResult } from '../utils/freshness.mjs';

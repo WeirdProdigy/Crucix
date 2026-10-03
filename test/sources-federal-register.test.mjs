@@ -389,6 +389,19 @@ test('an unusable timeout option falls back to the 10 s limit and never exceeds 
   assert.ok(seen.every(value => value >= 1 && value <= 10000)); assert.equal(seen[0], 10000);
 });
 
+test('an answer whose documents are all unreadable is an error now and is asked again at the next sweep, not kept for an hour', async () => {
+  let drifted = true, calls = 0;
+  const unreadable = docs => docs.map(({ document_number, ...rest }) => rest);
+  const fetcher = async url => { calls++; const docs = url.includes('foreign-assets') ? OFAC_DOCS : BIS_DOCS; return page(drifted ? unreadable(docs) : docs); };
+  const first = await brief({ fetcher, useCache: true });
+  assert.equal(first.status, 'error'); assert.match(first.error, /unexpected shape/); assert.equal(calls, 2);
+  drifted = false;
+  const healed = await brief({ fetcher, useCache: true, now: now + 5 * MINUTE });
+  assert.equal(healed.status, 'ok'); assert.equal(calls, 4, 'the unreadable answers were not cached: both agencies are asked again');
+  const again = await brief({ fetcher, useCache: true, now: now + 6 * MINUTE });
+  assert.equal(again.status, 'ok'); assert.equal(calls, 4, 'a readable answer is cached as before');
+});
+
 test('briefing caches a good answer per agency for an hour and never caches a failure', async () => {
   let calls = 0;
   const fetcher = async url => { calls++; return page(url.includes('foreign-assets') ? OFAC_DOCS : BIS_DOCS); };

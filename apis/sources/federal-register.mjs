@@ -132,7 +132,9 @@ async function load(agency, { fetcher, useCache, now, request }) {
   const query = new URLSearchParams([['conditions[agencies][]', agency.slug], ['order', 'newest'], ['per_page', String(PER_PAGE)], ...FIELDS.map(field => ['fields[]', field])]);
   let payload;
   try { payload = await fetcher(`${ENDPOINT}?${query}`, request); } catch { payload = { error: 'network error' }; }
-  if (useCache && Array.isArray(payload?.results)) cache.set(agency.slug, { payload, fetcher, collectedAt: now });
+  // Only an answer with at least one readable document is kept: a changed shape (every document unreadable) is asked again at the next sweep
+  // instead of showing an error for an hour.
+  if (useCache && Array.isArray(payload?.results) && payload.results.slice(0, MAX_EXAMINED).some(raw => document(raw, agency.code))) cache.set(agency.slug, { payload, fetcher, collectedAt: now });
   return payload;
 }
 

@@ -97,7 +97,7 @@ test('parse turns the live military list into one aggregate row per theater and 
 });
 
 test('licence, rights and attribution come from the adsb.lol terms (ODbL) and survive every state', () => {
-  for (const result of [parseAdsbMilitary(LIVE, [], { now }), parseAdsbMilitary(null, [], { now }), parseAdsbMilitary(mil([]), [], { now: now + HOUR })]) {
+  for (const result of [parseAdsbMilitary(LIVE, [], { now }), parseAdsbMilitary(null, [], { now }), parseAdsbMilitary(mil([]), [], { now: now + HOUR }), parseAdsbMilitary(mil([plane(1, 37, 127)]), [], { now: now + HOUR })]) {
     assert.match(result.attribution, /adsb\.lol/); assert.match(result.attribution, /ODbL/);
     assert.match(result.license, /ODbL/); assert.equal(result.licenseUrl, 'https://opendatacommons.org/licenses/odbl/1-0/');
     assert.match(result.rights, /Open Database License/); assert.match(result.rights, /API key/); assert.match(result.rights, /production/i); assert.match(result.rights, /transponder/i);
@@ -313,7 +313,7 @@ test('squawk aircraft that are not usable emergencies are skipped one by one', (
   assert.equal(run(ELSEWHERE, [squawks([alarm(1, '7700', { seen_pos: 120 })]), EMPTY_SQUAWK, EMPTY_SQUAWK]).observations.length, 1, '120 s old is the limit, as for the aircraft counts');
   // Emergency aircraft are not part of the military count and do not need to be military.
   assert.equal(total(run(ELSEWHERE, [squawks([alarm(1, '7700')]), EMPTY_SQUAWK, EMPTY_SQUAWK])), 1, 'only the aircraft of the military list');
-  // A position time that is in the future of the collection time, or older than the 15 minute limit, never becomes a row.
+  // A position time that is in the future of the collection time, or older than the 25 minute limit, never becomes a row.
   assert.equal(run(ELSEWHERE, [squawks([alarm(1, '7700')], { now: PAYLOAD_NOW + 30 * MINUTE }), EMPTY_SQUAWK, EMPTY_SQUAWK]).observations.length, 0, 'a position from 30 minutes in the future');
   assert.equal(run(ELSEWHERE, [squawks([alarm(1, '7700')], { now: PAYLOAD_NOW - 30 * MINUTE }), EMPTY_SQUAWK, EMPTY_SQUAWK]).observations.length, 0, 'a position from 30 minutes ago');
   assert.equal(run(ELSEWHERE, [squawks([alarm(1, '7700')], { now: PAYLOAD_NOW - 20 * MINUTE }), EMPTY_SQUAWK, EMPTY_SQUAWK]).observations.length, 1, 'but one from 20 minutes ago is inside the 25 minute limit');

@@ -384,12 +384,12 @@ test('hostile provider text stays inert and comparison signs in a question survi
   assert.equal(one([market('m-00001', `Iran ${'x'.repeat(1000)}`)]).observations[0].title.length, 300);
 });
 
-// Standing rule for every adapter: bound every input before any pattern or loop runs on it, and prove it fails fast. A quadratic pattern on 30,000
+// Standing rule for every adapter: bound every input before any pattern or loop runs on it, and prove it fails fast. A quadratic pattern on 100,000
 // characters takes seconds, so a regression fails these elapsed assertions (one per field) instead of hanging the run.
 test('hostile oversized provider fields are bounded in time and never stall the loop', () => {
-  const n = 30000;
+  const n = 100000;
   const floods = ['<'.repeat(n), '<a '.repeat(n / 3), `${'<'.repeat(n)}Iran`, 'x'.repeat(n), `${' '.repeat(n)}Iran`, `Iran${zero.repeat(n)}`, 'http://'.repeat(n / 7), `Iran ${'\n'.repeat(n)}`, `Iran ${'<a '.repeat(n / 3)}>`, `<${'a'.repeat(n)}`];
-  const timed = (label, run) => { const started = Date.now(), value = run(), ms = Date.now() - started; assert.ok(ms < 500, `${label} took ${ms} ms`); return value; };
+  const timed = (label, run) => { const started = Date.now(), value = run(), ms = Date.now() - started; assert.ok(ms < 1000, `${label} took ${ms} ms`); return value; };
   const safe = result => { for (const row of result.observations) { assert.doesNotMatch(row.title, /[<>]/); assert.ok(row.title.length <= 300); assert.ok(row.summary.length < 700, `summary length ${row.summary.length}`); assert.ok(JSON.stringify(row).length < 3000, 'only whitelisted fields are kept'); } };
   floods.forEach((text, i) => {
     safe(timed(`flood ${i} as a question`, () => one([market(`m-q${i}aaaa`, text.includes('Iran') ? text : `Iran ${text}`)])));
