@@ -1150,7 +1150,7 @@ test('the default row counts of the module are the ones these tests pin', () => 
 });
 
 test('the English fallback text of the module is the English locale text, key for key', () => {
-  const source = read('dashboard/public/changes.js'), literal = /const COPY=(\{[\s\S]*?\});\n  let opts/.exec(source);
+  const source = read('dashboard/public/changes.js'), literal = /const COPY=(\{[\s\S]*?\});\r?\n  let opts/.exec(source); // a Windows checkout has CRLF line endings
   assert.ok(literal, 'the COPY table');
   const copy = vm.runInNewContext('(' + literal[1] + ')');
   assert.deepEqual(JSON.parse(JSON.stringify(copy)), JSON.parse(read('locales/en.json')).changes);
