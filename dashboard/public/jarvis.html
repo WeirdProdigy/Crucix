@@ -12,6 +12,7 @@
 <script src="vendor/countries-110m-2.0.2.js"></script>
 <link rel="stylesheet" href="intelligence.css">
 <script src="intelligence.js"></script>
+<script src="clock.js"></script>
 <script src="record-core.js"></script>
 <script src="live-sources.js"></script>
 <script src="record-inspector.js"></script>
@@ -1991,7 +1992,9 @@ function mkSparkSvg(values, isGood){
 }
 
 // === HELPERS ===
-function getAge(d){const ts=Date.parse(d);if(!Number.isFinite(ts))return t('status.unknownTime','Unknown time');const ms=Math.max(0,Date.now()-ts);const m=Math.floor(ms/60000);if(m<1)return t('status.justNow','Just now');if(m<60)return m+' '+t('status.minutesAgo','min ago');const h=Math.floor(m/60);if(h<24)return h+' '+t('status.hoursAgo','h ago');return Math.floor(h/24)+' '+t('status.daysAgo','d ago')}
+// The dashboard's "now" for every age/freshness label: CrucixClock (frozen at the snapshot's time during a sweep replay), else real time.
+function clockNow(){return window.CrucixClock?window.CrucixClock.now():Date.now()}
+function getAge(d){const ts=Date.parse(d);if(!Number.isFinite(ts))return t('status.unknownTime','Unknown time');const ms=Math.max(0,clockNow()-ts);const m=Math.floor(ms/60000);if(m<1)return t('status.justNow','Just now');if(m<60)return m+' '+t('status.minutesAgo','min ago');const h=Math.floor(m/60);if(h<24)return h+' '+t('status.hoursAgo','h ago');return Math.floor(h/24)+' '+t('status.daysAgo','d ago')}
 function esc(value){return String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 function plainText(value){return String(value??'').replace(/&#39;/g,"'").replace(/&#33;/g,'!').replace(/&amp;/g,'&').replace(/<[^>]+>/g,'')}
 function cleanText(value){return esc(plainText(value))}
@@ -2316,7 +2319,7 @@ function updateRuntimeStatus(){
   if(!live||!fresh)return;
   live.dataset.state=connectionState==='live'?'live':connectionState==='offline'?'offline':'stale';
   live.textContent=t('status.connection','Connection')+': '+t('status.'+connectionState,connectionState)+(lastSweepError?' · '+t('status.sweepFailed','Last sweep failed'):'');
-  const timestamp=Date.parse(D.meta?.timestamp),age=Date.now()-timestamp;
+  const timestamp=Date.parse(D.meta?.timestamp),age=clockNow()-timestamp;
   const stale=!Number.isFinite(timestamp)||age>Math.max(300000,refreshIntervalMinutes*120000)||age< -300000;
   fresh.dataset.state=stale?'stale':'live';
   fresh.textContent=t('status.data','Data')+': '+(!Number.isFinite(timestamp)?t('status.noSnapshot','Waiting for the first snapshot'):stale?t('status.stale','Stale / cached'):t('status.fresh','Fresh'))+' · '+getAge(D.meta?.timestamp);
@@ -2381,8 +2384,8 @@ document.addEventListener('DOMContentLoaded',()=>{
     getLayers:()=>mapLayers,applyLayers:value=>{for(const layer of mapLayerRegistry)if(typeof value?.[layer.id]==='boolean')mapLayers[layer.id]=value[layer.id];flightsVisible=mapLayers.air!==false;writePreference(MAP_LAYER_STORAGE_KEY,JSON.stringify(mapLayers));reinit();},
     getRegion:()=>currentRegion,applyRegion:setRegion,t,escapeText:esc,historyEnabled:location.protocol!=='file:',profilesEnabled:true});
   // Before the inspector: it docks below the alert strip.
-  window.CrucixAlerts?.mount({getSummary:()=>D.alerts,t,now:Date.now});
-  window.CrucixRecordInspector?.mount({getSources:()=>D.liveSources,getEvents:()=>currentSnapshot().events,t,now:Date.now});
+  window.CrucixAlerts?.mount({getSummary:()=>D.alerts,t,now:clockNow});
+  window.CrucixRecordInspector?.mount({getSources:()=>D.liveSources,getEvents:()=>currentSnapshot().events,t,now:clockNow});
   init();
   if(location.protocol!=='file:')CrucixPWA.init({getSnapshot:()=>D,applySnapshot:data=>!D.meta.timestamp&&applySnapshot(data,{cached:true}),t});
   if(location.protocol!=='file:'){

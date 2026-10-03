@@ -12,6 +12,8 @@
     if(match[5]&&match[5]!=='Z'&&(Number(match[5].slice(1,3))>23||Number(match[5].slice(4))>59))return NaN;
     return Date.parse(value);
   }
+  // Freshness is judged against CrucixClock (frozen at the snapshot's own time during a sweep replay); without it, the real time.
+  function nowMs(){const clock=window.CrucixClock,value=clock&&typeof clock.now==='function'?clock.now():NaN;return Number.isFinite(value)?value:Date.now();}
   function fresh(value,limit,now){const ms=time(value);return Number.isFinite(ms)&&now-ms>=-300000&&now-ms<=limit;}
   function validRow(row,policy,now,source){
     if(!row||!fresh(row.observedAt||row.publishedAt,policy.observationMaxAgeMs||policy.maxAgeMs,now))return false;
@@ -22,13 +24,13 @@
     }
     return true;
   }
-  function state(source,now=Date.now()){
+  function state(source,now=nowMs()){
     if(source?.status==='error'||source?.error)return 'error';
     const policy=policies[source?.source];
     return policy && source?.status==='ok' && !source.stale && fresh(source.observedAt,policy.maxAgeMs,now) && (source.source!=='MET-Norway'||(Array.isArray(source.observations)&&source.observations.slice(0,100).some(row=>validRow(row,policy,now,source.source))))?'ok':'stale';
   }
   const limit=()=>Object.keys(policies).length;
-  function observations(sources,now=Date.now()){
+  function observations(sources,now=nowMs()){
     return (Array.isArray(sources)?sources:[]).slice(0,limit()).flatMap(source=>{
       if(state(source,now)!=='ok')return [];
       const policy=policies[source.source];
@@ -41,7 +43,7 @@
   const QUAKE_MS=60000,QUAKE_KM=100;
   const located=(lat,lon)=>typeof lat==='number'&&typeof lon==='number'&&Number.isFinite(lat)&&Number.isFinite(lon)&&Math.abs(lat)<=90&&Math.abs(lon)<=180;
   function km(a,b){const r=d=>d*Math.PI/180,h=Math.sin(r(b.lat-a.lat)/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(r(b.lon-a.lon)/2)**2;return 12742*Math.asin(Math.min(1,Math.sqrt(h)));}
-  function markerRows(sources,quakes,now=Date.now()){
+  function markerRows(sources,quakes,now=nowMs()){
     const usgs=(Array.isArray(quakes)?quakes:[]).slice(0,500).filter(q=>q&&located(q.lat,q.lon)).map(q=>({lat:q.lat,lon:q.lon,at:typeof q.time==='number'?q.time:time(q.time)})).filter(q=>Number.isFinite(q.at));
     return observations(sources,now).filter(row=>located(row.lat,row.lon)&&!(row.kind==='earthquake'&&usgs.some(q=>Math.abs(q.at-time(row.observedAt))<=QUAKE_MS&&km(q,row)<=QUAKE_KM)));
   }
@@ -58,7 +60,7 @@
     return R.LEVELS.filter(level=>level!=='unknown'&&counts[level]).map(level=>{const name=esc(t('inspector.level.'+level,level[0].toUpperCase()+level.slice(1)));return `<span class="sev sev-${level}" title="${name}"><i aria-hidden="true">${R.GLYPH[level]}</i>${counts[level]}<span class="ri-sr"> ${name}</span></span>`;}).join('');
   }
   // `events` is unused (the inspector pairs records by eventId); it stays so `now` keeps its position.
-  function renderPanel(sources,t,events,now=Date.now()){
+  function renderPanel(sources,t,events,now=nowMs()){
     const R=window.CrucixRecords,tr=(key,fallback)=>esc(t('liveSources.'+key,fallback));
     const providers=(Array.isArray(sources)?sources:[]).slice(0,limit()).filter(source=>source&&Object.hasOwn(policies,source.source));
     const cards=providers.map(source=>{
