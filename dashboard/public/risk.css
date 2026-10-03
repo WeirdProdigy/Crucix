@@ -1,0 +1,34 @@
+/* Country risk (risk.js): the right-rail panel. A change is a glyph and a number, convergence a glyph and a word, colour is an extra cue;
+   rows wrap their text, so the panel never widens the page (390 px included). */
+.rk-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.risk-panel h3:focus{outline:2px solid var(--accent,#64f0c8);outline-offset:3px}
+.risk-panel .sec-head{flex-wrap:wrap;gap:4px 8px}
+.rk-ver{font-family:var(--mono,monospace);font-size:9px;letter-spacing:.08em;color:var(--dim,#8aa0a8);text-transform:uppercase}
+.rk-brief{flex:none;min-height:24px;margin:0 0 0 auto;padding:2px 8px;border:1px solid rgba(68,204,255,.28);background:transparent;color:var(--accent2,#44ccff);font-family:var(--mono,monospace);font-size:10px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+.rk-brief:hover:not([aria-disabled="true"]){border-color:var(--accent2,#44ccff);background:rgba(68,204,255,.08)}
+.rk-brief[aria-disabled="true"],.rk-row[aria-disabled="true"]{opacity:.6;cursor:not-allowed}
+.rk-intro,.rk-sum,.rk-note,.rk-calm,.rk-help,.rk-stats{margin:4px 0;font-size:11px;line-height:1.5;color:var(--dim,#8aa0a8);overflow-wrap:anywhere}
+.rk-sum{color:var(--text,#e8f4f0);font-variant-numeric:tabular-nums}
+.rk-replay{color:var(--warn,#ffb84c)}
+.rk-stats{color:var(--text,#e8f4f0);font-family:var(--mono,monospace);font-variant-numeric:tabular-nums}
+.rk-list{margin:6px 0 0;padding:0;list-style:none}
+.rk-item{border-top:1px solid var(--border,rgba(255,255,255,.08))}.rk-item:first-child{border-top:0}
+.rk-row{display:grid;grid-template-columns:1.6em minmax(0,1fr) minmax(64px,34%);grid-template-areas:"rank name score" "rank meta meta";align-items:center;gap:1px 8px;box-sizing:border-box;width:100%;margin:0;padding:4px;background:none;border:0;color:var(--text,#e8f4f0);font:inherit;font-size:11px;line-height:1.4;text-align:left;overflow-wrap:anywhere}
+button.rk-row{cursor:pointer}button.rk-row:hover:not([aria-disabled="true"]){background:rgba(100,240,200,.06)}
+button.rk-row:focus-visible,.rk-brief:focus-visible{outline:2px solid var(--accent,#64f0c8);outline-offset:2px}
+.rk-rank{grid-area:rank;align-self:start;font-family:var(--mono,monospace);font-size:10px;color:var(--dim,#8aa0a8);font-variant-numeric:tabular-nums;text-align:right}
+.rk-name{grid-area:name;min-width:0;font-weight:600}
+.rk-score{grid-area:score;display:flex;align-items:center;gap:6px;min-width:0}
+.rk-bar{flex:1 1 auto;min-width:24px;height:6px;border:1px solid currentColor;border-radius:3px;overflow:hidden;opacity:.85}
+.rk-fill{display:block;height:100%;background:currentColor}
+.rk-num{flex:none;min-width:2ch;font-family:var(--mono,monospace);font-weight:700;font-variant-numeric:tabular-nums;text-align:right}
+.rk-score[data-band="high"]{color:var(--danger,#ff5f63)}.rk-score[data-band="elevated"]{color:var(--warn,#ffb84c)}.rk-score[data-band="watch"]{color:var(--accent2,#44ccff)}.rk-score[data-band="low"]{color:var(--dim,#8aa0a8)}
+.rk-meta{grid-area:meta;display:flex;flex-wrap:wrap;gap:2px 10px;font-size:10px;color:var(--dim,#8aa0a8)}
+.rk-chg{font-family:var(--mono,monospace);font-variant-numeric:tabular-nums;white-space:nowrap}.rk-chg i{font-style:normal}
+.rk-chg[data-dir="up"]{color:var(--warn,#ffb84c)}.rk-chg[data-dir="down"]{color:var(--accent,#64f0c8)}
+.rk-cov{white-space:nowrap}
+.rk-conv{font-weight:600;color:var(--warn,#ffb84c);white-space:nowrap}.rk-conv i{font-style:normal}
+.rk-track{margin-top:10px;padding-top:6px;border-top:1px solid var(--border,rgba(255,255,255,.08))}
+.rk-track h4{margin:0 0 2px;font-family:var(--mono,monospace);font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--dim,#8aa0a8)}
+@media(max-width:700px){button.rk-row{min-height:44px;padding:8px 4px}.rk-brief{min-height:36px}}
+@media(forced-colors:active){.rk-bar{border-color:CanvasText}.rk-fill{background:CanvasText}button.rk-row:focus-visible,.rk-brief:focus-visible{outline-color:Highlight}}

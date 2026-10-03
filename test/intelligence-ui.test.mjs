@@ -183,7 +183,7 @@ test('during a sweep replay history, export and event lookups by id are off and 
 test('saved profiles normalize hostile settings and keep twelve own entries at most',()=>{
   const profiles=Array.from({length:20},(_,i)=>({id:'user-'+i,name:'Profile '+i,layout:{zones:{left:['sensorGrid','evil','sensorGrid'],right:['newsTicker']},visibility:{newsTicker:false,evil:false},fixed:{map:false,evil:false}},layers:{news:false,evil:false},region:'malicious'}));const storage={getItem:()=>JSON.stringify({version:1,profiles}),setItem(){}};const h=harness({profilesEnabled:true,storage});h.api.openProfiles();
   assert.equal(byId(h,'ci-body').querySelectorAll('[data-ci-profile-action="delete"]').length,12);click(h,'[data-ci-profile-action="apply"][data-profile-id="user-0"]');
-  assert.equal(h.state.region,'world');assert.equal(h.state.layers.news,false);assert.equal(Object.hasOwn(h.state.layers,'evil'),false);assert.equal(Object.hasOwn(h.state.layout.visibility,'evil'),false);assert.equal(Object.values(h.state.layout.zones).flat().length,17);assert.equal(new Set(Object.values(h.state.layout.zones).flat()).size,17);
+  assert.equal(h.state.region,'world');assert.equal(h.state.layers.news,false);assert.equal(Object.hasOwn(h.state.layers,'evil'),false);assert.equal(Object.hasOwn(h.state.layout.visibility,'evil'),false);assert.equal(Object.values(h.state.layout.zones).flat().length,18);assert.equal(new Set(Object.values(h.state.layout.zones).flat()).size,18);
   change(h,'ci-profile-name','13th');click(h,'[data-ci-profile-action="save"]');assert.equal(byId(h,'ci-body').querySelectorAll('[data-ci-profile-action="delete"]').length,12);assert.match(byId(h,'ci-body').textContent,/12/);
 });
 
@@ -201,7 +201,7 @@ test('every workspace preset shows the What changed panel first in the right rai
   for(const id of ['research','market','infrastructure']){const h=harness({profilesEnabled:true});h.api.openProfiles();click(h,'[data-ci-profile-action="apply"][data-profile-id="'+id+'"]');assert.equal(h.state.layout.zones.right[0],'changes',id);assert.equal(h.state.layout.visibility.changes,true,id);}
   const old={id:'user-old',name:'Before the panel',layout:{zones:{left:['sensorGrid'],right:['sweepDelta']},visibility:{sweepDelta:true},fixed:{}},layers:{},region:'world'};
   const h=harness({profilesEnabled:true,storage:{getItem:()=>JSON.stringify({version:1,profiles:[old]}),setItem(){}}});h.api.openProfiles();click(h,'[data-ci-profile-action="apply"][data-profile-id="user-old"]');
-  assert.deepEqual(JSON.parse(JSON.stringify(h.state.layout.zones.right.slice(0,2))),['changes','sweepDelta'],'a profile that never held the panel gets it on top, the saved order after it');assert.equal(h.state.layout.visibility.changes,true);
+  assert.deepEqual(JSON.parse(JSON.stringify(h.state.layout.zones.right.slice(0,3))),['changes','countryRisk','sweepDelta'],'a profile that never held the panels gets them on top (Country risk under What changed), the saved order after them');assert.equal(h.state.layout.visibility.changes,true);
   assert.deepEqual(JSON.parse(JSON.stringify(h.state.layout.zones.left.slice(0,1))),['sensorGrid']);
 });
 
@@ -210,7 +210,7 @@ test('a stored profile keeps its own arrangement of the panel: in another zone i
   const applied=id=>{const stored=[profile('user-left',{zones:{left:['sensorGrid','changes'],right:['sweepDelta']},visibility:{changes:true},fixed:{}}),profile('user-hidden',{zones:{left:['sensorGrid'],right:['sweepDelta']},visibility:{changes:false},fixed:{}}),profile('user-entry',{zones:{left:['sensorGrid'],right:['sweepDelta']},visibility:{changes:true},fixed:{}})];
     const h=harness({profilesEnabled:true,storage:{getItem:()=>JSON.stringify({version:1,profiles:stored}),setItem(){}}});h.api.openProfiles();click(h,'[data-ci-profile-action="apply"][data-profile-id="'+id+'"]');return h.state.layout;};
   const left=applied('user-left');assert.deepEqual(JSON.parse(JSON.stringify(left.zones.left.slice(0,2))),['sensorGrid','changes'],'the panel the profile put in the left rail stays there');assert.equal(left.zones.right.includes('changes'),false);
-  const hidden=applied('user-hidden');assert.equal(hidden.visibility.changes,false,'a hidden panel stays hidden');assert.notEqual(hidden.zones.right[0],'changes');assert.equal(hidden.zones.right[0],'sweepDelta');
+  const hidden=applied('user-hidden');assert.equal(hidden.visibility.changes,false,'a hidden panel stays hidden');assert.notEqual(hidden.zones.right[0],'changes');assert.deepEqual(JSON.parse(JSON.stringify(hidden.zones.right.slice(0,2))),['countryRisk','sweepDelta'],'only the never-seen Country risk goes on top');
   const entry=applied('user-entry');assert.notEqual(entry.zones.right[0],'changes','a visibility entry means the profile has seen the panel');assert.equal(entry.visibility.changes,true);
 });
 

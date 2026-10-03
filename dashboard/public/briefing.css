@@ -1,0 +1,38 @@
+/* The cited briefing (briefing.js): a modal dialog. The source label is a glyph and a word; a citation chip is a real button with the
+   record's title as its name. At phone width the dialog takes the whole screen and nothing scrolls sideways. */
+.bf-dialog{box-sizing:border-box;width:min(720px,calc(100vw - 32px));max-width:none;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);margin:auto;padding:0;border:1px solid var(--border-bright,rgba(100,240,200,.3));border-radius:8px;background:#060e16;color:var(--text,#e8f4f0);font-family:var(--sans,sans-serif);font-size:12px;line-height:1.5;overflow:hidden}
+.bf-dialog[open]{display:flex;flex-direction:column}
+.bf-dialog::backdrop{background:rgba(2,6,10,.84)}
+.bf-box{box-sizing:border-box;display:flex;flex-direction:column;flex:1 1 auto;gap:8px;min-width:0;min-height:0;padding:14px 16px 16px}
+.bf-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.bf-title{margin:0;font-family:var(--mono,monospace);font-size:14px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.bf-close,.bf-generate{flex:none;min-height:32px;padding:4px 14px;border:1px solid var(--border,rgba(255,255,255,.12));background:transparent;color:var(--text,#e8f4f0);font:inherit;font-size:11px;cursor:pointer}
+.bf-close:hover{border-color:var(--accent,#64f0c8);color:var(--accent,#64f0c8)}
+.bf-generate{border-color:var(--accent,#64f0c8);color:var(--accent,#64f0c8);font-weight:600}
+.bf-generate:hover:not([aria-disabled="true"]){background:rgba(100,240,200,.08)}
+.bf-generate[aria-disabled="true"]{opacity:.5;cursor:not-allowed}
+.bf-intro,.bf-checked,.bf-help,.bf-time,.bf-calm{margin:0;color:var(--dim,#8aa0a8);overflow-wrap:anywhere}
+.bf-checked,.bf-time{font-size:11px}
+.bf-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.bf-label{color:var(--dim,#8aa0a8);font-family:var(--mono,monospace);font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+.bf-scope{flex:1 1 12em;min-width:0;max-width:100%;min-height:32px;padding:0 8px;background:var(--bg,#050a10);border:1px solid var(--border,rgba(255,255,255,.12));border-radius:4px;color:var(--text,#e8f4f0);font:inherit;font-size:12px}
+.bf-status{margin:0;color:var(--warn,#ffb84c);overflow-wrap:anywhere}.bf-status:empty{display:none}
+.bf-body{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain}
+.bf-body[aria-busy="true"]{opacity:.6}
+.bf-source{margin:0 0 4px;font-family:var(--mono,monospace);font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--accent2,#44ccff)}
+.bf-source[data-source="rules"]{color:var(--dim,#8aa0a8)}.bf-source i{font-style:normal}
+.bf-list{margin:6px 0;padding:0 0 0 1.4em}
+.bf-item{margin:0 0 8px}
+.bf-text{margin:0;overflow-wrap:anywhere}
+.bf-refs{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 0}
+.bf-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.bf-ref{min-width:32px;min-height:24px;padding:0 6px;border:1px solid rgba(68,204,255,.4);border-radius:10px;background:rgba(68,204,255,.06);color:var(--accent2,#44ccff);font-family:var(--mono,monospace);font-size:10px;cursor:pointer}
+.bf-ref:hover{border-color:var(--accent2,#44ccff)}
+.bf-close:focus-visible,.bf-generate:focus-visible,.bf-scope:focus-visible,.bf-ref:focus-visible{outline:2px solid var(--accent2,#44ccff);outline-offset:2px}
+@media(max-width:700px){
+  .bf-dialog{width:100vw;max-height:100vh;max-height:100dvh;height:100vh;height:100dvh;border:0;border-radius:0}
+  .bf-box{padding:12px}
+  .bf-close,.bf-generate,.bf-scope{min-height:44px}.bf-ref{min-height:36px;min-width:40px}
+}
+@media(prefers-reduced-motion:reduce){.bf-dialog *{transition:none!important;animation:none!important}}
+@media(forced-colors:active){.bf-ref,.bf-generate{border-color:ButtonText}.bf-ref:focus-visible,.bf-generate:focus-visible{outline-color:Highlight}}

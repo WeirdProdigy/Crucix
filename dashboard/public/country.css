@@ -1,0 +1,60 @@
+/* The country sheet (country.js): a modal dialog. Tables scroll inside their own box, so the page never scrolls sideways; at phone width the
+   dialog takes the whole screen. A state is a glyph and a word (✓ Available / · Missing), colour is an extra cue. */
+.cs-dialog{box-sizing:border-box;width:min(760px,calc(100vw - 32px));max-width:none;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);margin:auto;padding:0;border:1px solid var(--border-bright,rgba(100,240,200,.3));border-radius:8px;background:#060e16;color:var(--text,#e8f4f0);font-family:var(--sans,sans-serif);font-size:12px;line-height:1.5;overflow:hidden}
+.cs-dialog[open]{display:flex;flex-direction:column}
+.cs-dialog::backdrop{background:rgba(2,6,10,.84)}
+.cs-box{box-sizing:border-box;display:flex;flex-direction:column;flex:1 1 auto;gap:6px;min-width:0;min-height:0;padding:14px 16px 16px}
+.cs-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.cs-title{margin:0;min-width:0;font-family:var(--mono,monospace);font-size:14px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;overflow-wrap:anywhere}
+.cs-title:focus-visible{outline:2px solid var(--accent,#64f0c8);outline-offset:3px}
+.cs-close,.cs-brief{flex:none;min-height:32px;padding:4px 14px;border:1px solid var(--border,rgba(255,255,255,.12));background:transparent;color:var(--text,#e8f4f0);font:inherit;font-size:11px;cursor:pointer}
+.cs-close:hover,.cs-brief:hover{border-color:var(--accent,#64f0c8);color:var(--accent,#64f0c8)}
+.cs-brief{color:var(--accent2,#44ccff);border-color:rgba(68,204,255,.28)}
+.cs-status{margin:0;color:var(--warn,#ffb84c);overflow-wrap:anywhere}.cs-status:empty{display:none}
+.cs-body{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain}
+.cs-body[aria-busy="true"]{opacity:.6}
+.cs-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin:0 0 6px}
+.cs-score{margin:0;font-size:13px}.cs-score strong{font-family:var(--mono,monospace);font-size:16px;font-variant-numeric:tabular-nums}
+.cs-score[data-band="high"] strong{color:var(--danger,#ff5f63)}.cs-score[data-band="elevated"] strong{color:var(--warn,#ffb84c)}.cs-score[data-band="watch"] strong{color:var(--accent2,#44ccff)}
+.cs-label{color:var(--dim,#8aa0a8)}
+.cs-bar{flex:1 1 120px;min-width:80px;max-width:240px;height:8px;border:1px solid var(--dim,#8aa0a8);border-radius:4px;overflow:hidden}
+.cs-fill{display:block;height:100%;background:var(--accent,#64f0c8)}
+.cs-facts{display:flex;flex-wrap:wrap;gap:4px 14px;margin:0}.cs-facts div{display:flex;gap:6px}
+.cs-facts dt{color:var(--dim,#8aa0a8)}.cs-facts dd{margin:0;font-family:var(--mono,monospace);font-variant-numeric:tabular-nums}
+.cs-head .cs-cite{flex-basis:100%}
+.cs-sec{margin:10px 0 0}
+.cs-sec h3{margin:0 0 4px;font-family:var(--mono,monospace);font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--dim,#8aa0a8)}
+.cs-calm,.cs-cite,.cs-alt{margin:2px 0;color:var(--dim,#8aa0a8);overflow-wrap:anywhere}
+.cs-cite,.cs-alt{font-size:11px}
+.cs-value{margin:2px 0;font-family:var(--mono,monospace)}
+.cs-scroll{max-width:100%;overflow-x:auto}
+.cs-table{border-collapse:collapse;min-width:100%;font-size:11px}
+.cs-table th,.cs-table td{padding:3px 8px;border-bottom:1px solid var(--border,rgba(255,255,255,.08));text-align:left;vertical-align:top}
+.cs-table thead th{color:var(--dim,#8aa0a8);font-weight:400;font-family:var(--mono,monospace);font-size:10px;text-transform:uppercase;letter-spacing:.06em}
+.cs-table td{font-family:var(--mono,monospace);font-variant-numeric:tabular-nums}
+.cs-table tr[data-available="false"]{color:var(--dim,#8aa0a8)}
+.cs-table tr[data-used="true"] th{color:var(--accent,#64f0c8)}
+.cs-used{font-weight:400;font-size:10px}
+.cs-avail{white-space:nowrap}.cs-avail i{font-style:normal}
+.cs-spark{display:block;width:100%;max-width:360px;height:48px;color:var(--accent,#64f0c8);border-bottom:1px solid var(--border,rgba(255,255,255,.12))}
+.cs-conv[data-active="true"]{color:var(--warn,#ffb84c);font-weight:600}.cs-conv i{font-style:normal}
+.cs-list,.cs-links{margin:0;padding:0;list-style:none}
+.cs-list li{border-top:1px solid var(--border,rgba(255,255,255,.08))}.cs-list li:first-child{border-top:0}
+.cs-ev{display:grid;grid-template-columns:auto minmax(0,1fr);gap:1px 8px;box-sizing:border-box;width:100%;margin:0;padding:5px 4px;background:none;border:0;color:var(--text,#e8f4f0);font:inherit;font-size:11px;line-height:1.4;text-align:left;overflow-wrap:anywhere}
+button.cs-ev{cursor:pointer}button.cs-ev:hover{background:rgba(100,240,200,.06)}
+.cs-sev{grid-column:1;font-size:10px;font-weight:600;white-space:nowrap}.cs-sev i{font-style:normal}
+.cs-ev-title{grid-column:2;min-width:0}
+.cs-ev-meta{grid-column:2;font-size:10px;color:var(--dim,#8aa0a8)}
+.cs-links{display:flex;flex-wrap:wrap;gap:6px}
+.cs-link{min-height:30px;padding:2px 10px;border:1px solid var(--border,rgba(255,255,255,.12));border-radius:14px;background:transparent;color:var(--text,#e8f4f0);font:inherit;font-size:11px;cursor:pointer;overflow-wrap:anywhere;text-align:left}
+.cs-link:hover{border-color:var(--accent,#64f0c8)}
+.cs-n{color:var(--dim,#8aa0a8);font-size:10px}
+.cs-actions{margin:12px 0 0}
+.cs-close:focus-visible,.cs-brief:focus-visible,.cs-link:focus-visible,button.cs-ev:focus-visible{outline:2px solid var(--accent2,#44ccff);outline-offset:2px}
+@media(max-width:700px){
+  .cs-dialog{width:100vw;max-height:100vh;max-height:100dvh;height:100vh;height:100dvh;border:0;border-radius:0}
+  .cs-box{padding:12px}
+  button.cs-ev,.cs-link,.cs-close,.cs-brief{min-height:44px}
+}
+@media(prefers-reduced-motion:reduce){.cs-dialog *{transition:none!important;animation:none!important}}
+@media(forced-colors:active){.cs-bar{border-color:CanvasText}.cs-fill{background:CanvasText}.cs-spark{color:CanvasText}}

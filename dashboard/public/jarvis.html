@@ -20,6 +20,9 @@
 <script src="lens.js"></script>
 <script src="health-matrix.js"></script>
 <script src="changes.js"></script>
+<script src="risk.js"></script>
+<script src="country.js"></script>
+<script src="briefing.js"></script>
 <script src="record-core.js"></script>
 <script src="live-sources.js"></script>
 <script src="record-inspector.js"></script>
@@ -35,6 +38,9 @@
 <link rel="stylesheet" href="lens.css">
 <link rel="stylesheet" href="health-matrix.css">
 <link rel="stylesheet" href="changes.css">
+<link rel="stylesheet" href="risk.css">
+<link rel="stylesheet" href="country.css">
+<link rel="stylesheet" href="briefing.css">
 <link rel="stylesheet" href="palette.css">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#020408">
@@ -135,6 +141,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 #globeViz canvas{outline:none}
 #flatMapSvg .land{fill:rgba(180,200,210,0.08);stroke:rgba(200,220,230,0.15);stroke-width:0.5}
 #flatMapSvg .land:hover{fill:rgba(100,240,200,0.08)}
+#flatMapSvg .land-open{cursor:pointer}
 #flatMapSvg .graticule{fill:none;stroke:rgba(100,240,200,0.04);stroke-width:0.4}
 #flatMapSvg .border{fill:none;stroke:rgba(200,220,230,0.08);stroke-width:0.3}
 @keyframes pulse-conflict{0%,100%{opacity:0.5;stroke-width:1.5}50%{opacity:0.9;stroke-width:2.5}}
@@ -522,12 +529,13 @@ const dashboardDefaultZones = {
   center1:['newsTicker'],
   center2:['macroMarkets'],
   center3:['tradeIdeas'],
-  right:['changes','liveSources','crossSourceSignals','osintStream','signalCore','sourceHealth','internetOutages','healthAlerts','supplementalHealth','sweepDelta']
+  right:['changes','countryRisk','liveSources','crossSourceSignals','osintStream','signalCore','sourceHealth','internetOutages','healthAlerts','supplementalHealth','sweepDelta']
 };
 const dashboardPanelIds = Object.values(dashboardDefaultZones).flat();
 // A panel from this list that a saved layout has never held (in no zone and with no visibility entry) goes to the top of its default rail
-// instead of the end; any later save has an entry for it, so a user who hid it does not get it back.
-const dashboardTopPanels = ['changes'];
+// (after the top panels already leading it, so "Country risk" lands under "What changed") instead of the end; any later save has an entry
+// for it, so a user who hid it does not get it back.
+const dashboardTopPanels = ['changes','countryRisk'];
 const dashboardFixedModuleIds = ['map','mapRegions'];
 const DASHBOARD_LAYOUT_STORAGE_KEY = 'crucix_dashboard_layout_v2';
 const MAP_LAYER_STORAGE_KEY = 'crucix_map_layers_v1';
@@ -579,6 +587,8 @@ function normalizeSnapshot(data){
   out.sdr={total:0,online:0,zones:[],...(data?.sdr||{})};if(!Array.isArray(out.sdr.zones))out.sdr.zones=[];
   out.energy={wtiRecent:[],...(data?.energy||{})};if(!Array.isArray(out.energy.wtiRecent))out.energy.wtiRecent=[];
   out.treasury={...(data?.treasury||{})};
+  // The country-risk summary (absent before the first risk step, with RISK_ENABLED=false or after a failed step): an object or null.
+  out.risk=data?.risk&&typeof data.risk==='object'&&!Array.isArray(data.risk)?data.risk:null;
   out.liveSources=out.liveSources.filter(row=>row&&typeof row==='object'&&Object.hasOwn(CrucixLiveSources.policies,row.source)).slice(0,Object.keys(CrucixLiveSources.policies).length);
   for(const key of ['sourcesOk','sourcesQueried','sourcesFailed','totalDurationMs'])if(!Number.isFinite(out.meta[key]))out.meta[key]=0;
   return out;
@@ -611,7 +621,11 @@ function normalizeDashboardLayout(raw){
   for(const zone of dashboardZones){
     for(const id of dashboardDefaultZones[zone] || []){
       if(seen.has(id)) continue;
-      if(dashboardTopPanels.includes(id) && typeof raw?.visibility?.[id] !== 'boolean') zones[zone].unshift(id);
+      if(dashboardTopPanels.includes(id) && typeof raw?.visibility?.[id] !== 'boolean'){
+        let at = 0;
+        while(at < zones[zone].length && dashboardTopPanels.includes(zones[zone][at])) at++;
+        zones[zone].splice(at, 0, id);
+      }
       else zones[zone].push(id);
       seen.add(id);
     }
@@ -676,6 +690,7 @@ function getPanelLabel(panelId){
     case 'sourceHealth': return t('panels.sourceHealth','Source health');
     case 'sweepDelta': return t('panels.sweepDelta','Sweep Delta');
     case 'changes': return t('panels.changes','What changed');
+    case 'countryRisk': return t('panels.countryRisk','Country risk');
     default: return panelId;
   }
 }
@@ -1254,6 +1269,8 @@ function buildPanelHtml(panelId, zone){
     case 'supplementalHealth': return buildSupplementalHealthPanel();
     case 'sweepDelta': return buildSweepDeltaPanel();
     case 'changes': return window.CrucixChanges?.panelHtml(D.changes)||'';
+    // Not lens-filtered: a country has no domain. During a replay D is the archived snapshot, so this is that sweep's own ranking.
+    case 'countryRisk': return window.CrucixRisk?.panelHtml(D.risk)||'';
     default: return '';
   }
 }
@@ -1855,7 +1872,11 @@ function drawFlatMap(){
     const countries=topojson.feature(world,world.objects.countries);
     flatG.selectAll('.world-geometry').remove();
     const base=flatG.insert('g',':first-child').attr('class','world-geometry');
-    base.selectAll('path.land').data(countries.features).enter().append('path').attr('class','land').attr('d',flatPath);
+    // A country shape opens its country sheet (risk.js resolves the shape's ISO numeric id as the server does; country.js says why it is
+    // off during a replay). Without the live API (file pages, offline shell) the shapes stay plain.
+    const sheet=!!window.CrucixCountry?.mounted?.();
+    base.selectAll('path.land').data(countries.features).enter().append('path').attr('class',sheet?'land land-open':'land').attr('d',flatPath)
+      .on('click',sheet?(event,feature)=>{const iso3=window.CrucixRisk?.shapeIso3?.(feature.id,feature.properties?.name);if(!iso3)return;event.stopPropagation();closePopup();window.CrucixCountry.open(iso3);}:null);
     base.append('path').datum(topojson.mesh(world,world.objects.countries,(a,b)=>a!==b)).attr('class','border').attr('d',flatPath);
   });
 }
@@ -2321,8 +2342,12 @@ function paletteActions(){
   if(window.CrucixRecordInspector?.open)list.push(item('browser',say('openBrowser','Open the record browser (all sources)'),()=>window.CrucixRecordInspector.open('all')));
   if(archive&&window.CrucixReplay?.open)list.push(window.CrucixReplay.active?.()?item('replay',say('exitReplay','Back to live'),()=>window.CrucixReplay.exit()):item('replay',say('startReplay','Replay archived sweeps'),()=>window.CrucixReplay.open()));
   if(isPanelVisible('changes')&&document.getElementById('changesPanel')&&window.CrucixChanges?.focus)list.push(item('changes',say('openChanges','Go to “What changed”'),()=>window.CrucixChanges.focus()));
+  // Country risk: the briefing, then "Open country: <name>" (risk.js; none during a replay or without the live API), after the lenses.
+  const countries=window.CrucixRisk?.paletteItems?.()||[];
+  if(countries.length)list.push(countries[0]);
   const lens=window.CrucixLens?.get?.()||'all';
   for(const id of ['all',...(window.CrucixDomains?.DOMAIN_IDS||[])]){const name=t('lenses.'+id,id);list.push(item('lens:'+id,say('lens','Lens: {name}').split('{name}').join(name),()=>window.CrucixLens?.set?.(id),id===lens?say('lensActive','Current lens'):say('lensHint','Switch the domain lens'),[id,name]));}
+  list.push(...countries.slice(1));
   return list;
 }
 
@@ -2381,6 +2406,7 @@ function syncResponsiveLayout(force=false){
 // === REINIT (for live updates without boot sequence) ===
 function reinit(){
   window.CrucixChanges?.update(D.changes);
+  window.CrucixRisk?.update(D.risk);
   window.CrucixAlerts?.update(D.alerts);
   window.CrucixIntelligence?.update(currentSnapshot());
   window.CrucixRecordInspector?.refresh();
@@ -2516,6 +2542,14 @@ document.addEventListener('DOMContentLoaded',()=>{
     openEvent:id=>window.CrucixIntelligence?.openEvent(id),openMatrix:archiveApi?()=>window.CrucixHealthMatrix?.open():undefined,fetchJson:archiveApi?fetchJsonNoStore:undefined});
   // Ctrl+K / Cmd+K: before the first top bar (it carries the palette button). The record search reads /api/history, so like the archive
   // hooks it is left out on file pages and in the offline shell; the items are built on every open.
+  // Country risk: the panel reads the snapshot's own risk; the country sheet and the briefing read the live store (GET /api/countries/:iso3,
+  // POST /api/briefing), so like the archive hooks they are left out on file pages and in the offline shell, and are off during a replay.
+  const replayOn=()=>!!window.CrucixReplay?.active();
+  window.CrucixRisk?.mount({t,locale:uiLocale(),getRisk:()=>D.risk,isReplay:replayOn,fetchJson:archiveApi?fetchJsonNoStore:undefined});
+  if(archiveApi){
+    window.CrucixCountry?.mount({t,locale:uiLocale(),now:clockNow,fetchJson:fetchJsonNoStore,isReplay:replayOn,openEvent:id=>window.CrucixIntelligence?.openEvent(id)});
+    window.CrucixBriefing?.mount({t,locale:uiLocale(),isReplay:replayOn,getScopes:()=>Array.isArray(D.risk?.top)?D.risk.top:[],openEvent:id=>window.CrucixIntelligence?.openEvent(id)});
+  }
   window.CrucixPalette?.mount({fetchJson:archiveApi?fetchJsonNoStore:undefined,t,esc,actions:paletteActions,sources:paletteSources});
   init();
   if(location.protocol!=='file:')CrucixPWA.init({getSnapshot:()=>D,applySnapshot:data=>!D.meta.timestamp&&applySnapshot(data,{cached:true}),t});

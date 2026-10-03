@@ -21,6 +21,11 @@ import { installApiErrorHandler } from '../../lib/api-errors.mjs';
 import { archiveSweep } from '../../lib/sweeps/step.mjs';
 import { buildChanges } from '../../lib/sweeps/changes.mjs';
 import { domainOfSource } from '../../lib/domains.mjs';
+import { EntityStore } from '../../lib/intelligence/entities.mjs';
+import { PredictionJournal } from '../../lib/intelligence/predictions.mjs';
+import { runRiskStep } from '../../lib/intelligence/risk-step.mjs';
+import { installRiskRoutes } from '../../lib/intelligence/risk-routes.mjs';
+import { createBriefingService } from '../../lib/llm/briefing.mjs';
 const template = readFileSync(new URL('../../dashboard/public/jarvis.html', import.meta.url), 'utf8');
 const embedded = template.match(/^(?:let|const) D = (.*);\s*$/m);
 const data = JSON.parse(embedded[1]);
@@ -48,6 +53,20 @@ data.eventClusters = clusterEvents(data.events);
 const historyDir = mkdtempSync(join(tmpdir(),'crucix-fixture-'));
 const history = new HistoryStore(historyDir);history.add(data.events);
 const api=express();installIntelligenceRoutes(api,{getSnapshot:()=>data,history,language:'en'});
+// Country risk (2.13): the real store, journal, step, routes and rule-based briefing (no model) over the fixture's tmp dir, with small fixed
+// VIEWS/INFORM inputs so the panel has a ranking with forecast and baseline components. Every rebuild of the events runs the step again.
+const riskStore=new EntityStore(historyDir),riskJournal=new PredictionJournal(historyDir);let riskLatest=null;
+const VIEWS_MONTH=(new Date().getUTCFullYear()-1980)*12+new Date().getUTCMonth()+1;
+const viewsRows=(name,p)=>({months:[0,1,2].map(i=>({isoab:name,name,month_id:VIEWS_MONTH+i,year:new Date().getUTCFullYear(),month:((new Date().getUTCMonth()+i)%12)+1,main_dich:Math.max(0,p-i*0.02),main_mean:p*120}))});
+const riskRaw={sources:{'VIEWS-Forecast':{status:'ok',run:'fatalities003_fixture_t01',months:[VIEWS_MONTH,VIEWS_MONTH+1,VIEWS_MONTH+2],attribution:'Conflict forecasts: VIEWS (Uppsala University and PRIO), fixture run.',license:'Fixture licence text',
+  countries:{SDN:viewsRows('SDN',0.97),UKR:viewsRows('UKR',0.95),COD:viewsRows('COD',0.9),SOM:viewsRows('SOM',0.88),SYR:viewsRows('SYR',0.8),MMR:viewsRows('MMR',0.78),JPN:viewsRows('JPN',0.01)}},
+  'INFORM-Risk':{status:'ok',release:'INFORM Risk Fixture 2026',published:'2026-09-02',attribution:'INFORM Risk Index, European Commission Joint Research Centre (fixture).',license:'INFORM is open-source',
+    countries:{SDN:{score:7.4},UKR:{score:5.1},COD:{score:7.6},SOM:{score:8.6},SYR:{score:7.1},MMR:{score:6.5},JPN:{score:2.1},HUN:{score:1.9}}}}};
+function recordRisk(){const result=runRiskStep({store:riskStore,journal:riskJournal,snapshot:data,raw:riskRaw,log:quietRisk});if(result.ok)riskLatest=result;}
+const quietRisk={warn(){},error(){},log(){}};
+recordRisk();
+installRiskRoutes(api,{store:riskStore,journal:riskJournal,getSnapshot:()=>data,getState:()=>riskLatest,history,
+  briefing:createBriefingService({provider:null,language:'en',store:riskStore,history,getSnapshot:()=>data,getScores:()=>riskLatest?.scores??null,log:quietRisk}),security:{}});
 process.on('exit',()=>rmSync(historyDir,{recursive:true,force:true}));
 let online = true;
 let fixtureLanguage = 'en';
@@ -143,7 +162,7 @@ const archiveView={retention:()=>archive.retention(),list:options=>archive.list(
 installSweepRoutes(api,{archive:archiveView,getCurrent:()=>data});
 installApiErrorHandler(api);
 // Every rebuild of the page's events is a new sweep of the same kind: its changes are counted against the sweep an hour ago again.
-function rebuildEvents(){data.events=buildEvents(data);data.eventClusters=clusterEvents(data.events);history.add(data.events);data.changes=buildChanges(previousSweep,data);}
+function rebuildEvents(){data.events=buildEvents(data);data.eventClusters=clusterEvents(data.events);history.add(data.events);data.changes=buildChanges(previousSweep,data);recordRisk();}
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/control') {
@@ -192,7 +211,7 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/offline-shell') {
     res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});res.end(renderOfflineShell(readFileSync(new URL('../../dashboard/public/jarvis.html',import.meta.url),'utf8'),getLocaleForLanguage(fixtureLanguage)));return;
   }
-  if (['/api/history','/api/export','/api/alerts','/api/sweeps','/api/changes','/api/source-health'].includes(url.pathname)||['/api/events/','/api/alerts/','/api/sweeps/'].some(prefix=>url.pathname.startsWith(prefix))) { api(req,res);return; }
+  if (['/api/history','/api/export','/api/alerts','/api/sweeps','/api/changes','/api/source-health','/api/countries','/api/predictions','/api/briefing'].includes(url.pathname)||['/api/events/','/api/alerts/','/api/sweeps/','/api/countries/'].some(prefix=>url.pathname.startsWith(prefix))) { api(req,res);return; }
   if (url.pathname !== '/') {
     const root = resolve('dashboard/public');const file = resolve(root, '.' + url.pathname);
     if (file.startsWith(root + sep) && existsSync(file) && statSync(file).isFile()) {
