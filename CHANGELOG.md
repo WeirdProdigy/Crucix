@@ -1,5 +1,7 @@
 # Changelog / Változásnapló
 
+- [2.11.0 — Tíz új élő forrás: szorosok, légi forgalom, szankciók, energia és piacok / Ten new live sources: chokepoints, air traffic, sanctions, energy and markets](docs/releases/v2.11.0.md) — 2026-10-03
+
 - [2.10.1 — CI-javítás: a riasztó határidő-időzítője Node 22 alatt / CI fix: the notifier deadline timer on Node 22](docs/releases/v2.10.1.md) — 2026-10-02
 
 - [2.10.0 — Riasztási motor: szabályok, életciklus és értesítések / Alert engine: rules, lifecycle and notifications](docs/releases/v2.10.0.md) — 2026-10-02
