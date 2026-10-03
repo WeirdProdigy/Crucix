@@ -14,20 +14,52 @@ const flatten = (value, prefix) => Object.entries(value || {}).flatMap(([key, it
 const strings = lang => new Map([...flatten(JSON.parse(read(`locales/${lang}.json`)).matrix, 'matrix'), ...flatten(JSON.parse(read(`locales/${lang}.json`)).lenses, 'lenses'), ...flatten(JSON.parse(read(`locales/${lang}.json`)).status, 'status')]);
 const localT = lang => { const table = strings(lang); return (key, fallback) => table.has(key) ? table.get(key) : (fallback ?? key); };
 
+// Setting innerHTML parses the markup into nodes (tags, attributes, text: all render() writes), so the keyboard code runs on the real
+// table: closest(), querySelector(All)() understand compound selectors such as `tr.hm-row` and `button[data-hm-sweep][tabindex="0"]`.
+const ENTITIES = { '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&amp;': '&' };
+const decode = text => text.replace(/&(?:lt|gt|quot|#39|amp);/g, entity => ENTITIES[entity]);
+function parseMarkup(markup, doc, root) {
+  const holder = { kids: [] }, stack = [holder];
+  const token = /<(\/?)([a-zA-Z][\w]*)((?:\s+[\w-]+(?:="[^"]*")?)*)\s*>|([^<]+)/g;
+  for (let match; (match = token.exec(markup));) {
+    const top = stack[stack.length - 1], parent = top === holder ? root : top;
+    if (match[4] !== undefined) { const text = new Node('#text', doc); text.textContent = decode(match[4]); text.parentNode = parent; top.kids.push(text); continue; }
+    if (match[1]) { while (stack.length > 1 && stack.pop().tag !== match[2]); continue; }
+    const node = new Node(match[2], doc);
+    for (const attribute of match[3].matchAll(/([\w-]+)(?:="([^"]*)")?/g)) { node.setAttribute(attribute[1], decode(attribute[2] ?? '')); if (attribute[1] === 'class') node.className = decode(attribute[2] ?? ''); }
+    node.parentNode = parent; top.kids.push(node); stack.push(node);
+  }
+  return holder.kids;
+}
 class Node {
-  constructor(tag, doc) { Object.assign(this, { tag, doc, attrs: new Map(), kids: [], listeners: {}, className: '', id: '', textContent: '', innerHTML: '', hidden: false, disabled: false, value: '', type: '', open: false, isConnected: true, focused: 0, shown: 0, scrollLeft: 0, scrollWidth: 640 }); }
+  constructor(tag, doc) { Object.assign(this, { tag, doc, attrs: new Map(), kids: [], parentNode: null, markup: '', listeners: {}, className: '', id: '', textContent: '', hidden: false, disabled: false, value: '', type: '', open: false, isConnected: true, focused: 0, shown: 0, scrollLeft: 0, scrollWidth: 640 }); }
+  get innerHTML() { return this.markup; }
+  set innerHTML(value) { this.markup = String(value); this.kids = parseMarkup(this.markup, this.doc, this); }
+  get cells() { return this.kids.filter(kid => kid.tag === 'td' || kid.tag === 'th'); }
+  get cellIndex() { return this.parentNode ? this.parentNode.cells.indexOf(this) : -1; }
   setAttribute(name, value) { this.attrs.set(name, String(value)); if (name === 'id') this.id = String(value); }
   getAttribute(name) { return this.attrs.has(name) ? this.attrs.get(name) : null; }
   removeAttribute(name) { this.attrs.delete(name); }
-  append(...nodes) { for (const node of nodes) { if (typeof node === 'string') { const text = new Node('#text', this.doc); text.textContent = node; this.kids.push(text); } else this.kids.push(node); } }
+  append(...nodes) { for (const node of nodes) { const child = typeof node === 'string' ? Object.assign(new Node('#text', this.doc), { textContent: node }) : node; child.parentNode = this; this.kids.push(child); } }
   addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); }
   fire(type, event = {}) { for (const fn of this.listeners[type] || []) fn({ target: this, preventDefault() {}, ...event }); }
   focus() { this.focused++; this.doc.activeElement = this; }
   showModal() { if (this.open) throw new Error('InvalidStateError'); this.open = true; this.shown++; }
   close() { if (this.open) { this.open = false; this.fire('close'); } }
-  replaceChildren(...nodes) { this.kids = nodes; }
-  querySelectorAll() { return []; }
-  closest() { return null; }
+  replaceChildren(...nodes) { this.kids = nodes; for (const node of nodes) node.parentNode = this; }
+  matches(selector) {
+    const [, tag, rest] = /^([\w-]*)(.*)$/.exec(selector);
+    if (tag && this.tag !== tag) return false;
+    for (const part of rest.match(/\.[\w-]+|\[[\w-]+(?:="[^"]*")?\]/g) || []) {
+      if (part[0] === '.') { if (!this.className.split(' ').includes(part.slice(1))) return false; continue; }
+      const [, name, value] = /^\[([\w-]+)(?:="([^"]*)")?\]$/.exec(part);
+      if (!this.attrs.has(name) || (value !== undefined && this.attrs.get(name) !== value)) return false;
+    }
+    return true;
+  }
+  closest(selector) { for (let node = this; node; node = node.parentNode) if (node.tag !== '#text' && node.matches(selector)) return node; return null; }
+  querySelectorAll(selector) { return all(this).slice(1).filter(node => node.tag !== '#text' && node.matches(selector)); }
+  querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
   text() { return this.textContent + this.kids.map(kid => kid.text()).join(''); }
 }
 function all(node) { return [node, ...node.kids.flatMap(all)]; }
@@ -134,10 +166,11 @@ test('render: column headers carry a short time, the full time for screen reader
   const { matrix } = mounted({ t: localT('en') });
   const model = { sweeps: [{ id: IDS[0], timestamp: '2026-10-03T09:00:00.000Z' }, { id: IDS[1], timestamp: '2026-10-03T09:15:00.000Z' }, { id: 'sweep-20261004T090000Z', timestamp: '2026-10-04T09:00:00.000Z' }], sources: [] };
   const out = matrix.render({ ...model, sources: [{ source: 'USGS', domain: 'hazards', cells: [] }] });
-  const heads = [...out.matchAll(/<th scope="col" class="hm-time">(.*?)<\/th>/g)].map(match => match[1]);
+  const found = [...out.matchAll(/<th scope="col" class="hm-time" title="([^"]*)">(.*?)<\/th>/g)], heads = found.map(match => match[2]);
   assert.equal(heads.length, 3);
   const full = ms => new Date(ms).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   heads.forEach((head, index) => assert.ok(head.includes(`<span class="hm-sr">${full(Date.parse(model.sweeps[index].timestamp))}</span>`), `column ${index} full label (the format replay.js uses)`));
+  found.forEach((match, index) => assert.equal(match[1], full(Date.parse(model.sweeps[index].timestamp)), `column ${index}: the full label is also the tooltip of the short time`));
   assert.ok(heads.every(head => /<span class="hm-t" aria-hidden="true">\d{2}:\d{2}<\/span>/.test(head)), 'a short 24-hour time');
   const dates = heads.map(head => count(head, /class="hm-d"/g));
   assert.equal(dates[0], 1, 'the first column names its date');
@@ -160,6 +193,28 @@ test('render: hostile source names, domains, times, ids and locale strings never
   assert.ok([...out.matchAll(/data-hm-sweep="([^"]*)"/g)].every(match => /^sweep-\d{8}T\d{6}Z$/.test(match[1])), 'a sweep attribute only ever holds a real sweep id');
 });
 
+test('render: a column without a readable time says "unknown time" in the page language (screen reader text and tooltip); the visible mark stays "?"', () => {
+  const model = { sweeps: [{ id: IDS[0], timestamp: '2026-10-03T09:00:00.000Z' }, { id: 'latest', timestamp: 'yesterday' }, {}, null], sources: [{ source: 'USGS', domain: 'hazards', cells: [] }] };
+  const unknown = (lang, t = localT(lang)) => { const out = mounted({ t }).matrix.render(model); return [...out.matchAll(/<th scope="col" class="hm-time" title="([^"]*)"><span class="hm-sr">([^<]*)<\/span><span class="hm-t" aria-hidden="true">\?<\/span><\/th>/g)].map(match => [match[1], match[2]]); };
+  for (const [lang, label] of [['en', 'Unknown time'], ['hu', 'Ismeretlen idő'], ['fr', 'Date inconnue']]) {
+    assert.equal(strings(lang).get('status.unknownTime'), label, `${lang}: the status string this reads`);
+    assert.deepEqual(unknown(lang), [[label, label], [label, label], [label, label]], lang);
+  }
+  assert.deepEqual(unknown('en', () => ''), [['Unknown time', 'Unknown time'], ['Unknown time', 'Unknown time'], ['Unknown time', 'Unknown time']], 'an empty page string falls back to the built-in text');
+  const withoutT = realm().matrix.render(model);
+  assert.equal(count(withoutT, /title="Unknown time"/g), 3, 'without a page `t` too');
+  assert.ok(!/title="[^"]*\?/.test(withoutT.replace(/title="Unknown time"/g, '')), 'the "?" is only the visible mark');
+});
+
+test('render: a page `t` that throws, returns nothing or a non-string leaves the built-in English text', () => {
+  const english = mounted({ t: localT('en'), locale: '' }).matrix.render(MODEL).replace(/<th scope="rowgroup"[^>]*>.*?<\/th>/g, '');
+  for (const broken of [() => { throw new Error('locale broke'); }, () => '', () => undefined, () => 42, () => null, () => ({})]) {
+    const out = mounted({ t: broken, locale: '' }).matrix.render(MODEL);
+    assert.equal(out.replace(/<th scope="rowgroup"[^>]*>.*?<\/th>/g, ''), english, String(broken));
+    assert.ok(out.includes('<span class="hm-gl">security</span>'), 'a group name falls back to its id');
+  }
+});
+
 test('render: a sweep whose id is not a real archive id has cells that cannot be clicked', () => {
   const { matrix } = mounted({ t: localT('en') });
   const out = matrix.render({ sweeps: [{ id: IDS[0], timestamp: '2026-10-03T09:00:00.000Z' }, { id: 'latest', timestamp: '2026-10-03T09:15:00.000Z' }, { timestamp: '2026-10-03T09:30:00.000Z' }], sources: [{ source: 'USGS', domain: 'hazards', cells: [[0, 1], [0, 1], [0, 1]] }] });
@@ -168,12 +223,79 @@ test('render: a sweep whose id is not a real archive id has cells that cannot be
   assert.equal(count(out, /data-hm-sweep=/g), 1);
 });
 
-test('render: the first button is the one tab stop; the others are reached with the arrow keys', () => {
+test('render: the one tab stop is the newest cell of the first row (the table opens scrolled to the newest sweeps); the others use the arrow keys', () => {
   const { matrix } = mounted({ t: localT('en') });
   const out = matrix.render(MODEL);
   assert.equal(count(out, /tabindex="0"/g), 1);
   assert.equal(count(out, /tabindex="-1"/g), 14);
-  assert.ok(out.indexOf('tabindex="0"') < out.indexOf('tabindex="-1"'));
+  const firstRow = out.slice(out.indexOf('<tr class="hm-row">'), out.indexOf('</tr>', out.indexOf('<tr class="hm-row">')));
+  assert.ok(firstRow.includes('>GDELT<') && firstRow.includes(`data-hm-sweep="${IDS[2]}" tabindex="0"`), 'GDELT, the newest sweep');
+  assert.equal(count(firstRow, /tabindex="0"/g), 1);
+  // The newest column that can be clicked: a last column that is not a real archive sweep is passed over.
+  const odd = matrix.render({ sweeps: [{ id: IDS[0] }, { id: IDS[1] }, { id: 'latest' }], sources: MODEL.sources.slice(0, 2) });
+  assert.ok(odd.includes(`data-hm-sweep="${IDS[1]}" tabindex="0"`) && count(odd, /tabindex="0"/g) === 1);
+  assert.equal(count(matrix.render({ sweeps: [{ id: 'latest' }], sources: MODEL.sources.slice(0, 2) }), /tabindex=/g), 0, 'no button, no tab stop');
+});
+
+// ===== The keyboard: real render output, parsed by the fake DOM =====
+async function grid(model = MODEL) {
+  const r = realm({ t: localT('en'), routes: { '/api/sweeps': () => ARCHIVE(), '/api/source-health': () => model } });
+  r.mount(); await tick(); await r.matrix.open();
+  const scroll = part(r.doc, 'hm-scroll'), buttons = scroll.querySelectorAll('button[data-hm-sweep]');
+  const ids = model.sweeps.map(sweep => sweep.id);
+  const where = button => `${button.closest('tr').querySelector('th').text()}@${ids.indexOf(button.getAttribute('data-hm-sweep'))}`;
+  const stops = () => buttons.filter(button => button.getAttribute('tabindex') === '0');
+  // Presses a key on the focused cell; reports where the focus is afterwards and whether the default action was prevented.
+  const press = (key, extra = {}, from = r.doc.activeElement) => { let prevented = 0; scroll.fire('keydown', { target: from, key, preventDefault: () => { prevented++; }, ...extra }); return { at: where(r.doc.activeElement), prevented, stops: stops().map(where) }; };
+  return { r, scroll, buttons, where, stops, press };
+}
+
+test('keyboard: the arrow keys walk the grid in all four directions across the domain groups; the edges stay; one tab stop follows the focus', async () => {
+  const g = await grid();
+  assert.equal(g.buttons.length, 15);
+  assert.deepEqual(g.stops().map(g.where), ['GDELT@2']);
+  g.stops()[0].focus();
+  const walk = [
+    ['ArrowDown', 'USGS@2', 1], ['ArrowDown', 'GDACS@2', 1], ['ArrowDown', 'NOAA-SWPC@2', 1], ['ArrowDown', 'Mystery@2', 1], ['ArrowDown', 'Mystery@2', 0],
+    ['ArrowLeft', 'Mystery@1', 1], ['ArrowLeft', 'Mystery@0', 1], ['ArrowLeft', 'Mystery@0', 0],
+    ['ArrowUp', 'NOAA-SWPC@0', 1], ['ArrowUp', 'GDACS@0', 1], ['ArrowUp', 'USGS@0', 1], ['ArrowUp', 'GDELT@0', 1], ['ArrowUp', 'GDELT@0', 0],
+    ['ArrowRight', 'GDELT@1', 1], ['ArrowRight', 'GDELT@2', 1], ['ArrowRight', 'GDELT@2', 0],
+  ];
+  for (const [key, expected, prevented] of walk) {
+    const result = g.press(key);
+    assert.equal(result.at, expected, `${key} -> ${expected}`);
+    assert.equal(result.prevented, prevented, `${key}: the default action is prevented exactly when the focus moved`);
+    assert.deepEqual(result.stops, [expected], `${key}: the focused cell is the only tab stop`);
+  }
+});
+
+test('keyboard: Home and End go to the ends of the row; other keys and modifier keys do nothing', async () => {
+  const g = await grid();
+  g.buttons.find(button => g.where(button) === 'USGS@1').focus();
+  assert.equal(g.press('End').at, 'USGS@2'); assert.deepEqual(g.stops().map(g.where), ['USGS@2']);
+  assert.equal(g.press('Home').at, 'USGS@0'); assert.deepEqual(g.stops().map(g.where), ['USGS@0']);
+  assert.equal(g.press('End').prevented, 1);
+  g.buttons.find(button => g.where(button) === 'USGS@1').focus();
+  for (const modifier of ['shiftKey', 'ctrlKey', 'altKey', 'metaKey']) for (const key of ['ArrowRight', 'ArrowDown', 'Home', 'End']) {
+    const result = g.press(key, { [modifier]: true });
+    assert.deepEqual([result.at, result.prevented], ['USGS@1', 0], `${modifier} + ${key} is left to the browser`);
+  }
+  for (const key of ['Enter', ' ', 'Tab', 'a', 'PageDown', 'Escape', 'ArrowDownn', undefined]) { const result = g.press(key); assert.deepEqual([result.at, result.prevented], ['USGS@1', 0], String(key)); }
+  assert.deepEqual(g.stops().map(g.where), ['USGS@2'], 'the tab stop did not move');
+  // Not a cell button: a plain cell, the table, nothing.
+  const plain = g.scroll.querySelector('th');
+  for (const target of [plain, g.scroll, null, {}]) assert.equal(g.press('ArrowRight', {}, target).prevented, 0);
+});
+
+test('keyboard: cells that cannot be clicked are passed over', async () => {
+  const model = { ...MODEL, sweeps: [{ id: IDS[0] }, { id: 'not-a-sweep' }, { id: IDS[2] }] };
+  const g = await grid(model);
+  assert.equal(g.buttons.length, 10, 'two clickable columns x five sources');
+  assert.deepEqual(g.stops().map(g.where), ['GDELT@2']);
+  g.stops()[0].focus();
+  assert.equal(g.press('ArrowLeft').at, 'GDELT@0', 'the plain cell in between is skipped');
+  assert.equal(g.press('ArrowRight').at, 'GDELT@2');
+  assert.equal(g.press('ArrowDown').at, 'USGS@2');
 });
 
 test('render: the lens keeps only its own group; an unknown lens is "all"; a lens without sources says so', () => {
@@ -356,10 +478,11 @@ test('a failed series shows an error line, keeps the dialog usable and recovers 
   assert.equal(await r.matrix.open(), false);
   const dialog = dialogOf(r.doc);
   assert.equal(dialog.open, true, 'still open');
-  assert.equal(part(r.doc, 'hm-status').textContent, 'Could not load the source health. Change the sweep count or reopen this window to retry.');
+  assert.equal(part(r.doc, 'hm-status').textContent, 'Could not load the source health. Close and reopen this window to try again.');
   assert.equal(part(r.doc, 'hm-scroll').innerHTML, '');
   assert.equal(part(r.doc, 'hm-legend').hidden, true, 'no legend without a table');
   const select = part(r.doc, 'hm-count');
+  assert.equal(part(r.doc, 'hm-tools').hidden, false, 'the row with the selector is still shown (a retry by choosing another count stays possible)');
   assert.equal(select.hidden, false); assert.equal(select.disabled, false, 'the selector still works');
   assert.equal(all(dialog).some(node => node.className === 'hm-close'), true, 'and so does Close');
   fail = false;
@@ -382,6 +505,19 @@ test('a failing archive listing is an error line (a network failure) or the empt
     assert.equal(dialogOf(r.doc).open, true);
     assert.ok(!shown.includes('<table'));
     assert.equal(part(r.doc, 'hm-tools').hidden, true, 'no selector without an archive listing');
+  }
+});
+
+test('the error line fits the screen: without an archive listing there is no selector, and the text only asks for a reopen', async () => {
+  for (const [lang, reopen, selectorWord] of [['en', /reopen/, /count/i], ['hu', /nyisd meg újra/, /lekérdezésszám|darabszám/i], ['fr', /rouvrez/, /nombre/i]]) {
+    const r = realm({ t: localT(lang), routes: { '/api/sweeps': () => { throw new Error('offline'); } } });
+    r.mount(); await tick();
+    assert.equal(await r.matrix.open(), false);
+    assert.equal(part(r.doc, 'hm-tools').hidden, true, `${lang}: the selector is not offered`);
+    const message = part(r.doc, 'hm-status').textContent;
+    assert.equal(message, strings(lang).get('matrix.error'), lang);
+    assert.match(message, reopen, `${lang}: tells to reopen`);
+    assert.doesNotMatch(message, selectorWord, `${lang}: does not point at a selector that is hidden`);
   }
 });
 
@@ -447,11 +583,14 @@ test('a sweep count that is not a positive whole number asks for nothing', async
 
 test('every dynamic string in the markup goes through the page escaper (a tagging escaper shows what was not escaped)', () => {
   const { matrix } = mounted({ t: localT('en'), esc: value => `‹${String(value)}›` });
-  const out = matrix.render(MODEL);
+  // One column with a readable time and one without: the unknown-time label is a page string too.
+  const out = matrix.render({ ...MODEL, sweeps: [...MODEL.sweeps.slice(0, 2), { id: IDS[2] }, { id: 'latest', timestamp: 'later' }] });
   assert.ok(out.includes('‹GDELT›') && out.includes('‹Security and conflict›') && out.includes('‹OK›'), 'the page escaper is the one in use');
   // What remains once every escaped piece and every tag is removed can only be the fixed glyphs and the numbers.
   const rest = out.replace(/‹[^›]*›/g, '').replace(/<[^>]*>/g, '');
   assert.match(rest, /^[✓◔✕–·—?\d]*$/u, `unescaped text: ${rest}`);
+  const titles = [...out.matchAll(/title="([^"]*)"/g)].map(match => match[1]);
+  assert.ok(titles.length >= 3 && titles.every(value => /^‹[^›]*›$/.test(value)), `tooltips are escaped too: ${titles.join('|')}`);
   const failing = mounted({ t: localT('en'), esc: () => { throw new Error('escaper broke'); } }).matrix.render(MODEL);
   assert.ok(failing.includes('>GDELT<'), 'a throwing page escaper falls back to the built-in one');
 });
@@ -574,16 +713,39 @@ test('closing returns the focus to the opener, or to the rebuilt trigger when th
   r.doc.activeElement = part(r.doc, 'hm-close');
   dialog.close(); // what Esc does natively: the dialog closes, then a close event
   assert.equal(stale.focused, 0); assert.equal(trigger.focused, 1);
-  // Backdrop: a click whose target is the dialog itself.
+  // Backdrop: the press and the release both on the dialog itself, then the click.
   r.doc.activeElement = opener;
   await r.matrix.open();
-  dialog.fire('click', { target: dialog });
+  const backdropClick = () => { dialog.fire('pointerdown', { target: dialog }); dialog.fire('pointerup', { target: dialog }); dialog.fire('click', { target: dialog }); };
+  backdropClick();
   assert.equal(dialog.open, false, 'a click on the backdrop closes');
   await r.matrix.open();
-  dialog.fire('click', { target: part(r.doc, 'hm-scroll') });
+  const scroll = part(r.doc, 'hm-scroll');
+  dialog.fire('pointerdown', { target: scroll }); dialog.fire('pointerup', { target: scroll }); dialog.fire('click', { target: scroll });
   assert.equal(dialog.open, true, 'a click inside does not');
   part(r.doc, 'hm-close').fire('click');
   assert.equal(dialog.open, false, 'the Close button');
+});
+
+test('the backdrop closes the dialog only for a press and a release on it: a selection dragged out of the table does not', async () => {
+  const r = realm({ t: localT('en'), routes: { '/api/sweeps': () => ARCHIVE(), '/api/source-health': () => MODEL } });
+  r.mount(); await tick(); await r.matrix.open();
+  const dialog = dialogOf(r.doc), scroll = part(r.doc, 'hm-scroll');
+  // A drag that starts in the table and ends on the backdrop: the click lands on the dialog.
+  dialog.fire('pointerdown', { target: scroll }); dialog.fire('pointerup', { target: dialog }); dialog.fire('click', { target: dialog });
+  assert.equal(dialog.open, true, 'pressed inside, released on the backdrop');
+  // The other way round: pressed on the backdrop, released inside.
+  dialog.fire('pointerdown', { target: dialog }); dialog.fire('pointerup', { target: scroll }); dialog.fire('click', { target: dialog });
+  assert.equal(dialog.open, true, 'pressed on the backdrop, released inside');
+  // A click that no press announced (a synthetic one).
+  dialog.fire('click', { target: dialog });
+  assert.equal(dialog.open, true, 'no press, no close');
+  // The memory of a press does not outlive its click.
+  dialog.fire('pointerdown', { target: dialog }); dialog.fire('pointerup', { target: dialog }); dialog.fire('click', { target: scroll });
+  dialog.fire('click', { target: dialog });
+  assert.equal(dialog.open, true, 'a press is used up by the click that follows it');
+  dialog.fire('pointerdown', { target: dialog }); dialog.fire('pointerup', { target: dialog }); dialog.fire('click', { target: dialog });
+  assert.equal(dialog.open, false, 'a real backdrop click');
 });
 
 test('close({focus:false}) leaves the focus alone (the page is moving it to the replay)', async () => {
@@ -643,6 +805,7 @@ test('the page wires the matrix: scripts after lens.js and replay.js, the styles
   assert.match(call, /onOpenSweep:/);
   assert.match(call, /CrucixHealthMatrix\.close\(\{focus:false\}\)/, 'the dialog closes without taking the focus back');
   assert.match(call, /CrucixReplay\?\.open\(id\)/, 'a cell opens that sweep in the replay');
+  assert.match(call, /onAvailability:redrawSourceHealth/, 'the panel button appears and disappears with the archive');
   assert.match(call, /!window\.__CRUCIX_OFFLINE_SHELL__|location\.protocol!==/, 'not on file pages or the offline shell');
   assert.match(html, /window\.CrucixHealthMatrix\?\.refresh\(\)/, 'a live snapshot makes an empty archive look again');
 });

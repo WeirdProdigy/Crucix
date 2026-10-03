@@ -959,7 +959,7 @@
     "loading": "Chargement de la matrice…",
     "empty": "Aucun scan archivé pour le moment.",
     "noSources": "Aucune source de ce domaine dans les scans affichés.",
-    "error": "Impossible de charger l’état des sources. Changez le nombre de scans ou rouvrez cette fenêtre pour réessayer.",
+    "error": "Impossible de charger l’état des sources. Fermez cette fenêtre puis rouvrez-la pour réessayer.",
     "close": "Fermer"
   }
 }

@@ -959,7 +959,7 @@
     "loading": "Loading the matrix…",
     "empty": "No archived sweeps yet.",
     "noSources": "No source reported for this domain in the shown sweeps.",
-    "error": "Could not load the source health. Change the sweep count or reopen this window to retry.",
+    "error": "Could not load the source health. Close and reopen this window to try again.",
     "close": "Close"
   }
 }

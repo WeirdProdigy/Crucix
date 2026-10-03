@@ -959,7 +959,7 @@
     "loading": "A mátrix betöltése…",
     "empty": "Még nincs archivált lekérdezés.",
     "noSources": "A megjelenített lekérdezésekben egyetlen forrás sem jelentett ebből a témából.",
-    "error": "A források állapota nem tölthető be. Válts másik lekérdezésszámot, vagy nyisd meg újra az ablakot.",
+    "error": "A források állapota nem tölthető be. Zárd be az ablakot, majd nyisd meg újra.",
     "close": "Bezárás"
   }
 }

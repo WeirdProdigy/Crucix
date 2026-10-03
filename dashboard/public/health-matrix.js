@@ -21,7 +21,7 @@
   const COPY={title:'Source health matrix',trigger:'Matrix',caption:'Source status in each archived sweep, oldest to newest',openHint:'The newest sweep is on the right. Select a cell to replay that sweep.',
     sweeps:'Sweeps shown',source:'Source',ms:'Last run (ms)',stateOk:'OK',stateStale:'Stale',stateError:'Error',stateDisabled:'Disabled',stateNoData:'No data',other:'Other sources',
     loading:'Loading the matrix…',empty:'No archived sweeps yet.',noSources:'No source reported for this domain in the shown sweeps.',
-    error:'Could not load the source health. Change the sweep count or reopen this window to retry.',close:'Close'};
+    error:'Could not load the source health. Close and reopen this window to try again.',close:'Close'};
   const MOVES={ArrowLeft:[0,-1],ArrowRight:[0,1],ArrowUp:[-1,0],ArrowDown:[1,0]};
   let opts=null,nodes=null,model=null,archive=0,probing=null,seq=0,opener=null,skipFocus=false;
   const log=error=>{try{console.error('[health-matrix]',error);}catch{}};
@@ -49,9 +49,9 @@
   }
   function head(entry,previousDay){
     const ms=sweepTime(entry);
-    if(ms===null)return {markup:`<th scope="col" class="hm-time"><span class="hm-sr">${escHtml(text('status.unknownTime','Unknown time'))}</span><span class="hm-t" aria-hidden="true">?</span></th>`,day:previousDay};
+    if(ms===null){const unknown=escHtml(text('status.unknownTime','Unknown time'));return {markup:`<th scope="col" class="hm-time" title="${unknown}"><span class="hm-sr">${unknown}</span><span class="hm-t" aria-hidden="true">?</span></th>`,day:previousDay};}
     const stamp=stamps(ms);
-    return {markup:`<th scope="col" class="hm-time"><span class="hm-sr">${escHtml(stamp.full)}</span>${stamp.day!==previousDay?`<span class="hm-d" aria-hidden="true">${escHtml(stamp.day)}</span>`:''}<span class="hm-t" aria-hidden="true">${escHtml(stamp.time)}</span></th>`,day:stamp.day};
+    return {markup:`<th scope="col" class="hm-time" title="${escHtml(stamp.full)}"><span class="hm-sr">${escHtml(stamp.full)}</span>${stamp.day!==previousDay?`<span class="hm-d" aria-hidden="true">${escHtml(stamp.day)}</span>`:''}<span class="hm-t" aria-hidden="true">${escHtml(stamp.time)}</span></th>`,day:stamp.day};
   }
 
   // ===== The table =====
@@ -63,20 +63,23 @@
     const lens=lensId(),groups=[...ids(),null].filter(domain=>lens==='all'||domain===lens).map(domain=>({domain,rows:sources.filter(item=>groupOf(item)===domain)})).filter(group=>group.rows.length);
     if(!groups.length)return note('noSources');
     const words={};for(const state of Object.keys(GLYPHS))words[state]=escHtml(say(WORDS[state]));
-    let day=null,stop=true;
+    let day=null,firstRow=true;
     const heads=sweeps.map(entry=>{const column=head(entry,day);day=column.day;return column.markup;}).join('');
-    // One tab stop for the whole grid (the first button); the arrow keys move between the cells.
-    const cell=(code,entry)=>{
-      const state=typeof code==='number'&&Object.hasOwn(STATES,code)?STATES[code]:'nodata',id=entry&&typeof entry==='object'?entry.id:null;
+    // One tab stop for the whole grid: the newest clickable cell of the first row (the table opens scrolled to the newest sweeps, so
+    // Tab does not scroll it back); the arrow keys move between the cells.
+    const valid=entry=>!!entry&&typeof entry==='object'&&typeof entry.id==='string'&&SWEEP_ID.test(entry.id);
+    const stopColumn=sweeps.map(valid).lastIndexOf(true);
+    const cell=(code,entry,stop)=>{
+      const state=typeof code==='number'&&Object.hasOwn(STATES,code)?STATES[code]:'nodata';
       const inner=`<span class="hm-g" aria-hidden="true">${GLYPHS[state]}</span><span class="hm-sr">${words[state]}</span>`;
-      if(typeof id!=='string'||!SWEEP_ID.test(id))return `<td class="hm-c"><span class="hm-cell" data-state="${state}">${inner}</span></td>`;
-      const tabindex=stop?0:-1;stop=false;
-      return `<td class="hm-c"><button type="button" class="hm-cell" data-state="${state}" data-hm-sweep="${escHtml(id)}" tabindex="${tabindex}">${inner}</button></td>`;
+      if(!valid(entry))return `<td class="hm-c"><span class="hm-cell" data-state="${state}">${inner}</span></td>`;
+      return `<td class="hm-c"><button type="button" class="hm-cell" data-state="${state}" data-hm-sweep="${escHtml(entry.id)}" tabindex="${stop?0:-1}">${inner}</button></td>`;
     };
     const row=item=>{
-      const cells=Array.isArray(item.cells)?item.cells:[],last=cells[sweeps.length-1];
+      const cells=Array.isArray(item.cells)?item.cells:[],last=cells[sweeps.length-1],stopRow=firstRow;
+      firstRow=false;
       const ms=Array.isArray(last)&&typeof last[1]==='number'&&Number.isFinite(last[1])&&last[1]>=0?Math.round(last[1]):null;
-      return `<tr class="hm-row"><th scope="row" class="hm-src">${escHtml(item.source)}</th>${sweeps.map((entry,index)=>cell(Array.isArray(cells[index])?cells[index][0]:undefined,entry)).join('')}<td class="hm-ms">${ms===null?`<span aria-hidden="true">—</span><span class="hm-sr">${words.nodata}</span>`:ms}</td></tr>`;
+      return `<tr class="hm-row"><th scope="row" class="hm-src">${escHtml(item.source)}</th>${sweeps.map((entry,index)=>cell(Array.isArray(cells[index])?cells[index][0]:undefined,entry,stopRow&&index===stopColumn)).join('')}<td class="hm-ms">${ms===null?`<span aria-hidden="true">—</span><span class="hm-sr">${words.nodata}</span>`:ms}</td></tr>`;
     };
     const body=groups.map(group=>`<tbody class="hm-group" data-domain="${group.domain===null?'other':escHtml(group.domain)}"><tr class="hm-group-row"><th scope="rowgroup" colspan="${sweeps.length+2}"><span class="hm-gl">${escHtml(groupName(group.domain))}</span></th></tr>${group.rows.map(row).join('')}</tbody>`).join('');
     return `<table class="hm-table"><caption class="hm-sr">${escHtml(say('caption'))}</caption><thead><tr><th scope="col" class="hm-src-h">${escHtml(say('source'))}</th>${heads}<th scope="col" class="hm-ms-h">${escHtml(say('ms'))}</th></tr></thead>${body}</table>`;
@@ -119,7 +122,12 @@
     const status=element('p','hm-status');status.setAttribute('role','status');status.setAttribute('aria-live','polite');
     const scroll=element('div','hm-scroll');
     body.append(top,element('p','hm-hint',say('openHint')),tools,legend,status,scroll);dialog.append(body);
-    dialog.addEventListener('click',guarded(event=>{if(event.target===dialog)closeDialog();}));
+    // A click on the backdrop closes only when the press and the release were both on it: a text selection dragged out of the table
+    // ends with a click whose target is the dialog too.
+    let press={down:false,up:false};
+    dialog.addEventListener('pointerdown',guarded(event=>{press={down:event.target===dialog,up:false};}));
+    dialog.addEventListener('pointerup',guarded(event=>{press.up=event.target===dialog;}));
+    dialog.addEventListener('click',guarded(event=>{const both=press.down&&press.up;press={down:false,up:false};if(event.target===dialog&&both)closeDialog();}));
     dialog.addEventListener('close',guarded(closed));
     closeButton.addEventListener('click',guarded(()=>closeDialog()));
     select.addEventListener('change',guarded(()=>reload(Number(select.value))));
