@@ -130,7 +130,7 @@ test('the page helpers read the frozen clock: getAge and the data freshness line
   assert.equal(bare.context.getAge(stamp), '2 h ago', 'without CrucixClock getAge uses Date.now');
 });
 
-test('the DOMContentLoaded wiring hands the clock to the alert tray and the record inspector', () => {
+test('the DOMContentLoaded wiring hands the clock to the record inspector; the live alert tray keeps real time', () => {
   const start = html.indexOf("document.addEventListener('DOMContentLoaded'"), end = html.indexOf("\nwindow.addEventListener('beforeunload'", start);
   assert.ok(start > 0 && end > start, 'the DOMContentLoaded handler is found');
   const handlers = {}, mounted = {};
@@ -144,12 +144,13 @@ test('the DOMContentLoaded wiring hands the clock to the alert tray and the reco
   pageFunctions(context, 'clockNow');
   vm.runInContext(html.slice(start, end), context);
   handlers.DOMContentLoaded();
-  assert.equal(typeof mounted.alerts.now, 'function'); assert.equal(typeof mounted.inspector.now, 'function');
-  assert.equal(mounted.alerts.now(), T + 3 * DAY); assert.equal(mounted.inspector.now(), T + 3 * DAY);
+  // Without `now` alerts.js uses Date.now: the alerts are live state, also while a replay freezes the dashboard clock.
+  assert.equal(mounted.alerts.now, undefined, 'the alert tray gets no dashboard clock'); assert.equal(typeof mounted.inspector.now, 'function');
+  assert.equal(mounted.inspector.now(), T + 3 * DAY);
   window.CrucixClock.freeze(T);
-  assert.equal(mounted.alerts.now(), T, 'the tray reads the frozen clock'); assert.equal(mounted.inspector.now(), T, 'the inspector reads the frozen clock');
+  assert.equal(mounted.inspector.now(), T, 'the inspector reads the frozen clock');
   window.CrucixClock.release();
-  assert.equal(mounted.alerts.now(), T + 3 * DAY);
+  assert.equal(mounted.inspector.now(), T + 3 * DAY);
 });
 
 test('clock.js loads before every module that reads it, and the offline shell caches it', () => {

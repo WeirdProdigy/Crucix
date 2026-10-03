@@ -2,10 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
+import { dom } from './fixtures/alert-dom.mjs';
 
 const read = name => readFileSync(new URL('../dashboard/public/' + name, import.meta.url), 'utf8');
 const html = read('jarvis.html');
-const HOUR = 3600000;
+const HOUR = 3600000, DAY = 24 * HOUR;
 const REAL = Date.parse('2026-10-03T12:00:00Z'); // the "real" now of every realm
 const plain = value => JSON.parse(JSON.stringify(value));
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -131,7 +132,7 @@ class FakeElement {
   hasAttribute(name) { return this.attrs.has(name); }
   append(...nodes) { for (let node of nodes) { if (typeof node === 'string') { const text = new FakeElement('#text', this.ownerDocument); text.text = node; node = text; } node.parentNode = this; this.children.push(node); } }
   get textContent() { return this.text + this.children.map(child => child.textContent).join(''); }
-  set textContent(value) { this.text = String(value); this.children = []; }
+  set textContent(value) { this.text = String(value); this.children = []; this.writes = (this.writes || 0) + 1; }
   set innerHTML(value) { this.ownerDocument.innerHTMLWrites.push(String(value)); }
   get innerHTML() { return ''; }
   addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); }
@@ -140,6 +141,8 @@ class FakeElement {
   closest(selector) { for (let n = this; n; n = n.parentNode) if (selector.startsWith('#') && n.id === selector.slice(1)) return n; return null; }
   click() { return dispatch(this, 'click'); }
   get isConnected() { return true; }
+  showModal() { this.open = true; }
+  close() { this.open = false; }
 }
 function dispatch(target, type, init = {}) {
   const event = { type, target, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, ...init };
@@ -153,6 +156,8 @@ function fakeDocument() {
   doc.createElement = tag => new FakeElement(tag, doc);
   doc.getElementById = id => doc.all.find(node => node.id === id && (node === doc.body || doc.body.contains(node))) || null;
   doc.addEventListener = (type, fn) => { (doc.listeners[type] ||= []).push(fn); };
+  doc.createTextNode = text => { const node = new FakeElement('#text', doc); node.text = String(text); return node; };
+  doc.querySelector = () => null;
   doc.body = new FakeElement('body', doc);
   return doc;
 }
@@ -418,7 +423,7 @@ function pageRealm({ pwa = true } = {}) {
   window.CrucixRecordInspector = { refresh: () => { page.inspector++; } };
   pageFunctions(context, 'validSnapshot', 'normalizeSnapshot', 'applySnapshot', 'applyReplaySnapshot', 'restoreLiveSnapshot', 'newerAlerts', 'redriveClock', 'pollSnapshot', 'connectSSE');
   // The page's own hooks, as DOMContentLoaded hands them over.
-  Object.assign(realm.options, { applySnapshot: context.applyReplaySnapshot, restoreLive: context.restoreLiveSnapshot, redrive: context.redriveClock });
+  Object.assign(realm.options, { applySnapshot: context.applyReplaySnapshot, restoreLive: context.restoreLiveSnapshot, redrive: context.redriveClock, getLive: () => context.D });
   return { ...realm, page, handlers, liveAlerts };
 }
 
@@ -499,8 +504,9 @@ function pwaRealm(replaying) {
     return tx;
   } };
   const window = { indexedDB: { open() { const request = {}; queueMicrotask(() => { request.result = db; request.onsuccess?.(); }); return request; } }, navigator: {}, addEventListener() {}, CrucixReplay: { active: () => replaying.value } };
-  vm.runInNewContext(read('pwa.js'), { window, document: { querySelector: () => null }, TextEncoder, Date, JSON, Promise, Error, Object, Number, Array });
-  return { api: window.CrucixPWA, values };
+  const document = fakeDocument();
+  vm.runInNewContext(read('pwa.js'), { window, document, TextEncoder, Date, JSON, Promise, Error, Object, Number, Array });
+  return { api: window.CrucixPWA, values, document };
 }
 
 test('pwa.js writes no snapshot to IndexedDB while a replay is active', async () => {
@@ -513,4 +519,149 @@ test('pwa.js writes no snapshot to IndexedDB while a replay is active', async ()
   assert.equal(values.has('snapshot'), false, 'neither cacheLive nor enabling saves the replayed snapshot');
   replaying.value = false;
   assert.equal(await api.saveSnapshot(archived), true); assert.equal(values.has('snapshot'), true);
+});
+
+// ===== Fix round 1 =====
+test('pwa.js says truthfully that nothing was saved when offline storage is turned on during a replay', async () => {
+  const replaying = { value: true }, { api, values, document } = pwaRealm(replaying);
+  api.openSettings();
+  const input = document.getElementById('pwa-save-snapshot'), message = document.getElementById('pwa-message');
+  input.checked = true; await input.onchange();
+  assert.match(message.textContent, /saved when you go back to live/); assert.equal(values.has('snapshot'), false);
+  assert.ok(!/^Snapshot saved locally/.test(message.textContent));
+});
+
+test('live alert ages keep real time while a replay freezes the dashboard clock', () => {
+  // The page's DOMContentLoaded wiring (as test/clock.test.mjs runs it) hands its options to the real alerts.js.
+  const start = html.indexOf("document.addEventListener('DOMContentLoaded'"), end = html.indexOf("\nwindow.addEventListener('beforeunload'", start);
+  const handlers = {}, mounted = {}, pageWindow = {};
+  const page = vm.createContext({ window: pageWindow, Date, t: english, L: { meta: { code: 'en' } }, D: { alerts: null, liveSources: [] }, location: { protocol: 'file:' }, setInterval: () => 0,
+    document: { documentElement: {}, title: '', addEventListener: (type, fn) => { handlers[type] = fn; } }, currentSnapshot: () => ({ events: [] }), init() {}, updateRuntimeStatus() {}, refreshLiveFreshness() {} });
+  vm.runInContext(read('clock.js'), page);
+  pageWindow.CrucixAlerts = { mount: options => { mounted.alerts = options; } };
+  pageWindow.CrucixRecordInspector = { mount: options => { mounted.inspector = options; } };
+  pageFunctions(page, 'clockNow');
+  vm.runInContext(html.slice(start, end), page);
+  handlers.DOMContentLoaded();
+  const { A, byId } = dom(), firstSeenAt = Date.now() - 2 * HOUR;
+  const summary = { generatedAt: Date.now(), lastEvaluatedAt: Date.now(), counts: { critical: 1, high: 0, watch: 0, info: 0, total: 1 }, threat: { level: 5, drivers: [] },
+    top: [{ id: 'alert-' + '1'.padStart(32, '0'), ruleId: 'events-critical', severity: 'critical', state: 'firing', title: 'Live alert', firstSeenAt, lastSeenAt: firstSeenAt }] };
+  A.mount({ ...mounted.alerts, getSummary: () => summary });
+  const age = () => byId('alertStrip').innerHTML.match(/class="as-age">([^<]*)</)[1];
+  assert.equal(age(), '2h');
+  pageWindow.CrucixClock.freeze(firstSeenAt - DAY);
+  assert.equal(A.update({ ...summary }), true, 'redrawn as redriveClock does');
+  assert.equal(age(), '2h', 'a live alert is as old as it is, whatever sweep is replayed');
+  assert.equal(mounted.inspector.now(), firstSeenAt - DAY, 'the inspector follows the frozen clock');
+});
+
+test('a throwing apply on entry leaves the clock running and the page live', async () => {
+  const realm = await entered();
+  realm.options.applySnapshot = () => { throw new Error('render failed'); };
+  assert.equal(await realm.api.open(), false);
+  assert.equal(realm.clock.frozen(), false, 'the freeze is undone'); assert.equal(realm.api.active(), false);
+  assert.equal(realm.api.offerLive(live(1)), true);
+});
+
+test('a throwing apply on a step puts the clock back at the sweep shown', async () => {
+  const realm = await entered();
+  await realm.api.open();
+  realm.options.applySnapshot = () => { throw new Error('render failed'); };
+  byAction(realm.root, 'prev').click(); await tick();
+  assert.equal(realm.clock.now(), Date.parse(sweepTime(IDS[3]))); assert.equal(realm.api.active(), true);
+  assert.match(statusText(realm), /Could not load this sweep/);
+});
+
+test('an /api/data answer from an earlier exit is dropped when the replay was entered again', async () => {
+  let answer;
+  const realm = await entered(IDS, { routes: { '/api/data': () => new Promise(resolve => { answer = resolve; }) } });
+  await realm.api.open(); realm.api.exit();
+  assert.equal(await realm.api.open(IDS[1]), true);
+  realm.log.length = 0;
+  answer(live(3)); await tick();
+  assert.ok(!realm.log.some(([kind]) => kind === 'restore'), 'no restore over the new replay');
+  assert.equal(realm.api.active(), true); assert.equal(realm.clock.now(), Date.parse(sweepTime(IDS[1])));
+});
+
+test('exit with nothing kept and /api/data down brings back the live snapshot from before the replay', async () => {
+  const realm = pageRealm(), { context, page, api } = realm;
+  await tick();
+  const before = context.D.meta.timestamp;
+  await api.open(IDS[2]);
+  assert.equal(context.D.meta.timestamp, sweepTime(IDS[2]));
+  api.exit(); await tick();
+  assert.equal(api.active(), false);
+  assert.equal(context.D.meta.timestamp, before, 'the archived sweep does not stay on screen as live data');
+  assert.ok(!page.cache.includes(sweepTime(IDS[2])), 'the archived snapshot never reaches the offline cache');
+  const module = await entered(IDS, { routes: { '/api/data': () => Promise.reject(new Error('offline')) } });
+  module.options.getLive = () => live(-5);
+  await module.api.open(); module.api.exit(); module.log.length = 0; await tick();
+  assert.deepEqual(plain(module.log), [['restore', live(-5).meta.timestamp, false], ['redrive', null]]);
+});
+
+test('offerLive fails closed: an exception during a replay never lets the page apply the live snapshot', async () => {
+  const realm = await entered();
+  await realm.api.open();
+  const hostile = { get meta() { throw new Error('getter'); } };
+  assert.strictEqual(realm.api.offerLive(hostile), false);
+  assert.equal(realm.api.active(), true); assert.deepEqual(realm.errors, ['[replay] Error: getter']);
+});
+
+test('the status line is rewritten only when its text changes', async () => {
+  const realm = await entered();
+  await realm.api.open();
+  realm.api.offerLive(live(5));
+  const status = byRole(realm.root, 'status'), writes = status.writes;
+  realm.api.offerLive(live(5)); realm.api.offerLive(live(1)); await tick();
+  assert.equal(status.writes, writes, 'identical redraws are not re-announced');
+  realm.api.offerLive(live(6));
+  assert.equal(status.writes, writes + 1); assert.match(statusText(realm), /waiting: 2/);
+});
+
+test('a failure before entry shows no replay banner, the button is not pressed and pressing it retries', async () => {
+  const realm = await entered(IDS, { routes: { ['/api/sweeps/' + IDS[3]]: () => Promise.reject(httpError(503)) } });
+  realm.trigger.click(); await tick();
+  assert.equal(realm.root.hidden, false); assert.match(statusText(realm), /Could not load this sweep/);
+  assert.equal(find(realm.root, n => n.className === 'rp-head').hidden, true, 'no "replay" banner while live data flows');
+  assert.equal(find(realm.root, n => n.className === 'rp-note').hidden, true);
+  assert.equal(byAction(realm.root, 'exit').textContent, 'Dismiss');
+  assert.equal(realm.trigger.getAttribute('aria-pressed'), 'false'); assert.match(realm.api.button(), /aria-pressed="false"/);
+  realm.trigger.click(); await tick();
+  assert.equal(realm.requests.filter(url => url === '/api/sweeps/' + IDS[3]).length, 2, 'the header button retries');
+  byAction(realm.root, 'exit').click();
+  assert.equal(realm.root.hidden, true);
+});
+
+test('the disabled header button has its reason as an accessible description', async () => {
+  const one = await entered(IDS.slice(0, 1));
+  const markup = one.api.button();
+  assert.match(markup, /aria-describedby="replayTriggerHint"/);
+  assert.match(markup, /<span class="rp-sr" id="replayTriggerHint">Replay needs at least two archived sweeps\.<\/span>/);
+  assert.equal(one.trigger.getAttribute('aria-describedby'), 'replayTriggerHint');
+  const two = await entered(IDS.slice(0, 2));
+  assert.doesNotMatch(two.api.button(), /aria-describedby/); assert.equal(two.trigger.getAttribute('aria-describedby'), null);
+});
+
+test('open(): a later open wins over an earlier one whose list answer comes back last', async () => {
+  const lists = [];
+  const realm = replayRealm({ routes: { '/api/sweeps': () => new Promise(resolve => lists.push(resolve)), ...Object.fromEntries(IDS.map(id => ['/api/sweeps/' + id, snapshotOf(id)])) } });
+  lists[0](listOf(IDS)); await tick();
+  const first = realm.api.open(IDS[1]), second = realm.api.open(IDS[2]); await tick();
+  lists[2](listOf(IDS)); await tick();
+  lists[1](listOf(IDS)); await tick();
+  assert.equal(await first, false); assert.equal(await second, true);
+  assert.ok(!realm.requests.includes('/api/sweeps/' + IDS[1]), 'the earlier open loads nothing');
+  assert.equal(realm.clock.now(), Date.parse(sweepTime(IDS[2])));
+});
+
+test('the sweep list: an older /api/sweeps answer arriving last does not replace a newer one', async () => {
+  const lists = [], NEW = 'sweep-20261003T100000Z';
+  const realm = replayRealm({ routes: { '/api/sweeps': () => new Promise(resolve => lists.push(resolve)), ...Object.fromEntries(IDS.map(id => ['/api/sweeps/' + id, snapshotOf(id)])) } });
+  lists[0](listOf(IDS)); await tick();
+  const opening = realm.api.open(); await tick(); lists[1](listOf(IDS)); await opening;
+  realm.api.offerLive(live(1)); realm.api.offerLive(live(2)); await tick();
+  assert.equal(lists.length, 4, 'each live update during the replay re-reads the list');
+  lists[3](listOf([...IDS, NEW])); await tick();
+  lists[2](listOf(IDS)); await tick();
+  assert.equal(String(slider(realm.root).max), '4', 'the newest list (five sweeps) stays');
 });

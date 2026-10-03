@@ -33,7 +33,7 @@ test('the lenses group names "all", the lens bar and each domain of the registry
 });
 
 // Every string replay.js renders, in locale order (the same order in en, hu and fr).
-const REPLAY_KEYS = ['button', 'region', 'banner', 'slider', 'prev', 'next', 'backToLive', 'loading', 'error', 'notFound', 'newerLive', 'alertsLive', 'historyUnavailable', 'noSweeps', 'position', 'unknownTime'];
+const REPLAY_KEYS = ['button', 'region', 'banner', 'slider', 'prev', 'next', 'backToLive', 'dismiss', 'loading', 'error', 'notFound', 'newerLive', 'alertsLive', 'historyUnavailable', 'noSweeps', 'position', 'unknownTime'];
 
 test('the replay group has the same keys in the same order in en, hu and fr, each a non-empty string', () => {
   for (const lang of LANGS) {

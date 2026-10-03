@@ -6,17 +6,18 @@
   //   fetchJson(url)  -> Promise<object>; a rejection may carry .status (404 = the sweep left the archive)
   //   applySnapshot(s) renders an archived snapshot (the page keeps its live alerts); restoreLive(s) renders a live one again
   //   redrive()       redraws every age label after the clock froze or was released (the clock sends no notification)
+  //   getLive()       the live snapshot shown before the replay: restored on exit when no newer one can be had
   //   t(key, fallback), locale (for the time label)
   // While a replay holds the page, live snapshots are not applied (offerLive -> false): the newest is kept and applied on exit.
   const C=window.CrucixReplayCore;
   const SWEEP_ID=/^sweep-(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/;
-  const COPY={button:'Replay',region:'Sweep replay',banner:'Replay of an archived sweep',slider:'Archived sweep',prev:'Previous sweep',next:'Next sweep',backToLive:'Back to live',
+  const COPY={button:'Replay',region:'Sweep replay',banner:'Replay of an archived sweep',slider:'Archived sweep',prev:'Previous sweep',next:'Next sweep',backToLive:'Back to live',dismiss:'Dismiss',
     loading:'Loading sweep…',error:'Could not load this sweep. The previous view is kept.',notFound:'This sweep is no longer in the archive.',
     newerLive:'Newer live data waiting: {count}. It is shown when you go back to live.',alertsLive:'Alerts stay live during the replay.',
     historyUnavailable:'Event history and export read the live store, so they are off during the replay; the records shown are the replayed sweep’s own.',
     noSweeps:'Replay needs at least two archived sweeps.',position:'{index} of {total}',unknownTime:'Unknown time'};
   const ERRORS=['error','notFound','noSweeps'];
-  let opts=null,nodes=null,state=C.createState(),times={},listed=false,seq=0,listSeq=0,liveSeen=0,frozen=false,refocus=false;
+  let opts=null,nodes=null,state=C.createState(),times={},listed=false,seq=0,listSeq=0,liveSeen=0,frozen=false,refocus=false,liveBefore=null;
   const log=error=>{try{console.error('[replay]',error);}catch{}};
   const guarded=fn=>(...args)=>{try{return fn(...args);}catch(error){log(error);}};
   const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -78,38 +79,43 @@
   }
   function measure(){document.documentElement?.style?.setProperty('--rp-height',Math.ceil(nodes.root.getBoundingClientRect().height)+'px');}
   function speak(range,time,text){time.textContent=text;range.setAttribute('aria-valuetext',text);}
+  // A live region speaks on every write: text is only replaced when it changes.
+  function write(node,text){if(node.textContent!==text)node.textContent=text;}
   function draw(){
     syncTrigger();
     if(!nodes)return;
-    const {root,time,position,controls,range,prev,next,status}=nodes,wasHidden=root.hidden;
+    const {root,head,time,position,controls,range,prev,next,exitButton,note,status}=nodes,wasHidden=root.hidden;
     root.hidden=state.mode==='live';
     if(root.hidden)return;
-    // An error before any sweep was shown has no slider: only the message and the way back.
+    // An error before any sweep was shown is not a replay (live data flows): no banner, no slider, only the message and Dismiss.
     const entered=state.id!==null||state.mode==='loading';
-    controls.hidden=!entered;time.hidden=!entered;position.hidden=!entered;
+    head.hidden=!entered;controls.hidden=!entered;note.hidden=!entered;
+    write(exitButton,say(entered?'backToLive':'dismiss'));
     if(entered){
       const at=Math.max(0,state.mode==='loading'?state.targetIndex:state.index),total=state.sweeps.length;
       range.max=String(Math.max(0,total-1));range.value=String(at);
       speak(range,time,label(state.sweeps[at]));
-      position.textContent=say('position',{index:at+1,total});
+      write(position,say('position',{index:at+1,total}));
       setDisabled(prev,at<=0);setDisabled(next,at>=total-1);
     }
-    status.textContent=[state.mode==='loading'?say('loading'):'',state.error?say(ERRORS.includes(state.error)?state.error:'error'):'',state.missed?say('newerLive',{count:state.missed}):''].filter(Boolean).join(' · ');
+    write(status,[state.mode==='loading'?say('loading'):'',state.error?say(ERRORS.includes(state.error)?state.error:'error'):'',state.missed?say('newerLive',{count:state.missed}):''].filter(Boolean).join(' · '));
     if(wasHidden&&entered)range.focus();
   }
   // aria-disabled keeps the button focusable when an end is reached (a disabled button would drop the keyboard focus).
   function setDisabled(node,off){if(off)node.setAttribute('aria-disabled','true');else node.removeAttribute('aria-disabled');}
+  const HINT='replayTriggerHint';
   function syncTrigger(){
     const node=document.getElementById('replayTrigger');if(!node)return;
-    node.setAttribute('aria-pressed',String(state.mode!=='live'));
-    if(state.mode!=='live'||available()){node.removeAttribute('aria-disabled');node.removeAttribute('title');}
-    else{node.setAttribute('aria-disabled','true');node.setAttribute('title',say('noSweeps'));}
+    node.setAttribute('aria-pressed',String(active()));
+    if(active()||available()){node.removeAttribute('aria-disabled');node.removeAttribute('title');node.removeAttribute('aria-describedby');}
+    else{node.setAttribute('aria-disabled','true');node.setAttribute('title',say('noSweeps'));node.setAttribute('aria-describedby',HINT);}
   }
-  // The header button (renderTopbar includes it): disabled with the reason until two sweeps are archived. Empty before mount.
+  // The header button (renderTopbar includes it): disabled until two sweeps are archived, the reason in its title and in a
+  // visually hidden description (aria-describedby). Pressed only while a replay holds the page. Empty before mount.
   function button(){
     if(!opts)return '';
-    const on=state.mode!=='live',off=!on&&!available(),controls=opts.root.id?` aria-controls="${esc(opts.root.id)}"`:'';
-    return `<button type="button" class="guide-btn rp-trigger" id="replayTrigger" aria-pressed="${on}"${controls}${off?` aria-disabled="true" title="${esc(say('noSweeps'))}"`:''}>${esc(say('button'))}</button>`;
+    const on=active(),off=!on&&!available(),controls=opts.root.id?` aria-controls="${esc(opts.root.id)}"`:'',hint=esc(say('noSweeps'));
+    return `<button type="button" class="guide-btn rp-trigger" id="replayTrigger" aria-pressed="${on}"${controls}${off?` aria-disabled="true" title="${hint}" aria-describedby="${HINT}"`:''}>${esc(say('button'))}</button><span class="rp-sr" id="${HINT}">${hint}</span>`;
   }
 
   // ===== Loading =====
@@ -134,8 +140,10 @@
     catch(failure){error=failure&&failure.status===404?'notFound':'error';}
     if(mine!==seq)return false;
     if(!error){
-      const c=clock(),previous=frozen&&c?c.now():null;
-      try{if(c){c.freeze(snapshotTime(snapshot));frozen=true;}opts.applySnapshot(snapshot);}
+      const c=clock(),previous=frozen&&c?c.now():null,first=state.id===null;
+      // Entering: remember the live snapshot shown now, before the archived one replaces it.
+      let live=null;if(first){try{live=opts.getLive?.()??null;}catch(failure){log(failure);}}
+      try{if(c){c.freeze(snapshotTime(snapshot));frozen=true;}opts.applySnapshot(snapshot);if(first)liveBefore=live;}
       catch(failure){
         log(failure);error='error';
         if(c){if(previous===null){c.release();frozen=false;}else c.freeze(previous);}
@@ -172,23 +180,26 @@
   // Back to live: the clock is released first, then the newest kept live snapshot is rendered (or /api/data is read once).
   function leave(focusTrigger){
     if(!opts||state.mode==='live')return;
-    const before=state;++seq;
+    const before=state,kept=liveBefore;++seq;liveBefore=null;
     state=C.reduce(state,{type:'exit'});
     const c=clock();if(frozen){frozen=false;c?.release();}
     draw();
     if(before.pending){restore(before.pending);redrive();}
-    else if(before.id!==null){redrive();fromServer().catch(log);}
+    else if(before.id!==null){redrive();fromServer(kept).catch(log);}
     refocus=!!focusTrigger;if(refocus)focusTriggerNow();
   }
   // The header button is redrawn with the top bar: focus whatever node carries its id now.
   function focusTriggerNow(){document.getElementById('replayTrigger')?.focus?.();}
-  async function fromServer(){
+  // Without /api/data the live snapshot from before the replay comes back: the archived one never stays on screen as live data.
+  async function fromServer(kept){
     const mine=seq,seen=liveSeen;
-    let data;
-    try{data=await opts.fetchJson('/api/data');}catch{return;}
+    let data=null;
+    try{data=await opts.fetchJson('/api/data');}catch{data=null;}
     // A replay entered again, or a live update the page applied meanwhile, makes this answer stale.
-    if(mine!==seq||seen!==liveSeen||snapshotTime(data)===null)return;
-    restore(data);redrive();
+    if(mine!==seq||seen!==liveSeen)return;
+    const live=snapshotTime(data)!==null?data:kept;
+    if(!live)return;
+    restore(live);redrive();
     if(refocus&&(!document.activeElement||document.activeElement===document.body))focusTriggerNow();
   }
   // SSE `update` and the poll fallback ask first: true = apply it (live mode); false = kept aside for the exit.
@@ -203,9 +214,10 @@
     refreshList().catch(log);draw();
     return false;
   }
+  // The header button leaves a replay; otherwise it opens one (also a retry after a failure before entry).
   function onDocumentClick(event){
     const trigger=event.target?.closest?.('#replayTrigger');if(!trigger)return;
-    if(state.mode!=='live'){leave(true);return;}
+    if(active()){leave(true);return;}
     if(available())open().catch(log);
   }
   function mount(options){
@@ -215,5 +227,9 @@
     refreshList().catch(log);
     return true;
   }
-  window.CrucixReplay=Object.freeze({mount,open:id=>open(id).catch(error=>{log(error);return false;}),exit:guarded(()=>leave(false)),active,offerLive:guarded(offerLive),button:guarded(button)});
+  // offerLive fails closed: after an exception during a replay the caller must not apply the live snapshot over it.
+  const offer=snapshot=>{try{return offerLive(snapshot);}catch(error){log(error);return !active();}};
+  // The history/export note for intelligence.js: one source for its text.
+  const historyNote=()=>say('historyUnavailable');
+  window.CrucixReplay=Object.freeze({mount,open:id=>open(id).catch(error=>{log(error);return false;}),exit:guarded(()=>leave(false)),active,offerLive:offer,button:guarded(button),historyNote});
 })(window,document);

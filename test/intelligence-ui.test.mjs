@@ -169,8 +169,8 @@ test('history reports empty, failed and offline states and clamps invalid page s
 });
 
 test('during a sweep replay history, export and event lookups by id are off and say why',async()=>{
-  const urls=[];const h=harness({historyEnabled:true,translations:{'replay.historyUnavailable':'REPLAY NOTE <b>'},fetch:async url=>{urls.push(String(url));return {ok:true,json:async()=>({items:[fixture()],total:1,limit:50,offset:0,stats:{}})}}});
-  let replaying=true;h.window.CrucixReplay={active:()=>replaying};
+  const urls=[];const h=harness({historyEnabled:true,fetch:async url=>{urls.push(String(url));return {ok:true,json:async()=>({items:[fixture()],total:1,limit:50,offset:0,stats:{}})}}});
+  let replaying=true;h.window.CrucixReplay={active:()=>replaying,historyNote:()=>'REPLAY NOTE <b>'};
   assert.equal(h.api.openHistory(),true,'the dialog opens with the explanation');await tick();
   assert.deepEqual(urls,[],'no /api/history request');assert.match(byId(h,'ci-body').textContent,/REPLAY NOTE <b>/);assert.equal(h.document.querySelectorAll('[data-ci-export]').length,0,'no export buttons');
   assert.equal(await h.api.openEvent('event-not-in-snapshot'),false);assert.deepEqual(urls,[],'no /api/events/:id request');assert.match(byId(h,'ci-body').textContent,/REPLAY NOTE/);

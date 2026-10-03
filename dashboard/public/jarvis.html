@@ -2413,11 +2413,13 @@ document.addEventListener('DOMContentLoaded',()=>{
     getLayers:()=>mapLayers,applyLayers:value=>{for(const layer of mapLayerRegistry)if(typeof value?.[layer.id]==='boolean')mapLayers[layer.id]=value[layer.id];flightsVisible=mapLayers.air!==false;writePreference(MAP_LAYER_STORAGE_KEY,JSON.stringify(mapLayers));reinit();},
     getRegion:()=>currentRegion,applyRegion:setRegion,t,escapeText:esc,historyEnabled:location.protocol!=='file:',profilesEnabled:true});
   // Before the inspector: it docks below the alert strip.
-  window.CrucixAlerts?.mount({getSummary:()=>D.alerts,t,now:clockNow});
+  // The alert strip and tray are live state (also during a sweep replay): they keep real time. The inspector shows the records
+  // of the snapshot on screen, so it reads the dashboard clock (frozen at an archived sweep's time during a replay).
+  window.CrucixAlerts?.mount({getSummary:()=>D.alerts,t});
   window.CrucixRecordInspector?.mount({getSources:()=>D.liveSources,getEvents:()=>currentSnapshot().events,t,now:clockNow});
   // Before init: the first top bar already carries the replay button. Not on file pages or the offline shell (no archive there).
   if(location.protocol!=='file:'&&!window.__CRUCIX_OFFLINE_SHELL__)window.CrucixReplay?.mount({root:document.getElementById('replayBar'),fetchJson:fetchJsonNoStore,
-    applySnapshot:applyReplaySnapshot,restoreLive:restoreLiveSnapshot,redrive:redriveClock,t,locale:L.meta?.code==='hu'?'hu-HU':L.meta?.code==='fr'?'fr-FR':'en-US'});
+    applySnapshot:applyReplaySnapshot,restoreLive:restoreLiveSnapshot,redrive:redriveClock,getLive:()=>D,t,locale:L.meta?.code==='hu'?'hu-HU':L.meta?.code==='fr'?'fr-FR':'en-US'});
   init();
   if(location.protocol!=='file:')CrucixPWA.init({getSnapshot:()=>D,applySnapshot:data=>!D.meta.timestamp&&applySnapshot(data,{cached:true}),t});
   if(location.protocol!=='file:'){

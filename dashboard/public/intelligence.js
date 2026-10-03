@@ -32,10 +32,10 @@
     return value;
   }
   // A sweep replay (replay.js) shows an archived snapshot; /api/history, /api/export and /api/events/:id read the live store, so
-  // those requests are off while it runs and the dialog says why. Records of the replayed snapshot itself still open.
-  const REPLAY_NOTE = 'Event history and export read the live store, so they are off during the replay; the records shown are the replayed sweep’s own.';
+  // those requests are off while it runs and the dialog says why (the text is replay.js's). Records of the replayed snapshot
+  // itself still open.
   function replaying() { try { return !!window.CrucixReplay?.active?.(); } catch { return false; } }
-  function replayNote() { let value = REPLAY_NOTE; try { value = options.t?.('replay.historyUnavailable', REPLAY_NOTE); } catch { value = REPLAY_NOTE; } return typeof value === 'string' && value ? value : REPLAY_NOTE; }
+  function replayNote() { let value = ''; try { value = window.CrucixReplay?.historyNote?.(); } catch { value = ''; } return typeof value === 'string' && value ? value : tr('eventUnavailable'); }
   function label(prefix, value) { const code = bounded(value, 100); return COPY[prefix + '_' + code] ? tr(prefix + '_' + code) : code || tr('unknown'); }
   function element(tag, className, text) { const node = document.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = String(text); return node; }
   function button(text, action, className = 'ci-button') { const node = element('button', className, text); node.type = 'button'; if (action) node.addEventListener('click', action); return node; }
