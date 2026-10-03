@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { CHANGE_CAPS, buildChanges, mergeChanges } from '../lib/sweeps/changes.mjs';
 import { SOURCE_STATES, SweepArchive } from '../lib/sweeps/archive.mjs';
 import { DOMAIN_IDS } from '../lib/domains.mjs';
+import { LEVELS } from '../lib/alerts/levels.mjs';
 
 const BASE = Date.parse('2026-10-03T08:00:00.000Z');
 const QUARTER = 15 * 60000;
@@ -223,26 +224,41 @@ test('delta signals are simplified, ordered by level then new/escalated/deescala
   const changes = buildChanges(deepFreeze(sweep(0)), deepFreeze(sweep(1, { delta })));
   assert.deepEqual(changes.signals, [
     { key: 'nuke_anomaly', label: 'Nuclear anomaly detected', direction: null, severity: 'critical', type: 'new' },
+    { key: 'tg_urgent:abc', label: 'New urgent OSINT post', direction: null, severity: 'high', type: 'new' },
     { key: 'vix', label: 'VIX', direction: 'up', severity: 'high', type: 'escalated' },
     { key: 'nuke_anomaly', label: 'Nuclear Anomaly', direction: 'resolved', severity: 'high', type: 'deescalated' },
     { key: 'source_degradation', label: '3 additional sources failing', direction: null, severity: 'watch', type: 'new' },
     { key: 'wti', label: 'WTI Crude', direction: 'down', severity: 'watch', type: 'deescalated' },
-    { key: 'tg_urgent:abc', label: 'New urgent OSINT post', direction: null, severity: null, type: 'new' },
   ]);
   assert.doesNotMatch(JSON.stringify(changes), /onerror|hostile/);
   assert.deepEqual(changes.domains, {}, 'signals carry no domain');
 });
 
-test('a signal severity that is no event-scale word stays a short plain string; non-strings become null', () => {
+test('a signal severity is one of the four levels or null: event-scale words are mapped, every other word is dropped', () => {
   const entries = [
     { key: 'a', label: 'A', severity: 'Critical' }, { key: 'b', label: 'B', severity: 'severe' }, { key: 'c', label: 'C', severity: 'odd' },
     { key: 'd', label: 'D', severity: `  ${'x'.repeat(100)}` }, { key: 'e', label: 'E', severity: 7 }, { key: 'f', label: 'F', severity: '' },
-    { key: 'g', label: 'G', severity: '<b>' }, { key: 'h', label: 'H' },
+    { key: 'g', label: 'G', severity: '<b>' }, { key: 'h', label: 'H' }, { key: 'i', label: 'I', severity: 'watch' }, { key: 'j', label: 'J', severity: 'moderate' },
+    { key: 'k', label: 'K', severity: 'unknown' }, { key: 'l', label: 'L', severity: 'info' }, { key: 'm', label: 'M', severity: { toString: () => 'high' } },
   ];
   const changes = buildChanges(deepFreeze(sweep(0)), deepFreeze(sweep(1, { delta: { signals: { new: [], escalated: entries, deescalated: [] } } })));
   const severity = Object.fromEntries(changes.signals.map(item => [item.key, item.severity]));
-  assert.deepEqual(severity, { a: 'critical', b: 'high', c: 'odd', d: 'x'.repeat(18), e: null, f: null, g: '<b>', h: null });
-  assert.ok(changes.signals.every(item => item.severity === null || item.severity.length <= 20));
+  assert.deepEqual(severity, { a: 'critical', b: 'high', c: null, d: null, e: null, f: null, g: null, h: null, i: 'watch', j: 'watch', k: null, l: 'info', m: null });
+  assert.ok(changes.signals.every(item => item.severity === null || LEVELS.includes(item.severity)));
+});
+
+test('a new urgent Telegram post is rated high: it keeps its place under the cap, and nothing else gets that rule', () => {
+  const metrics = Array.from({ length: 25 }, (_, n) => ({ key: `m${n}`, label: `Metric ${n}`, direction: 'up', severity: 'moderate' }));
+  const posts = [{ key: 'tg_urgent:p1', reason: 'New urgent OSINT post', text: 'first' }, { key: 'tg_urgent:p2', reason: 'New urgent OSINT post', text: 'second', severity: 'critical' }];
+  const delta = { signals: { new: [...posts, { key: 'plain_new', reason: 'no severity' }, { key: 'tg_urgent_like', reason: 'other prefix' }], escalated: [...metrics, { key: 'tg_urgent:esc', label: 'wrong type' }], deescalated: [] } };
+  const changes = buildChanges(deepFreeze(sweep(0)), deepFreeze(sweep(1, { delta })));
+  assert.deepEqual(changes.signals.slice(0, 2).map(item => [item.key, item.severity]), [['tg_urgent:p2', 'critical'], ['tg_urgent:p1', 'high']], 'an explicit severity still wins');
+  assert.equal(changes.signals.length, CHANGE_CAPS.signals);
+  assert.ok(changes.signals.slice(2).every(item => item.severity === 'watch'), 'the posts are not dropped for metrics of a lower level');
+  const loose = buildChanges(deepFreeze(sweep(0)), deepFreeze(sweep(1, { delta: { signals: { new: delta.signals.new.slice(2), escalated: [{ key: 'tg_urgent:esc', label: 'wrong type' }], deescalated: [] } } })));
+  assert.deepEqual(loose.signals.map(item => [item.key, item.severity]), [['plain_new', null], ['tg_urgent_like', null], ['tg_urgent:esc', null]]);
+  const merged = mergeChanges(deepFreeze([shell(1, { signals: [{ key: 'tg_urgent:old', label: 'old', direction: null, severity: null, type: 'new' }, { key: 'tg_urgent:old2', label: 'old2', direction: null, severity: null, type: 'escalated' }] })]));
+  assert.deepEqual(merged.signals.map(item => [item.key, item.severity]), [['tg_urgent:old', 'high'], ['tg_urgent:old2', null]], 'the merge applies the same rule to a stored row without a level');
 });
 
 test('signal labels fall back to the reason, then the key; unusable entries and delta shapes are skipped without throwing', () => {
@@ -393,7 +409,7 @@ test('mergeChanges caps the lists at 40/30/20 and keeps real totals; sources kee
     sources: Array.from({ length: 20 }, (_, n) => move(`c-${n}`, 'error', 'ok')),
     signals: Array.from({ length: 15 }, (_, n) => ({ key: `s${n}`, label: `S${n}`, direction: 'up', severity: 'watch', type: 'escalated' })),
   });
-  const fourth = shell(4, { signals: Array.from({ length: 15 }, (_, n) => ({ key: `t${n}`, label: `T${n}`, direction: 'up', severity: n === 14 ? 'critical' : 'info', type: 'new' })) });
+  const fourth = shell(4, { signals: Array.from({ length: 15 }, (_, n) => ({ key: `t${n}`, label: `T${n}`, direction: 'up', severity: n === 14 ? 'critical' : 'watch', type: 'new' })) });
   const merged = mergeChanges(deepFreeze([first, second, third, fourth]));
   assert.equal(merged.events.new.length, 40);
   assert.ok(merged.events.new.every(entry => entry.severity === 'critical'));
@@ -401,9 +417,26 @@ test('mergeChanges caps the lists at 40/30/20 and keeps real totals; sources kee
   assert.equal(merged.domains.hazards, 160);
   assert.equal(merged.sources.length, 30);
   assert.deepEqual(merged.sources.map(entry => entry.source), [...Array.from({ length: 10 }, (_, n) => `b-${n + 10}`), ...Array.from({ length: 20 }, (_, n) => `c-${n}`)]);
-  assert.equal(merged.signals.length, 20);
-  assert.equal(merged.signals[0].key, 't14');
-  assert.equal(merged.signals[1].key, 's0', 'equal levels keep their chronological order');
+  assert.deepEqual(merged.signals.map(entry => entry.key), ['t14', ...Array.from({ length: 14 }, (_, n) => `t${n}`), ...Array.from({ length: 5 }, (_, n) => `s${n}`)], 'the critical one, then the same level newest sweep first');
+});
+
+test('mergeChanges lists a signal once per type and key with its latest level, and a late critical signal survives the cap', () => {
+  const metric = (key, severity, type = 'escalated') => ({ key, label: key, direction: 'up', severity, type });
+  // 97 sweeps: two metrics escalate as critical in every one of them, and 24 distinct metrics escalate once each; a nuclear anomaly
+  // shows up only in the newest sweep, an old high-level signal only in the oldest.
+  const sweeps = Array.from({ length: 97 }, (_, n) => shell(n + 1, {
+    signals: [metric('news_count', 'critical'), metric('sources_ok', 'critical'), ...(n < 24 ? [metric(`once-${n}`, 'watch')] : []), ...(n === 0 ? [metric('old_high', 'high')] : []),
+      ...(n === 96 ? [metric('nuke_anomaly', 'critical', 'new')] : [])],
+  }));
+  const merged = mergeChanges(deepFreeze(sweeps));
+  const keys = merged.signals.map(entry => `${entry.type}|${entry.key}`);
+  assert.equal(new Set(keys).size, keys.length, 'no repeated type and key');
+  assert.deepEqual(keys.slice(0, 4), ['escalated|news_count', 'escalated|sources_ok', 'new|nuke_anomaly', 'escalated|old_high'], 'the critical ones come first (the newest sweep in its own row order), then the high one');
+  assert.equal(merged.signals.length, CHANGE_CAPS.signals);
+  assert.deepEqual(keys.slice(4), Array.from({ length: 16 }, (_, n) => `escalated|once-${23 - n}`), 'then the single-sighting metrics, newest sweep first within the level');
+  // The same key at two levels: the newest sighting decides; the same key as another type is another row.
+  const upgraded = mergeChanges(deepFreeze([shell(1, { signals: [metric('vix', 'watch'), metric('vix', 'high', 'deescalated')] }), shell(2, { signals: [metric('vix', 'critical')] })]));
+  assert.deepEqual(upgraded.signals.map(entry => [entry.type, entry.key, entry.severity]), [['escalated', 'vix', 'critical'], ['deescalated', 'vix', 'high']]);
 });
 
 test('mergeChanges takes since from the first entry and at from the last, and the limit keeps the newest entries', () => {
