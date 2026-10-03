@@ -90,10 +90,12 @@ test('the risk step never throws on a hostile or empty snapshot and sets snapsho
   assert.equal(japan.components.baseline.value, 24, 'INFORM x 10');
   assert.ok(result.scores.some(row => row.iso3 === 'HUN'));
   assert.ok(journal.recent(50).some(row => row.iso3 === 'JPN'), 'today\'s prediction is logged');
-  // A stale VIEWS payload gives no forecast: the component is missing and the coverage shows it.
+  // A stale VIEWS payload (the last good one) still gives its forecast; a missing one drops the component and the coverage shows it.
   const stale = runRiskStep({ store, snapshot: { events: events() }, raw: raw({ stale: true }), now: NOW + HOUR, log: quiet }).scores.find(row => row.iso3 === 'JPN');
-  assert.equal(stale.components.forecast.value, null);
-  assert.ok(stale.coverage < japan.coverage);
+  assert.equal(stale.components.forecast.value, 25);
+  const none = runRiskStep({ store, snapshot: { events: events() }, raw: { sources: {} }, now: NOW + HOUR, log: quiet }).scores.find(row => row.iso3 === 'JPN');
+  assert.equal(none.components.forecast.value, null);
+  assert.ok(none.coverage < japan.coverage);
 });
 
 test('the read-only routes over real HTTP: list, profile and predictions shapes; invalid and unknown ISO3; no stack on errors', async t => {
