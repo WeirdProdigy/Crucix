@@ -1,5 +1,7 @@
 # Changelog / Változásnapló
 
+- [2.13.0 — Intelligencia-réteg: országkockázat, naplózott előrejelzések, konfliktus-előrejelzés és hivatkozott összefoglalók / Intelligence layer: country risk, logged predictions, conflict forecasts and cited briefings](docs/releases/v2.13.0.md) — 2026-10-03
+
 - [2.12.1 — CI-javítás: sortörés-érzékeny teszt Windowson / CI fix: a line-ending-sensitive test on Windows](docs/releases/v2.12.1.md) — 2026-10-03
 
 - [2.12.0 — Dashboard-szerkezet: témalencsék, Ctrl+K paletta, forrás-egészség mátrix, „Mi változott” és sweep-visszajátszás / Dashboard structure: domain lenses, Ctrl+K palette, source-health matrix, "What changed" and sweep replay](docs/releases/v2.12.0.md) — 2026-10-03
