@@ -149,9 +149,10 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/control') {
     if(url.searchParams.has('liveSources')){
       const enabled=url.searchParams.get('liveSources')==='true',samples=liveSamples(Date.now());
-      // failed=group: the first source of each domain (policy order) reports an error; failed=all: every source does.
-      const failed=url.searchParams.get('failed'),hit=new Set();
-      if(['group','all'].includes(failed))for(const sample of Object.values(samples)){const domain=domainOfSource(sample.source);if(failed==='all'||!hit.has(domain)){hit.add(domain);sample.status='error';sample.error='Fixture failure';}}
+      // failed=group: the first source of each domain (policy order) reports an error; failed=all: every source does; any other value is
+      // a comma-separated list of source names that fail (e.g. two sources of one domain).
+      const failed=url.searchParams.get('failed'),hit=new Set(),named=failed?failed.split(','):[];
+      if(failed)for(const sample of Object.values(samples)){const domain=domainOfSource(sample.source);if(failed==='all'||(failed==='group'&&!hit.has(domain))||named.includes(sample.source)){hit.add(domain);sample.status='error';sample.error='Fixture failure';}}
       data.liveSources=enabled?normalizeLiveSources(samples):[];
       if(enabled&&url.searchParams.get('expired')==='true')data.liveSources[0].observedAt='2025-01-01T00:00:00Z';
       // Rows carry eventId as in 2.9.0 snapshots; legacyIds=true keeps the 2.8.0 shape without it.

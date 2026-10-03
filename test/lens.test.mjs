@@ -392,6 +392,7 @@ test('live-sources.css keeps the chip line to one line ("+N" whole) and both box
   const rule = (text, selector) => text.match(new RegExp('(?:^|\\})' + selector.replace(/[.[\]()*+?^$|\\]/g, '\\$&') + '\\{([^}]*)\\}', 'm'))?.[1] ?? '';
   assert.match(rule(css, '.lg-sub'), /flex-wrap:nowrap/, 'the chip line never wraps (spec 1.2: <= 420 px collapsed in every state)');
   assert.match(rule(css, '.lg-sub'), /overflow:hidden/);
+  assert.match(rule(css, '.lg-sub'), /contain:inline-size/, 'the one-line chips do not widen the auto-width right rail on phones');
   assert.match(rule(css, '.lg-chip'), /text-overflow:ellipsis/); assert.match(rule(css, '.lg-chip'), /white-space:nowrap/); assert.match(rule(css, '.lg-chip'), /min-width:0/);
   assert.doesNotMatch(rule(css, '.lg-chip'), /overflow-wrap:anywhere/, 'a chip does not break onto a second line');
   assert.match(rule(css, '.lg-chip.lg-more'), /flex:0 0 auto/, 'the "+N" chip never shrinks');

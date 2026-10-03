@@ -849,6 +849,37 @@ async function structureChecks() {
       }
     }
     console.log('STRUCTURE collapsed live panel PASS', measured.collapsedByState);
+    // (9) Phones with failing sources: the one-line chips must not widen the right rail (an auto-width flex item) past the viewport.
+    // States: the first source of each domain, every source, and two failing sources of one domain (two pairs).
+    measured.phoneFailing = {};
+    for (const [state, query] of [['group', 'failed=group'], ['all', 'failed=all'], ['supply pair', 'failed=Energy-Charts-HU,ENTSOG-HU'], ['hazards pair', 'failed=Meteoalarm,GDACS']]) {
+      await control('liveSources=true&' + query);
+      for (const width of [360, 390]) {
+        const { context, page } = await prepare({ width, height: 844 });
+        try {
+          const size = await page.evaluate(() => {
+            const box = node => { const r = node?.getBoundingClientRect(); return r ? { left: r.left, right: r.right } : null; };
+            const panel = document.querySelector('.live-sources-panel'), lines = [...panel.querySelectorAll('.lg-sub')];
+            return { innerWidth, root: [document.documentElement.scrollWidth, document.documentElement.clientWidth], body: [document.body.scrollWidth, document.body.clientWidth],
+              rail: box(document.getElementById('rightRail')), panel: box(panel), badge: box(panel.querySelector('.sec-head .badge')),
+              failing: D.liveSources.filter(source => source.status === 'error').length,
+              chips: lines.flatMap(line => [...line.querySelectorAll('.lg-chip')].map(chip => chip.getBoundingClientRect().right <= line.getBoundingClientRect().right + 0.5)),
+              more: lines.flatMap(line => [...line.querySelectorAll('.lg-more')].map(more => more.scrollWidth <= more.clientWidth + 1 && more.getBoundingClientRect().right <= line.getBoundingClientRect().right + 0.5)),
+              cut: [...panel.querySelectorAll('.lg-chip:not(.lg-more)')].filter(chip => chip.scrollWidth > chip.clientWidth + 1).length };
+          });
+          const where = `${state} at ${width} px: ${JSON.stringify(size)}`;
+          assert(size.failing > 0, 'failing sources in the fixture: ' + where);
+          assert(size.root[0] <= size.root[1] && size.body[0] <= size.body[1], 'no horizontal overflow: ' + where);
+          for (const part of ['rail', 'panel', 'badge']) assert(size[part] && size[part].left >= -0.5 && size[part].right <= size.innerWidth + 0.5, `the ${part} stays inside the viewport: ` + where);
+          assert(size.chips.length > 0 && size.chips.every(Boolean), 'every chip stays inside its line (it shrinks with an ellipsis): ' + where);
+          assert(size.more.every(Boolean), '"+N" is shown whole: ' + where);
+          if (state === 'all') assert(size.more.length > 0 && size.cut > 0, 'every source failing: a "+N" chip and ellipsised chips: ' + where);
+          (measured.phoneFailing[state] ||= {})[width] = Math.round(size.panel.right - size.panel.left);
+          if (state === 'all' && width === 390) { await page.locator('.live-sources-panel').scrollIntoViewIfNeeded(); await shot(page, '390-live-all-failed'); }
+        } finally { await context.close(); }
+      }
+    }
+    console.log('STRUCTURE phone failing sources PASS', measured.phoneFailing);
   } finally { await control('liveSources=false&archive=seed'); }
 }
 try {

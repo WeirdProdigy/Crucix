@@ -73,17 +73,17 @@
     // across rows and columns, so the word alone would not tell where the focus is.
     // (A real sweep id always has a time: the id's own when the list's timestamp is unreadable.)
     const when=sweeps.map(entry=>{if(!valid(entry))return '';const stamp=stamps(sweepTime(entry));return escHtml(stamp.day+' '+stamp.time);});
-    const cell=(code,entry,stop,source,index)=>{
+    const cell=(code,entry,stop,source,index)=>{ // source: the row's escaped name
       const state=typeof code==='number'&&Object.hasOwn(STATES,code)?STATES[code]:'nodata';
       const inner=`<span class="hm-g" aria-hidden="true">${GLYPHS[state]}</span><span class="hm-sr">${words[state]}</span>`;
       if(!valid(entry))return `<td class="hm-c"><span class="hm-cell" data-state="${state}">${inner}</span></td>`;
-      return `<td class="hm-c"><button type="button" class="hm-cell" data-state="${state}" data-hm-sweep="${escHtml(entry.id)}" tabindex="${stop?0:-1}" aria-label="${escHtml(source)}, ${when[index]}, ${words[state]}">${inner}</button></td>`;
+      return `<td class="hm-c"><button type="button" class="hm-cell" data-state="${state}" data-hm-sweep="${escHtml(entry.id)}" tabindex="${stop?0:-1}" aria-label="${source}, ${when[index]}, ${words[state]}">${inner}</button></td>`;
     };
     const row=item=>{
-      const cells=Array.isArray(item.cells)?item.cells:[],last=cells[sweeps.length-1],stopRow=firstRow;
+      const cells=Array.isArray(item.cells)?item.cells:[],last=cells[sweeps.length-1],stopRow=firstRow,name=escHtml(item.source);
       firstRow=false;
       const ms=Array.isArray(last)&&typeof last[1]==='number'&&Number.isFinite(last[1])&&last[1]>=0?Math.round(last[1]):null;
-      return `<tr class="hm-row"><th scope="row" class="hm-src">${escHtml(item.source)}</th>${sweeps.map((entry,index)=>cell(Array.isArray(cells[index])?cells[index][0]:undefined,entry,stopRow&&index===stopColumn,item.source,index)).join('')}<td class="hm-ms">${ms===null?`<span aria-hidden="true">—</span><span class="hm-sr">${words.nodata}</span>`:ms}</td></tr>`;
+      return `<tr class="hm-row"><th scope="row" class="hm-src">${name}</th>${sweeps.map((entry,index)=>cell(Array.isArray(cells[index])?cells[index][0]:undefined,entry,stopRow&&index===stopColumn,name,index)).join('')}<td class="hm-ms">${ms===null?`<span aria-hidden="true">—</span><span class="hm-sr">${words.nodata}</span>`:ms}</td></tr>`;
     };
     const body=groups.map(group=>`<tbody class="hm-group" data-domain="${group.domain===null?'other':escHtml(group.domain)}"><tr class="hm-group-row"><th scope="rowgroup" colspan="${sweeps.length+2}"><span class="hm-gl">${escHtml(groupName(group.domain))}</span></th></tr>${group.rows.map(row).join('')}</tbody>`).join('');
     return `<table class="hm-table"><caption class="hm-sr">${escHtml(say('caption'))}</caption><thead><tr><th scope="col" class="hm-src-h">${escHtml(say('source'))}</th>${heads}<th scope="col" class="hm-ms-h">${escHtml(say('ms'))}</th></tr></thead>${body}</table>`;
