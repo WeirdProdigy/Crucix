@@ -17,6 +17,7 @@ import { installAlertRoutes } from '../../lib/alerts/routes.mjs';
 import { writeJsonAtomic } from '../../lib/atomic-json.mjs';
 import { SweepArchive } from '../../lib/sweeps/archive.mjs';
 import { installSweepRoutes } from '../../lib/sweeps/routes.mjs';
+import { installApiErrorHandler } from '../../lib/api-errors.mjs';
 import { archiveSweep } from '../../lib/sweeps/step.mjs';
 import { buildChanges } from '../../lib/sweeps/changes.mjs';
 const template = readFileSync(new URL('../../dashboard/public/jarvis.html', import.meta.url), 'utf8');
@@ -137,8 +138,9 @@ for(const hoursAgo of [5,4,3,2,1]){const snapshot=pastSweep(hoursAgo,Date.parse(
 // see rebuildEvents); the archive keeps this startup copy, so a replay of the newest sweep shows no live cards.
 archiveSweep({archive:seededArchive,snapshot:data,timing:timingOf(data),previous:previousSweep,log:quietLog});
 let archive=seededArchive;
-const archiveView={retention:()=>archive.retention(),list:options=>archive.list(options),get:id=>archive.get(id),latest:()=>archive.latest(),healthSeries:options=>archive.healthSeries(options)};
+const archiveView={retention:()=>archive.retention(),list:options=>archive.list(options),get:id=>archive.get(id),getRaw:id=>archive.getRaw(id),latest:()=>archive.latest(),healthSeries:options=>archive.healthSeries(options)};
 installSweepRoutes(api,{archive:archiveView,getCurrent:()=>data});
+installApiErrorHandler(api);
 // Every rebuild of the page's events is a new sweep of the same kind: its changes are counted against the sweep an hour ago again.
 function rebuildEvents(){data.events=buildEvents(data);data.eventClusters=clusterEvents(data.events);history.add(data.events);data.changes=buildChanges(previousSweep,data);}
 const server = http.createServer((req, res) => {

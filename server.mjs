@@ -8,6 +8,7 @@ import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { openBrowser } from './lib/open-browser.mjs';
 import { inlineJson } from './lib/html.mjs';
+import { installApiErrorHandler } from './lib/api-errors.mjs';
 import { installHttpSecurity } from './lib/http-security.mjs';
 import { saveSnapshot } from './lib/snapshots.mjs';
 import { buildEvents, clusterEvents, stampLiveEventIds } from './lib/intelligence/events.mjs';
@@ -352,6 +353,9 @@ app.get('/api/locales', (req, res) => {
   });
 });
 
+// After the last /api route: JSON for what a route could not answer itself (a broken percent-encoding in an id, an escaped error).
+installApiErrorHandler(app);
+
 // SSE: live updates
 app.get('/events', (req, res) => {
   if (sseClients.size >= config.maxSseClients) return res.status(503).set('Retry-After', '15').end();
@@ -499,8 +503,9 @@ async function start() {
       const existing = JSON.parse(readFileSync(join(RUNS_DIR, 'latest.json'), 'utf8'));
       const data = await synthesize(existing, { news: [] });
       recordSnapshotEvents(data);
-      // Stale data without a delta: show the stored alerts, do not evaluate. Not archived: the sweep behind runs/latest.json
-      // was archived when it ran, and this copy is re-synthesized without its news.
+      // Stale data without a delta: show the stored alerts, do not evaluate. Not archived: this copy is re-synthesized without its
+      // news, and the sweep behind runs/latest.json was archived when it ran - except on the first start after the upgrade to a
+      // version with an archive, when that sweep ran before there was one. The initial sweep below is then the first one stored.
       attachAlertSummary(data, alertEngine);
       currentData = data;
       lastSweepTime = data.meta?.timestamp || null;

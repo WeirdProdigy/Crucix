@@ -199,6 +199,21 @@ test('group headers escape every translated and source string', () => {
   assert.ok(!html.includes('<img'), 'no markup from a translation'); assert.ok(html.includes('&lt;img src=x onerror=&quot;alert(1)&quot;&gt;'));
 });
 
+test('a hostile source name is escaped in the attention chip and in the card attributes', () => {
+  const { window } = realm({ files: PANEL_FILES, storage: memory() }), api = window.CrucixLiveSources, domains = window.CrucixDomains;
+  // Provider names are whitelisted by the policies and the domain table; the hostile one is put into both, as a future adapter's name could be.
+  const HOSTILE = `<img src=x onerror="alert(1)"> ' &`, ESCAPED = '&lt;img src=x onerror=&quot;alert(1)&quot;&gt; &#39; &amp;';
+  api.policies[HOSTILE] = { maxAgeMs: 3600000 };
+  window.CrucixDomains = { ...domains, domainOfSource: name => (name === HOSTILE ? 'hazards' : domains.domainOfSource(name)) };
+  const html = api.renderPanel([liveRow('GDACS'), { ...liveRow(HOSTILE), status: 'error' }, { ...liveRow('EMSC'), status: 'error' }], t, [], now);
+  const hazards = sections(html).find(section => groupOf(section) === 'hazards');
+  assert.ok(hazards, 'the hostile source is grouped');
+  assert.ok(hazards.includes(`<span class="lg-chip lg-error">${ESCAPED}: Unavailable</span>`), 'the chip names it, escaped');
+  assert.ok(hazards.includes(`data-live-source="${ESCAPED}"`), 'and so does the card attribute');
+  assert.ok(hazards.includes('<span class="lg-chip lg-error">EMSC: Unavailable</span>'), 'the other chip is as before');
+  assert.ok(!html.includes('<img'), 'no markup from the name'); assert.ok(!html.includes('onerror="alert(1)"'), 'no raw quote in an attribute');
+});
+
 test('a domain lens shows only its own group, open and not collapsible; a lens without live sources says so', () => {
   const storage = memory({ 'crucix.lens': 'hazards', 'crucix.liveGroups': JSON.stringify({ hazards: { open: false, attention: false } }) });
   const { window } = realm({ files: PANEL_FILES, storage }), api = window.CrucixLiveSources;

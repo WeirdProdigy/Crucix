@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -684,4 +684,116 @@ test('corrupt files are deleted once they are older than every kept sweep, newer
   archive.add({ snapshot: snap(11) });
   assert.deepEqual(gzFiles(dir), [10, 11].map(n => `${idAt(n)}.json.gz`), 'once it is older than everything kept it goes too');
   assert.deepEqual(archive.list().map(item => item.id), [idAt(11), idAt(10)]);
+});
+
+// An unlink seam: fails with EBUSY (an open viewer or a virus scanner on Windows) for the ids in `locked` until released.
+function unlinkSeam(locked = []) {
+  const held = new Set(locked);
+  const calls = [];
+  return {
+    calls,
+    release: () => held.clear(),
+    unlink(path) {
+      const id = basename(path).replace('.json.gz', '');
+      calls.push(id);
+      if (held.has(id)) throw Object.assign(new Error('locked'), { code: 'EBUSY' });
+      unlinkSync(path);
+    },
+  };
+}
+
+test('a pruned sweep whose file cannot be deleted is remembered: no rebuild, the timings survive, the deletion is retried', t => {
+  const dir = tmp(t);
+  const log = recorder();
+  const reads = readSeam();
+  const seam = unlinkSeam([idAt(1)]);
+  const archive = archiveAt(dir, { count: 2, logger: log, readFile: reads.readFile, unlink: seam.unlink });
+  const timing = n => ({ USGS: { status: 'ok', ms: 100 + n } });
+  for (const n of [1, 2, 3]) archive.add({ snapshot: snap(n), timing: timing(n) });
+  assert.deepEqual(gzFiles(dir), [1, 2, 3].map(n => `${idAt(n)}.json.gz`), 'the locked file is still on disk');
+  assert.equal(log.lines.filter(line => line.includes('could not delete')).length, 1);
+  const indexAfter = readFileSync(indexFile(dir), 'utf8');
+  assert.deepEqual(archive.list().map(item => item.id), [idAt(3), idAt(2)], 'the retention decision stands');
+  assert.deepEqual(archive.healthSeries().sources.find(item => item.source === 'USGS').cells, [[0, 102], [0, 103]], 'the run times are not nulled by a rebuild');
+  assert.equal(reads.reads.length, 0, 'no sweep file was read again');
+  assert.equal(readFileSync(indexFile(dir), 'utf8'), indexAfter, 'and the index was not rewritten');
+  // Still locked: the retry fails quietly, the pruned sweep 2 goes.
+  archive.add({ snapshot: snap(4), timing: timing(4) });
+  assert.deepEqual(gzFiles(dir), [1, 3, 4].map(n => `${idAt(n)}.json.gz`));
+  assert.equal(log.lines.filter(line => line.includes('could not delete')).length, 1, 'the same file is not reported on every sweep');
+  assert.equal(reads.reads.length, 0);
+  assert.deepEqual(archive.healthSeries().sources.find(item => item.source === 'USGS').cells, [[0, 103], [0, 104]]);
+  seam.release();
+  archive.add({ snapshot: snap(5), timing: timing(5) });
+  assert.deepEqual(gzFiles(dir), [4, 5].map(n => `${idAt(n)}.json.gz`), 'unlocked, the next add removes it with the sweep it prunes');
+  const callsForOne = seam.calls.filter(id => id === idAt(1)).length;
+  archive.add({ snapshot: snap(6), timing: timing(6) });
+  assert.equal(seam.calls.filter(id => id === idAt(1)).length, callsForOne, 'a deleted file is not retried again');
+  assert.deepEqual(archive.list().map(item => item.id), [idAt(6), idAt(5)]);
+  assert.equal(reads.reads.length, 0);
+});
+
+test('a file that was removed by hand while its deletion was pending is forgotten without a warning', t => {
+  const dir = tmp(t);
+  const log = recorder();
+  const seam = unlinkSeam([idAt(1)]);
+  const archive = archiveAt(dir, { count: 2, logger: log, unlink: seam.unlink });
+  for (const n of [1, 2, 3]) archive.add({ snapshot: snap(n) });
+  rmSync(join(sweepsDir(dir), `${idAt(1)}.json.gz`));
+  seam.release();
+  archive.add({ snapshot: snap(4) });
+  assert.equal(log.lines.filter(line => line.includes('could not delete')).length, 1, 'only the first failure was reported');
+  const calls = seam.calls.filter(id => id === idAt(1)).length;
+  archive.add({ snapshot: snap(5) });
+  assert.equal(seam.calls.filter(id => id === idAt(1)).length, calls, 'an ENOENT ends the retries');
+  assert.deepEqual(gzFiles(dir), [4, 5].map(n => `${idAt(n)}.json.gz`));
+});
+
+test('an explicit rebuild leaves a sweep with a pending deletion out of the index', t => {
+  const dir = tmp(t);
+  const seam = unlinkSeam([idAt(1)]);
+  const archive = archiveAt(dir, { count: 2, unlink: seam.unlink });
+  for (const n of [1, 2, 3]) archive.add({ snapshot: snap(n) });
+  assert.equal(archive.rebuildIndex(), 2);
+  assert.deepEqual(readIndex(dir).sweeps.map(item => item.id), [idAt(2), idAt(3)]);
+  assert.deepEqual(archive.list().map(item => item.id), [idAt(3), idAt(2)]);
+});
+
+test('getRaw returns the stored gzip bytes of a valid sweep and null for everything get refuses', t => {
+  const dir = tmp(t);
+  const archive = archiveAt(dir);
+  const added = archive.add({ snapshot: snap(1) });
+  const stored = readFileSync(join(sweepsDir(dir), `${idAt(1)}.json.gz`));
+  const raw = archive.getRaw(idAt(1));
+  assert.ok(Buffer.isBuffer(raw));
+  assert.ok(raw.equals(stored), 'exactly the bytes on disk');
+  assert.equal(raw.length, added.bytes);
+  assert.equal(gunzipSync(raw).toString('utf8'), JSON.stringify(snap(1)), 'which decode to the snapshot JSON');
+  const put = (n, bytes) => writeFileSync(join(sweepsDir(dir), `${idAt(n)}.json.gz`), bytes);
+  put(2, Buffer.alloc(0));
+  put(3, stored.subarray(0, 12));
+  put(4, 'plain text, not gzip');
+  put(5, gzipSync('[1,2,3]'));
+  put(6, gzipSync('"a string"'));
+  put(7, gzipSync(Buffer.concat([Buffer.from('{"filler":"'), Buffer.alloc(100 * 1024 * 1024, 'x'), Buffer.from('"}')])));
+  for (const n of [2, 3, 4, 5, 6, 7, 9]) assert.equal(archive.getRaw(idAt(n)), null, `sweep ${n}`);
+  for (const bad of ['../x', `${idAt(1)}.json.gz`, 'sweep-1', '', undefined, null, 7, {}, [idAt(1)]]) assert.equal(archive.getRaw(bad), null, String(bad));
+  mkdirSync(join(sweepsDir(dir), `${idAt(8)}.json.gz`));
+  assert.equal(archive.getRaw(idAt(8)), null, 'a directory with a sweep name');
+  assert.equal(archiveAt(join(dir, 'nowhere')).getRaw(idAt(1)), null);
+});
+
+test('getRaw is judged exactly like get: a corrupt file is reported once and a transient failure is not', t => {
+  const dir = tmp(t);
+  const log = recorder();
+  const archive = archiveAt(dir, { logger: log, readFile: readSeam([idAt(2)]).readFile });
+  archive.add({ snapshot: snap(1) });
+  writeFileSync(join(sweepsDir(dir), `${idAt(3)}.json.gz`), 'broken');
+  writeFileSync(join(sweepsDir(dir), `${idAt(2)}.json.gz`), gzipSync(JSON.stringify(snap(2))));
+  assert.equal(archive.getRaw(idAt(3)), null);
+  assert.equal(archive.getRaw(idAt(3)), null);
+  assert.equal(log.lines.filter(line => line.includes(idAt(3))).length, 1, 'reported once, like get');
+  assert.equal(archive.getRaw(idAt(2)), null, 'a file that cannot be read is no sweep to serve');
+  assert.equal(log.lines.filter(line => line.includes(idAt(2))).length, 0, 'but is not reported as corrupt');
+  assert.ok(archive.getRaw(idAt(1)));
 });

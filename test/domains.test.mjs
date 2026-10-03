@@ -57,6 +57,8 @@ test('domainOfEvent reads the source name of an event record and never throws', 
   assert.equal(domainOfEvent(event('CISA-KEV')), 'cyber');
   assert.equal(domainOfEvent({ ...event('USGS'), sourceName: 'GDELT' }), 'hazards', 'the nested source wins over a flat export field');
   assert.equal(domainOfEvent({ sourceName: 'GDELT' }), 'security', 'a flat export record carries sourceName');
+  assert.equal(domainOfEvent({ source: { name: null }, sourceName: 'GDELT' }), 'security', 'a nested source without a name falls back to the flat one');
+  assert.equal(domainOfEvent({ source: { name: '' }, sourceName: 'GDELT' }), null, 'an empty nested name is a name: the flat one does not replace it');
   assert.equal(domainOfEvent(event('Some News Wire')), null, 'a news or OSINT source has no domain');
   assert.equal(domainOfEvent(event('')), null);
   assert.equal(domainOfEvent({ id: 'x', title: 'no source' }), null);
@@ -71,7 +73,9 @@ test('the browser copy holds identical data and behaves like the server module',
   assert.deepEqual(plain(copy.DOMAINS), plain(DOMAINS));
   assert.deepEqual(plain(copy.DOMAIN_IDS), DOMAIN_IDS);
   for (const name of [...all, 'nope', 'constructor', '', undefined, null, 7]) assert.equal(copy.domainOfSource(name), domainOfSource(name), String(name));
-  for (const value of [event('USGS'), event('Some News Wire'), { sourceName: 'GDELT' }, { source: 'USGS' }, { source: null }, {}, null, undefined, 'GDELT', 7]) {
+  // Both name fields present: the nested one wins unless it is missing (null or undefined); an empty one still wins.
+  const both = [{ ...event('USGS'), sourceName: 'GDELT' }, { source: { name: null }, sourceName: 'GDELT' }, { source: { name: undefined }, sourceName: 'GDELT' }, { source: { name: '' }, sourceName: 'GDELT' }, { source: { name: 'Some News Wire' }, sourceName: 'GDELT' }];
+  for (const value of [event('USGS'), event('Some News Wire'), { sourceName: 'GDELT' }, ...both, { source: 'USGS' }, { source: null }, {}, null, undefined, 'GDELT', 7]) {
     assert.equal(copy.domainOfEvent(value), domainOfEvent(value), JSON.stringify(value) ?? 'undefined');
   }
 });

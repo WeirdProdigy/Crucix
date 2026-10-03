@@ -12,7 +12,8 @@ const T = Date.parse('2026-10-01T21:00:00Z'); // the snapshot time a replay free
 // `new Date(value)` and Date.parse still work. TypeError is passed in so assert.throws can match it across realms.
 function realm(files, { real = T + 3 * DAY, ...extra } = {}) {
   const state = { real };
-  class FakeDate extends Date { static now() { return state.real; } }
+  // Both `Date.now()` and `new Date()` report the fake real time, so a computation that bypasses the clock cannot read the machine's.
+  class FakeDate extends Date { constructor(...args) { super(...(args.length ? args : [state.real])); } static now() { return state.real; } }
   const window = {};
   const context = vm.createContext({ window, Date: FakeDate, URL, Object, Array, Number, JSON, Set, TypeError, ...extra });
   for (const file of files) vm.runInContext(read(file), context);
@@ -166,4 +167,99 @@ test('no freshness computation bypasses the clock: the only Date.now left in the
   assert.equal(count(read('live-sources.js')), 1, 'live-sources.js: the nowMs fallback only');
   assert.equal(count(html), 1, 'jarvis.html: the clockNow fallback only');
   assert.match(html, /function clockNow\(\)\{[^}]*Date\.now\(\)/);
+});
+
+// The page functions that decide what the live panel, the source health and the inspector's events show, run under a frozen clock
+// and under the real one. Each of them must read CrucixClock (clockNow / live-sources.js), never `new Date()` or Date.now itself.
+function livePage(pick = row => [row], real) {
+  const swapped = { live: [], health: [] }, updates = [];
+  const eventId = 'event-' + '1'.padStart(32, '0');
+  const row = { ...gdacs, observations: [{ ...gdacs.observations[0], eventId }] };
+  const nodes = { '.live-sources-panel': { set outerHTML(value) { swapped.live.push(value); } }, '.source-health-panel': { set outerHTML(value) { swapped.health.push(value); } } };
+  const health = [{ n: 'GDACS', err: false, stale: false, disabled: false, timestamp: new Date(T - 2 * HOUR).toISOString() }];
+  const events = [{ id: eventId, title: 'Flood alert', source: { name: 'GDACS' }, observedAt }, { id: 'event-' + '2'.padStart(32, '0'), title: 'Not a live source', source: { name: 'Some News Wire' } }];
+  const { window, state, context } = realm(['record-core.js', 'domains.js', 'lens-core.js', 'clock.js', 'live-sources.js'], {
+    real, t, document: { querySelector: selector => nodes[selector] ?? null }, D: { liveSources: pick(row), events, health, meta: { timestamp: new Date(T).toISOString() } },
+    plotMarkers() {}, flatG: null });
+  context.CrucixLiveSources = window.CrucixLiveSources;
+  window.CrucixIntelligence = { update: snapshot => { updates.push(snapshot.events.map(event => event.id)); } };
+  window.CrucixRecordInspector = { refresh() {} };
+  pageFunctions(context, 'clockNow', 'getAge', 'esc', 'lensMatchesSource', 'sourceState', 'buildSourceHealthPanel', 'currentSnapshot', 'refreshLiveFreshness');
+  return { window, state, context, swapped, updates, eventId };
+}
+
+test('sourceState, buildSourceHealthPanel and currentSnapshot judge by the frozen clock, and by the real one after release', () => {
+  const { window, context, eventId } = livePage();
+  assert.equal(context.sourceState({ n: 'GDACS' }), 'stale', 'real clock: observed 3 days ago');
+  assert.match(context.buildSourceHealthPanel(), /data-source-state="stale"/);
+  assert.match(context.buildSourceHealthPanel(), /<small>3 d ago<\/small>/);
+  assert.equal(context.currentSnapshot().events.filter(event => event.id === eventId).length, 0, 'an expired live row takes its event with it');
+  window.CrucixClock.freeze(T);
+  assert.equal(context.sourceState({ n: 'GDACS' }), 'ok', 'frozen at the snapshot time: 2 h old');
+  assert.match(context.buildSourceHealthPanel(), /data-source-state="ok"/);
+  assert.match(context.buildSourceHealthPanel(), /<small>2 h ago<\/small>/);
+  assert.equal(context.currentSnapshot().events.length, 2, 'the live event stays, the record of another source is untouched');
+  assert.ok(context.currentSnapshot().events.some(event => event.id === eventId));
+  window.CrucixClock.release();
+  assert.equal(context.sourceState({ n: 'GDACS' }), 'stale', 'the real clock is back');
+  assert.match(context.buildSourceHealthPanel(), /data-source-state="stale"/);
+});
+
+test('refreshLiveFreshness redraws the live panel and the source health from the frozen clock, and again from the real one', () => {
+  const { window, context, swapped, updates, eventId } = livePage();
+  const signature = () => vm.runInContext('liveExpirySignature', context);
+  context.refreshLiveFreshness();
+  assert.match(swapped.live.at(-1), /data-live-state="stale"/, 'the real clock: expired');
+  assert.match(swapped.health.at(-1), /data-source-state="stale"/);
+  assert.ok(!updates.at(-1).includes(eventId), 'the inspector snapshot has no event of an expired row');
+  const before = signature();
+  context.refreshLiveFreshness();
+  assert.equal(swapped.live.length, 1, 'unchanged: nothing is swapped again');
+  window.CrucixClock.freeze(T);
+  context.refreshLiveFreshness();
+  assert.notEqual(signature(), before, 'the freeze changes what the signature says');
+  assert.equal(swapped.live.length, 2, 'the panel was redrawn');
+  assert.match(swapped.live.at(-1), /data-live-state="ok"/); assert.match(swapped.live.at(-1), /data-open-records="GDACS"/); assert.doesNotMatch(swapped.live.at(-1), /Provider data expired/);
+  assert.match(swapped.health.at(-1), /data-source-state="ok"/);
+  assert.ok(updates.at(-1).includes(eventId), 'the inspector snapshot has the event again');
+  window.CrucixClock.release();
+  context.refreshLiveFreshness();
+  assert.equal(swapped.live.length, 3);
+  assert.match(swapped.live.at(-1), /data-live-state="stale"/, 'after leaving the replay the real clock is back');
+  assert.ok(!updates.at(-1).includes(eventId));
+});
+
+test('refreshLiveFreshness notices a source that turns current under the frozen clock even when it has no records to show', () => {
+  // NOAA-SWPC keeps a row current for 1 h: 30 min old at T it is current, 3 days later expired; with no records only its state tells.
+  const quiet = { source: 'NOAA-SWPC', status: 'ok', observedAt: new Date(T - 30 * 60000).toISOString(), observations: [] };
+  const { window, context, swapped } = livePage(() => [quiet]);
+  context.refreshLiveFreshness();
+  assert.match(swapped.live.at(-1), /data-live-state="stale"/);
+  window.CrucixClock.freeze(T);
+  context.refreshLiveFreshness();
+  assert.equal(swapped.live.length, 2, 'the freeze alone changed the signature');
+  assert.match(swapped.live.at(-1), /data-live-state="ok"/); assert.doesNotMatch(swapped.live.at(-1), /data-live-state="stale"/);
+  window.CrucixClock.release();
+  context.refreshLiveFreshness();
+  assert.equal(swapped.live.length, 3);
+  assert.match(swapped.live.at(-1), /data-live-state="stale"/);
+});
+
+test('refreshLiveFreshness notices a record that is still valid at the frozen time although the source is current under both clocks', () => {
+  // The source row is 2 h old (current at T and an hour later); its record is 71.5 h old at T (valid for 72 h) and 72.5 h old an hour later.
+  const old = new Date(T - 71.5 * HOUR).toISOString();
+  const row = { ...gdacs, observations: [{ ...gdacs.observations[0], providerId: 'g-old', observedAt: old }] };
+  const { window, context, swapped } = livePage(() => [row], T + HOUR);
+  context.refreshLiveFreshness();
+  assert.match(swapped.live.at(-1), /data-live-state="ok"/, 'the source is current with the real clock too');
+  assert.match(swapped.live.at(-1), /No current records in the watched scope/, 'but its only record is just too old: no records shown');
+  window.CrucixClock.freeze(T);
+  context.refreshLiveFreshness();
+  assert.equal(swapped.live.length, 2, 'the record that turns valid again changes the signature');
+  assert.match(swapped.live.at(-1), /data-live-state="ok"/);
+  assert.match(swapped.live.at(-1), /<span>1 current records<\/span>/);
+  window.CrucixClock.release();
+  context.refreshLiveFreshness();
+  assert.equal(swapped.live.length, 3);
+  assert.match(swapped.live.at(-1), /No current records in the watched scope/);
 });

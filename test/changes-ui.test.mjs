@@ -340,7 +340,7 @@ test('chip click: scrolls to the panel and focuses its heading; no panel, no err
   click(r, chip);
   const heading = r.rail.querySelector('#changesTitle');
   assert.equal(r.panel().scrolled.length, 1, 'the panel is scrolled into view');
-  assert.equal(r.doc.activeElement, heading, 'the heading takes the focus');
+  assert.ok(r.doc.activeElement === heading, 'the heading takes the focus');
   assert.deepEqual(JSON.parse(JSON.stringify(r.panel().scrolled[0])), { block: 'start', behavior: 'smooth' });
   assert.deepEqual(JSON.parse(JSON.stringify(heading.focusOptions[0])), { preventScroll: true });
   const reduced = mounted({ changes: FULL }); reduced.window.matchMedia = () => ({ matches: true }); reduced.draw(); reduced.strip();
@@ -428,7 +428,7 @@ test('windows: a non-"last" window asks GET /api/changes?window= (relative URL),
   later.resolve(MERGED);
   await tick();
   assert.equal(r.panel().attrs.has('aria-busy'), false);
-  assert.equal(r.rail.querySelector('.ch-status'), null, 'the loading line is gone');
+  assert.ok(r.rail.querySelector('.ch-status') === null, 'the loading line is gone');
   assert.deepEqual(titles(r), ['Older flood warning']);
   assert.deepEqual(pressed(r), ['6h']);
   assert.equal(r.panel().attrs.get('data-window'), '6h');
@@ -572,17 +572,17 @@ test('windows: the window buttons keep the focus across the redraw that follows 
   const button = win(r, '6h');
   button.focus();
   click(r, button);
-  assert.notEqual(win(r, '6h'), button, 'the panel was swapped in place');
-  assert.equal(r.doc.activeElement, win(r, '6h'), 'and the focus is on the new button');
+  assert.ok(win(r, '6h') !== button, 'the panel was swapped in place');
+  assert.ok(r.doc.activeElement === win(r, '6h'), 'and the focus is on the new button');
   await tick();
-  assert.equal(r.doc.activeElement, win(r, '6h'), 'also after the answer');
+  assert.ok(r.doc.activeElement === win(r, '6h'), 'also after the answer');
   const heading = r.rail.querySelector('#changesTitle'); heading.focus();
   click(r, win(r, '24h'));
-  assert.equal(r.doc.activeElement, r.rail.querySelector('#changesTitle'), 'the heading (the chip\'s target) keeps the focus too');
-  assert.notEqual(r.doc.activeElement, heading);
+  assert.ok(r.doc.activeElement === r.rail.querySelector('#changesTitle'), 'the heading (the chip\'s target) keeps the focus too');
+  assert.ok(r.doc.activeElement !== heading, 'the focus left the old heading');
   r.doc.activeElement = r.doc.body;
   click(r, win(r, '1h'));
-  assert.equal(r.doc.activeElement, r.doc.body, 'a focus outside the panel is left alone');
+  assert.ok(r.doc.activeElement === r.doc.body, 'a focus outside the panel is left alone');
 });
 
 test('windows: an answer arriving while the panel is not on the page changes nothing and does not throw', async () => {
@@ -628,7 +628,7 @@ test('windows: a focus outside the panel is not pulled into it by the redraw, ev
   const stray = r.doc.createElement('button'); stray.setAttribute('data-changes-window', '24h'); stray.parentNode = r.doc.body; r.doc.body.kids.push(stray);
   stray.focus();
   click(r, win(r, '1h'));
-  assert.equal(r.doc.activeElement, stray);
+  assert.ok(r.doc.activeElement === stray, 'the focus stays on the stray element');
 });
 
 test('mount: a second mount is refused and binds nothing again', () => {
@@ -735,6 +735,11 @@ test('bounded panel: Show all opens one list, Show fewer closes it, and the choi
   assert.deepEqual(rowsOf(r), [40, 30, 20], 'a render of the rails keeps the lists open');
   click(r, win(r, '6h')); await tick(); click(r, win(r, 'last'));
   assert.deepEqual(rowsOf(r), [40, 30, 20], 'a window change keeps them open');
+  // A new sweep (the page calls update() with its changes and then renders the rails again) keeps them open too.
+  r.state.changes = { ...BIG, at: '2026-10-03T10:15:00.000Z' };
+  r.api.update(r.state.changes);
+  r.draw();
+  assert.deepEqual(rowsOf(r), [40, 30, 20], 'a new sweep keeps the lists open');
   click(r, more(r, 'records'));
   assert.deepEqual(rowsOf(r), [SHOW, 30, 20], 'Show fewer closes only that list');
   click(r, more(r, 'records'));
@@ -748,8 +753,8 @@ test('bounded panel: the button keeps the keyboard focus across the swap; a list
   const button = more(r, 'sources');
   button.focus();
   click(r, button);
-  assert.notEqual(more(r, 'sources'), button, 'the panel was swapped in place');
-  assert.equal(r.doc.activeElement, more(r, 'sources'), 'and the focus is on the new button');
+  assert.ok(more(r, 'sources') !== button, 'the panel was swapped in place');
+  assert.ok(r.doc.activeElement === more(r, 'sources'), 'and the focus is on the new button');
   const small = mounted({ changes: FULL });
   small.draw();
   assert.equal(small.rail.querySelectorAll('[data-changes-more]').length, 0, 'three records, two transitions and two signals are all shown');
@@ -972,7 +977,7 @@ test('refresh: ages are rewritten in place from the page clock, without replacin
   r.state.now = NOW + 62 * 60000;
   r.api.refresh();
   assert.equal(age.text(), '1h', 'the same node, a newer label');
-  assert.equal(r.rail.querySelector('[data-changes-event]'), row);
+  assert.ok(r.rail.querySelector('[data-changes-event]') === row, 'the first record row is the same node');
   assert.equal(r.rail.querySelectorAll('.ch-age').filter(node => node.text() === '—').length, 1, 'an unknown time stays a dash');
   const bare = realm({ changes: FULL });
   assert.doesNotThrow(() => bare.api.refresh());

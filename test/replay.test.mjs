@@ -240,7 +240,7 @@ test('entering freezes the clock at the snapshot time, renders the bar and re-dr
   assert.equal(byAction(realm.root, 'prev').getAttribute('aria-disabled'), null);
   assert.match(allText(realm.root), /Alerts stay live/); assert.match(allText(realm.root), /Event history and export/);
   assert.equal(statusText(realm), '');
-  assert.equal(realm.document.activeElement, range, 'the slider takes the focus when the bar opens');
+  assert.ok(realm.document.activeElement === range, 'the slider takes the focus when the bar opens');
   assert.match(realm.api.button(), /aria-pressed="true"/);
 });
 
@@ -359,7 +359,7 @@ test('keyboard and buttons: slider change, prev/next at the ends, Esc on the bar
   assert.equal(realm.api.active(), true, 'Esc with a modifier is not ours'); assert.equal(ignored.defaultPrevented, false);
   const esc = dispatch(range, 'keydown', { key: 'Escape' });
   assert.equal(esc.defaultPrevented, true); assert.equal(realm.api.active(), false);
-  assert.equal(realm.document.activeElement, realm.trigger, 'focus returns to the header button');
+  assert.ok(realm.document.activeElement === realm.trigger, 'focus returns to the header button');
   realm.trigger.click(); await tick();
   assert.equal(realm.api.active(), true, 'the header button opens the replay');
   realm.trigger.click();
@@ -664,4 +664,36 @@ test('the sweep list: an older /api/sweeps answer arriving last does not replace
   lists[3](listOf([...IDS, NEW])); await tick();
   lists[2](listOf(IDS)); await tick();
   assert.equal(String(slider(realm.root).max), '4', 'the newest list (five sweeps) stays');
+});
+
+// The page's real DOMContentLoaded handler (as test/clock.test.mjs runs it) with the replay module replaced by a recorder.
+function wiredPage(protocol) {
+  const start = html.indexOf("document.addEventListener('DOMContentLoaded'"), end = html.indexOf("\nwindow.addEventListener('beforeunload'", start);
+  assert.ok(start > 0 && end > start, 'the DOMContentLoaded handler is found');
+  const handlers = {}, mounted = {}, replayBar = { id: 'replayBar' };
+  const hooks = { fetchJsonNoStore() {}, applyReplaySnapshot() {}, restoreLiveSnapshot() {}, redriveClock() {} };
+  const page = vm.createContext({
+    window: { CrucixReplay: { mount: options => { mounted.replay = options; } } }, t: english, L: { meta: { code: 'en' } }, D: { marker: 'first live snapshot' },
+    location: { protocol }, setInterval: () => 0, fetch: () => new Promise(() => {}), AbortSignal: { timeout: () => undefined }, CrucixPWA: { init() {} }, uiLocale: () => 'en-US',
+    document: { documentElement: {}, title: '', getElementById: id => (id === 'replayBar' ? replayBar : null), addEventListener: (type, fn) => { handlers[type] = fn; } },
+    currentSnapshot: () => ({ events: [] }), init() {}, updateRuntimeStatus() {}, refreshLiveFreshness() {}, connectSSE() {}, pollSnapshot() {}, ...hooks,
+  });
+  vm.runInContext(html.slice(start, end), page);
+  handlers.DOMContentLoaded();
+  return { page, mounted, replayBar, hooks };
+}
+
+test('the page wires the replay with the live snapshot, the apply and restore hooks and the clock re-drive (the real DOMContentLoaded handler)', () => {
+  const { page, mounted, replayBar, hooks } = wiredPage('http:');
+  const options = mounted.replay;
+  assert.ok(options, 'the replay is mounted on an http page');
+  assert.ok(options.root === replayBar, 'on the replay bar');
+  assert.ok(options.fetchJson === hooks.fetchJsonNoStore && options.applySnapshot === hooks.applyReplaySnapshot && options.restoreLive === hooks.restoreLiveSnapshot && options.redrive === hooks.redriveClock, 'the page hooks');
+  assert.equal(typeof options.getLive, 'function', 'the live snapshot is handed over');
+  assert.ok(options.getLive() === page.D, 'it is the page\'s current D');
+  const second = { marker: 'second live snapshot' };
+  page.D = second;
+  assert.ok(options.getLive() === second, 'and it follows D when the page replaces it');
+  assert.equal(options.locale, 'en-US'); assert.ok(options.t === english);
+  assert.equal(wiredPage('file:').mounted.replay, undefined, 'a file page has no archive, so no replay');
 });

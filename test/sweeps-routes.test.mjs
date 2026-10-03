@@ -2,10 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import { request } from 'node:http';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { gzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
+import { installApiErrorHandler } from '../lib/api-errors.mjs';
 import { installHttpSecurity } from '../lib/http-security.mjs';
 import { freshLiveSnapshot } from '../lib/intelligence/live-sources.mjs';
 import { SweepArchive } from '../lib/sweeps/archive.mjs';
@@ -50,13 +51,14 @@ function tmp(t) {
 function spied(archive) {
   const calls = [];
   const wrap = name => (...args) => { calls.push([name, ...args]); return archive[name](...args); };
-  return { calls, archive: { list: wrap('list'), get: wrap('get'), latest: wrap('latest'), healthSeries: wrap('healthSeries'), retention: wrap('retention'), get status() { return archive.status; } } };
+  return { calls, archive: { list: wrap('list'), get: wrap('get'), getRaw: wrap('getRaw'), latest: wrap('latest'), healthSeries: wrap('healthSeries'), retention: wrap('retention'), get status() { return archive.status; } } };
 }
 
 async function serve(t, { archive, getCurrent = () => null, now = () => BASE, auth = {} }) {
   const app = express();
   installHttpSecurity(app, auth);
   installSweepRoutes(app, { archive, getCurrent, now });
+  installApiErrorHandler(app);
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
   t.after(() => new Promise(resolve => server.close(resolve)));
@@ -72,7 +74,17 @@ async function serve(t, { archive, getCurrent = () => null, now = () => BASE, au
     req.on('error', reject);
     req.end();
   });
-  return { get };
+  // The same with the body as bytes: a gzip response must not go through a string decoder.
+  const bytes = (path, headers = {}) => new Promise((resolve, reject) => {
+    const req = request({ host: '127.0.0.1', port, path, headers, agent: false }, res => {
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+  return { get, bytes };
 }
 
 // An archive in a temporary runs directory holding the given [minutes, n] sweeps.
@@ -156,8 +168,9 @@ test('hostile sweep ids are refused before the archive is touched; well-formed u
   for (const path of hostile) {
     const response = await get(path);
     assert.equal(response.status, 400, path.slice(0, 60));
-    // Also the broken percent-encoding, which fails in the router: JSON, never Express's HTML page with a stack.
-    assert.deepEqual(response.json(), { error: 'Invalid sweep ID', code: 'INVALID_FILTER', field: 'id' }, path.slice(0, 60));
+    // Also the broken percent-encoding, which fails in the router and is answered by the API's error handler: JSON, never
+    // Express's HTML page with a stack.
+    assert.deepEqual(response.json(), path === '/api/sweeps/%E0%A4%A' ? { error: 'Invalid path parameter', code: 'INVALID_FILTER', field: 'id' } : { error: 'Invalid sweep ID', code: 'INVALID_FILTER', field: 'id' }, path.slice(0, 60));
   }
   // A raw ../ is several path segments: no route of the archive matches at all.
   assert.equal((await get('/api/sweeps/../../secret.json.gz')).status, 404);
@@ -359,4 +372,171 @@ test('archiveSweep against a real archive whose directory cannot be written repo
   assert.equal(snapshot.changes.baseline, true);
   assert.equal(archive.status, 'unavailable');
   assert.equal(lines.length, 1);
+});
+
+// An Accept-Encoding the route answers with gzip, and ones it answers with plain JSON (the header absent included).
+const GZIP_ACCEPTED = ['gzip', 'GZIP', 'gzip, deflate, br', 'deflate, gzip;q=0.5', 'gzip;q=1.0, identity;q=0.1', 'identity;q=0.5, gzip'];
+const PLAIN_ACCEPTED = ['identity', 'gzip;q=0', 'br', 'deflate', 'gzip;q=0, deflate', 'identity, gzip;q=0', ''];
+const SECURITY_HEADERS = { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'x-frame-options': 'DENY' };
+
+test('GET /api/sweeps/:id passes the stored gzip bytes on to a client that accepts gzip; the decoded body equals the plain JSON byte for byte', async t => {
+  const dir = tmp(t);
+  const archive = new SweepArchive(dir, { logger: quiet });
+  const title = `Árvíztűrő tükörfúrógép <script>${String.fromCharCode(0x2028)}</script> ☃ ${String.fromCodePoint(0x1f600)}`;
+  const snapshot = snapshotAt(0, 1, { events: [{ id: eid(9), title, source: { name: 'USGS' } }], numbers: [1.5, -0, 1e21, 0.1 + 0.2] });
+  archive.add({ snapshot });
+  const stored = readFileSync(join(dir, 'sweeps', `${idOf(0)}.json.gz`));
+  const { calls, archive: spy } = spied(archive);
+  const { bytes } = await serve(t, { archive: spy });
+  const path = `/api/sweeps/${idOf(0)}`;
+  const plainResponse = await bytes(path);
+  assert.equal(plainResponse.status, 200);
+  assert.equal(plainResponse.headers['content-encoding'], undefined);
+  assert.equal(plainResponse.headers['content-type'], 'application/json; charset=utf-8');
+  assert.match(plainResponse.headers.vary, /Accept-Encoding/i);
+  assert.ok(plainResponse.body.equals(Buffer.from(JSON.stringify(snapshot))), 'the plain path is the snapshot JSON');
+  const gzip = await bytes(path, { 'Accept-Encoding': 'gzip' });
+  assert.equal(gzip.status, 200);
+  assert.equal(gzip.headers['content-encoding'], 'gzip');
+  assert.equal(gzip.headers['content-type'], 'application/json; charset=utf-8');
+  assert.match(gzip.headers.vary, /Accept-Encoding/i);
+  assert.ok(gzip.body.equals(stored), 'the bytes of the file, not a second compression');
+  assert.equal(Number(gzip.headers['content-length']), stored.length);
+  assert.ok(gunzipSync(gzip.body).equals(plainResponse.body), 'decoded, exactly the bytes of the plain answer');
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+    assert.equal(plainResponse.headers[name], value, `plain ${name}`);
+    assert.equal(gzip.headers[name], value, `gzip ${name}`);
+  }
+  assert.deepEqual(calls.filter(([name]) => name !== 'retention'), [['get', idOf(0)], ['getRaw', idOf(0)]], 'one archive read per request, the one the branch needs');
+});
+
+test('only a client that accepts gzip gets the stored bytes', async t => {
+  const { archive } = filled(t, [[0, 1]]);
+  const { bytes } = await serve(t, { archive });
+  const path = `/api/sweeps/${idOf(0)}`;
+  const expected = JSON.stringify(snapshotAt(0, 1));
+  for (const header of GZIP_ACCEPTED) {
+    const response = await bytes(path, { 'Accept-Encoding': header });
+    assert.equal(response.headers['content-encoding'], 'gzip', `[${header}]`);
+    assert.equal(gunzipSync(response.body).toString('utf8'), expected, `[${header}]`);
+    assert.match(response.headers.vary, /Accept-Encoding/i, `[${header}]`);
+  }
+  for (const header of [...PLAIN_ACCEPTED, undefined]) {
+    const response = await bytes(path, header === undefined ? {} : { 'Accept-Encoding': header });
+    assert.equal(response.headers['content-encoding'], undefined, `[${header}]`);
+    assert.equal(response.body.toString('utf8'), expected, `[${header}]`);
+    assert.match(response.headers.vary, /Accept-Encoding/i, `[${header}]`);
+  }
+});
+
+test('the gzip branch keeps the validation: a corrupt, empty, non-object or deleted file is a 404, a bad id a 400', async t => {
+  const { dir, archive } = filled(t, [[0, 1], [15, 2], [30, 3], [45, 4]]);
+  const file = minutes => join(dir, 'sweeps', `${idOf(minutes)}.json.gz`);
+  writeFileSync(file(0), 'not gzip at all');
+  writeFileSync(file(15), Buffer.alloc(0));
+  writeFileSync(file(30), gzipSync('[1,2,3]'));
+  writeFileSync(file(45), gzipSync('{"half":'));
+  const { bytes } = await serve(t, { archive });
+  for (const encoding of ['gzip', 'identity']) {
+    for (const minutes of [0, 15, 30, 45, 60]) {
+      const response = await bytes(`/api/sweeps/${idOf(minutes)}`, { 'Accept-Encoding': encoding });
+      assert.equal(response.status, 404, `${encoding} ${minutes}`);
+      assert.equal(response.headers['content-encoding'], undefined, `${encoding} ${minutes}`);
+      assert.deepEqual(JSON.parse(response.body.toString('utf8')), { error: 'Sweep not found' }, `${encoding} ${minutes}`);
+      assert.equal(response.headers['cache-control'], 'no-store');
+    }
+    const bad = await bytes('/api/sweeps/sweep-1', { 'Accept-Encoding': encoding });
+    assert.equal(bad.status, 400);
+    assert.equal(bad.headers['content-encoding'], undefined);
+    assert.deepEqual(JSON.parse(bad.body.toString('utf8')), { error: 'Invalid sweep ID', code: 'INVALID_FILTER', field: 'id' });
+    const query = await bytes(`/api/sweeps/${idOf(0)}?full=1`, { 'Accept-Encoding': encoding });
+    assert.equal(query.status, 400);
+    assert.deepEqual(JSON.parse(query.body.toString('utf8')), { error: 'Unknown query parameter', code: 'INVALID_FILTER', field: 'query' });
+  }
+});
+
+test('a file that went bad after it was listed is never passed on as gzip', async t => {
+  const { dir, archive } = filled(t, [[0, 1], [15, 2]]);
+  const { bytes } = await serve(t, { archive });
+  assert.equal((await bytes(`/api/sweeps/${idOf(15)}`, { 'Accept-Encoding': 'gzip' })).status, 200);
+  writeFileSync(join(dir, 'sweeps', `${idOf(15)}.json.gz`), gzipSync(JSON.stringify(snapshotAt(15, 2))).subarray(0, 40));
+  const response = await bytes(`/api/sweeps/${idOf(15)}`, { 'Accept-Encoding': 'gzip' });
+  assert.equal(response.status, 404);
+  assert.equal(response.headers['content-encoding'], undefined);
+});
+
+// A fake archive of known sweeps for the memo tests: list() newest first as the real one answers, every get() recorded.
+function fakeArchive(count = 5) {
+  const state = { listed: [], files: new Map(), gets: [], lists: [] };
+  const archive = {
+    retention: () => ({ count, maxMb: 64 }),
+    list: options => { state.lists.push(options); return state.listed.slice(0, options?.limit ?? 672); },
+    get: id => { state.gets.push(id); return state.files.get(id) ?? null; },
+  };
+  const put = (minutes, n) => state.files.set(idOf(minutes), snapshotAt(minutes, n));
+  const list = minutesList => { state.listed = minutesList.map(minutes => ({ id: idOf(minutes), timestamp: iso(minutes) })); };
+  return { state, archive, put, list };
+}
+
+test('a time window reads each sweep once: the changes are memoized per id, for as long as the id is listed', async t => {
+  const { state, archive, put, list } = fakeArchive(5);
+  for (const [minutes, n] of [[0, 1], [15, 2], [30, 3], [45, 4]]) put(minutes, n);
+  list([45, 30, 15, 0]);
+  let now = BASE + 50 * MINUTE;
+  const { get } = await serve(t, { archive, now: () => now });
+  const expected = sweeps => plain(mergeChanges(sweeps.map(([minutes, n]) => changesAt(minutes, n))));
+  const all = [[0, 1], [15, 2], [30, 3], [45, 4]];
+  const first = await get('/api/changes?window=1h');
+  assert.deepEqual(first.json(), expected(all), 'the first answer is the merge of what the archive holds');
+  assert.deepEqual(state.gets, [0, 15, 30, 45].map(idOf), 'every sweep of the window was read, oldest first');
+  const second = await get('/api/changes?window=1h');
+  assert.equal(second.body, first.body, 'the same answer');
+  assert.equal(state.gets.length, 4, 'and no sweep was read again');
+  assert.ok(state.lists.length >= 2 && state.lists.every(options => options?.limit === 5), 'the list is asked for the retention count');
+  // The window moves on: only the newest sweep is inside it, the older ones are still listed and stay memoized.
+  now = BASE + 100 * MINUTE;
+  assert.deepEqual((await get('/api/changes?window=1h')).json(), expected([[45, 4]]));
+  now = BASE + 50 * MINUTE;
+  assert.deepEqual((await get('/api/changes?window=1h')).json(), expected(all));
+  assert.equal(state.gets.length, 4, 'a sweep outside one window but still listed is not forgotten');
+  // A new sweep: only that one is read. The oldest leaves the list.
+  put(60, 5);
+  list([60, 45, 30, 15]);
+  now = BASE + 70 * MINUTE;
+  assert.deepEqual((await get('/api/changes?window=1h')).json(), expected([[15, 2], [30, 3], [45, 4], [60, 5]]));
+  assert.deepEqual(state.gets.slice(4), [idOf(60)]);
+  // The id that left the list was dropped from the memo: when it is listed again it is read again.
+  list([60, 45, 30, 15, 0]);
+  now = BASE + 65 * MINUTE;
+  assert.deepEqual((await get('/api/changes?window=24h')).json(), expected([[0, 1], [15, 2], [30, 3], [45, 4], [60, 5]]));
+  assert.deepEqual(state.gets.slice(5), [idOf(0)]);
+});
+
+test('a sweep that could not be read is not memoized; one that was read without changes is', async t => {
+  const { state, archive, put, list } = fakeArchive(5);
+  put(15, 2);
+  state.files.set(idOf(30), { meta: { timestamp: iso(30) }, health: [] });
+  list([30, 15, 0]);
+  const { get } = await serve(t, { archive, now: () => BASE + 40 * MINUTE });
+  const first = await get('/api/changes?window=1h');
+  assert.deepEqual(first.json(), plain(mergeChanges([changesAt(15, 2)])), 'the missing file and the sweep without changes are left out');
+  assert.deepEqual(state.gets, [0, 15, 30].map(idOf));
+  put(0, 1);
+  const second = await get('/api/changes?window=1h');
+  assert.deepEqual(second.json(), plain(mergeChanges([changesAt(0, 1), changesAt(15, 2)])), 'the file that has appeared is used at once');
+  assert.deepEqual(state.gets.slice(3), [idOf(0)], 'only the one that failed is read again');
+  state.files.delete(idOf(0));
+  assert.deepEqual((await get('/api/changes?window=1h')).json(), second.json(), 'a read that succeeded stays, whatever happens to the file later');
+});
+
+test('the changes of a window cover at most the retention count of sweeps, even when the index holds more', async t => {
+  const { dir } = filled(t, [[0, 1], [15, 2], [30, 3], [45, 4]], { count: 8 });
+  // The operator lowered SWEEP_ARCHIVE_COUNT: the index still lists four sweeps until the next add.
+  const archive = new SweepArchive(dir, { logger: quiet, count: 2 });
+  assert.equal(archive.list().length, 4);
+  const { calls, archive: spy } = spied(archive);
+  const { get } = await serve(t, { archive: spy, now: () => BASE + 50 * MINUTE });
+  assert.deepEqual((await get('/api/changes?window=1h')).json(), plain(mergeChanges([changesAt(30, 3), changesAt(45, 4)])));
+  assert.deepEqual(calls.filter(([name]) => name === 'list'), [['list', { limit: 2 }]]);
+  assert.deepEqual(calls.filter(([name]) => name === 'get'), [['get', idOf(30)], ['get', idOf(45)]]);
 });

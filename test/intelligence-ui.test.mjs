@@ -105,17 +105,17 @@ test('metadata quality does not mark an unknown location method or failed source
 test('modal traps keyboard focus and restores prior inert, focus and scrolling on Escape',async()=>{
   const h=harness();h.document.body.style.overflow='auto';await h.api.openEvent(fixture());
   assert.equal(h.main.inert,true);assert.equal(byId(h,'ci-dialog').getAttribute('aria-modal'),'true');assert.equal(h.document.body.style.overflow,'hidden');
-  const controls=byId(h,'ci-dialog').querySelectorAll('button,a,input,select,textarea');const first=controls[0],last=controls.at(-1);first.focus();h.document.dispatchEvent(event('keydown',{key:'Tab',shiftKey:true}));assert.equal(h.document.activeElement,last);
-  h.document.dispatchEvent(event('keydown',{key:'Tab'}));assert.equal(h.document.activeElement,first);h.document.dispatchEvent(event('keydown',{key:'Escape'}));
-  assert.equal(h.main.inert,false);assert.equal(h.existing.inert,true);assert.equal(h.document.activeElement,h.trigger);assert.equal(h.document.body.style.overflow,'auto');assert.equal(byId(h,'ci-overlay'),null);
+  const controls=byId(h,'ci-dialog').querySelectorAll('button,a,input,select,textarea');const first=controls[0],last=controls.at(-1);first.focus();h.document.dispatchEvent(event('keydown',{key:'Tab',shiftKey:true}));assert.ok(h.document.activeElement===last,'Shift+Tab from the first control wraps to the last');
+  h.document.dispatchEvent(event('keydown',{key:'Tab'}));assert.ok(h.document.activeElement===first,'Tab from the last control wraps to the first');h.document.dispatchEvent(event('keydown',{key:'Escape'}));
+  assert.equal(h.main.inert,false);assert.equal(h.existing.inert,true);assert.ok(h.document.activeElement===h.trigger,'the focus returns to the trigger');assert.equal(h.document.body.style.overflow,'auto');assert.ok(byId(h,'ci-overlay')===null,'the overlay is gone');
 });
 
 test('modal restores a replaced dashboard trigger by ID after applying a workspace',async()=>{
-  const h=harness();await h.api.openEvent(fixture());h.trigger.remove();const replacement=h.document.createElement('button');replacement.id='trigger';h.main.appendChild(replacement);h.document.dispatchEvent(event('keydown',{key:'Escape'}));assert.equal(h.document.activeElement,replacement);
+  const h=harness();await h.api.openEvent(fixture());h.trigger.remove();const replacement=h.document.createElement('button');replacement.id='trigger';h.main.appendChild(replacement);h.document.dispatchEvent(event('keydown',{key:'Escape'}));assert.ok(h.document.activeElement===replacement,'the focus goes to the replacement of the removed trigger');
 });
 
 test('feature flags gate history and profiles without network or storage side effects',()=>{
-  let requests=0;const h=harness({fetch:async()=>{requests++;throw new Error('unexpected')}});assert.equal(h.api.openHistory(),false);assert.equal(h.api.openProfiles(),false);assert.equal(requests,0);assert.equal(byId(h,'ci-overlay'),null);
+  let requests=0;const h=harness({fetch:async()=>{requests++;throw new Error('unexpected')}});assert.equal(h.api.openHistory(),false);assert.equal(h.api.openProfiles(),false);assert.equal(requests,0);assert.ok(byId(h,'ci-overlay')===null,'nothing opened');
 });
 
 test('related report opens the matching snapshot event rather than following an unsafe link',async()=>{
@@ -190,7 +190,7 @@ test('saved profiles normalize hostile settings and keep twelve own entries at m
 test('profiles save, rename and delete only own entries with blocked-storage session fallback',()=>{
   const storage={getItem(){throw new Error('denied')},setItem(){throw new Error('denied')}};const h=harness({profilesEnabled:true,storage});h.api.openProfiles();assert.match(byId(h,'ci-body').textContent,/session/i);change(h,'ci-profile-name','<script>Saved view</script>');click(h,'[data-ci-profile-action="save"]');let own=byId(h,'ci-body').querySelector('[data-ci-profile-action="delete"]');assert.ok(own);const id=own.dataset.profileId;assert.equal(byId(h,'ci-body').querySelectorAll('script').length,0);
   click(h,'[data-ci-profile-action="rename"][data-profile-id="'+id+'"]');change(h,'ci-profile-name','Renamed');click(h,'[data-ci-profile-action="save"]');assert.match(byId(h,'ci-body').textContent,/Renamed/);assert.doesNotMatch(byId(h,'ci-body').textContent,/<script>/);
-  assert.equal(byId(h,'ci-body').querySelector('[data-ci-profile-action="delete"][data-profile-id="research"]'),null);click(h,'[data-ci-profile-action="delete"][data-profile-id="'+id+'"]');assert.equal(byId(h,'ci-body').querySelectorAll('[data-ci-profile-action="delete"]').length,0);
+  assert.ok(byId(h,'ci-body').querySelector('[data-ci-profile-action="delete"][data-profile-id="research"]')===null,'a preset has no delete button');click(h,'[data-ci-profile-action="delete"][data-profile-id="'+id+'"]');assert.equal(byId(h,'ci-body').querySelectorAll('[data-ci-profile-action="delete"]').length,0);
 });
 
 test('preset switching retains the original custom workspace and allows restoring it',()=>{
