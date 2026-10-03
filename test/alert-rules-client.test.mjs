@@ -494,7 +494,8 @@ test('Reset to default removes an override and reads the rules again; editing a 
   assert(row(h.html(),'events-high').includes('>Modified<')&&row(h.html(),'events-high').includes('Watch–High · keywords: storm')); assert.equal(h.focused.at(-1),'[data-rule-action="edit"][data-rule-id="events-high"]');
   const before=h.requests.length; h.press({'data-rule-action':'reset','data-rule-id':'events-high'});
   await h.until(()=>row(h.html(),'events-high').includes('>Built-in<')&&h.html().includes('Rule reset to default'));
-  assert.deepEqual(plain(h.requests.slice(before).map(request=>[request.method,request.path])),[['DELETE','/api/alerts/rules/events-high'],['GET','/api/alerts/rules']]);
+  // The tray may re-read the alert list in between (timing differs per platform); only the rule requests are pinned.
+  assert.deepEqual(plain(h.requests.slice(before).filter(request=>request.path.startsWith('/api/alerts/rules')).map(request=>[request.method,request.path])),[['DELETE','/api/alerts/rules/events-high'],['GET','/api/alerts/rules']]);
   assert(row(h.html(),'events-high').includes('= High')&&!row(h.html(),'events-high').includes('storm'),'the default is back'); assert.equal(h.engine.rules().find(rule=>rule.id==='events-high').source,'builtin');
 });
 
