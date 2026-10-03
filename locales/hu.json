@@ -466,6 +466,17 @@
         "btc": "Bitcoin",
         "eth": "Ethereum",
         "eurhuf": "EUR/HUF",
+        "hormuz_transits": "Hormuzi-szoros, áthaladások (7 napos átlag)",
+        "bab_el_mandeb_transits": "Báb el-Mandeb, áthaladások (7 napos átlag)",
+        "suez_transits": "Szuezi-csatorna, áthaladások (7 napos átlag)",
+        "malacca_transits": "Malaka-szoros, áthaladások (7 napos átlag)",
+        "bosporus_transits": "Boszporusz, áthaladások (7 napos átlag)",
+        "panama_transits": "Panama-csatorna, áthaladások (7 napos átlag)",
+        "gibraltar_transits": "Gibraltári-szoros, áthaladások (7 napos átlag)",
+        "dover_transits": "Doveri-szoros, áthaladások (7 napos átlag)",
+        "hu_power_price": "Magyar másnapi áramár",
+        "grid_frequency_hz": "Hálózati frekvencia (kontinentális Európa)",
+        "mil_aircraft_total": "Katonai repülőgépek a levegőben, világszerte (ADS-B, 2 percen belüli pozíció)",
         "urgent_posts": "Sürgős OSINT-posztok",
         "who_alerts": "WHO-riasztások",
         "conflict_events": "Konfliktusesemények",
@@ -494,7 +505,9 @@
         "alerts": "riasztás",
         "events": "esemény",
         "fatalities": "áldozat",
-        "sources": "forrás"
+        "sources": "forrás",
+        "transits/day": "áthaladás/nap",
+        "aircraft": "repülőgép"
       },
       "summary": {
         "kinds": "típusok",
@@ -565,7 +578,7 @@
     "layer_nuclear": "Nukleáris / RadNet",
     "layer_health": "WHO / kiegészítő egészség",
     "layer_news": "Hírek / GDELT",
-    "layer_earthquake": "Jelentős földrengések · USGS"
+    "layer_earthquake": "Földrengések · USGS jelentős + EMSC M4,5+"
   },
   "status": {
     "connection": "Kapcsolat",
@@ -755,7 +768,11 @@
     "startsAt": "Kezdőidő",
     "validUntil": "Érvényes eddig",
     "method_forecast-grid": "Előrejelzési rácspont",
-    "method_configured-point": "Beállított előrejelzési hely"
+    "method_configured-point": "Beállított előrejelzési hely",
+    "method_theater-centre": "A figyelt terület közepe (összesítés, nem pozíció)",
+    "method_polygon-centroid": "A forrás által megadott terület középpontja (sokszög súlypontja)",
+    "method_polygon-vertex-mean": "A forrás által megadott terület közelítő közepe (pontjainak átlaga)",
+    "method_global": "Globális (nincs egyetlen helyszín)"
   },
   "pwa": {
     "menu": "Telepítés / offline",

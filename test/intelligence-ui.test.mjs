@@ -83,6 +83,21 @@ test('detail localizes severity and known geolocation method codes',async()=>{
   const h=harness({translations:{'intelligence.severity_high':'Magas','intelligence.method_headline-keyword':'Cím alapján becsült'}});await h.api.openEvent(fixture({severity:'high',location:{lat:47,lon:19,method:'headline-keyword',precision:'approximate'}}));assert.match(byId(h,'ci-body').textContent,/Magas/);assert.match(byId(h,'ci-body').textContent,/Cím alapján becsült/);assert.doesNotMatch(byId(h,'ci-body').textContent,/headline-keyword/);
 });
 
+test('every location method a source adapter emits has a label in the detail and in en, hu and fr',async()=>{
+  // The tokens are read from the adapters: each line that sets locationMethod, between it and locationPrecision (ternaries included).
+  const dir=new URL('../apis/sources/',import.meta.url),tokens=new Set();
+  for(const name of fs.readdirSync(dir).filter(file=>file.endsWith('.mjs')))for(const line of fs.readFileSync(new URL(name,dir),'utf8').split('\n')){const at=line.indexOf('locationMethod');if(at<0)continue;const end=line.indexOf('locationPrecision',at);for(const match of line.slice(at,end<0?undefined:end).matchAll(/'([a-z][a-z-]*)'/g))tokens.add(match[1]);}
+  for(const token of ['provider','theater-centre','polygon-centroid','polygon-vertex-mean','configured-point'])assert(tokens.has(token),'the scan finds '+token);
+  const locales=['en','hu','fr'].map(lang=>JSON.parse(fs.readFileSync(new URL(`../locales/${lang}.json`,import.meta.url),'utf8')).intelligence);
+  for(const token of tokens){
+    for(const [index,strings] of locales.entries())assert.ok(typeof strings['method_'+token]==='string'&&strings['method_'+token].trim(),`${['en','hu','fr'][index]}: intelligence.method_${token}`);
+    const h=harness();await h.api.openEvent(fixture({location:{lat:47,lon:19,method:token,precision:'approximate'}}));
+    assert.match(byId(h,'ci-body').textContent,new RegExp(locales[0]['method_'+token].replace(/[()]/g,'\\$&')),`${token}: the English label is the fallback`);
+    const hu=harness({translations:{['intelligence.method_'+token]:locales[1]['method_'+token]}});await hu.api.openEvent(fixture({location:{lat:47,lon:19,method:token,precision:'approximate'}}));
+    assert.match(byId(hu,'ci-body').textContent,new RegExp(locales[1]['method_'+token].replace(/[()]/g,'\\$&')),`${token}: translated`);
+  }
+});
+
 test('metadata quality does not mark an unknown location method or failed source as available',async()=>{
   const h=harness();await h.api.openEvent(fixture({source:{name:'Provider',url:'https://example.org/report',status:'error'},location:{lat:47,lon:19,method:'unknown',precision:'unknown'}}));assert.equal(byId(h,'ci-body').querySelectorAll('.ci-check-missing').length,2);assert.doesNotMatch(byId(h,'ci-body').textContent,/Complete metadata/);
 });

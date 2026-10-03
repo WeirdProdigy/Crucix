@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 import { DEFAULT_RULES, mergeRules, validateRule } from '../lib/alerts/rules.mjs';
 import { METRICS } from '../lib/alerts/metrics.mjs';
+import { LIVE_KINDS } from '../lib/intelligence/live-sources.mjs';
 import express from 'express';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -145,6 +146,10 @@ test('the metric select lists the catalog with current values and units; auto se
   assert(select.includes('Sources OK — 28 sources')); assert(html.includes('current: 17.4 index'),'the current value of the selected metric');
   assert(form('change','hy_spread').includes('current: 3.9 %'),'the hint follows the selected metric');
   assert(form('threshold','wti').includes('<option value="wti" selected>'));
+  // A unit with one slash is a locale key too; units with capitals (EUR/MWh, Hz) are shown as they are.
+  const hu=R.renderRules(view({editing:{id:null,draft:{...R.newDraft('threshold',METRIC_VIEW),metric:'hormuz_transits'},error:null}}),pageT(locale('hu')));
+  assert(hu.includes('<option value="hormuz_transits" selected>Hormuzi-szoros, áthaladások (7 napos átlag) — 1.5 áthaladás/nap</option>'),'localised label and unit');
+  assert(hu.includes('<option value="hu_power_price">Magyar másnapi áramár — 1.5 EUR/MWh</option>')&&hu.includes('— 1.5 Hz</option>'));
   assert(R.renderRules(view({editing:{id:null,draft:{...R.newDraft('threshold',[]),metric:'vix'},error:null},metrics:[]}),t).includes('<option value="vix" selected>'),'a draft metric missing from the catalog stays selectable');
   // Severity: auto only for event rules.
   const severities=kind=>[.../<select[^>]*name="severity"[^>]*>([^]*?)<\/select>/.exec(form(kind))[1].matchAll(/<option value="([^"]*)"/g)].map(m=>m[1]);
@@ -161,6 +166,8 @@ test('the event kinds are a checkbox group that keeps tokens the rule already ha
   const html=R.renderRules(view({editing:{id:null,draft,error:null}}),t),group=fieldBlocks(html).get('scope.kinds');
   assert(/<input type="checkbox" name="kinds" value="conflict"[^>]* checked/.test(group)&&/value="custom-kind"[^>]* checked/.test(group),'a token outside the known list stays, checked');
   assert(/value="earthquake"(?![^>]* checked)/.test(group)); assert(group.includes('>Conflict<')&&group.includes('>Space weather<'),'English fallback labels come from the token');
+  // Every kind an event can have (lib/intelligence/history.mjs KINDS) is offered, the live-source kinds included.
+  for(const kind of ['news','osint','health','outage','conflict','signal',...LIVE_KINDS])assert(group.includes(`name="kinds" value="${kind}"`),kind);
   const named=R.renderRules(view({editing:{id:null,draft,error:null}}),pageT({intelligence:{'kind_space-weather':'Űridőjárás',kind_conflict:'Konfliktus'}}));
   assert(named.includes('Űridőjárás')&&named.includes('Konfliktus'),'kind labels come from the intelligence locale group');
   const conv=R.renderRules(view({editing:{id:null,draft:{...R.newDraft('convergence',METRIC_VIEW),kinds:['weather']},error:null}}),t);
@@ -324,9 +331,9 @@ test('every string the rule editor renders exists in en, hu and fr, in the same 
   for(const v of states)R.renderRules(v,rec);
   // Strings only some states or the controller use.
   for(const key of ['errorLoad','deleted','saved','resetDone','errorDelete','errorIdTaken','source.override','summary.kinds','summary.sources','summary.keywords','summary.clears','summary.absenceAge'])used.add('alerts.rules.'+key);
-  for(const token of ['news','osint','health','earthquake','weather','outage','conflict','signal','disaster','space-weather','economic','forecast','network','cyber'])used.add('intelligence.kind_'+token);
+  for(const token of ['news','osint','health','earthquake','weather','outage','conflict','signal','disaster','space-weather','economic','forecast','network','cyber','maritime','aviation','sanctions','market','energy'])used.add('intelligence.kind_'+token);
   for(const metric of METRICS)used.add('alerts.rules.metric.'+metric.key);
-  for(const unit of new Set(METRICS.map(metric=>metric.unit)))if(/^[a-z]+$/.test(unit))used.add('alerts.rules.unit.'+unit);
+  for(const unit of new Set(METRICS.map(metric=>metric.unit)))if(/^[a-z]+(?:\/[a-z]+)?$/.test(unit))used.add('alerts.rules.unit.'+unit);
   const maps=['en','hu','fr'].map(lang=>new Map([...flatten(locale(lang).alerts,'alerts'),...flatten(locale(lang).intelligence,'intelligence'),...flatten(locale(lang).inspector,'inspector')]));
   // (alerts.ruleNames.* is looked up for every rule id, with the stored name as the fallback: locales.test pins the built-in ones.)
   const own=[...used].filter(key=>['alerts.','intelligence.kind_','inspector.level.'].some(prefix=>key.startsWith(prefix))&&!key.startsWith('alerts.ruleNames.'));

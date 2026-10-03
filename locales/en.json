@@ -466,6 +466,17 @@
         "btc": "Bitcoin",
         "eth": "Ethereum",
         "eurhuf": "EUR/HUF",
+        "hormuz_transits": "Strait of Hormuz transits (7-day mean)",
+        "bab_el_mandeb_transits": "Bab el-Mandeb transits (7-day mean)",
+        "suez_transits": "Suez Canal transits (7-day mean)",
+        "malacca_transits": "Malacca Strait transits (7-day mean)",
+        "bosporus_transits": "Bosporus transits (7-day mean)",
+        "panama_transits": "Panama Canal transits (7-day mean)",
+        "gibraltar_transits": "Gibraltar Strait transits (7-day mean)",
+        "dover_transits": "Dover Strait transits (7-day mean)",
+        "hu_power_price": "Hungary day-ahead power price",
+        "grid_frequency_hz": "Grid frequency (Continental Europe)",
+        "mil_aircraft_total": "Military aircraft airborne worldwide (ADS-B, position within 2 min)",
         "urgent_posts": "Urgent OSINT posts",
         "who_alerts": "WHO alerts",
         "conflict_events": "Conflict events",
@@ -494,7 +505,9 @@
         "alerts": "alerts",
         "events": "events",
         "fatalities": "fatalities",
-        "sources": "sources"
+        "sources": "sources",
+        "transits/day": "transits/day",
+        "aircraft": "aircraft"
       },
       "summary": {
         "kinds": "types",
@@ -565,7 +578,7 @@
     "layer_nuclear": "Nuclear / RadNet",
     "layer_health": "WHO / supplemental health",
     "layer_news": "News / GDELT",
-    "layer_earthquake": "USGS significant earthquakes"
+    "layer_earthquake": "Earthquakes · USGS significant + EMSC M4.5+"
   },
   "status": {
     "connection": "Connection",
@@ -755,7 +768,11 @@
     "startsAt": "Starts at",
     "validUntil": "Valid until",
     "method_forecast-grid": "Forecast grid point",
-    "method_configured-point": "Configured forecast location"
+    "method_configured-point": "Configured forecast location",
+    "method_theater-centre": "Centre of the watched area (aggregate, not a position)",
+    "method_polygon-centroid": "Centre of the provider’s area (polygon centroid)",
+    "method_polygon-vertex-mean": "Approximate centre of the provider’s area (mean of its points)",
+    "method_global": "Global (no single location)"
   },
   "pwa": {
     "menu": "Install / offline",

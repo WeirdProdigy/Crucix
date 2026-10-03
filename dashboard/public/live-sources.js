@@ -35,6 +35,16 @@
       return (Array.isArray(source.observations)?source.observations:[]).slice(0,100).filter(row=>validRow(row,policy,now,source.source));
     });
   }
+  // The rows the maps draw: current rows with coordinates. A quake that USGS and EMSC both report is drawn once: an earthquake row within
+  // QUAKE_MS and QUAKE_KM of a USGS significant quake (D.earthquakes, its own markers) is left off the map; both events stay in the lists.
+  // Measured in a live sweep on 2026-10-03: the same M4.7 near Korumburra was 0.05 s and 2.6 km apart in the two catalogues.
+  const QUAKE_MS=60000,QUAKE_KM=100;
+  const located=(lat,lon)=>typeof lat==='number'&&typeof lon==='number'&&Number.isFinite(lat)&&Number.isFinite(lon)&&Math.abs(lat)<=90&&Math.abs(lon)<=180;
+  function km(a,b){const r=d=>d*Math.PI/180,h=Math.sin(r(b.lat-a.lat)/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(r(b.lon-a.lon)/2)**2;return 12742*Math.asin(Math.min(1,Math.sqrt(h)));}
+  function markerRows(sources,quakes,now=Date.now()){
+    const usgs=(Array.isArray(quakes)?quakes:[]).slice(0,500).filter(q=>q&&located(q.lat,q.lon)).map(q=>({lat:q.lat,lon:q.lon,at:typeof q.time==='number'?q.time:time(q.time)})).filter(q=>Number.isFinite(q.at));
+    return observations(sources,now).filter(row=>located(row.lat,row.lon)&&!(row.kind==='earthquake'&&usgs.some(q=>Math.abs(q.at-time(row.observedAt))<=QUAKE_MS&&km(q,row)<=QUAKE_KM)));
+  }
   const stamp=value=>Number.isFinite(Date.parse(value))?new Date(value).toISOString().replace('T',' ').replace(/\.\d{3}Z$/,' UTC'):'—';
   function safeUrl(raw){try{const url=new URL(raw);return ['https:','http:'].includes(url.protocol)&&!url.username&&!url.password&&!Array.from(url.searchParams.keys()).some(key=>/^(?:api[-_]?key|token|secret|password|authorization|auth)$/i.test(key))?url.href:null;}catch{return null;}}
   function metricText(metrics){
@@ -65,5 +75,5 @@
     }).join('');
     return `<div class="g-panel live-sources-panel"><div class="sec-head"><h3>${tr('title','Current public data')}</h3><span class="badge">${providers.filter(row=>state(row,now)==='ok').length}/${providers.length}</span></div><p class="live-help">${tr('help','Only records within each provider’s freshness window are shown. Forecasts and model estimates are labelled.')}</p><div class="live-source-list">${cards||'<div class="empty-state">'+tr('waiting','Waiting for the first collection')+'</div>'}</div></div>`;
   }
-  window.CrucixLiveSources={policies,state,observations,renderPanel};
+  window.CrucixLiveSources={policies,state,observations,markerRows,renderPanel};
 })(window);

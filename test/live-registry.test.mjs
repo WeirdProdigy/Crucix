@@ -111,3 +111,37 @@ test('the map kind table sends located live rows to layer types that exist', () 
   assert.equal(html.match(/liveMarkerType\(row\.kind\)/g)?.length, 2, 'both marker sites use the table');
   assert.doesNotMatch(html, /row\.kind==='forecast'\?/);
 });
+
+test('a located live row takes the colour of the layer it is drawn in, on the globe and on the flat map', () => {
+  const html = read('dashboard/public/jarvis.html');
+  const code = html.match(/const LIVE_MARKER_TYPE[\s\S]*?const liveMarkerColor=[^\n]*/);
+  assert(code, 'LIVE_MARKER_COLOR and liveMarkerColor follow the type table');
+  const color = vm.runInNewContext(code[0] + '\nliveMarkerColor');
+  // The colours the layers' own markers use: USGS quakes, the chokepoints, the air theaters; everything else keeps the live blue.
+  assert.match(html, /color:'rgba\(255,112,67,0\.9\)',type:'earthquake'/); assert.match(html, /color:'rgba\(179,136,255,0\.8\)', type:'maritime'/); assert.match(html, /color:'rgba\(100,240,200,0\.8\)', type:'air'/);
+  assert.deepEqual(['earthquake', 'disaster', 'maritime', 'aviation', 'weather', 'forecast', 'energy', '__proto__', undefined].map(kind => color(kind, 0.8)),
+    ['rgba(255,112,67,0.8)', 'rgba(255,112,67,0.8)', 'rgba(179,136,255,0.8)', 'rgba(100,240,200,0.8)', 'rgba(100,200,255,0.8)', 'rgba(100,200,255,0.8)', 'rgba(100,200,255,0.8)', 'rgba(100,200,255,0.8)', 'rgba(100,200,255,0.8)']);
+  assert.equal(html.match(/liveMarkerColor\(row\.kind,/g)?.length, 3, 'the globe colour and the flat fill and stroke');
+  assert.equal(html.match(/CrucixLiveSources\.markerRows\(D\.liveSources,D\.earthquakes\)/g)?.length, 2, 'both maps draw the de-duplicated rows');
+});
+
+test('the earthquake layer toggle names both catalogues it draws (USGS and EMSC)', () => {
+  assert.match(read('dashboard/public/jarvis.html'), /\{id:'earthquake',key:'map\.earthquake',label:'[^']*USGS[^']*EMSC[^']*'/);
+  for (const lang of ['en', 'hu', 'fr']) assert.match(JSON.parse(read(`locales/${lang}.json`)).settings.layer_earthquake, /USGS.*EMSC M4[.,]5\+/, lang);
+});
+
+test('a quake that USGS and EMSC both report is drawn once: the USGS marker stays, the EMSC row is left off the map', () => {
+  const api = browser(), at = Date.parse('2026-10-02T16:01:39.630Z'), clock = at + 3600000;
+  // Measured in a live sweep on 2026-10-03: the same M4.7 near Korumburra, 0.05 s and 2.6 km apart in the two catalogues.
+  const usgs = [{ magnitude: 4.7, place: '5 km NNE of Korumburra, Australia', time: '2026-10-02T16:01:39.581Z', lat: -38.3802, lon: 145.8401 }];
+  const quake = (id, lat, lon, observedAt = new Date(at).toISOString()) => ({ providerId: id, kind: 'earthquake', title: 'M4.7 ' + id, observedAt, lat, lon });
+  const rows = [quake('same', -38.3803, 145.8704), quake('later', -38.3803, 145.8704, new Date(at + 120000).toISOString()), quake('far', -42.9, 147.3),
+    { ...quake('maritime', -38.3803, 145.8704), kind: 'maritime' }, { ...quake('unlocated', null, null) }];
+  const sources = [{ source: 'EMSC', status: 'ok', observedAt: new Date(at).toISOString(), observations: rows }];
+  const ids = list => list.map(row => row.providerId);
+  assert.deepEqual(ids(api.markerRows(sources, usgs, clock)), ['later', 'far', 'maritime'], 'within 60 s and 100 km of a USGS quake: drawn once');
+  assert.deepEqual(ids(api.markerRows(sources, [], clock)), ['same', 'later', 'far', 'maritime'], 'without USGS quakes every located row is drawn');
+  assert.deepEqual(ids(api.markerRows(sources, [{ ...usgs[0], time: at - 61000 }], clock)), ['same', 'later', 'far', 'maritime'], 'a numeric USGS time works; 61 s apart are two quakes');
+  assert.deepEqual(ids(api.markerRows(sources, [null, 'x', { lat: 999, lon: 0, time: usgs[0].time }, { ...usgs[0], time: 'not a time' }, { ...usgs[0], lat: '-38.38' }], clock)), ['same', 'later', 'far', 'maritime'], 'unusable quakes are ignored');
+  assert.deepEqual(ids(api.markerRows(sources, usgs, at + 30 * 3600000)), [], 'expired rows are not drawn either');
+});

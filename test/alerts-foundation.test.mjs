@@ -207,7 +207,9 @@ test('threatOf maps a level onto the 2-5 threat scale and falls back to 1', () =
 
 // ─── metrics registry ────────────────────────────────────────────────────────
 
-const KEYS = ['vix', 'hy_spread', 't10y2y', 'wti', 'brent', 'natgas', 'gold', 'silver', 'y10', 'usd_index', 'mortgage', 'fed_funds', 'unemployment', 'btc', 'eth', 'eurhuf', 'urgent_posts', 'who_alerts', 'conflict_events', 'conflict_fatalities', 'sources_ok', 'sources_failed', 'sources_stale'];
+const LIVE_KEYS = ['hormuz_transits', 'bab_el_mandeb_transits', 'suez_transits', 'malacca_transits', 'bosporus_transits', 'panama_transits', 'gibraltar_transits', 'dover_transits',
+  'hu_power_price', 'grid_frequency_hz', 'mil_aircraft_total'];
+const KEYS = ['vix', 'hy_spread', 't10y2y', 'wti', 'brent', 'natgas', 'gold', 'silver', 'y10', 'usd_index', 'mortgage', 'fed_funds', 'unemployment', 'btc', 'eth', 'eurhuf', ...LIVE_KEYS, 'urgent_posts', 'who_alerts', 'conflict_events', 'conflict_fatalities', 'sources_ok', 'sources_failed', 'sources_stale'];
 
 function snapshot() {
   return {
@@ -218,7 +220,10 @@ function snapshot() {
     ],
     energy: { wti: 89.17, brent: 99.22, natgas: 2.93 },
     metals: { gold: 4213.5, silver: 61.45 },
-    liveSources: [{ source: 'USGS', metrics: { HUF: 1 } }, { source: 'ECB', metrics: { HUF: 367.18, USD: 1.1298 } }],
+    liveSources: [{ source: 'USGS', metrics: { HUF: 1 } }, { source: 'ECB', metrics: { HUF: 367.18, USD: 1.1298 } },
+      { source: 'IMF-PortWatch', status: 'ok', metrics: { hormuz_transits: 3.1, bab_el_mandeb_transits: 27.1, suez_transits: 40, malacca_transits: 217.9, bosporus_transits: 49.6, panama_transits: 27, gibraltar_transits: 133, dover_transits: 172.3 } },
+      { source: 'Energy-Charts-HU', status: 'ok', metrics: { hu_power_price: 172.6, grid_frequency_hz: 50.0307 } },
+      { source: 'ADSB-Military', status: 'ok', metrics: { mil_aircraft_total: 71 } }],
     tg: { urgent: [{ text: 'a' }, { text: 'b' }, { text: 'c' }] },
     who: [{ title: 'outbreak' }],
     acled: { totalEvents: 12, totalFatalities: 34 },
@@ -226,7 +231,7 @@ function snapshot() {
   };
 }
 
-test('METRICS describes the 23 metrics and METRIC_KEYS lists them in order', () => {
+test('METRICS describes the 34 metrics and METRIC_KEYS lists them in order', () => {
   assert.deepEqual(metrics.METRIC_KEYS, KEYS);
   assert.deepEqual(metrics.METRICS.map(metric => metric.key), KEYS);
   for (const metric of metrics.METRICS) {
@@ -246,11 +251,13 @@ test('the registry is frozen so callers cannot reshape it', () => {
   assert.ok(Object.isFrozen(metrics.METRIC_KEYS));
 });
 
-test('metricValues reads all 23 keys from a snapshot', () => {
+test('metricValues reads all 34 keys from a snapshot', () => {
   assert.deepEqual(metrics.metricValues(snapshot()), {
     vix: 15.95, hy_spread: 3.12, t10y2y: 0.46, wti: 89.17, brent: 99.22, natgas: 2.93, gold: 4213.5, silver: 61.45,
     y10: 5.29, usd_index: 120.33, mortgage: 7.28, fed_funds: 3.88, unemployment: 4.1,
     btc: 86327.37, eth: 2745.87, eurhuf: 367.18,
+    hormuz_transits: 3.1, bab_el_mandeb_transits: 27.1, suez_transits: 40, malacca_transits: 217.9, bosporus_transits: 49.6, panama_transits: 27, gibraltar_transits: 133, dover_transits: 172.3,
+    hu_power_price: 172.6, grid_frequency_hz: 50.0307, mil_aircraft_total: 71,
     urgent_posts: 3, who_alerts: 1, conflict_events: 12, conflict_fatalities: 34,
     sources_ok: 32, sources_failed: 2, sources_stale: 1,
   });
@@ -302,13 +309,40 @@ test('crypto and the ECB rate are matched by symbol and source, not position', (
   assert.equal(values.eurhuf, null);
 });
 
+test('the live-source metrics name their unit and kind, and the PortWatch ones say they are 7-day means', () => {
+  const byKey = Object.fromEntries(metrics.METRICS.map(metric => [metric.key, metric]));
+  for (const key of LIVE_KEYS) assert.equal(byKey[key].kind, 'number', key);
+  for (const key of LIVE_KEYS.filter(key => key.endsWith('_transits'))) {
+    assert.equal(byKey[key].unit, 'transits/day', key);
+    assert.match(byKey[key].label, /\(7-day mean\)$/, `${key}: PortWatch publishes a 7-day mean, not one day's count`);
+  }
+  assert.deepEqual([byKey.hu_power_price.unit, byKey.grid_frequency_hz.unit, byKey.mil_aircraft_total.unit], ['EUR/MWh', 'Hz', 'aircraft']);
+  for (const word of [/worldwide/, /airborne/, /2 min/]) assert.match(byKey.mil_aircraft_total.label, word);
+});
+
+test('a live-source metric is read only while its source is current: stale, failed or absent sources give null', () => {
+  const live = (status, extra = {}) => ({ liveSources: [{ source: 'IMF-PortWatch', status, metrics: { hormuz_transits: 3.1 }, ...extra },
+    { source: 'Energy-Charts-HU', status, metrics: { hu_power_price: 172.6, grid_frequency_hz: 50.03 }, ...extra }, { source: 'ADSB-Military', status, metrics: { mil_aircraft_total: 71 }, ...extra }] });
+  const read = snapshot => { const values = metrics.metricValues(snapshot); return [values.hormuz_transits, values.hu_power_price, values.grid_frequency_hz, values.mil_aircraft_total]; };
+  assert.deepEqual(read(live('ok')), [3.1, 172.6, 50.03, 71]);
+  // A value a snapshot still carries for a source that is no longer current is never read.
+  for (const status of ['stale', 'error', 'disabled', undefined]) assert.deepEqual(read(live(status)), [null, null, null, null], String(status));
+  assert.deepEqual(read(live('ok', { stale: true })), [null, null, null, null], 'stale flag');
+  assert.deepEqual(read({ liveSources: [] }), [null, null, null, null], 'absent');
+  assert.deepEqual(read({ liveSources: [{ source: 'Energy-Charts-HU', status: 'ok', metrics: {} }] }), [null, null, null, null], 'nothing current: an empty metrics object');
+  // Matched by source name: the same key under another source does not count.
+  assert.equal(metrics.metricValues({ liveSources: [{ source: 'EMSC', status: 'ok', metrics: { hormuz_transits: 9, mil_aircraft_total: 9 } }] }).hormuz_transits, null);
+  const odd = metrics.metricValues({ liveSources: [{ source: 'IMF-PortWatch', status: 'ok', metrics: { hormuz_transits: '3.1', suez_transits: NaN } }] });
+  assert.deepEqual([odd.hormuz_transits, odd.suez_transits], [null, null]);
+});
+
 test('non-finite and non-numeric values become null and hostile shapes never throw', () => {
   const hostile = {
     markets: { vix: { value: NaN }, crypto: [null, { symbol: 'BTC-USD', price: Infinity }, 'ETH-USD'] },
     fred: [null, { id: 'BAMLH0A0HYM2', value: '3.12' }, { id: 'T10Y2Y', value: -Infinity }, { id: 'DGS10' }, 7],
     energy: { wti: NaN, brent: '99', natgas: null },
     metals: [],
-    liveSources: [null, { source: 'ECB' }, { source: 'ECB', metrics: null }],
+    liveSources: [null, { source: 'ECB' }, { source: 'ECB', metrics: null }, { source: 'IMF-PortWatch', status: 'ok', metrics: null }, { source: 'ADSB-Military', status: 'ok', metrics: 'many' }],
     tg: { urgent: 'many' }, who: { length: 5 }, acled: { totalEvents: NaN, totalFatalities: '9' },
     meta: { sourcesOk: Infinity, sourcesFailed: {}, sourcesStale: -1 },
   };
@@ -322,6 +356,8 @@ test('non-finite and non-numeric values become null and hostile shapes never thr
   assert.equal(values.btc, null);
   assert.equal(values.eth, null);
   assert.equal(values.eurhuf, null);
+  assert.equal(values.hormuz_transits, null);
+  assert.equal(values.mil_aircraft_total, null);
   assert.equal(values.wti, null);
   assert.equal(values.brent, null);
   assert.equal(values.gold, null);

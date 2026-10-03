@@ -2,7 +2,7 @@
 
 # Crucix
 
-**Your own intelligence terminal. 40 sources. One command. Local processing.**
+**Your own intelligence terminal. 50 sources. One command. Local processing.**
 
 ## [Visit The Upstream Demo: crucix.live](https://www.crucix.live/)
 
@@ -12,7 +12,7 @@
 [![Node.js 22+](https://img.shields.io/badge/node-22%2B-brightgreen)](#quick-start)
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPLv3-blue.svg)](LICENSE)
 [![Dependencies](https://img.shields.io/badge/dependencies-1%20(express)-orange)](#architecture)
-[![Sources](https://img.shields.io/badge/OSINT%20sources-40-cyan)](#data-sources-40)
+[![Sources](https://img.shields.io/badge/OSINT%20sources-50-cyan)](#data-sources-50)
 [![Docker](https://img.shields.io/badge/docker-ready-blue?logo=docker)](#docker)
 
 **Enter The Signal Network**
@@ -90,7 +90,7 @@ npm run dev
 > ```
 > This bypasses npm's script runner, which can swallow errors on some systems (particularly PowerShell on Windows). You can also run `node diag.mjs` to diagnose the exact issue — it checks your Node version, tests each module import individually, and verifies port availability. See [Troubleshooting](#troubleshooting) for more.
 
-The dashboard opens automatically at `http://localhost:3117` and immediately begins its first intelligence sweep. This initial sweep queries all 40 sources in parallel and typically takes 30–60 seconds — the dashboard will appear empty until the sweep completes and pushes the first data update. After that, it auto-refreshes every 15 minutes via SSE (Server-Sent Events). No manual page refresh needed.
+The dashboard opens automatically at `http://localhost:3117` and immediately begins its first intelligence sweep. This initial sweep queries all 50 sources in parallel and typically takes 30–60 seconds — the dashboard will appear empty until the sweep completes and pushes the first data update. After that, it auto-refreshes every 15 minutes via SSE (Server-Sent Events). No manual page refresh needed.
 
 **Requirements:** Node.js 22+ (uses native `fetch`, top-level `await`, ESM)
 
@@ -201,7 +201,7 @@ The preference is saved in browser local storage, so the UI will remember your l
 
 ### Auto-Refresh
 The server runs a sweep cycle every 15 minutes (configurable). Each cycle:
-1. Queries all 40 sources in parallel (~30s)
+1. Queries all 50 sources in parallel (~30s)
 2. Synthesizes raw data into dashboard format
 3. Computes delta from previous run (what changed, escalated, de-escalated) — visible in the **Sweep Delta** panel on the dashboard
 4. Generates LLM trade ideas (if configured)
@@ -344,14 +344,14 @@ crucix/
 ├── docs/                      # Screenshots for README
 │
 ├── apis/
-│   ├── briefing.mjs           # Master orchestrator — runs all 40 sources in parallel
+│   ├── briefing.mjs           # Master orchestrator — runs all 50 sources in parallel
 │   ├── save-briefing.mjs      # CLI: save timestamped + latest.json
 │   ├── BRIEFING_PROMPT.md     # Intelligence synthesis protocol
 │   ├── BRIEFING_TEMPLATE.md   # Briefing output structure
 │   ├── utils/
 │   │   ├── fetch.mjs          # safeFetch() — timeout, retries, abort, auto-JSON
 │   │   └── env.mjs            # .env loader (no dotenv dependency)
-│   └── sources/               # 40 registered source adapters
+│   └── sources/               # 50 registered source adapters
 │       ├── gdelt.mjs          # Each exports briefing() → structured data
 │       ├── fred.mjs           # Can run standalone: node apis/sources/fred.mjs
 │       ├── space.mjs          # CelesTrak satellite tracking
@@ -394,14 +394,14 @@ crucix/
 ### Design Principles
 - **Pure ESM** — every file is `.mjs` with explicit imports
 - **Minimal dependencies** — Express is the only runtime dependency. `discord.js` is optional (for Discord bot). LLM providers use raw `fetch()`, no SDKs.
-- **Parallel execution** — `Promise.allSettled()` fires all 40 sources simultaneously
+- **Parallel execution** — `Promise.allSettled()` fires all 50 sources simultaneously
 - **Graceful degradation** — missing keys are disabled, upstream errors are visible, and model failures use rules. Other sources continue.
 - **Each source is standalone** — run `node apis/sources/gdelt.mjs` to test any source independently
 - **Self-contained dashboard** — the HTML file works with or without the server
 
 ---
 
-## Data Sources (40)
+## Data Sources (50)
 
 ### Tier 1: Core OSINT & Geopolitical (11)
 
@@ -466,9 +466,9 @@ crucix/
 
 ---
 
-### Tier 7: Current public data (9)
+### Tier 7: Current public data (19)
 
-All nine feeds are free and require no API key. The **Current public data** panel shows provider time, status, attribution and a summary of the current records, which open in the [Record Inspector](#record-inspector-v29). Records have original links and enter event details, searchable history and exports. Geographic natural events and forecast points are map layers. Provider dates are checked again on snapshot reads and in the browser, including offline PWA restores; expired values are hidden.
+All 19 feeds are free and require no API key. The **Current public data** panel shows provider time, status, attribution and a summary of the current records, which open in the [Record Inspector](#record-inspector-v29). Records have original links and enter event details, searchable history and exports. Located records are map markers in the layer of their kind (earthquakes, maritime, air, natural events, weather) and colour; a quake that USGS and EMSC both report (within 60 s and 100 km) is drawn once, as the USGS marker, while both events stay in the lists. Provider dates are checked again on snapshot reads and in the browser, including offline PWA restores; expired values are hidden.
 
 | Source | Data / default watched scope | Freshness ceiling |
 | --- | --- | --- |
@@ -482,7 +482,24 @@ All nine feeds are free and require no API key. The **Current public data** pane
 | MET Norway | Budapest model forecast, separate target/validity times | Model 8h; target within 1h of now and valid interval |
 | OONI | Five recent public HU web-connectivity measurements | 24h; samples, not country-wide conclusions |
 
-Edit the small `publicSources` watchlists in `crucix.config.mjs` for Meteoalarm countries, RIPE ASNs, MET location labels/coordinates and OONI countries. Each adapter validates and limits its inputs. MET identifies Crucix with a project/contact User-Agent; public requests and memory caches are bounded. Empty current feeds remain distinct from failed or undated feeds. World Bank annual indicators are deliberately excluded because this installation requires current data.
+Added in v2.11 (ten more keyless feeds; every request is bounded to 10 s and 2 MiB, 3 MiB for the OpenSanctions index):
+
+| Source | Data / default watched scope | Endpoint | Auth | Freshness ceiling | Licence |
+| --- | --- | --- | --- | --- | --- |
+| IMF PortWatch | AIS-visible daily ship transits at 8 chokepoints (latest published day, 2–9 days behind), rated on the 7-day mean against the previous 28-day median (only from 10 transits a day) | `services9.arcgis.com/…/Daily_Chokepoints_Data` (ArcGIS) | None | Feed and day 10 days; 6h cache | IMF terms: personal, non-commercial use |
+| EMSC | M4.5+ earthquakes of the last 24 h, largest first, up to 100 | `seismicportal.eu/fdsnws/event/1/query` | None | Feed 12h; quake 26h | CC BY 4.0 |
+| Copernicus EMS | Rapid-mapping activations (no severity is published: moderate) | `mapping.emergency.copernicus.eu/backend/dashboard-api/public-activations-info/` | None | Feed 45 days; activation 30 days; 1h cache | Free, full and open (Regulation (EU) 2021/696) |
+| Aviation SIGMET | International SIGMETs worldwide (volcanic ash, tropical cyclone, severe turbulence and icing, thunderstorms) that have started and not expired | `aviationweather.gov/api/data/isigmet` | None | Feed 3h; SIGMET 24h and valid-until | Public domain (NWS) |
+| ADSB-Military (adsb.lol) | Military aircraft per watched theater (an aggregate at the box centre, not positions) and 7700/7600/7500 emergency squawks | `api.adsb.lol/v2/mil`, `/v2/sqk/<code>` | None | 25 min | ODbL 1.0 |
+| OpenSanctions index | Last change and entry count of six sanctions lists (OFAC SDN, EU FSF, UN SC, UK FCDO, BIS Denied, US CSL) | `data.opensanctions.org/datasets/latest/index.json` | None | Index 48h; list change 14 days; 1h cache | CC BY-NC 4.0 |
+| Federal Register | Newest OFAC and BIS documents | `federalregister.gov/api/v1/documents.json` | None | 14 days; 1h cache | Public domain |
+| Energy-Charts HU | Hungarian day-ahead power price, Continental Europe grid frequency, Hungarian renewable share of generation | `api.energy-charts.info` (`/price`, `/frequency`, `/public_power`) | None | 6h; 2 min cache | CC BY 4.0 (price: Bundesnetzagentur \| SMARD.de) |
+| ENTSOG HU | Physical gas flow at the 7 Hungarian cross-border points, latest completed gas day | `transparency.entsog.eu/api/v1/operationaldata` | None | 72h; 1 request an hour | ENTSOG Transparency Platform terms (re-use with citation) |
+| Prediction markets (Manifold) | Play-money markets whose question matches the watched words, most traded first, up to 20 | `api.manifold.markets/v0/search-markets` | None | Last bet 12h, market not closed; 30 min cache | Manifold terms: personal, non-commercial use |
+
+Alert rules can watch the new metrics `<chokepoint>_transits` (PortWatch 7-day mean, transits a day; `hormuz_transits`, `suez_transits` and the other six default chokepoints), `hu_power_price` (EUR/MWh), `grid_frequency_hz` and `mil_aircraft_total` (military aircraft worldwide, airborne, position within 2 minutes); a metric is empty while its source is stale or failing. The HU day-ahead price runs high (median about 194 EUR/MWh over 2026-09-19..10-02; price rows are rated only from 300 and 400 EUR/MWh), so give a `hu_power_price` threshold rule its own level.
+
+Edit the small `publicSources` watchlists in `crucix.config.mjs` for Meteoalarm countries, RIPE ASNs, MET location labels/coordinates, OONI countries, PortWatch chokepoints (`portwatchChokepoints`), ADS-B theater boxes (`adsbTheaters`) and prediction-market words (`marketQueries`). Each adapter validates and limits its inputs. MET identifies Crucix with a project/contact User-Agent; public requests and memory caches are bounded. Empty current feeds remain distinct from failed or undated feeds. World Bank annual indicators are deliberately excluded because this installation requires current data.
 
 Full endpoint, freshness and validation evidence: [source assessment](docs/audit/fresh-data-implementation-2026-10-01.md).
 
@@ -602,7 +619,7 @@ Crucix requires Node.js 22 or later. If you have an older version, download the 
 
 ### Dashboard shows empty panels after first start
 
-This is normal — the first sweep takes 30–60 seconds to query all 40 sources. The dashboard will populate automatically once the sweep completes. Check the terminal for sweep progress logs.
+This is normal — the first sweep takes 30–60 seconds to query all 50 sources. The dashboard will populate automatically once the sweep completes. Check the terminal for sweep progress logs.
 
 ### Some sources show errors
 

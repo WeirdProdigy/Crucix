@@ -11,7 +11,7 @@ import { installIntelligenceRoutes } from '../../lib/intelligence/routes.mjs';
 import { getLocaleForLanguage } from '../../lib/i18n.mjs';
 import { renderOfflineShell } from '../../lib/offline-shell.mjs';
 import { POLICIES } from '../../apis/utils/freshness.mjs';
-import { normalizeLiveSources } from '../../lib/intelligence/live-sources.mjs';
+import { normalizeLiveSources, FACT_FIELDS } from '../../lib/intelligence/live-sources.mjs';
 import { AlertEngine } from '../../lib/alerts/engine.mjs';
 import { installAlertRoutes } from '../../lib/alerts/routes.mjs';
 import { writeJsonAtomic } from '../../lib/atomic-json.mjs';
@@ -67,25 +67,43 @@ function seedAlerts(mode){
   alertEngine.load();
   publishAlerts(alertEngine.summary(),mode==='newcritical'?[alerts.at(-1).id]:[]);
 }
+// /control?liveSources=true: one current sample per POLICIES key, so a new source appears without a fixture edit. SAMPLE adds what a source
+// needs beyond the default (a 'disaster' row without coordinates): its kind, a place for located kinds (`at`, or `indexed`: 47.5+i, 19+i),
+// row extras, metrics; every FACT_FIELDS key gets a value. Located rows show the map marker of each kind.
+const SAMPLE={
+  Meteoalarm:{rows:false},'NOAA-SWPC':{rows:false,summary:'Current NOAA R0/S0/G0: no active space-weather alert.'},
+  GDACS:{indexed:true,row:{severity:'Orange'}},'NASA-EONET':{indexed:true},ECB:{kind:'economic'},RIPEstat:{kind:'network'},'FIRST-EPSS':{kind:'cyber'},OONI:{kind:'network'},
+  'MET-Norway':{kind:'forecast',indexed:true,row:now=>({forecastAt:new Date(now+3600000).toISOString(),validUntil:new Date(now+7200000).toISOString()})},
+  'IMF-PortWatch':{kind:'maritime',at:[26.2969,56.8598],metrics:{hormuz_transits:3.1,suez_transits:40}},
+  EMSC:{kind:'earthquake',at:[51.8043,159.605],precision:'exact',row:{severity:'moderate'}},
+  'Copernicus-EMS':{at:[37.7895,-7.2135],row:{severity:'moderate'}},
+  'Aviation-SIGMET':{kind:'weather',at:[39.2,45.417],method:'polygon-centroid',row:{severity:'high'}},
+  'ADSB-Military':{kind:'aviation',at:[25,48],method:'theater-centre',metrics:{mil_aircraft_total:71}},
+  'OpenSanctions-Index':{kind:'sanctions'},'Federal-Register':{kind:'sanctions'},
+  'Energy-Charts-HU':{kind:'energy',metrics:{hu_power_price:172.6,grid_frequency_hz:50.0307}},'ENTSOG-HU':{kind:'energy'},'Prediction-Markets':{kind:'market'},
+};
+function liveSamples(now){
+  const quake=data.earthquakes[0];
+  return Object.fromEntries(Object.keys(POLICIES).map((source,index)=>{
+    const spec=SAMPLE[source]||{},at=spec.at||(spec.indexed?[47.5+index,19+index]:null),extra=typeof spec.row==='function'?spec.row(now):spec.row;
+    const row={providerId:'live-'+index,source,kind:spec.kind||'disaster',title:'Fixture current '+source+' <img onerror="window.__liveXss=1">',summary:'Public data: safe text only',
+      url:'https://example.org/public/'+index,observedAt:new Date(now-600000).toISOString(),...Object.fromEntries((FACT_FIELDS[source]||[]).map((key,i)=>[key,i+1])),
+      ...(at?{lat:at[0],lon:at[1],locationMethod:spec.method||'provider',locationPrecision:spec.precision||'approximate'}:{}),...extra};
+    // A second GDACS record at another level, so the inspector's severity chips have something to filter. A second EMSC record is the USGS
+    // fixture quake as EMSC reports it: the maps draw it once (the USGS marker), the event lists keep both.
+    const more=source==='GDACS'?[{providerId:'live-'+index+'-b',source,kind:'disaster',title:'Fixture GDACS green alert',summary:'Public data: second record',severity:'Green',observedAt:new Date(now-1200000).toISOString()}]
+      :source==='EMSC'?[{providerId:'live-'+index+'-usgs',source,kind:'earthquake',title:'Fixture EMSC copy of the USGS quake',summary:'Public data: the same quake in both catalogues',url:'https://example.org/public/emsc-copy',
+        observedAt:new Date(Date.parse(quake.time)+50).toISOString(),lat:quake.lat+0.02,lon:quake.lon+0.03,locationMethod:'provider',locationPrecision:'exact',severity:'high'}]:[];
+    return [source,{source,status:'ok',observedAt:new Date(now-600000).toISOString(),timestamp:new Date(now).toISOString(),summary:spec.summary||'Fixture current '+source,
+      attribution:source+' public source attribution',...(spec.metrics?{metrics:spec.metrics}:{}),observations:spec.rows===false?[]:[row,...more]}];
+  }));
+}
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/control') {
     if(url.searchParams.has('liveSources')){
       const enabled=url.searchParams.get('liveSources')==='true';
-      const now=Date.now();
-      data.liveSources=enabled?normalizeLiveSources(Object.fromEntries(Object.keys(POLICIES).map((source,index)=>[source,{
-        source,status:'ok',observedAt:new Date(now-600000).toISOString(),timestamp:new Date(now).toISOString(),
-        summary:source==='NOAA-SWPC'?'Current NOAA R0/S0/G0: no active space-weather alert.':'Fixture current '+source,
-        attribution:source+' public source attribution',
-        observations:source==='NOAA-SWPC'||source==='Meteoalarm'?[]:[{providerId:'live-'+index,source,kind:source==='ECB'?'economic':source==='MET-Norway'?'forecast':source==='FIRST-EPSS'?'cyber':source==='RIPEstat'||source==='OONI'?'network':'disaster',
-          title:'Fixture current '+source+' <img onerror="window.__liveXss=1">',summary:'Public data: safe text only',url:'https://example.org/public/'+index,observedAt:new Date(now-600000).toISOString(),
-          ...(source==='MET-Norway'?{forecastAt:new Date(now+3600000).toISOString(),validUntil:new Date(now+7200000).toISOString()}:{}),
-          ...(['MET-Norway','GDACS','NASA-EONET'].includes(source)?{lat:47.5+index,lon:19+index,locationMethod:'provider',locationPrecision:'approximate'}:{}),
-          ...(source==='GDACS'?{severity:'Orange'}:{}),
-        },
-        // A second GDACS record at another level, so the inspector's severity chips have something to filter.
-        ...(source==='GDACS'?[{providerId:'live-'+index+'-b',source,kind:'disaster',title:'Fixture GDACS green alert',summary:'Public data: second record',severity:'Green',observedAt:new Date(now-1200000).toISOString()}]:[])]
-      }]))):[];
+      data.liveSources=enabled?normalizeLiveSources(liveSamples(Date.now())):[];
       if(enabled&&url.searchParams.get('expired')==='true')data.liveSources[0].observedAt='2025-01-01T00:00:00Z';
       // Rows carry eventId as in 2.9.0 snapshots; legacyIds=true keeps the 2.8.0 shape without it.
       if(url.searchParams.get('legacyIds')!=='true')data.liveSources=stampLiveEventIds(data.liveSources);

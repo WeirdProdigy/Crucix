@@ -466,6 +466,17 @@
         "btc": "Bitcoin",
         "eth": "Ethereum",
         "eurhuf": "EUR/HUF",
+        "hormuz_transits": "Passages du détroit d’Ormuz (moyenne sur 7 jours)",
+        "bab_el_mandeb_transits": "Passages de Bab el-Mandeb (moyenne sur 7 jours)",
+        "suez_transits": "Passages du canal de Suez (moyenne sur 7 jours)",
+        "malacca_transits": "Passages du détroit de Malacca (moyenne sur 7 jours)",
+        "bosporus_transits": "Passages du Bosphore (moyenne sur 7 jours)",
+        "panama_transits": "Passages du canal de Panama (moyenne sur 7 jours)",
+        "gibraltar_transits": "Passages du détroit de Gibraltar (moyenne sur 7 jours)",
+        "dover_transits": "Passages du pas de Calais (moyenne sur 7 jours)",
+        "hu_power_price": "Prix de l’électricité J+1 en Hongrie",
+        "grid_frequency_hz": "Fréquence du réseau (Europe continentale)",
+        "mil_aircraft_total": "Aéronefs militaires en vol dans le monde (ADS-B, position de moins de 2 min)",
         "urgent_posts": "Posts OSINT urgents",
         "who_alerts": "Alertes OMS",
         "conflict_events": "Événements de conflit",
@@ -494,7 +505,9 @@
         "alerts": "alertes",
         "events": "événements",
         "fatalities": "victimes",
-        "sources": "sources"
+        "sources": "sources",
+        "transits/day": "passages/jour",
+        "aircraft": "aéronefs"
       },
       "summary": {
         "kinds": "types",
@@ -565,7 +578,7 @@
     "layer_nuclear": "Nucléaire / RadNet",
     "layer_health": "OMS / santé complémentaire",
     "layer_news": "Actualités / GDELT",
-    "layer_earthquake": "Séismes significatifs · USGS"
+    "layer_earthquake": "Séismes · USGS significatifs + EMSC M4,5+"
   },
   "status": {
     "connection": "Connexion",
@@ -755,7 +768,11 @@
     "startsAt": "Début",
     "validUntil": "Valable jusqu’au",
     "method_forecast-grid": "Point de grille de prévision",
-    "method_configured-point": "Lieu de prévision configuré"
+    "method_configured-point": "Lieu de prévision configuré",
+    "method_theater-centre": "Centre de la zone surveillée (agrégat, pas une position)",
+    "method_polygon-centroid": "Centre de la zone du fournisseur (centroïde du polygone)",
+    "method_polygon-vertex-mean": "Centre approximatif de la zone du fournisseur (moyenne de ses points)",
+    "method_global": "Mondial (aucun lieu unique)"
   },
   "pwa": {
     "menu": "Installer / hors ligne",

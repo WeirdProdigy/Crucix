@@ -11,7 +11,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const target = new URL(process.env.QA_URL || 'http://127.0.0.1:3199/');
 assert(['127.0.0.1', 'localhost'].includes(target.hostname) && target.pathname === '/' && target.protocol === 'http:', 'Use the local deterministic QA fixture');
 const phase = process.env.QA_PHASE || 'detail';
-assert(['detail', 'history', 'profiles', 'inspector', 'alerts', 'all'].includes(phase), 'QA_PHASE is detail, history, profiles, inspector, alerts, or all');
+assert(['detail', 'history', 'profiles', 'inspector', 'live', 'alerts', 'all'].includes(phase), 'QA_PHASE is detail, history, profiles, inspector, live, alerts, or all');
 const artifacts = process.env.QA_ARTIFACT_DIR || path.join(os.tmpdir(), 'crucix-intelligence-qa');
 fs.mkdirSync(artifacts, { recursive: true });
 const vendor = fileURLToPath(new URL('../dashboard/public/vendor/', import.meta.url));
@@ -303,6 +303,73 @@ async function inspectorChecks() {
     console.log('INSPECTOR mobile PASS', { sheet: box });
   } finally { await context.close(); await fetch(target.origin + '/control?liveSources=false'); }
 }
+// The nineteen live sources: one current card each (desktop and phone), the new kinds in the history type filter, the alert metrics of the
+// new sources with their current values, and a map marker per located kind in its own layer and colour (flat and globe); the EMSC copy of
+// the USGS fixture quake is drawn once. Classic scrollbars, as in the alert phase.
+async function liveChecks() {
+  assert.equal(await (await fetch(target.origin + '/control?liveSources=true')).text(), 'ok');
+  const rules = await (await fetch(target.origin + '/api/alerts/rules')).json(), value = key => rules.metrics.find(metric => metric.key === key)?.value;
+  assert.deepEqual(['hormuz_transits', 'suez_transits', 'hu_power_price', 'grid_frequency_hz', 'mil_aircraft_total', 'dover_transits'].map(value), [3.1, 40, 172.6, 50.0307, 71, null], 'the rules API reads the live metrics (null when the source publishes none)');
+  const NEW_KINDS = ['earthquake', 'maritime', 'aviation', 'sanctions', 'market', 'energy'];
+  const MARKERS = { 'IMF-PortWatch': ['maritime', 'rgba(179,136,255,0.8)'], EMSC: ['earthquake', 'rgba(255,112,67,0.8)'], 'Copernicus-EMS': ['disaster', 'rgba(255,112,67,0.8)'], 'Aviation-SIGMET': ['weather', 'rgba(100,200,255,0.8)'], 'ADSB-Military': ['air', 'rgba(100,240,200,0.8)'] };
+  const owner = await chromium.launch({ headless: true, args: ['--enable-unsafe-swiftshader'], ignoreDefaultArgs: ['--hide-scrollbars'] });
+  try {
+    for (const [width, height, size] of [[1440, 1000, 'desktop'], [390, 844, 'mobile']]) {
+      const { context, page } = await prepare({ width, height }, 'en', false, owner);
+      try {
+        const sources = await page.evaluate(() => Object.keys(CrucixLiveSources.policies)), panel = page.locator('.live-sources-panel');
+        assert.equal(sources.length, 19, 'nineteen sources in the browser policy copy');
+        await panel.scrollIntoViewIfNeeded();
+        assert.deepEqual(await panel.locator('.live-source').evaluateAll(nodes => nodes.map(node => [node.dataset.liveSource, node.dataset.liveState])), sources.map(source => [source, 'ok']), 'one current card per source, in policy order');
+        assert.match(await panel.locator('.sec-head .badge').innerText(), /^19\/19$/);
+        assert.equal(await panel.locator('button.live-open').count(), 19, 'every current source can open its records');
+        assert(await panel.evaluate(node => node.scrollWidth <= node.clientWidth + 1), 'no card is clipped sideways');
+        assert(await page.evaluate(() => document.body.scrollWidth <= innerWidth && document.documentElement.scrollWidth <= innerWidth), 'no horizontal page scroll');
+        // The page scrolls <body>, so an element screenshot paints only the first screen of a panel this tall: one viewport shot per screen instead.
+        const top = await panel.evaluate(node => node.getBoundingClientRect().top + document.body.scrollTop), tall = (await panel.boundingBox()).height;
+        for (let offset = 0, part = 1; offset < tall; offset += height - 120, part++) {
+          await page.evaluate(y => { document.body.scrollTop = y; }, top + offset - 60); await page.waitForTimeout(150);
+          await page.screenshot({ path: path.join(artifacts, `live-panel-${size}-${part}.png`) });
+        }
+        await page.evaluate(() => { document.body.scrollTop = 0; });
+        if (size === 'mobile') { console.log('LIVE mobile PASS', { cards: sources.length }); continue; }
+        // History: the type filter offers the new kinds, labelled; one maritime record however often the fixture re-sends the row.
+        assert(await page.evaluate(() => CrucixIntelligence.openHistory())); await page.waitForSelector('#ci-history-kind');
+        const kinds = await page.locator('#ci-history-kind option').evaluateAll(nodes => Object.fromEntries(nodes.map(node => [node.value, node.textContent])));
+        for (const kind of NEW_KINDS) assert(kinds[kind] && kinds[kind] !== kind, 'history filter offers ' + kind);
+        await fetch(target.origin + '/control?liveSources=true');
+        await page.locator('#ci-history-kind').selectOption('maritime');
+        await page.waitForFunction(() => document.querySelector('.ci-history-status')?.innerText.startsWith('1 ') && document.querySelector('.ci-event-card')?.innerText.includes('IMF-PortWatch'));
+        await page.screenshot({ path: path.join(artifacts, 'live-history-maritime.png') }); await page.keyboard.press('Escape');
+        // Flat map (the desktop default): a marker per located new kind, in its layer, with its colour; the EMSC copy of the USGS quake is not drawn.
+        if (!await page.evaluate(() => isFlat)) await page.locator('#projToggle').click();
+        const title = source => 'Fixture current ' + source + ' <img onerror="window.__liveXss=1">';
+        for (const [source, [layer, color]] of Object.entries(MARKERS)) {
+          const marker = page.locator(`.markers [aria-label="${title(source).replace(/"/g, '\\"')}"]`); await marker.waitFor({ state: 'attached' });
+          assert.deepEqual([await marker.getAttribute('data-layer'), await marker.locator('circle').getAttribute('fill')], [layer, color], source);
+        }
+        assert.equal(await page.locator('.markers [aria-label="Fixture EMSC copy of the USGS quake"]').count(), 0, 'the EMSC copy of the USGS quake is drawn once (flat)');
+        assert(await page.evaluate(() => D.events.some(event => event.title === 'Fixture EMSC copy of the USGS quake')), 'the copy stays an event');
+        await page.locator('#mapContainer').scrollIntoViewIfNeeded(); await page.locator('#mapContainer').screenshot({ path: path.join(artifacts, 'live-map-flat.png') });
+        // Zoomed: the Gulf (PortWatch Hormuz, the Gulf air theater, the Baku SIGMET) and the north-west Pacific (EMSC Kamchatka, the USGS quake).
+        for (const region of ['middleEast', 'asiaPacific']) { await page.locator(`.region-btn[data-region="${region}"]`).click(); await page.waitForTimeout(1200); await page.locator('#mapContainer').screenshot({ path: path.join(artifacts, `live-map-flat-${region}.png`) }); }
+        await page.locator('.region-btn[data-region="world"]').click(); await page.waitForTimeout(800);
+        // The EMSC marker opens its event, like every live marker.
+        await page.locator(`.markers [aria-label="${title('EMSC').replace(/"/g, '\\"')}"]`).click({ force: true }); await page.waitForSelector('#ci-dialog');
+        assert.match(await page.locator('#ci-title').innerText(), /Fixture current EMSC/); assert.match(await page.locator('#ci-body').innerText(), /Earthquake/); await page.keyboard.press('Escape');
+        // Globe: the same rows, types and colours; Middle East view for the screenshot (Hormuz, the Gulf theater, the Baku SIGMET).
+        await page.locator('#projToggle').click(); await page.waitForFunction(() => !isFlat && globe?.pointsData().length > 0);
+        const points = await page.evaluate(() => globe.pointsData().filter(point => Object.hasOwn(CrucixLiveSources.policies, point.popMeta)).map(point => [point.popMeta, point.type, point.color, point.popHead]));
+        for (const [source, [layer, color]] of Object.entries(MARKERS)) assert(points.some(point => point[0] === source && point[1] === layer && point[2] === color), 'globe: ' + source);
+        assert(!points.some(point => point[3] === 'Fixture EMSC copy of the USGS quake'), 'the EMSC copy of the USGS quake is drawn once (globe)');
+        await page.locator('.region-btn[data-region="middleEast"]').click(); await page.waitForTimeout(1500);
+        await page.locator('#mapContainer').screenshot({ path: path.join(artifacts, 'live-map-globe.png') });
+        assert.equal(await page.evaluate(() => window.__liveXss), undefined, 'hostile live titles stay inert');
+        console.log('LIVE desktop PASS', { cards: sources.length, markers: Object.keys(MARKERS), kinds: NEW_KINDS });
+      } finally { await context.close(); }
+    }
+  } finally { await owner.close(); await fetch(target.origin + '/control?liveSources=false'); }
+}
 // Alerts: the strip under the top bar, the threat drivers, the tray (tabs, acknowledge, snooze, evidence, the rules editor), toasts,
 // the tab title, Esc and focus return, hostile titles, the phone layout. Its own Chromium shows classic scrollbars (Playwright hides
 // them by default), so a scrollbar artefact in the screenshots is a real one.
@@ -511,6 +578,7 @@ try {
   if (phase === 'history' || phase === 'all') { await historyChecks(); await clusterChecks(); }
   if (phase === 'profiles' || phase === 'all') await profileChecks();
   if (phase === 'inspector' || phase === 'all') await inspectorChecks();
+  if (phase === 'live' || phase === 'all') await liveChecks();
   if (phase === 'alerts' || phase === 'all') await alertChecks();
   assert.deepEqual(errors, [], 'No browser runtime errors'); assert.deepEqual(external, [], 'No unexpected external requests');
   if (phase === 'profiles' || phase === 'all') assert.deepEqual(legacyAssets, [], 'PWA phase loads all assets locally without legacy CDN routing');

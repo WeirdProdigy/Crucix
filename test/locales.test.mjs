@@ -71,7 +71,7 @@ test('the rule editor names every rule kind, every metric of the registry and ev
     const strings = flat(lang), rules = locale(lang).alerts.rules;
     assert.deepEqual(Object.keys(rules.kind), [...RULE_KINDS], `${lang}: alerts.rules.kind`);
     assert.deepEqual(Object.keys(rules.metric), METRICS.map(metric => metric.key), `${lang}: alerts.rules.metric`);
-    for (const unit of new Set(METRICS.map(metric => metric.unit))) if (/^[a-z]+$/.test(unit)) assert.ok(strings.has(`alerts.rules.unit.${unit}`), `${lang}: alerts.rules.unit.${unit}`);
+    for (const unit of new Set(METRICS.map(metric => metric.unit))) if (/^[a-z]+(?:\/[a-z]+)?$/.test(unit)) assert.ok(strings.has(`alerts.rules.unit.${unit}`), `${lang}: alerts.rules.unit.${unit}`);
     for (const source of ['builtin', 'override', 'user']) assert.ok(strings.has(`alerts.rules.source.${source}`), `${lang}: source.${source}`);
   }
   assert.equal(flat('en').get('alerts.rules.metric.vix'), 'VIX');

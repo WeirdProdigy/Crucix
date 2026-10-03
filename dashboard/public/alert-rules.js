@@ -12,7 +12,7 @@
   // of form values (strings, booleans, one array); parseDraft turns it into the body of PUT /api/alerts/rules/:id.
   const KINDS=['event','threshold','change','absence','convergence','delta'];
   // The kinds of events the dashboard can hold (lib/intelligence/history.mjs); a rule may name others, they stay selectable.
-  const EVENT_KINDS=['news','osint','health','earthquake','weather','outage','conflict','signal','disaster','space-weather','economic','forecast','network','cyber'];
+  const EVENT_KINDS=['news','osint','health','earthquake','weather','outage','conflict','signal','disaster','space-weather','economic','forecast','network','cyber','maritime','aviation','sanctions','market','energy'];
   const KIND_TEXT={event:'Event',threshold:'Threshold',change:'Change',absence:'Absence',convergence:'Convergence',delta:'Delta'};
   const SOURCE_TEXT={builtin:'Built-in',override:'Modified',user:'Custom'};
   const OPERATORS=[['>','>'],['>=','≥'],['<','<'],['<=','≤']];
@@ -47,7 +47,7 @@
   const catalogOf=metrics=>{const map=new Map();for(const metric of items(metrics))if(typeof metric.key==='string'&&!map.has(metric.key))map.set(metric.key,metric);return map;};
   // The server's metric labels are English constants: a locale key per metric, the server label as the fallback.
   const metricName=(env,key)=>{const entry=env.catalog.get(key),fallback=text(entry?.label)||shown(key);return KEY.test(text(key))?env.tx('alerts.rules.metric.'+key,fallback):esc(fallback);};
-  const unitName=(env,unit)=>/^[a-z]+$/.test(text(unit))?env.tx('alerts.rules.unit.'+unit,unit):esc(text(unit));
+  const unitName=(env,unit)=>/^[a-z]+(?:\/[a-z]+)?$/.test(text(unit))?env.tx('alerts.rules.unit.'+unit,unit):esc(text(unit));
   const valueName=value=>typeof value==='number'&&Number.isFinite(value)?esc(String(Math.round(value*1000)/1000)):'—';
   const levelName=(env,level)=>levelOf(level)==='unknown'?env.tx('inspector.level.unknown','Unknown'):env.tx('alerts.level.'+level,level[0].toUpperCase()+level.slice(1));
   const kindName=(env,token)=>{const word=text(token);return TOKEN.test(word)?env.tx('intelligence.kind_'+word,word[0].toUpperCase()+word.slice(1).replace(/-/g,' ')):esc(shown(token));};
