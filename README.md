@@ -2,7 +2,7 @@
 
 # Crucix
 
-**Your own intelligence terminal. 50 sources. One command. Local processing.**
+**Your own intelligence terminal. 52 sources. One command. Local processing.**
 
 ## [Visit The Upstream Demo: crucix.live](https://www.crucix.live/)
 
@@ -12,7 +12,7 @@
 [![Node.js 22+](https://img.shields.io/badge/node-22%2B-brightgreen)](#quick-start)
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPLv3-blue.svg)](LICENSE)
 [![Dependencies](https://img.shields.io/badge/dependencies-1%20(express)-orange)](#architecture)
-[![Sources](https://img.shields.io/badge/OSINT%20sources-50-cyan)](#data-sources-50)
+[![Sources](https://img.shields.io/badge/OSINT%20sources-52-cyan)](#data-sources-52)
 [![Docker](https://img.shields.io/badge/docker-ready-blue?logo=docker)](#docker)
 
 **Enter The Signal Network**
@@ -90,7 +90,7 @@ npm run dev
 > ```
 > This bypasses npm's script runner, which can swallow errors on some systems (particularly PowerShell on Windows). You can also run `node diag.mjs` to diagnose the exact issue — it checks your Node version, tests each module import individually, and verifies port availability. See [Troubleshooting](#troubleshooting) for more.
 
-The dashboard opens automatically at `http://localhost:3117` and immediately begins its first intelligence sweep. This initial sweep queries all 50 sources in parallel and typically takes 30–60 seconds — the dashboard will appear empty until the sweep completes and pushes the first data update. After that, it auto-refreshes every 15 minutes via SSE (Server-Sent Events). No manual page refresh needed.
+The dashboard opens automatically at `http://localhost:3117` and immediately begins its first intelligence sweep. This initial sweep queries all 52 sources in parallel and typically takes 30–60 seconds — the dashboard will appear empty until the sweep completes and pushes the first data update. After that, it auto-refreshes every 15 minutes via SSE (Server-Sent Events). No manual page refresh needed.
 
 **Requirements:** Node.js 22+ (uses native `fetch`, top-level `await`, ESM)
 
@@ -169,7 +169,7 @@ The **Current public data** panel grows from nine to 19 keyless sources: IMF Por
 
 ### Dashboard structure (v2.12)
 
-- **Domain lenses.** A bar under the alert strip offers **All** and eight domains (security and conflict, natural hazards and weather, space, cyber and internet, markets and economy, energy and supply chain, sanctions and regulation, health and environment) that together cover all 50 source adapters. A lens narrows the live panel, the source-health panel, the changes panel and its chip, the record browser's source list and the live record markers on both maps. News, OSINT and delta signals have no domain and only show under **All**; the older map layers keep their own switches. The choice is kept per browser (in memory only when storage is blocked).
+- **Domain lenses.** A bar under the alert strip offers **All** and eight domains (security and conflict, natural hazards and weather, space, cyber and internet, markets and economy, energy and supply chain, sanctions and regulation, health and environment) that together cover all 52 source adapters. A lens narrows the live panel, the source-health panel, the changes panel and its chip, the record browser's source list and the live record markers on both maps. News, OSINT and delta signals have no domain and only show under **All**; the older map layers keep their own switches. The choice is kept per browser (in memory only when storage is blocked).
 - **Compact live panel.** The 19 cards sit in domain groups, collapsed to one line each (sources, records, worst severity, failing sources); a group that needs attention (a source not ok, or a high or critical record) opens by itself, and under a lens only that domain's group is shown, open. The failing-source chips of a collapsed group stay on one line (a long name is cut short with an ellipsis; its full text is in the tooltip and the button name, and "+N more" always shows). Collapsed, the panel measured 378 px (English) and 395 px (Hungarian and French) tall at 1280 px, the same with every source current, with one failing source per group and with every source failing (measured on the QA test fixture, not on a live sweep). The panel badge counts the cards shown: under a lens, that domain's current / shown cards. A focused group header or **Open records** button keeps the focus when the panel is redrawn.
 - **Ctrl+K / Cmd+K command palette** (or the **Commands** button): actions (lenses, alerts, settings, signal guide, source-health matrix, record browser, replay, What changed), one entry per source (it opens that source's records, or the matrix: it does not scroll to the source's row), and a live search of the record history from two characters (6 records, 200 ms after the last keystroke; a slower older answer never replaces a newer one). At most 12 results; ↑/↓, Home/End, Enter, Esc. It does not take the inspector's keys and does nothing while another dialog is open.
 - **Source-health matrix** (the **Matrix** button of the Source health panel, or the palette): every source × the last archived sweeps (48 by default, up to the retention), grouped by domain. Each cell is a glyph and a word (✓ OK, ◔ Stale, ✕ Error, – Disabled, · No data), the last column the newest run time; arrow keys move between cells (a screen reader hears each one as source, sweep time and state, e.g. "GDELT, Oct 3 09:00, OK") and a cell opens that sweep in the replay.
@@ -216,7 +216,7 @@ The preference is saved in browser local storage, so the UI will remember your l
 
 ### Auto-Refresh
 The server runs a sweep cycle every 15 minutes (configurable). Each cycle:
-1. Queries all 50 sources in parallel (~30s)
+1. Queries all 52 sources in parallel (~30s)
 2. Synthesizes raw data into dashboard format
 3. Computes delta from previous run (what changed, escalated, de-escalated) — visible in the **Sweep Delta** panel on the dashboard
 4. Generates LLM trade ideas (if configured)
@@ -359,14 +359,14 @@ crucix/
 ├── docs/                      # Screenshots for README
 │
 ├── apis/
-│   ├── briefing.mjs           # Master orchestrator — runs all 50 sources in parallel
+│   ├── briefing.mjs           # Master orchestrator — runs all 52 sources in parallel
 │   ├── save-briefing.mjs      # CLI: save timestamped + latest.json
 │   ├── BRIEFING_PROMPT.md     # Intelligence synthesis protocol
 │   ├── BRIEFING_TEMPLATE.md   # Briefing output structure
 │   ├── utils/
 │   │   ├── fetch.mjs          # safeFetch() — timeout, retries, abort, auto-JSON
 │   │   └── env.mjs            # .env loader (no dotenv dependency)
-│   └── sources/               # 50 registered source adapters
+│   └── sources/               # 52 registered source adapters
 │       ├── gdelt.mjs          # Each exports briefing() → structured data
 │       ├── fred.mjs           # Can run standalone: node apis/sources/fred.mjs
 │       ├── space.mjs          # CelesTrak satellite tracking
@@ -409,14 +409,14 @@ crucix/
 ### Design Principles
 - **Pure ESM** — every file is `.mjs` with explicit imports
 - **Minimal dependencies** — Express is the only runtime dependency. `discord.js` is optional (for Discord bot). LLM providers use raw `fetch()`, no SDKs.
-- **Parallel execution** — `Promise.allSettled()` fires all 50 sources simultaneously
+- **Parallel execution** — `Promise.allSettled()` fires all 52 sources simultaneously
 - **Graceful degradation** — missing keys are disabled, upstream errors are visible, and model failures use rules. Other sources continue.
 - **Each source is standalone** — run `node apis/sources/gdelt.mjs` to test any source independently
 - **Self-contained dashboard** — the HTML file works with or without the server
 
 ---
 
-## Data Sources (50)
+## Data Sources (52)
 
 ### Tier 1: Core OSINT & Geopolitical (11)
 
@@ -517,6 +517,15 @@ Alert rules can watch the new metrics `<chokepoint>_transits` (PortWatch 7-day m
 Edit the small `publicSources` watchlists in `crucix.config.mjs` for Meteoalarm countries, RIPE ASNs, MET location labels/coordinates, OONI countries, PortWatch chokepoints (`portwatchChokepoints`), ADS-B theater boxes (`adsbTheaters`) and prediction-market words (`marketQueries`). Each adapter validates and limits its inputs. MET identifies Crucix with a project/contact User-Agent; public requests and memory caches are bounded. Empty current feeds remain distinct from failed or undated feeds. World Bank annual indicators are deliberately excluded because this installation requires current data.
 
 Full endpoint, freshness and validation evidence: [source assessment](docs/audit/fresh-data-implementation-2026-10-01.md).
+
+### Tier 8: Country risk inputs (2)
+
+Both are free and key-less, every request is bounded to 10 s and 2 MiB, and the country-risk model reads them (a missing source only lowers the coverage of a score). They are plain sources: a source-health row, no live-data card, listed under the security and conflict lens.
+
+| Source | What it tracks | Endpoint | Cache | Attribution and licence |
+| --- | --- | --- | --- | --- |
+| VIEWS-Forecast | Predicted probability of at least 25 battle-related deaths in state-based armed conflict, and predicted fatalities, per country for the three months after the newest run's data month; a forecast, not observed events | `api.viewsforecasting.org` (run list, then `/<run>/cm/sb`) | Run list 24 h; data per run id; last good payload 45 days, shown as stale | "VIEWS (Uppsala University and PRIO)" and the run id; the provider states no data licence (its code repositories are CC BY-NC) |
+| INFORM-Risk | INFORM Risk Index, 0-10 per country (higher is worse), newest published release; a yearly baseline | `drmkc.jrc.ec.europa.eu/inform-index/API/InformAPI` (release list, then scores) | Release list 24 h; scores 7 days | "INFORM Risk Index, European Commission Joint Research Centre (DRMKC) / INFORM partnership, <release>"; the provider says only "INFORM is open-source" |
 
 ## npm Scripts
 
@@ -642,7 +651,7 @@ Crucix requires Node.js 22 or later. If you have an older version, download the 
 
 ### Dashboard shows empty panels after first start
 
-This is normal — the first sweep takes 30–60 seconds to query all 50 sources. The dashboard will populate automatically once the sweep completes. Check the terminal for sweep progress logs.
+This is normal — the first sweep takes 30–60 seconds to query all 52 sources. The dashboard will populate automatically once the sweep completes. Check the terminal for sweep progress logs.
 
 ### Some sources show errors
 
