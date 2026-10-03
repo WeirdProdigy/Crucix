@@ -4,25 +4,32 @@ import fs from 'node:fs';
 import { FACT_FIELDS } from '../lib/intelligence/live-sources.mjs';
 import { DEFAULT_RULES, RULE_KINDS } from '../lib/alerts/rules.mjs';
 import { METRICS } from '../lib/alerts/metrics.mjs';
+import { DOMAIN_IDS } from '../lib/domains.mjs';
 
 const LANGS = ['en', 'hu', 'fr'];
 const locale = lang => JSON.parse(fs.readFileSync(new URL(`../locales/${lang}.json`, import.meta.url), 'utf8'));
 const flatten = (value, prefix) => Object.entries(value || {}).flatMap(([key, item]) => item && typeof item === 'object' ? flatten(item, `${prefix}.${key}`) : [[`${prefix}.${key}`, item]]);
-const flat = lang => { const data = locale(lang); return new Map([...flatten(data.liveSources, 'liveSources'), ...flatten(data.inspector, 'inspector'), ...flatten(data.alerts, 'alerts')]); };
+const flat = lang => { const data = locale(lang); return new Map([...flatten(data.liveSources, 'liveSources'), ...flatten(data.inspector, 'inspector'), ...flatten(data.alerts, 'alerts'), ...flatten(data.lenses, 'lenses')]); };
 const factKeys = [...new Set(Object.values(FACT_FIELDS).flat())];
 const BUILTIN_RULES = DEFAULT_RULES.map(rule => rule.id);
 const ALERT_UI_KEYS = ['title', 'threat', 'calm', 'lastEval', 'ack', 'snooze', 'resolve', 'open', 'close', 'ackAll', 'tabActive', 'tabHandled', 'tabResolved', 'tabRules', 'empty',
   'firing', 'acked', 'snoozedUntil', 'resolvedAt', 'count', 'rule', 'evidence', 'drivers', 'snooze1h', 'snooze8h', 'snooze24h', 'more', 'errorLoad', 'errorAction', 'errorOrigin', 'unavailable', 'silent', 'toastNew'];
 
-test('liveSources, inspector and alerts strings have identical keys, in the same order, in en, hu and fr', () => {
+test('liveSources, inspector, alerts and lenses strings have identical keys, in the same order, in en, hu and fr', () => {
   const [en, ...others] = LANGS.map(lang => [...flat(lang).keys()]);
   assert.ok(en.length > 60, 'the inspector group is present');
   assert.ok(en.includes('alerts.calm') && en.includes('alerts.tiers.flash.label'), 'the alerts group is covered');
+  assert.ok(en.includes('lenses.all') && en.includes('lenses.health'), 'the lenses group is covered');
   for (const keys of others) assert.deepEqual(keys, en);
 });
 
-test('every liveSources, inspector and alerts value is a non-empty string', () => {
+test('every liveSources, inspector, alerts and lenses value is a non-empty string', () => {
   for (const lang of LANGS) for (const [key, value] of flat(lang)) assert.ok(typeof value === 'string' && value.trim() !== '', `${lang}: ${key}`);
+});
+
+test('the lenses group names "all", the lens bar and each domain of the registry, in registry order', () => {
+  for (const lang of LANGS) assert.deepEqual(Object.keys(locale(lang).lenses), ['all', 'label', ...DOMAIN_IDS], `${lang}: lenses keys`);
+  assert.deepEqual(['en', 'hu', 'fr'].map(lang => locale(lang).lenses.all), ['All', 'Mind', 'Tous']);
 });
 
 test('the alert UI has every string it renders, a name for each built-in rule and the inspector level words', () => {

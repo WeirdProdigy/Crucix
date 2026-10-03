@@ -900,5 +900,17 @@
       "closesAt": "Clôture du marché",
       "platform": "Plateforme"
     }
+  },
+  "lenses": {
+    "all": "Tous",
+    "label": "Lentille thématique",
+    "security": "Sécurité et conflits",
+    "hazards": "Risques naturels et météo",
+    "space": "Espace",
+    "cyber": "Cyber et internet",
+    "economy": "Marchés et économie",
+    "supply": "Énergie et chaîne d’approvisionnement",
+    "sanctions": "Sanctions et réglementation",
+    "health": "Santé et environnement"
   }
 }

@@ -900,5 +900,17 @@
       "closesAt": "Market closes",
       "platform": "Platform"
     }
+  },
+  "lenses": {
+    "all": "All",
+    "label": "Domain lens",
+    "security": "Security and conflict",
+    "hazards": "Natural hazards and weather",
+    "space": "Space",
+    "cyber": "Cyber and internet",
+    "economy": "Markets and economy",
+    "supply": "Energy and supply chain",
+    "sanctions": "Sanctions and regulation",
+    "health": "Health and environment"
   }
 }

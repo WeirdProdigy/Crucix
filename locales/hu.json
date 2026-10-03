@@ -900,5 +900,17 @@
       "closesAt": "A piac lezárul",
       "platform": "Platform"
     }
+  },
+  "lenses": {
+    "all": "Mind",
+    "label": "Témalencse",
+    "security": "Biztonság és konfliktus",
+    "hazards": "Természeti veszélyek és időjárás",
+    "space": "Világűr",
+    "cyber": "Kiber és internet",
+    "economy": "Piacok és gazdaság",
+    "supply": "Energia és ellátási lánc",
+    "sanctions": "Szankciók és szabályozás",
+    "health": "Egészség és környezet"
   }
 }
