@@ -63,6 +63,8 @@ class Node {
 function all(node) { return [node, ...node.kids.flatMap(all)]; }
 
 const NOW = Date.parse('2026-10-03T10:00:00.000Z');
+// The rows each list shows until its "Show all" button is used (SHOW in changes.js, checked below): a layout-independent bound on the panel's height.
+const SHOW = 3;
 const ID = number => 'event-' + number.toString(16).padStart(32, '0');
 const defer = () => { const out = {}; out.promise = new Promise((resolve, reject) => { out.resolve = resolve; out.reject = reject; }); return out; };
 
@@ -143,15 +145,16 @@ test('panelHtml: a full object renders the three sections, the window buttons, t
 test('panelHtml: a record row has the severity glyph AND word, the title, the source and the age, and opens the record by its id', () => {
   const { api } = mounted({ changes: FULL });
   const out = api.panelHtml(FULL);
-  const rows = [...out.matchAll(/<li class="ch-item"><button type="button" class="ch-row" data-changes-event="([^"]+)">(.*?)<\/button><\/li>/g)];
-  assert.deepEqual(rows.map(match => match[1]), [ID(1), ID(2), ID(3)]);
-  assert.match(rows[0][2], /<span class="ch-sev sev-critical"><i aria-hidden="true">◆<\/i> Critical<\/span><span class="ch-title">Strong earthquake near Kobe<\/span>/);
-  assert.match(rows[0][2], /<span class="ch-source">USGS<\/span><span class="ch-age" data-changes-time="2026-10-03T09:57:00.000Z" title="2026-10-03 09:57:00 UTC">3m<\/span>/, 'the age from the page clock');
-  assert.match(rows[1][2], /<span class="ch-sev sev-watch"><i aria-hidden="true">●<\/i> Watch<\/span>/);
-  assert.ok(rows[1][2].includes('>2h</span>'), 'two hours old');
-  assert.match(rows[2][2], /<span class="ch-sev sev-unknown"><i aria-hidden="true">–<\/i> Unknown<\/span>/, 'a null severity is the unknown dash');
-  assert.ok(!rows[2][2].includes('ch-source'), 'no source, no source label');
-  assert.match(rows[2][2], /<span class="ch-age"[^>]*>—<\/span>/, 'an unknown time is a dash');
+  const rows = [...out.matchAll(/<li class="ch-item"><button type="button" class="ch-row" id="changes-ev-([^"]+)" data-changes-event="([^"]+)">(.*?)<\/button><\/li>/g)];
+  assert.deepEqual(rows.map(match => match[2]), [ID(1), ID(2), ID(3)]);
+  assert.deepEqual(rows.map(match => match[1]), rows.map(match => match[2]), 'the button id is changes-ev-<event id>');
+  assert.match(rows[0][3], /<span class="ch-sev sev-critical"><i aria-hidden="true">◆<\/i> Critical<\/span><span class="ch-title">Strong earthquake near Kobe<\/span>/);
+  assert.match(rows[0][3], /<span class="ch-source">USGS<\/span><span class="ch-age" data-changes-time="2026-10-03T09:57:00.000Z" title="2026-10-03 09:57:00 UTC">3m<\/span>/, 'the age from the page clock');
+  assert.match(rows[1][3], /<span class="ch-sev sev-watch"><i aria-hidden="true">●<\/i> Watch<\/span>/);
+  assert.ok(rows[1][3].includes('>2h</span>'), 'two hours old');
+  assert.match(rows[2][3], /<span class="ch-sev sev-unknown"><i aria-hidden="true">–<\/i> Unknown<\/span>/, 'a null severity is the unknown dash');
+  assert.ok(!rows[2][3].includes('ch-source'), 'no source, no source label');
+  assert.match(rows[2][3], /<span class="ch-age"[^>]*>—<\/span>/, 'an unknown time is a dash');
   assert.equal(count(out, /data-changes-event=/g), 3);
 });
 
@@ -631,11 +634,14 @@ test('lists the server caps are noted: 30 transitions and 20 signals say "capped
   const transitions = length => Array.from({ length }, (_, index) => ({ source: 'S' + index, domain: null, from: 'ok', to: 'error' }));
   const signals = length => Array.from({ length }, (_, index) => ({ key: 'k' + index, label: 'L' + index, direction: null, severity: 'high', type: 'new' }));
   const part = (out, name) => (new RegExp(`<section class="ch-sec" data-changes-section="${name}".*?</section>`).exec(out) || [''])[0];
-  const NOTE = 'The list is capped, so more may exist.';
-  assert.ok(part(api.panelHtml({ ...EMPTY, sources: transitions(CHANGE_CAPS.sources) }), 'sources').includes(`Showing ${CHANGE_CAPS.sources}. ${NOTE}`));
-  assert.ok(!part(api.panelHtml({ ...EMPTY, sources: transitions(CHANGE_CAPS.sources - 1) }), 'sources').includes(NOTE));
-  assert.ok(part(api.panelHtml({ ...EMPTY, signals: signals(CHANGE_CAPS.signals) }), 'signals').includes(`Showing ${CHANGE_CAPS.signals}. ${NOTE}`));
-  assert.ok(!part(api.panelHtml({ ...EMPTY, signals: signals(CHANGE_CAPS.signals - 1) }), 'signals').includes(NOTE));
+  const NOTE = 'The list is capped, so more may exist.', open = { expanded: { records: true, sources: true, signals: true } };
+  assert.ok(part(api.panelHtml({ ...EMPTY, sources: transitions(CHANGE_CAPS.sources) }, open), 'sources').includes(`Showing ${CHANGE_CAPS.sources}. ${NOTE}`));
+  assert.ok(!part(api.panelHtml({ ...EMPTY, sources: transitions(CHANGE_CAPS.sources - 1) }, open), 'sources').includes(NOTE));
+  assert.ok(part(api.panelHtml({ ...EMPTY, signals: signals(CHANGE_CAPS.signals) }, open), 'signals').includes(`Showing ${CHANGE_CAPS.signals}. ${NOTE}`));
+  assert.ok(!part(api.panelHtml({ ...EMPTY, signals: signals(CHANGE_CAPS.signals - 1) }, open), 'signals').includes(NOTE));
+  // Until the section is opened the note counts the rows that are on screen.
+  assert.ok(part(api.panelHtml({ ...EMPTY, sources: transitions(CHANGE_CAPS.sources) }), 'sources').includes(`Showing ${SHOW}. ${NOTE}`));
+  assert.ok(part(api.panelHtml({ ...EMPTY, signals: signals(CHANGE_CAPS.signals) }), 'signals').includes(`Showing ${SHOW}. ${NOTE}`));
 });
 
 test('lens: records of a domain are "of N" while the transition list is complete and just "capped" once it is not', () => {
@@ -643,12 +649,15 @@ test('lens: records of a domain are "of N" while the transition list is complete
   const records = Array.from({ length: CHANGE_CAPS.events }, (_, index) => ({ id: ID(100 + index), title: 'R' + index, kind: 'x', source: 'USGS', domain: 'hazards', severity: 'high', observedAt: null }));
   const quakes = length => Array.from({ length }, () => ({ source: 'USGS', domain: 'hazards', from: 'ok', to: 'stale' }));
   const object = sources => ({ ...EMPTY, events: { new: records, newTotal: 90, expiredTotal: 0 }, sources: quakes(sources), domains: { hazards: 61 + sources } });
-  const known = api.panelHtml(object(CHANGE_CAPS.sources - 1), { lens: 'hazards' });
+  const open = { lens: 'hazards', expanded: { records: true } };
+  const known = api.panelHtml(object(CHANGE_CAPS.sources - 1), open);
   assert.ok(known.includes(`Showing ${CHANGE_CAPS.events} of 61 new records, most severe first.`), 'domain total minus the listed transitions');
-  const capped = api.panelHtml(object(CHANGE_CAPS.sources), { lens: 'hazards' });
+  assert.ok(api.panelHtml(object(CHANGE_CAPS.sources - 1), { lens: 'hazards' }).includes(`Showing ${SHOW} of 61 new records, most severe first.`), 'collapsed: the rows on screen');
+  const capped = api.panelHtml(object(CHANGE_CAPS.sources), open);
   assert.ok(capped.includes(`Showing ${CHANGE_CAPS.events}. The list is capped, so more may exist.`), 'the transitions hide part of the count, so no total is claimed');
   assert.ok(!capped.includes('new records, most severe first'));
-  assert.ok(api.panelHtml(object(0), { lens: 'all' }).includes(`Showing ${CHANGE_CAPS.events} of 90 new records`), 'all: the real total');
+  assert.ok(api.panelHtml(object(CHANGE_CAPS.sources), { lens: 'hazards' }).includes(`Showing ${SHOW}. The list is capped, so more may exist.`));
+  assert.ok(api.panelHtml(object(0), { lens: 'all', expanded: { records: true } }).includes(`Showing ${CHANGE_CAPS.events} of 90 new records`), 'all: the real total');
 });
 
 test('without record-core.js the panel still renders: the words stay, the glyphs and the ages are left out', () => {
@@ -656,6 +665,190 @@ test('without record-core.js the panel still renders: the words stay, the glyphs
   const out = r.api.panelHtml(FULL);
   assert.ok(out.includes('<i aria-hidden="true"></i> Critical') && out.includes('Strong earthquake near Kobe'));
   assert.match(out, /<span class="ch-age" data-changes-time="2026-10-03T09:57:00.000Z"[^>]*>—<\/span>/);
+});
+
+// ===== review fixes (round 1) =====
+
+test('attribute context: a quote in a source name or a signal key cannot break out of its attribute', () => {
+  const source = 'x" onmouseover="alert(1)', key = "k' onfocus='alert(2)";
+  const hostile = { ...FULL, sources: [{ source, domain: null, from: 'ok', to: 'error' }], signals: [{ key, label: 'L', direction: null, severity: 'high', type: 'new' }] };
+  const r = mounted({ changes: hostile, openEvent() {}, openMatrix() {} });
+  const out = r.api.panelHtml(hostile);
+  assert.ok(!HANDLER.test(out), 'no tag carries an event-handler attribute');
+  r.rail.innerHTML = out;
+  assert.deepEqual(r.rail.querySelectorAll('[data-changes-source]').map(node => node.getAttribute('data-changes-source')), [source], 'the DOM reads the name back whole');
+  assert.deepEqual(r.rail.querySelectorAll('[data-signal]').map(node => node.getAttribute('data-signal')), [key]);
+  assert.equal(r.rail.querySelectorAll('[onmouseover]').length + r.rail.querySelectorAll('[onfocus]').length, 0, 'no attribute of the hostile text was created');
+  assert.ok(out.includes('x&quot; onmouseover=&quot;alert(1)') && out.includes('k&#39; onfocus=&#39;alert(2)'), 'both quote characters are entities in the markup');
+});
+
+const BIG = {
+  since: '2026-10-03T09:45:00.000Z', at: '2026-10-03T10:00:00.000Z', baseline: false,
+  events: { new: Array.from({ length: CHANGE_CAPS.events }, (_, index) => ({ id: ID(200 + index), title: 'Record ' + index, kind: 'news', source: 'USGS', domain: 'hazards', severity: 'high', observedAt: '2026-10-03T09:30:00.000Z' })), newTotal: 63, expiredTotal: 0 },
+  sources: Array.from({ length: CHANGE_CAPS.sources }, (_, index) => ({ source: 'Source ' + index, domain: null, from: 'ok', to: 'error' })),
+  signals: Array.from({ length: CHANGE_CAPS.signals }, (_, index) => ({ key: 'k' + index, label: 'Signal ' + index, direction: null, severity: 'high', type: 'new' })),
+  domains: { hazards: 63 },
+};
+const rowsOf = r => [r.rail.querySelectorAll('[data-changes-event]').length, r.rail.querySelectorAll('[data-changes-source]').length, r.rail.querySelectorAll('[data-signal]').length];
+const more = (r, name) => r.rail.querySelector(`[data-changes-more="${name}"]`);
+
+test('bounded panel: every list shows its first rows until its Show all button is used, with every list at its server cap', () => {
+  const r = mounted({ changes: BIG });
+  r.draw();
+  assert.deepEqual(rowsOf(r), [SHOW, SHOW, SHOW], 'a few records, transitions and signals');
+  assert.deepEqual(r.rail.querySelectorAll('[data-changes-event]').map(node => node.getAttribute('data-changes-event')), BIG.events.new.slice(0, SHOW).map(item => item.id), 'the first ones, in the server\'s order');
+  assert.deepEqual(['records', 'sources', 'signals'].map(name => more(r, name).text()), ['Show all 40', 'Show all 30', 'Show all 20']);
+  for (const name of ['records', 'sources', 'signals']) {
+    const button = more(r, name);
+    assert.equal(button.getAttribute('aria-expanded'), 'false');
+    assert.equal(button.tag, 'button');
+    assert.equal(button.getAttribute('type'), 'button');
+    assert.equal(button.closest('section').querySelector('.ch-list').id, button.getAttribute('aria-controls'), name + ': it controls the list of its own section');
+  }
+  assert.ok(r.rail.innerHTML.includes(`Showing ${SHOW} of 63 new records, most severe first.`), 'the note counts the rows on screen');
+  assert.ok(r.rail.innerHTML.includes(`Showing ${SHOW}. The list is capped, so more may exist.`));
+});
+
+test('bounded panel: Show all opens one list, Show fewer closes it, and the choice is kept for the session', async () => {
+  const r = mounted({ changes: BIG, fetchJson: () => Promise.resolve(MERGED) });
+  r.draw();
+  click(r, more(r, 'records'));
+  assert.deepEqual(rowsOf(r), [40, SHOW, SHOW], 'only the records opened');
+  assert.equal(more(r, 'records').getAttribute('aria-expanded'), 'true');
+  assert.equal(more(r, 'records').text(), 'Show fewer');
+  assert.ok(r.rail.innerHTML.includes('Showing 40 of 63 new records, most severe first.'));
+  click(r, more(r, 'sources'));
+  click(r, more(r, 'signals'));
+  assert.deepEqual(rowsOf(r), [40, 30, 20]);
+  // The choice survives another render, a window change and a lens change.
+  r.draw();
+  assert.deepEqual(rowsOf(r), [40, 30, 20], 'a render of the rails keeps the lists open');
+  click(r, win(r, '6h')); await tick(); click(r, win(r, 'last'));
+  assert.deepEqual(rowsOf(r), [40, 30, 20], 'a window change keeps them open');
+  click(r, more(r, 'records'));
+  assert.deepEqual(rowsOf(r), [SHOW, 30, 20], 'Show fewer closes only that list');
+  click(r, more(r, 'records'));
+  assert.deepEqual(rowsOf(r), [40, 30, 20]);
+  assert.equal(r.errors.length, 0);
+});
+
+test('bounded panel: the button keeps the keyboard focus across the swap; a list with nothing more to show has no button', () => {
+  const r = mounted({ changes: BIG });
+  r.draw();
+  const button = more(r, 'sources');
+  button.focus();
+  click(r, button);
+  assert.notEqual(more(r, 'sources'), button, 'the panel was swapped in place');
+  assert.equal(r.doc.activeElement, more(r, 'sources'), 'and the focus is on the new button');
+  const small = mounted({ changes: FULL });
+  small.draw();
+  assert.equal(small.rail.querySelectorAll('[data-changes-more]').length, 0, 'three records, two transitions and two signals are all shown');
+  const five = { ...BIG, events: { ...BIG.events, new: BIG.events.new.slice(0, SHOW) }, sources: BIG.sources.slice(0, SHOW), signals: BIG.signals.slice(0, SHOW) };
+  small.rail.innerHTML = small.api.panelHtml(five);
+  assert.equal(small.rail.querySelectorAll('[data-changes-more]').length, 0, 'exactly as many as the default shows: no button');
+  small.rail.innerHTML = small.api.panelHtml({ ...five, events: { ...five.events, new: BIG.events.new.slice(0, SHOW + 1) } });
+  assert.deepEqual(small.rail.querySelectorAll('[data-changes-more]').map(node => node.getAttribute('data-changes-more')), ['records'], 'one more than the default: a button');
+});
+
+test('bounded panel: a lens counts its own rows, a merged window keeps "up to", an exact merged list says "of N"', async () => {
+  const r = mounted({ changes: BIG, lens: 'hazards' });
+  r.draw();
+  assert.equal(more(r, 'records').text(), 'Show all 40');
+  const merged = (newTotal, length) => ({ ...MERGED, events: { new: BIG.events.new.slice(0, length), newTotal, expiredTotal: 0 }, sources: [], domains: { hazards: newTotal } });
+  assert.ok(r.api.panelHtml(merged(57, 12), { window: '6h', windowChanges: merged(57, 12) }).includes(`Showing ${SHOW} of up to 57 new records, most severe first.`));
+  assert.ok(r.api.panelHtml(merged(12, 12), { window: '6h', windowChanges: merged(12, 12) }).includes(`Showing ${SHOW} of 12 new records, most severe first.`), 'complete: exact');
+  const other = mounted({ changes: BIG, lens: 'cyber' });
+  other.draw();
+  assert.equal(other.rail.querySelectorAll('[data-changes-more]').length, 0, 'nothing in the lens, nothing to open');
+});
+
+test('record rows have a stable id so the focus can be found again after the rails are rebuilt; invalid ids and plain rows get none', () => {
+  const r = mounted({ changes: FULL });
+  r.draw();
+  const node = r.doc.getElementById('changes-ev-' + ID(2));
+  assert.ok(node && node.getAttribute('data-changes-event') === ID(2));
+  node.focus();
+  r.draw();
+  const again = r.doc.getElementById('changes-ev-' + ID(2));
+  assert.ok(again && again !== node, 'the rebuilt row answers to the same id (what the event dialog\'s focus restore looks for)');
+  const ids = all(r.doc.body).map(item => item.id).filter(value => value.startsWith('changes-ev-'));
+  assert.deepEqual(ids, [ID(1), ID(2), ID(3)].map(id => 'changes-ev-' + id), 'one per row, unique');
+  const hostile = { ...FULL, events: { ...FULL.events, new: [{ ...FULL.events.new[0], id: 'event-1" onclick="x' }, FULL.events.new[1]] } };
+  assert.equal(count(r.api.panelHtml(hostile), /id="changes-ev-/g), 1, 'an id that is not an event id gets none');
+  const plain = mounted({ changes: FULL, openEvent: null });
+  assert.ok(!plain.api.panelHtml(FULL).includes('changes-ev-'), 'a plain row is not a control and has no id');
+});
+
+test('a failed refresh of the window on screen says the earlier data is shown', async () => {
+  let fail = false;
+  const r = mounted({ changes: FULL, fetchJson: () => fail ? Promise.reject(new Error('x')) : Promise.resolve(MERGED) });
+  r.draw(); click(r, win(r, '6h')); await tick();
+  assert.deepEqual(titles(r), ['Older flood warning']);
+  fail = true;
+  r.api.update({ ...FULL, at: '2026-10-03T10:15:00.000Z' });
+  await tick();
+  assert.equal(r.rail.querySelector('.ch-status').text(), 'Could not refresh the 6 h changes. The earlier data is shown.');
+  assert.deepEqual(titles(r), ['Older flood warning'], 'the earlier answer is what is on screen');
+  assert.deepEqual(pressed(r), ['6h']);
+  assert.equal(r.errors.length, 0);
+});
+
+test('"Last sweep" forgets the window answer, so a later failing window falls back to the last sweep and says so', async () => {
+  let fail = false;
+  const r = mounted({ changes: FULL, fetchJson: () => fail ? Promise.reject(new Error('x')) : Promise.resolve(MERGED) });
+  r.draw(); click(r, win(r, '6h')); await tick();
+  click(r, win(r, 'last'));
+  fail = true;
+  click(r, win(r, '24h')); await tick();
+  assert.deepEqual(pressed(r), ['last'], 'not the old 6 h answer');
+  assert.ok(!titles(r).includes('Older flood warning') && titles(r).includes('VIX'), 'the snapshot\'s own list');
+  assert.equal(r.rail.querySelector('.ch-status').text(), 'Could not load the 24 h changes. Showing Last sweep instead.');
+  // A different window that answered stays the fallback.
+  fail = false;
+  click(r, win(r, '1h')); await tick();
+  fail = true;
+  click(r, win(r, '24h')); await tick();
+  assert.deepEqual(pressed(r), ['1h']);
+  assert.equal(r.rail.querySelector('.ch-status').text(), 'Could not load the 24 h changes. Showing 1 h instead.');
+});
+
+test('a window button that is disabled does not react to hover', () => {
+  const css = read('dashboard/public/changes.css');
+  assert.ok(css.includes('.ch-win:hover:not([aria-disabled="true"]){'));
+  assert.ok(!/\.ch-win:hover\{/.test(css), 'no bare hover rule');
+  assert.ok(css.includes('.ch-win[aria-disabled="true"]{opacity:.5;cursor:not-allowed}'));
+});
+
+test('the Show all button has a focus ring and, on a narrow screen, the same 44 px touch target as the other controls', () => {
+  const css = read('dashboard/public/changes.css');
+  assert.match(css, /\.ch-win:focus-visible,\.ch-more:focus-visible,button\.ch-row:focus-visible[^{]*\{outline:2px solid/);
+  assert.ok(css.includes('@media(max-width:700px){.ch-win,.ch-more,button.ch-row{min-height:44px}'));
+});
+
+test('a time that is not ISO-8601 is unknown, however Date.parse reads it', () => {
+  const { api } = mounted({ changes: FULL });
+  const odd = { ...FULL, since: 'Oct 3 2026', events: { ...FULL.events, new: ['Oct 3 2026', '<img src=x onerror=2>', '2026-10-03 09:57'].map((observedAt, index) => ({ ...FULL.events.new[index], observedAt })) } };
+  const out = api.panelHtml(odd);
+  assert.ok(!out.includes('data-changes-time'), 'no time attribute');
+  assert.equal(count(out, /<span class="ch-age">—<\/span>/g), 3, 'three dashes');
+  assert.ok(!out.includes('<time'), 'a since time that is not ISO is not shown');
+  assert.ok(api.panelHtml({ ...odd, since: '2026-10-03T09:45:00Z' }).includes('<time datetime="2026-10-03T09:45:00.000Z">'), 'a real one is');
+});
+
+test('an openEvent hook that rejects later is logged, never thrown into the page', async () => {
+  const r = mounted({ changes: FULL, openEvent: () => Promise.reject(new Error('async')) });
+  r.draw();
+  click(r, r.rail.querySelector('[data-changes-event]'));
+  await tick();
+  assert.equal(r.errors.length, 1);
+});
+
+test('the since time follows the page locale, and an unusable locale tag falls back to the UTC stamp', () => {
+  const shownTime = locale => />([^<]*)<\/time>/.exec(mounted({ changes: FULL, locale }).api.panelHtml(FULL))[1];
+  const expected = locale => new Date('2026-10-03T09:45:00.000Z').toLocaleString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  for (const locale of ['en-US', 'hu-HU', 'fr-FR']) assert.equal(shownTime(locale), expected(locale), locale);
+  assert.notEqual(shownTime('hu-HU'), shownTime('en-US'));
+  assert.equal(shownTime('not a locale tag!'), '2026-10-03 09:45:00 UTC');
 });
 
 // ===== a replay =====
@@ -812,24 +1005,55 @@ test('jarvis.html: the panel is registered in the zones, the label, the builder 
   assert.match(html, /setInterval\(\(\)=>\{updateRuntimeStatus\(\);refreshLiveFreshness\(\);window\.CrucixChanges\?\.refresh\(\);\},30000\)/);
 });
 
-test('a saved layout from before this release still gets the panel (appended, visible), a fresh one has it first in the right rail', () => {
+function layoutApi() {
   const header = sliceBetween(html, 'const dashboardZones = [', 'const dashboardFixedModuleIds');
   const context = vm.createContext({});
   vm.runInContext(header + "\nconst dashboardFixedModuleIds=['map','mapRegions'];", context);
   vm.runInContext(html.slice(html.indexOf('function createDefaultDashboardLayout('), html.indexOf('function loadDashboardLayout(')), context);
-  const normalize = vm.runInContext('normalizeDashboardLayout', context);
-  const fresh = JSON.parse(JSON.stringify(vm.runInContext('createDefaultDashboardLayout', context)()));
-  assert.equal(fresh.zones.right[0], 'changes');
-  assert.equal(fresh.visibility.changes, true);
-  const saved = { zones: { left: ['sensorGrid'], center1: ['newsTicker'], center2: [], center3: [], right: ['sourceHealth', 'liveSources', 'sweepDelta'] }, visibility: { sourceHealth: false }, fixed: { map: false } };
-  const merged = JSON.parse(JSON.stringify(normalize(saved)));
-  assert.ok(merged.zones.right.includes('changes'), 'the panel reaches a saved layout');
-  assert.deepEqual(merged.zones.right.slice(0, 4), ['sourceHealth', 'liveSources', 'sweepDelta', 'changes'], 'the user\'s own order stays; a new panel is appended to its default rail');
-  assert.equal(merged.visibility.changes, true, 'and is visible');
+  const plain = value => JSON.parse(JSON.stringify(value));
+  return { fresh: () => plain(vm.runInContext('createDefaultDashboardLayout', context)()), normalize: raw => plain(vm.runInContext('normalizeDashboardLayout', context)(raw)) };
+}
+const OLD_RAIL = ['sourceHealth', 'liveSources', 'sweepDelta'];
+const oldLayout = (extra = {}) => ({ zones: { left: ['sensorGrid'], center1: ['newsTicker'], center2: [], center3: [], right: OLD_RAIL }, visibility: { sourceHealth: false }, fixed: { map: false }, ...extra });
+
+test('a saved layout that never held the panel gets it at the top of its right rail, visible; a fresh layout has it there too', () => {
+  const { fresh, normalize } = layoutApi();
+  assert.equal(fresh().zones.right[0], 'changes');
+  assert.equal(fresh().visibility.changes, true);
+  const merged = normalize(oldLayout());
+  assert.deepEqual(merged.zones.right.slice(0, 4), ['changes', 'sourceHealth', 'liveSources', 'sweepDelta'], 'on top, the user\'s own order after it');
+  assert.equal(merged.visibility.changes, true, 'and visible');
   assert.equal(merged.visibility.sourceHealth, false, 'the saved choices stay');
+  assert.deepEqual(merged.zones.left.slice(0, 1), ['sensorGrid']);
   assert.equal(Object.values(merged.zones).flat().filter(id => id === 'changes').length, 1, 'once');
-  const hidden = JSON.parse(JSON.stringify(normalize({ zones: { right: ['changes'] }, visibility: { changes: false } })));
-  assert.equal(hidden.visibility.changes, false, 'a panel the user hid stays hidden');
+  assert.equal(normalize(null).zones.right[0], 'changes', 'no saved layout: the default');
+  assert.equal(normalize('garbage').zones.right[0], 'changes');
+});
+
+test('a layout that already holds the panel keeps it where it is, in any zone, however the user arranged it', () => {
+  const { normalize } = layoutApi();
+  const left = normalize(oldLayout({ zones: { left: ['sensorGrid', 'changes', 'nuclearWatch'], center1: [], center2: [], center3: [], right: OLD_RAIL } }));
+  assert.deepEqual(left.zones.left.slice(0, 3), ['sensorGrid', 'changes', 'nuclearWatch'], 'a panel the user moved to the left rail stays there');
+  assert.equal(left.zones.right.includes('changes'), false);
+  const last = normalize(oldLayout({ zones: { left: [], center1: [], center2: [], center3: [], right: [...OLD_RAIL, 'changes'] } }));
+  assert.equal(last.zones.right.indexOf('changes'), 3, 'at the end of the rail stays at the end');
+  // A layout saved after this release lists every panel in a zone and in visibility: it is not changed on the next load.
+  const saved = normalize(oldLayout());
+  saved.zones.right = saved.zones.right.filter(id => id !== 'changes').concat('changes');
+  assert.equal(normalize(saved).zones.right.at(-1), 'changes', 'after a save the panel counts as seen');
+});
+
+test('a user who hid the panel does not get it back: a visibility entry means the layout has seen it', () => {
+  const { normalize } = layoutApi();
+  const hidden = normalize(oldLayout({ visibility: { sourceHealth: false, changes: false } }));
+  assert.equal(hidden.visibility.changes, false, 'it stays hidden');
+  assert.notEqual(hidden.zones.right[0], 'changes', 'and is not put on top');
+  assert.deepEqual(hidden.zones.right.slice(0, 3), OLD_RAIL);
+  assert.equal(hidden.zones.right.includes('changes'), true, 'it keeps a place for when the user turns it on');
+  const entry = normalize(oldLayout({ visibility: { changes: true } }));
+  assert.notEqual(entry.zones.right[0], 'changes', 'a visibility entry of any kind counts as seen');
+  assert.equal(entry.visibility.changes, true);
+  assert.equal(normalize({ zones: { right: ['changes'] }, visibility: { changes: false } }).visibility.changes, false);
 });
 
 test('the workspace profiles know the panel: default zones, the presets and an old stored profile', () => {
@@ -889,8 +1113,11 @@ test('a real buildChanges object and a real mergeChanges object render, with the
   const built = buildChanges(before, after);
   const r = mounted({ changes: built, openEvent() {}, openMatrix() {} });
   const out = r.api.panelHtml(built);
-  assert.equal(count(out, /data-changes-event=/g), CHANGE_CAPS.events);
-  assert.ok(out.includes(`Showing ${CHANGE_CAPS.events} of 59 new records, most severe first.`), 'the capped list names the real total');
+  assert.equal(count(out, /data-changes-event=/g), SHOW, 'a few rows until "Show all" is used');
+  assert.ok(out.includes(`Showing ${SHOW} of 59 new records, most severe first.`), 'the note names the real total');
+  const opened = r.api.panelHtml(built, { expanded: { records: true } });
+  assert.equal(count(opened, /data-changes-event=/g), CHANGE_CAPS.events);
+  assert.ok(opened.includes(`Showing ${CHANGE_CAPS.events} of 59 new records, most severe first.`), 'the capped list names the real total');
   assert.ok(out.includes('<h4 id="changesRecords">New records <span class="ch-n">59</span></h4>'));
   assert.match(out, /data-changes-source="USGS"/);
   assert.equal(count(out, /data-signal=/g), 2);
@@ -902,6 +1129,10 @@ test('a real buildChanges object and a real mergeChanges object render, with the
 });
 
 // ===== locales =====
+
+test('the default row counts of the module are the ones these tests pin', () => {
+  assert.match(read('dashboard/public/changes.js'), new RegExp(`const SHOW=\\{records:${SHOW},sources:${SHOW},signals:${SHOW}\\}`));
+});
 
 test('the English fallback text of the module is the English locale text, key for key', () => {
   const source = read('dashboard/public/changes.js'), literal = /const COPY=(\{[\s\S]*?\});\n  let opts/.exec(source);

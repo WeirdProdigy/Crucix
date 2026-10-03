@@ -988,10 +988,13 @@
     "nothingLens": "Rien n’a changé dans ce thème.",
     "loading": "Chargement des changements…",
     "error": "Impossible de charger la période {window}. Affichage : {shown}.",
+    "errorStale": "Impossible d’actualiser la période {window}. Les données précédentes restent affichées.",
     "replayNote": "Les périodes plus longues lisent l’archive en direct : elles sont désactivées pendant la relecture. La liste est celle du scan relu.",
     "cappedRecords": "{shown} affichées sur {total} nouvelles données, les plus graves d’abord.",
     "cappedRecordsAbout": "{shown} affichées sur {total} nouvelles données au plus, les plus graves d’abord.",
     "cappedList": "{shown} affichés. La liste est plafonnée : il peut y en avoir davantage.",
+    "showAll": "Tout afficher ({count})",
+    "showFewer": "Afficher moins",
     "chipLabel": "{count} changements depuis le scan précédent",
     "chipLabelOne": "{count} changement depuis le scan précédent",
     "chipLabelAtLeast": "Au moins {count} changements depuis le scan précédent"

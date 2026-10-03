@@ -5,6 +5,8 @@
   // Honesty rules: a merged window's totals are upper bounds ("up to"), the lists the server caps (records 40, transitions 30,
   // signals 20) say so, a null severity is the unknown dash, a state or level is always a glyph and a word, and a domain lens narrows
   // every list (items without a domain only show under `all`). The chosen window lives in memory only (a reload starts at the last sweep).
+  // The panel is bounded: each list shows its first rows (SHOW) and a "Show all N" button (aria-expanded, a real <button>, so Enter/Space work)
+  // opens it; which lists are open is kept in memory for the session and survives every re-render.
   // mount(options):
   //   t(key, fallback)   the page's text: group `changes`, plus `lenses.*`, `inspector.level.*`, `matrix.state*`
   //   locale, now()      BCP 47 tag of the since time, the page clock (frozen during a replay) for the age labels
@@ -19,6 +21,9 @@
   const WINDOWS=['last','1h','6h','24h'],WINDOW_KEY={last:'windowLast','1h':'window1h','6h':'window6h','24h':'window24h'};
   // The server's list caps (CHANGE_CAPS in lib/sweeps/changes.mjs; test/changes-ui.test.mjs keeps them equal).
   const CAPS={events:40,sources:30,signals:20};
+  // How many rows each list shows until its "Show all" button is used (the expansion lives in memory for the session): the panel is the
+  // first one of the right rail, so with every list at its cap it would otherwise be several screens tall.
+  const SHOW={records:3,sources:3,signals:3};
   const EVENT_ID=/^event-[0-9a-f]{32}$/;
   const ISO_TIME=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})$/;
   const LEVELS=['critical','high','watch','info'];
@@ -29,12 +34,13 @@
     newRecords:'New records',sourceChanges:'Source changes',signals:'Signals',typeNew:'New',typeEscalated:'Escalated',typeDeescalated:'De-escalated',to:'changed to',upTo:'up to {count}',
     baseline:'First sweep, nothing to compare yet. Changes show up after the next sweep.',baselineWindow:'No earlier sweeps to compare in this window yet.',
     waiting:'Changes appear once the first sweep has finished.',nothing:'Nothing changed since the previous sweep.',nothingWindow:'Nothing changed in this window.',nothingLens:'Nothing changed in this domain.',
-    loading:'Loading changes…',error:'Could not load the {window} changes. Showing {shown} instead.',
+    loading:'Loading changes…',error:'Could not load the {window} changes. Showing {shown} instead.',errorStale:'Could not refresh the {window} changes. The earlier data is shown.',
     replayNote:'Longer windows read the live archive, so they are off during the replay. The list is the replayed sweep’s own.',
     cappedRecords:'Showing {shown} of {total} new records, most severe first.',cappedRecordsAbout:'Showing {shown} of up to {total} new records, most severe first.',
-    cappedList:'Showing {shown}. The list is capped, so more may exist.',chipLabel:'{count} changes since the previous sweep',chipLabelOne:'{count} change since the previous sweep',
+    cappedList:'Showing {shown}. The list is capped, so more may exist.',showAll:'Show all {count}',showFewer:'Show fewer',chipLabel:'{count} changes since the previous sweep',chipLabelOne:'{count} change since the previous sweep',
     chipLabelAtLeast:'At least {count} changes since the previous sweep'};
   let opts=null,selected='last',shown=null,loading=false,failed='',seq=0,key='',lastMarkup='';
+  const expanded={records:false,sources:false,signals:false};
   const log=error=>{try{console.error('[changes]',error);}catch{}};
   const guarded=fn=>(...args)=>{try{return fn(...args);}catch(error){log(error);}};
   const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -105,7 +111,7 @@
     const from=typeof item.source==='string'&&item.source?`<span class="ch-source">${esc(item.source)}</span>`:'';
     const age=`<span class="ch-age"${ms===null?'':` data-changes-time="${esc(new Date(ms).toISOString())}" title="${esc(stamp(ms))}"`}>${esc(ageOf(ms))}</span>`;
     const inner=`${severity(item.severity)}<span class="ch-title">${esc(typeof item.title==='string'&&item.title?item.title:'—')}</span><span class="ch-meta">${from}${age}</span>`;
-    return `<li class="ch-item">${id&&opts&&typeof opts.openEvent==='function'?`<button type="button" class="ch-row" data-changes-event="${esc(id)}">${inner}</button>`:`<div class="ch-row">${inner}</div>`}</li>`;
+    return `<li class="ch-item">${id&&opts&&typeof opts.openEvent==='function'?`<button type="button" class="ch-row" id="changes-ev-${esc(id)}" data-changes-event="${esc(id)}">${inner}</button>`:`<div class="ch-row">${inner}</div>`}</li>`;
   }
   function sourceRow(item){
     const name=item.source,inner=`<span class="ch-name">${esc(name)}</span><span class="ch-trans">${stateTag(item.from)}<span class="ch-arrow" aria-hidden="true">→</span><span class="ch-sr">${esc(say('to'))}</span>${stateTag(item.to)}</span>`;
@@ -116,7 +122,11 @@
     const tag=type?`<span class="ch-meta"><span class="ch-type" data-type="${esc(item.type)}"><i aria-hidden="true">${type[0]}</i> ${esc(say(type[1]))}</span></span>`:'';
     return `<li class="ch-item ch-sig" data-signal="${esc(name)}"><div class="ch-row">${severity(item.severity)}<span class="ch-title">${esc(label)}</span>${tag}</div></li>`;
   }
-  const section=(name,id,title,figureHtml,rows,cap)=>`<section class="ch-sec" data-changes-section="${name}" aria-labelledby="${id}"><h4 id="${id}">${esc(title)} <span class="ch-n">${figureHtml}</span></h4><ul class="ch-list">${rows}</ul>${cap?`<p class="ch-cap">${esc(cap)}</p>`:''}</section>`;
+  // One list: the first SHOW rows, or all of them once the section's button was used (a section with nothing more to show has no button).
+  const section=(name,id,title,figureHtml,list,render,cap,open)=>{
+    const more=list.length>SHOW[name]?`<button type="button" class="ch-more" data-changes-more="${name}" aria-expanded="${open}" aria-controls="${id}List">${esc(open?say('showFewer'):say('showAll',{count:list.length}))}</button>`:'';
+    return `<section class="ch-sec" data-changes-section="${name}" aria-labelledby="${id}"><h4 id="${id}">${esc(title)} <span class="ch-n">${figureHtml}</span></h4><ul class="ch-list" id="${id}List">${list.slice(0,open?list.length:SHOW[name]).map(render).join('')}</ul>${cap||more?`<div class="ch-foot">${cap?`<p class="ch-cap">${esc(cap)}</p>`:''}${more}</div>`:''}</section>`;
+  };
   function domainChips(data,lens,exact){
     const list=domainIds().filter(id=>(lens==='all'||id===lens)&&domainCount(data.domains,id)>0);
     if(!list.length)return '';
@@ -129,7 +139,7 @@
   }
 
   // The sections of one object under a lens; merged = a window answer, whose totals are upper bounds (the snapshot's own are real counts).
-  function body(data,lens,merged){
+  function body(data,lens,merged,open){
     const exact=!merged;
     if(data.baseline){const name=merged?'baselineWindow':'baseline';return calm(name,say(name));}
     const t=tally(data,lens);
@@ -138,20 +148,23 @@
       return calm(name,say(name));
     }
     let out=domainChips(data,lens,exact);
-    const listed=t.records.length,total=t.known?t.total:listed;
+    const listed=t.records.length,total=t.known?t.total:listed,exactTotal=exact||total===listed;
+    // The notes count the rows on screen: the first SHOW ones until the section is opened.
+    const rows=name=>open(name)?Infinity:SHOW[name];
     if(listed>0||total>0){
+      const onScreen=Math.min(listed,rows('records'));
       let cap='';
-      if(t.known&&total>listed)cap=say(exact?'cappedRecords':'cappedRecordsAbout',{shown:listed,total});
-      else if(!t.known&&data.records.length>=CAPS.events)cap=say('cappedList',{shown:listed});
-      out+=section('records','changesRecords',say('newRecords'),figure(total,exact||total===listed),t.records.map(recordRow).join(''),cap);
+      if(!t.known&&data.records.length>=CAPS.events)cap=say('cappedList',{shown:onScreen});
+      else if(total>onScreen)cap=say(exactTotal?'cappedRecords':'cappedRecordsAbout',{shown:onScreen,total});
+      out+=section('records','changesRecords',say('newRecords'),figure(total,exactTotal),t.records,recordRow,cap,open('records'));
     }
     const names=t.sources.filter(item=>typeof item.source==='string'&&item.source);
-    if(names.length)out+=section('sources','changesSources',say('sourceChanges'),String(names.length),names.map(sourceRow).join(''),t.sourcesCapped?say('cappedList',{shown:names.length}):'');
-    if(t.signals.length)out+=section('signals','changesSignals',say('signals'),String(t.signals.length),t.signals.map(signalRow).join(''),t.signalsCapped?say('cappedList',{shown:t.signals.length}):'');
+    if(names.length)out+=section('sources','changesSources',say('sourceChanges'),String(names.length),names,sourceRow,t.sourcesCapped?say('cappedList',{shown:Math.min(names.length,rows('sources'))}):'',open('sources'));
+    if(t.signals.length)out+=section('signals','changesSignals',say('signals'),String(t.signals.length),t.signals,signalRow,t.signalsCapped?say('cappedList',{shown:Math.min(t.signals.length,rows('signals'))}):'',open('signals'));
     return out;
   }
 
-  // options (tests and callers that know better than the module's state): lens, window, windowChanges, replay, loading, failed.
+  // options (tests and callers that know better than the module's state): lens, window, windowChanges, replay, loading, failed, expanded.
   function build(changes,options){
     const o=isObject(options)?options:{};
     const replay=typeof o.replay==='boolean'?o.replay:inReplay();
@@ -163,10 +176,10 @@
     const content=win==='last'?changes:answer!==undefined?answer:shown?shown.changes:changes;
     const merged=win!=='last'&&!(stale&&!shown);
     const busy=typeof o.loading==='boolean'?o.loading:loading&&!replay,problem=typeof o.failed==='string'?o.failed:replay?'':failed;
-    const windows=opts&&typeof opts.fetchJson==='function';
+    const windows=opts&&typeof opts.fetchJson==='function',open=name=>isObject(o.expanded)&&typeof o.expanded[name]==='boolean'?o.expanded[name]:expanded[name]===true;
     const data=read(content);
     const buttons=windows?`<div class="ch-windows" role="group" aria-label="${esc(say('windowLabel'))}">${WINDOWS.map(id=>`<button type="button" class="ch-win" data-changes-window="${id}" aria-pressed="${id===win}"${replay&&id!=='last'?' aria-disabled="true" aria-describedby="changesNote"':''}>${esc(windowText(id))}</button>`).join('')}</div>`:'';
-    const status=busy?`<p class="ch-status" role="status">${esc(say('loading'))}</p>`:WINDOWS.includes(problem)?`<p class="ch-status ch-error" role="status">${esc(say('error',{window:windowText(problem),shown:windowText(win)}))}</p>`:'';
+    const status=busy?`<p class="ch-status" role="status">${esc(say('loading'))}</p>`:WINDOWS.includes(problem)?`<p class="ch-status ch-error" role="status">${esc(problem===win?say('errorStale',{window:windowText(problem)}):say('error',{window:windowText(problem),shown:windowText(win)}))}</p>`:'';
     const note=replay&&windows?`<p class="ch-note ch-replay" id="changesNote">${esc(say('replayNote'))}</p>`:'';
     let badge='',since='',main;
     if(!data)main=calm('waiting',say('waiting'));
@@ -175,7 +188,7 @@
       // A merged window mixes an upper bound with capped lists: no single honest figure, so only the snapshot's own object gets a badge.
       if(t&&t.sum>0&&!merged)badge=`<span class="badge">${t.sum}${t.atLeast?'+':''}</span>`;
       if(!data.baseline&&data.since!==null)since=sinceLine(data.since);
-      main=body(data,lens,merged);
+      main=body(data,lens,merged,open);
     }
     return `<div class="g-panel changes-panel" id="changesPanel" role="region" aria-labelledby="changesTitle" data-window="${win}"${busy?' aria-busy="true"':''}${stale&&busy?' data-stale="true"':''}><div class="sec-head"><h3 id="changesTitle" tabindex="-1">${esc(say('title'))}</h3>${badge}</div>${buttons}${since}${status}${note}${main}</div>`;
   }
@@ -200,7 +213,7 @@
 
   // ===== Windows =====
   // The page rebuilds the rails with innerHTML on every update; a change of state here swaps the panel in place and keeps the focus.
-  const FOCUS_ATTRS=['data-changes-window','data-changes-event','data-changes-source'];
+  const FOCUS_ATTRS=['data-changes-window','data-changes-more','data-changes-event','data-changes-source'];
   function mark(node){
     if(node.id==='changesTitle')return {title:true};
     for(const attr of FOCUS_ATTRS){const value=typeof node.getAttribute==='function'?node.getAttribute(attr):null;if(typeof value==='string')return {attr,value};}
@@ -244,7 +257,13 @@
     if(!opts||!WINDOWS.includes(win)||typeof opts.fetchJson!=='function'||inReplay())return;
     if(win===selected){if(failed){failed='';redraw();}return;}
     selected=win;failed='';
-    if(win==='last'){seq++;loading=false;}else start(win);
+    // "Last sweep" forgets the window answer, so a later failing window never falls back to a stale one.
+    if(win==='last'){seq++;loading=false;shown=null;}else start(win);
+    redraw();
+  }
+  // A section's "Show all" / "Show fewer" button; the choice is kept for the session.
+  function toggle(name){
+    expanded[name]=!expanded[name];
     redraw();
   }
   // A new sweep: a chosen merged window is read again (the page renders the panel right after, so no redraw here).
@@ -280,6 +299,8 @@
     const target=event.target&&typeof event.target.closest==='function'?event.target:null;
     if(!target||!opts)return;
     if(target.closest('[data-changes-chip]')){focusPanel();return;}
+    const more=target.closest('[data-changes-more]');
+    if(more){toggle(more.getAttribute('data-changes-more'));return;}
     const windowButton=target.closest('[data-changes-window]');
     if(windowButton){select(windowButton.getAttribute('data-changes-window'));return;}
     const record=target.closest('[data-changes-event]');

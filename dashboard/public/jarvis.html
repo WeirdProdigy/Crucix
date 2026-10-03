@@ -522,6 +522,9 @@ const dashboardDefaultZones = {
   right:['changes','liveSources','crossSourceSignals','osintStream','signalCore','sourceHealth','internetOutages','healthAlerts','supplementalHealth','sweepDelta']
 };
 const dashboardPanelIds = Object.values(dashboardDefaultZones).flat();
+// A panel from this list that a saved layout has never held (in no zone and with no visibility entry) goes to the top of its default rail
+// instead of the end; any later save has an entry for it, so a user who hid it does not get it back.
+const dashboardTopPanels = ['changes'];
 const dashboardFixedModuleIds = ['map','mapRegions'];
 const DASHBOARD_LAYOUT_STORAGE_KEY = 'crucix_dashboard_layout_v2';
 const MAP_LAYER_STORAGE_KEY = 'crucix_map_layers_v1';
@@ -605,7 +608,8 @@ function normalizeDashboardLayout(raw){
   for(const zone of dashboardZones){
     for(const id of dashboardDefaultZones[zone] || []){
       if(seen.has(id)) continue;
-      zones[zone].push(id);
+      if(dashboardTopPanels.includes(id) && typeof raw?.visibility?.[id] !== 'boolean') zones[zone].unshift(id);
+      else zones[zone].push(id);
       seen.add(id);
     }
   }

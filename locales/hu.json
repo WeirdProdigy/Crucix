@@ -988,10 +988,13 @@
     "nothingLens": "Ebben a témában nem történt változás.",
     "loading": "Változások betöltése…",
     "error": "Nem sikerült betölteni ezt az időablakot: {window}. Helyette ez látható: {shown}.",
+    "errorStale": "Nem sikerült frissíteni ezt az időablakot: {window}. A korábbi adatok láthatók.",
     "replayNote": "A hosszabb időablakok az élő archívumból olvasnak, ezért visszajátszás közben nem érhetők el. A lista a visszajátszott lekérdezés saját változásait mutatja.",
     "cappedRecords": "{total} új rekordból {shown} látható, a legsúlyosabbak elöl.",
     "cappedRecordsAbout": "Legfeljebb {total} új rekordból {shown} látható, a legsúlyosabbak elöl.",
     "cappedList": "{shown} látható. A lista korlátozott, ezért lehet több is.",
+    "showAll": "Mind megjelenítése ({count})",
+    "showFewer": "Kevesebb megjelenítése",
     "chipLabel": "{count} változás az előző lekérdezés óta",
     "chipLabelOne": "{count} változás az előző lekérdezés óta",
     "chipLabelAtLeast": "Legalább {count} változás az előző lekérdezés óta"

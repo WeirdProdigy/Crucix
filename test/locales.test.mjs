@@ -119,7 +119,7 @@ test('the rule editor names every rule kind, every metric of the registry and ev
 
 // Every string changes.js renders (the panel, the window labels, the notes and the chip phrases), in locale order.
 const CHANGES_KEYS = ['title', 'windowLabel', 'windowLast', 'window1h', 'window6h', 'window24h', 'since', 'byDomain', 'newRecords', 'sourceChanges', 'signals', 'typeNew', 'typeEscalated', 'typeDeescalated', 'to', 'upTo',
-  'baseline', 'baselineWindow', 'waiting', 'nothing', 'nothingWindow', 'nothingLens', 'loading', 'error', 'replayNote', 'cappedRecords', 'cappedRecordsAbout', 'cappedList', 'chipLabel', 'chipLabelOne', 'chipLabelAtLeast'];
+  'baseline', 'baselineWindow', 'waiting', 'nothing', 'nothingWindow', 'nothingLens', 'loading', 'error', 'errorStale', 'replayNote', 'cappedRecords', 'cappedRecordsAbout', 'cappedList', 'showAll', 'showFewer', 'chipLabel', 'chipLabelOne', 'chipLabelAtLeast'];
 
 test('the changes group has the same keys in the same order in en, hu and fr, each a plain non-empty string, and panels.changes names the panel', () => {
   for (const lang of LANGS) {
@@ -127,7 +127,7 @@ test('the changes group has the same keys in the same order in en, hu and fr, ea
     assert.deepEqual(Object.keys(group || {}), CHANGES_KEYS, `${lang}: changes keys`);
     for (const key of CHANGES_KEYS) assert.ok(typeof group[key] === 'string' && group[key].trim() !== '', `${lang}: changes.${key}`);
     assert.ok(!/[<>]/.test(Object.values(group).join('')), `${lang}: plain text, no markup`);
-    for (const [key, name] of [['since', 'time'], ['upTo', 'count'], ['error', 'window'], ['error', 'shown'], ['cappedRecords', 'shown'], ['cappedRecords', 'total'], ['cappedRecordsAbout', 'total'], ['cappedList', 'shown'], ['chipLabel', 'count'], ['chipLabelOne', 'count'], ['chipLabelAtLeast', 'count']]) assert.ok(group[key].includes(`{${name}}`), `${lang}: changes.${key} names {${name}}`);
+    for (const [key, name] of [['since', 'time'], ['upTo', 'count'], ['error', 'window'], ['error', 'shown'], ['errorStale', 'window'], ['showAll', 'count'], ['cappedRecords', 'shown'], ['cappedRecords', 'total'], ['cappedRecordsAbout', 'total'], ['cappedList', 'shown'], ['chipLabel', 'count'], ['chipLabelOne', 'count'], ['chipLabelAtLeast', 'count']]) assert.ok(group[key].includes(`{${name}}`), `${lang}: changes.${key} names {${name}}`);
     assert.equal(typeof data.panels.changes, 'string', `${lang}: panels.changes`);
     assert.equal(data.panels.changes, group.title, `${lang}: the settings label and the panel heading agree`);
     assert.equal(new Set(['windowLast', 'window1h', 'window6h', 'window24h'].map(key => group[key])).size, 4, `${lang}: four distinct window labels`);

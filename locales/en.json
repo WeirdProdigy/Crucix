@@ -988,10 +988,13 @@
     "nothingLens": "Nothing changed in this domain.",
     "loading": "Loading changes…",
     "error": "Could not load the {window} changes. Showing {shown} instead.",
+    "errorStale": "Could not refresh the {window} changes. The earlier data is shown.",
     "replayNote": "Longer windows read the live archive, so they are off during the replay. The list is the replayed sweep’s own.",
     "cappedRecords": "Showing {shown} of {total} new records, most severe first.",
     "cappedRecordsAbout": "Showing {shown} of up to {total} new records, most severe first.",
     "cappedList": "Showing {shown}. The list is capped, so more may exist.",
+    "showAll": "Show all {count}",
+    "showFewer": "Show fewer",
     "chipLabel": "{count} changes since the previous sweep",
     "chipLabelOne": "{count} change since the previous sweep",
     "chipLabelAtLeast": "At least {count} changes since the previous sweep"

@@ -201,7 +201,17 @@ test('every workspace preset shows the What changed panel first in the right rai
   for(const id of ['research','market','infrastructure']){const h=harness({profilesEnabled:true});h.api.openProfiles();click(h,'[data-ci-profile-action="apply"][data-profile-id="'+id+'"]');assert.equal(h.state.layout.zones.right[0],'changes',id);assert.equal(h.state.layout.visibility.changes,true,id);}
   const old={id:'user-old',name:'Before the panel',layout:{zones:{left:['sensorGrid'],right:['sweepDelta']},visibility:{sweepDelta:true},fixed:{}},layers:{},region:'world'};
   const h=harness({profilesEnabled:true,storage:{getItem:()=>JSON.stringify({version:1,profiles:[old]}),setItem(){}}});h.api.openProfiles();click(h,'[data-ci-profile-action="apply"][data-profile-id="user-old"]');
-  assert.ok(h.state.layout.zones.right.includes('changes'));assert.equal(h.state.layout.visibility.changes,true);assert.equal(h.state.layout.zones.right[0],'sweepDelta','the saved order stays; the new panel is appended');
+  assert.deepEqual(JSON.parse(JSON.stringify(h.state.layout.zones.right.slice(0,2))),['changes','sweepDelta'],'a profile that never held the panel gets it on top, the saved order after it');assert.equal(h.state.layout.visibility.changes,true);
+  assert.deepEqual(JSON.parse(JSON.stringify(h.state.layout.zones.left.slice(0,1))),['sensorGrid']);
+});
+
+test('a stored profile keeps its own arrangement of the panel: in another zone it stays, a hidden one is not turned on or put on top',()=>{
+  const profile=(id,layout)=>({id,name:id,layout,layers:{},region:'world'});
+  const applied=id=>{const stored=[profile('user-left',{zones:{left:['sensorGrid','changes'],right:['sweepDelta']},visibility:{changes:true},fixed:{}}),profile('user-hidden',{zones:{left:['sensorGrid'],right:['sweepDelta']},visibility:{changes:false},fixed:{}}),profile('user-entry',{zones:{left:['sensorGrid'],right:['sweepDelta']},visibility:{changes:true},fixed:{}})];
+    const h=harness({profilesEnabled:true,storage:{getItem:()=>JSON.stringify({version:1,profiles:stored}),setItem(){}}});h.api.openProfiles();click(h,'[data-ci-profile-action="apply"][data-profile-id="'+id+'"]');return h.state.layout;};
+  const left=applied('user-left');assert.deepEqual(JSON.parse(JSON.stringify(left.zones.left.slice(0,2))),['sensorGrid','changes'],'the panel the profile put in the left rail stays there');assert.equal(left.zones.right.includes('changes'),false);
+  const hidden=applied('user-hidden');assert.equal(hidden.visibility.changes,false,'a hidden panel stays hidden');assert.notEqual(hidden.zones.right[0],'changes');assert.equal(hidden.zones.right[0],'sweepDelta');
+  const entry=applied('user-entry');assert.notEqual(entry.zones.right[0],'changes','a visibility entry means the profile has seen the panel');assert.equal(entry.visibility.changes,true);
 });
 
 test('oversized and malformed profile storage leaves presets usable',()=>{

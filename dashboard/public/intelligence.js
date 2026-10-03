@@ -14,6 +14,8 @@
     left: ['sensorGrid', 'nuclearWatch', 'riskGauges', 'spaceWatch'], center1: ['newsTicker'], center2: ['macroMarkets'], center3: ['tradeIdeas'], right: ['changes', 'crossSourceSignals', 'osintStream', 'signalCore', 'sourceHealth', 'internetOutages', 'healthAlerts', 'supplementalHealth', 'sweepDelta', 'liveSources']
   };
   const ZONES = Object.keys(DEFAULT_ZONES), PANELS = Object.values(DEFAULT_ZONES).flat();
+  // Panels a saved layout or profile that never held them gets at the top of their default rail (as in jarvis.html), not at the end.
+  const TOP_PANELS = ['changes'];
   const LAYERS = ['air', 'thermal', 'sdr', 'maritime', 'nuclear', 'conflict', 'osint', 'health', 'network', 'news', 'weather', 'space', 'earthquake', 'disaster'];
   const EVENT_KINDS = ['news', 'osint', 'health', 'earthquake', 'weather', 'outage', 'conflict', 'signal', 'disaster', 'space-weather', 'economic', 'forecast', 'network', 'cyber', 'maritime', 'aviation', 'sanctions', 'market', 'energy'];
   const REGIONS = ['world', 'americas', 'europe', 'middleEast', 'asiaPacific', 'africa'];
@@ -242,7 +244,7 @@
   function normalizeLayout(raw) {
     const seen = new Set(), zones = {};
     for (const zone of ZONES) { zones[zone] = []; const ids = Array.isArray(raw?.zones?.[zone]) ? raw.zones[zone].slice(0, PANELS.length) : []; for (const id of ids) if (PANELS.includes(id) && !seen.has(id)) { zones[zone].push(id); seen.add(id); } }
-    for (const zone of ZONES) for (const id of DEFAULT_ZONES[zone]) if (!seen.has(id)) { zones[zone].push(id); seen.add(id); }
+    for (const zone of ZONES) for (const id of DEFAULT_ZONES[zone]) if (!seen.has(id)) { if (TOP_PANELS.includes(id) && typeof raw?.visibility?.[id] !== 'boolean') zones[zone].unshift(id); else zones[zone].push(id); seen.add(id); }
     const visibility = {}; for (const id of PANELS) visibility[id] = typeof raw?.visibility?.[id] === 'boolean' ? raw.visibility[id] : true;
     const fixed = {}; for (const id of ['map', 'mapRegions']) fixed[id] = typeof raw?.fixed?.[id] === 'boolean' ? raw.fixed[id] : true; return { zones, visibility, fixed };
   }
