@@ -941,5 +941,25 @@
     "noSweeps": "La relecture nécessite au moins deux scans archivés.",
     "position": "{index} sur {total}",
     "unknownTime": "Heure inconnue"
+  },
+  "matrix": {
+    "title": "Matrice de santé des sources",
+    "trigger": "Matrice",
+    "caption": "État des sources dans chaque scan archivé, du plus ancien au plus récent",
+    "openHint": "Le scan le plus récent est à droite. Sélectionnez une cellule pour relire ce scan.",
+    "sweeps": "Scans affichés",
+    "source": "Source",
+    "ms": "Dernière exécution (ms)",
+    "stateOk": "OK",
+    "stateStale": "Obsolète",
+    "stateError": "Erreur",
+    "stateDisabled": "Désactivée",
+    "stateNoData": "Aucune donnée",
+    "other": "Autres sources",
+    "loading": "Chargement de la matrice…",
+    "empty": "Aucun scan archivé pour le moment.",
+    "noSources": "Aucune source de ce domaine dans les scans affichés.",
+    "error": "Impossible de charger l’état des sources. Changez le nombre de scans ou rouvrez cette fenêtre pour réessayer.",
+    "close": "Fermer"
   }
 }

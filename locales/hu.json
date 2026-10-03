@@ -941,5 +941,25 @@
     "noSweeps": "A visszajátszáshoz legalább két archivált lekérdezés kell.",
     "position": "{index}/{total}",
     "unknownTime": "Ismeretlen időpont"
+  },
+  "matrix": {
+    "title": "Forrásállapot-mátrix",
+    "trigger": "Mátrix",
+    "caption": "A források állapota az archivált lekérdezésekben, a legrégebbitől a legújabbig",
+    "openHint": "A legújabb lekérdezés jobbra van. Egy cellát kiválasztva visszajátszhatod az adott lekérdezést.",
+    "sweeps": "Megjelenített lekérdezések",
+    "source": "Forrás",
+    "ms": "Utolsó futás (ms)",
+    "stateOk": "Rendben",
+    "stateStale": "Elavult",
+    "stateError": "Hiba",
+    "stateDisabled": "Kikapcsolva",
+    "stateNoData": "Nincs adat",
+    "other": "Egyéb források",
+    "loading": "A mátrix betöltése…",
+    "empty": "Még nincs archivált lekérdezés.",
+    "noSources": "A megjelenített lekérdezésekben egyetlen forrás sem jelentett ebből a témából.",
+    "error": "A források állapota nem tölthető be. Válts másik lekérdezésszámot, vagy nyisd meg újra az ablakot.",
+    "close": "Bezárás"
   }
 }

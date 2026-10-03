@@ -18,6 +18,7 @@
 <script src="domains.js"></script>
 <script src="lens-core.js"></script>
 <script src="lens.js"></script>
+<script src="health-matrix.js"></script>
 <script src="record-core.js"></script>
 <script src="live-sources.js"></script>
 <script src="record-inspector.js"></script>
@@ -29,6 +30,7 @@
 <link rel="stylesheet" href="alerts.css">
 <link rel="stylesheet" href="replay.css">
 <link rel="stylesheet" href="lens.css">
+<link rel="stylesheet" href="health-matrix.css">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#020408">
 <script src="pwa.js"></script>
@@ -973,7 +975,7 @@ function buildSourceHealthPanel(){
     const state=sourceState(source);const label=t('status.'+state,{ok:'Available',error:'Failed',stale:'Stale / cached',disabled:'Not configured'}[state]);
     return `<div class="source-row" data-source-state="${state}"><div>${esc(source.n||source.name||'Source')}${source.message||source.error?`<small>${esc(source.message||source.error)}</small>`:''}${source.timestamp?`<small>${esc(getAge(source.timestamp))}</small>`:''}</div><span class="source-state ${state}">${esc(label)}</span></div>`;
   }).join('');
-  return `<div class="g-panel source-health-panel"><div class="sec-head"><h3>${t('panels.sourceHealth','Source health')}</h3><span class="badge">${shown.length===D.health.length?D.health.length:shown.length+'/'+D.health.length}</span></div>${rows||`<div class="empty-state">${D.health.length?t('lenses.noSources','No source of this domain reported in this sweep.'):t('status.noHealth','Source status is not available yet')}</div>`}</div>`;
+  return `<div class="g-panel source-health-panel"><div class="sec-head"><h3>${t('panels.sourceHealth','Source health')}</h3>${window.CrucixHealthMatrix?.button?.()||''}<span class="badge">${shown.length===D.health.length?D.health.length:shown.length+'/'+D.health.length}</span></div>${rows||`<div class="empty-state">${D.health.length?t('lenses.noSources','No source of this domain reported in this sweep.'):t('status.noHealth','Source status is not available yet')}</div>`}</div>`;
 }
 
 // === DASHBOARD PANELS ===
@@ -2016,6 +2018,10 @@ function mkSparkSvg(values, isGood){
 // === HELPERS ===
 // The dashboard's "now" for every age/freshness label: CrucixClock (frozen at the snapshot's time during a sweep replay), else real time.
 function clockNow(){return window.CrucixClock?window.CrucixClock.now():Date.now()}
+// The locale tag of the time labels the replay bar and the health matrix write (the page language).
+function uiLocale(){return L.meta?.code==='hu'?'hu-HU':L.meta?.code==='fr'?'fr-FR':'en-US'}
+// The matrix button appears or disappears with the archive: the panel header is drawn again in place.
+function redrawSourceHealth(){const panel=document.querySelector('.source-health-panel');if(panel)panel.outerHTML=buildSourceHealthPanel()}
 function getAge(d){const ts=Date.parse(d);if(!Number.isFinite(ts))return t('status.unknownTime','Unknown time');const ms=Math.max(0,clockNow()-ts);const m=Math.floor(ms/60000);if(m<1)return t('status.justNow','Just now');if(m<60)return m+' '+t('status.minutesAgo','min ago');const h=Math.floor(m/60);if(h<24)return h+' '+t('status.hoursAgo','h ago');return Math.floor(h/24)+' '+t('status.daysAgo','d ago')}
 function esc(value){return String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 function plainText(value){return String(value??'').replace(/&#39;/g,"'").replace(/&#33;/g,'!').replace(/&amp;/g,'&').replace(/<[^>]+>/g,'')}
@@ -2356,7 +2362,8 @@ function applySnapshot(data,{cached=false,force=false}={}){
   // A replayed archive snapshot is not live data: it never reaches the offline cache and keeps the live sweep error.
   const replaying=!!window.CrucixReplay?.active();
   D=normalizeSnapshot(data);if(!replaying)lastSweepError='';reinit();updateRuntimeStatus();
-  if(!cached&&!replaying){window.CrucixPWA?.markLive();window.CrucixPWA?.cacheLive(D);}
+  // A live snapshot means a sweep was archived meanwhile: an archive that was empty is looked at again (the matrix button).
+  if(!cached&&!replaying){window.CrucixPWA?.markLive();window.CrucixPWA?.cacheLive(D);window.CrucixHealthMatrix?.refresh();}
   return true;
 }
 // Sweep replay (replay.js) hooks. An archived sweep goes through the live render path; the alert strip and tray stay live, so
@@ -2436,7 +2443,9 @@ document.addEventListener('DOMContentLoaded',()=>{
   window.CrucixRecordInspector?.mount({getSources:()=>D.liveSources,getEvents:()=>currentSnapshot().events,t,now:clockNow});
   // Before init: the first top bar already carries the replay button. Not on file pages or the offline shell (no archive there).
   if(location.protocol!=='file:'&&!window.__CRUCIX_OFFLINE_SHELL__)window.CrucixReplay?.mount({root:document.getElementById('replayBar'),fetchJson:fetchJsonNoStore,
-    applySnapshot:applyReplaySnapshot,restoreLive:restoreLiveSnapshot,redrive:redriveClock,getLive:()=>D,t,locale:L.meta?.code==='hu'?'hu-HU':L.meta?.code==='fr'?'fr-FR':'en-US'});
+    applySnapshot:applyReplaySnapshot,restoreLive:restoreLiveSnapshot,redrive:redriveClock,getLive:()=>D,t,locale:uiLocale()});
+  // The matrix reads the same archive: a cell opens that sweep in the replay (the dialog closes first and leaves the focus to it).
+  if(location.protocol!=='file:'&&!window.__CRUCIX_OFFLINE_SHELL__)window.CrucixHealthMatrix?.mount({fetchJson:fetchJsonNoStore,t,esc,locale:uiLocale(),onOpenSweep:id=>{window.CrucixHealthMatrix.close({focus:false});return window.CrucixReplay?.open(id);},onAvailability:redrawSourceHealth});
   // The lens bar under the top bar and the live panel's group headers; the first render below already reads the stored lens.
   window.CrucixLens?.mount(document.getElementById('lensBar'),{t});window.CrucixLens?.onChange(applyLens);
   init();

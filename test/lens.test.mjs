@@ -289,7 +289,7 @@ test('the maps draw only the located live rows of the active lens', () => {
 
 test('the source-health panel shows the rows of the active lens', () => {
   const health = [{ n: 'GDELT' }, { n: 'USGS' }, { n: 'EMSC' }, { n: 'ECB' }, { n: 'Mystery' }];
-  const panel = window => helper('buildSourceHealthPanel', { D: { health }, t, esc: String, getAge: String, sourceState: () => 'ok', lensMatchesSource: helper('lensMatchesSource', { window }) })();
+  const panel = window => helper('buildSourceHealthPanel', { window, D: { health }, t, esc: String, getAge: String, sourceState: () => 'ok', lensMatchesSource: helper('lensMatchesSource', { window }) })();
   const names = out => [...out.matchAll(/<div class="source-row" data-source-state="ok"><div>([^<]+)/g)].map(match => match[1]);
   assert.deepEqual(names(panel(lensWindow('hazards'))), ['USGS', 'EMSC']);
   assert.deepEqual(names(panel(lensWindow('all'))), ['GDELT', 'USGS', 'EMSC', 'ECB', 'Mystery']);

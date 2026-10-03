@@ -49,6 +49,21 @@ test('the replay group has the same keys in the same order in en, hu and fr, eac
   assert.deepEqual(LANGS.map(lang => locale(lang).replay.button), ['Replay', 'Visszajátszás', 'Relecture']);
 });
 
+// Every string health-matrix.js renders (the dialog, the legend, the table words and the messages), in locale order.
+const MATRIX_KEYS = ['title', 'trigger', 'caption', 'openHint', 'sweeps', 'source', 'ms', 'stateOk', 'stateStale', 'stateError', 'stateDisabled', 'stateNoData', 'other', 'loading', 'empty', 'noSources', 'error', 'close'];
+
+test('the matrix group has the same keys in the same order in en, hu and fr, each a non-empty string', () => {
+  for (const lang of LANGS) {
+    const group = locale(lang).matrix;
+    assert.deepEqual(Object.keys(group || {}), MATRIX_KEYS, `${lang}: matrix keys`);
+    for (const key of MATRIX_KEYS) assert.ok(typeof group[key] === 'string' && group[key].trim() !== '', `${lang}: matrix.${key}`);
+    assert.ok(!/[<>]/.test(Object.values(group).join('')), `${lang}: plain text, no markup`);
+  }
+  assert.deepEqual(LANGS.map(lang => locale(lang).matrix.title), ['Source health matrix', 'Forrásállapot-mátrix', 'Matrice de santé des sources']);
+  // The five cell states are told apart in every language (a glyph is never the only signal, and the words must not collapse).
+  for (const lang of LANGS) assert.equal(new Set(['stateOk', 'stateStale', 'stateError', 'stateDisabled', 'stateNoData'].map(key => locale(lang).matrix[key])).size, 5, `${lang}: five distinct state words`);
+});
+
 test('the alert UI has every string it renders, a name for each built-in rule and the inspector level words', () => {
   assert.equal(BUILTIN_RULES.length, 8, 'the built-in rule pack');
   for (const lang of LANGS) {

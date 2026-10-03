@@ -941,5 +941,25 @@
     "noSweeps": "Replay needs at least two archived sweeps.",
     "position": "{index} of {total}",
     "unknownTime": "Unknown time"
+  },
+  "matrix": {
+    "title": "Source health matrix",
+    "trigger": "Matrix",
+    "caption": "Source status in each archived sweep, oldest to newest",
+    "openHint": "The newest sweep is on the right. Select a cell to replay that sweep.",
+    "sweeps": "Sweeps shown",
+    "source": "Source",
+    "ms": "Last run (ms)",
+    "stateOk": "OK",
+    "stateStale": "Stale",
+    "stateError": "Error",
+    "stateDisabled": "Disabled",
+    "stateNoData": "No data",
+    "other": "Other sources",
+    "loading": "Loading the matrix…",
+    "empty": "No archived sweeps yet.",
+    "noSources": "No source reported for this domain in the shown sweeps.",
+    "error": "Could not load the source health. Change the sweep count or reopen this window to retry.",
+    "close": "Close"
   }
 }
