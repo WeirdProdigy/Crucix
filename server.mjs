@@ -28,6 +28,9 @@ import { AlertEngine } from './lib/alerts/engine.mjs';
 import { AlertNotifier } from './lib/alerts/notify.mjs';
 import { installAlertRoutes } from './lib/alerts/routes.mjs';
 import { attachAlertSummary, runAlertStep } from './lib/alerts/sweep.mjs';
+import { SweepArchive } from './lib/sweeps/archive.mjs';
+import { installSweepRoutes } from './lib/sweeps/routes.mjs';
+import { archiveSweep } from './lib/sweeps/step.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
@@ -62,6 +65,12 @@ function recordSnapshotEvents(snapshot) {
 // Alert state lives in runs/alerts/; a missing or corrupt file starts empty and never stops the server.
 const alertEngine = new AlertEngine(RUNS_DIR, { config: { maxActivePerRule: config.alerts.maxActivePerRule } });
 alertEngine.load();
+// Sweep archive in runs/sweeps/: every completed sweep is stored for replay, the changes windows and the source-health matrix.
+// previousArchived is the baseline of the next sweep's changes; after a restart it is the newest archived sweep.
+const sweepArchive = new SweepArchive(RUNS_DIR, { count: config.sweeps.count, maxMb: config.sweeps.maxMb });
+let previousArchived = null;
+try { previousArchived = sweepArchive.latest(); }
+catch (error) { console.error('[Sweeps] Could not read the archive:', error.message); }
 
 // === LLM + Telegram + Discord ===
 const llmProvider = createLLMProvider(config.llm);
@@ -304,6 +313,11 @@ installAlertRoutes(app, { engine: alertEngine, getSnapshot: () => freshLiveSnaps
   if (currentData) currentData.alerts = summary;
   broadcast({ type: 'alerts', data: summary, newIds });
 }, security: { publicUrl: config.alerts.publicUrl, allowedHosts: config.alerts.allowedHosts } });
+installSweepRoutes(app, { archive: sweepArchive, getCurrent: () => currentData });
+
+function archivedSweepCount() {
+  try { return sweepArchive.list().length; } catch { return 0; }
+}
 
 // API: health check
 app.get('/api/health', (req, res) => {
@@ -325,6 +339,8 @@ app.get('/api/health', (req, res) => {
     refreshIntervalMinutes: config.refreshIntervalMinutes,
     language: currentLanguage,
     historyStatus,
+    archiveStatus: sweepArchive.status,
+    archivedSweeps: archivedSweepCount(),
   });
 });
 
@@ -420,6 +436,9 @@ async function runSweepCycle() {
     recordSnapshotEvents(synthesized);
     // Alert engine: never throws and does not wait for the notifications it sends.
     runAlertStep(synthesized, { engine: alertEngine, notifier: alertNotifier, delta });
+    // Sets synthesized.changes and stores the sweep; never throws. After a failed write the next changes are counted from
+    // the last sweep on disk, so the next archived sweep also covers this one.
+    if (!archiveSweep({ archive: sweepArchive, snapshot: synthesized, timing: rawData.timing, previous: previousArchived }).error) previousArchived = synthesized;
     currentData = synthesized;
 
     // 6. Push to all connected browsers
@@ -480,7 +499,8 @@ async function start() {
       const existing = JSON.parse(readFileSync(join(RUNS_DIR, 'latest.json'), 'utf8'));
       const data = await synthesize(existing, { news: [] });
       recordSnapshotEvents(data);
-      // Stale data without a delta: show the stored alerts, do not evaluate.
+      // Stale data without a delta: show the stored alerts, do not evaluate. Not archived: the sweep behind runs/latest.json
+      // was archived when it ran, and this copy is re-synthesized without its news.
       attachAlertSummary(data, alertEngine);
       currentData = data;
       lastSweepTime = data.meta?.timestamp || null;

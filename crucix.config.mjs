@@ -139,6 +139,13 @@ export default {
     maxActivePerRule: envInteger('ALERT_MAX_ACTIVE_PER_RULE', 50, 1, 500),
   },
 
+  // Sweep archive (<RUNS_DIR>/sweeps): replay, changes windows and the source-health matrix. The oldest sweeps go first
+  // once either cap is reached; the newest sweep is always kept.
+  sweeps: {
+    count: envInteger('SWEEP_ARCHIVE_COUNT', 96, 2, 672), // 96 = 24 hours at the default 15-minute sweep
+    maxMb: envInteger('SWEEP_ARCHIVE_MAX_MB', 64, 4, 512),
+  },
+
   // Delta engine thresholds — override defaults from lib/delta/engine.mjs
   // Set to null to use built-in defaults
   delta: {

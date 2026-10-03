@@ -617,6 +617,25 @@ test('a file that cannot be read for a non-corruption reason is skipped once, ne
   assert.deepEqual(gzFiles(dir), [1, 3, 4].map(n => `${idAt(n)}.json.gz`), 'the unreadable file is older than everything kept, yet it stays');
 });
 
+test('a file that vanishes between the size check and the read is missing, not skipped for the process lifetime', t => {
+  const dir = tmp(t);
+  const writer = archiveAt(dir);
+  for (const n of [1, 2]) writer.add({ snapshot: snap(n) });
+  rmSync(indexFile(dir), { force: true });
+  let vanish = true;
+  const log = recorder();
+  const archive = archiveAt(dir, { logger: log, readFile(path) {
+    if (vanish && basename(path) === `${idAt(1)}.json.gz`) throw Object.assign(new Error('gone'), { code: 'ENOENT' });
+    return readFileSync(path);
+  } });
+  assert.deepEqual(archive.list().map(item => item.id), [idAt(2)]);
+  assert.deepEqual(log.lines, [], 'a missing file is no warning');
+  assert.equal(archive.get(idAt(1)), null);
+  vanish = false;
+  // Not remembered as unreadable: once the file reads again (a new file with that name) it is listed again.
+  assert.deepEqual(archive.list().map(item => item.id), [idAt(2), idAt(1)]);
+});
+
 test('an index that cannot be written is not retried or re-read from every file on every call', t => {
   const dir = tmp(t);
   const writer = archiveAt(dir);

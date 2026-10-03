@@ -553,6 +553,8 @@ All settings are in `.env` with sensible defaults:
 | `ALERT_NTFY_TOKEN` | — | Optional ntfy access token (Bearer header) |
 | `ALERT_WEBHOOK_URL` | — | Webhook that receives each alert as a JSON POST |
 | `ALERT_MAX_ACTIVE_PER_RULE` | `50` | Open alerts per rule (1–500); further hits are counted, not opened |
+| `SWEEP_ARCHIVE_COUNT` | `96` | Sweeps kept in `RUNS_DIR/sweeps` for replay, changes and the source-health matrix (2–672; 96 = 24 hours at 15 minutes) |
+| `SWEEP_ARCHIVE_MAX_MB` | `64` | Disk budget of the sweep archive in MB (4–512); the oldest sweeps go first, the newest is always kept |
 
 Delta engine thresholds (how sensitive the system is to changes between sweeps) can be customized in `crucix.config.mjs` under the `delta.thresholds` section. The defaults are tuned to filter out noise while catching meaningful moves.
 

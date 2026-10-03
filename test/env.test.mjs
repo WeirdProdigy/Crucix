@@ -24,20 +24,22 @@ test('port accepts five digits and rejects malformed/out-of-range values', () =>
 
 // The config module reads process.env when it is evaluated, so each case imports a fresh copy (own query string).
 const ALERT_KEYS = ['ALERT_NOTIFY_CHANNELS', 'ALERT_NOTIFY_MIN_SEVERITY', 'ALERT_QUIET_HOURS', 'ALERT_MAX_NOTIFICATIONS_PER_SWEEP', 'ALERT_PUBLIC_URL', 'ALERT_ALLOWED_HOSTS', 'ALERT_NTFY_URL', 'ALERT_NTFY_TOKEN', 'ALERT_WEBHOOK_URL', 'ALERT_MAX_ACTIVE_PER_RULE'];
+const SWEEP_KEYS = ['SWEEP_ARCHIVE_COUNT', 'SWEEP_ARCHIVE_MAX_MB'];
+const CONFIG_KEYS = [...ALERT_KEYS, ...SWEEP_KEYS];
 let freshConfigs = 0;
-async function loadConfig(env = {}) {
-  const saved = Object.fromEntries(ALERT_KEYS.map(key => [key, process.env[key]]));
-  for (const key of ALERT_KEYS) delete process.env[key];
+async function loadConfig(env = {}, section = 'alerts') {
+  const saved = Object.fromEntries(CONFIG_KEYS.map(key => [key, process.env[key]]));
+  for (const key of CONFIG_KEYS) delete process.env[key];
   Object.assign(process.env, env);
   const warnings = [];
   const warn = console.warn;
   console.warn = (...parts) => warnings.push(parts.join(' '));
   try {
     const module = await import(`../crucix.config.mjs?alerts=${++freshConfigs}`);
-    return { config: module.default.alerts, warnings };
+    return { config: module.default[section], warnings };
   } finally {
     console.warn = warn;
-    for (const key of ALERT_KEYS) { if (saved[key] === undefined) delete process.env[key]; else process.env[key] = saved[key]; }
+    for (const key of CONFIG_KEYS) { if (saved[key] === undefined) delete process.env[key]; else process.env[key] = saved[key]; }
   }
 }
 
@@ -112,6 +114,28 @@ test('alert integer settings accept their bounds and reject everything else', as
 test('.env.example documents every ALERT_* key: comment line above, empty value, no inline comment', () => {
   const lines = readFileSync(new URL('../.env.example', import.meta.url), 'utf8').split(/\r?\n/);
   for (const key of ALERT_KEYS) {
+    const index = lines.findIndex(line => line.startsWith(`${key}=`));
+    assert.ok(index > 0, `${key} is missing`);
+    assert.equal(lines[index], `${key}=`, `${key} must have an empty value and no inline comment`);
+    assert.match(lines[index - 1], /^# \S/, `${key} needs a comment line above`);
+  }
+});
+
+test('sweep archive settings: defaults 96 sweeps and 64 MB, bounds 2-672 and 4-512, anything else is refused', async () => {
+  assert.deepEqual((await loadConfig({}, 'sweeps')).config, { count: 96, maxMb: 64 });
+  assert.deepEqual((await loadConfig({ SWEEP_ARCHIVE_COUNT: '', SWEEP_ARCHIVE_MAX_MB: '' }, 'sweeps')).config, { count: 96, maxMb: 64 }, 'empty means unset');
+  assert.deepEqual((await loadConfig({ SWEEP_ARCHIVE_COUNT: '192', SWEEP_ARCHIVE_MAX_MB: '128' }, 'sweeps')).config, { count: 192, maxMb: 128 });
+  for (const [key, field, min, max] of [['SWEEP_ARCHIVE_COUNT', 'count', 2, 672], ['SWEEP_ARCHIVE_MAX_MB', 'maxMb', 4, 512]]) {
+    for (const ok of [min, max]) assert.equal((await loadConfig({ [key]: String(ok) }, 'sweeps')).config[field], ok, `${key}=${ok}`);
+    for (const bad of [String(min - 1), String(max + 1), '-1', '1.5', '5;evil', 'ten', ' 5', '64MB']) {
+      await assert.rejects(loadConfig({ [key]: bad }, 'sweeps'), new RegExp(`${key} must be an integer between ${min} and ${max}`), `${key}=${bad}`);
+    }
+  }
+});
+
+test('.env.example documents the sweep archive keys: comment line above, empty value, no inline comment', () => {
+  const lines = readFileSync(new URL('../.env.example', import.meta.url), 'utf8').split(/\r?\n/);
+  for (const key of SWEEP_KEYS) {
     const index = lines.findIndex(line => line.startsWith(`${key}=`));
     assert.ok(index > 0, `${key} is missing`);
     assert.equal(lines[index], `${key}=`, `${key} must have an empty value and no inline comment`);

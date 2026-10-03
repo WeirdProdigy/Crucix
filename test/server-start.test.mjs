@@ -19,7 +19,7 @@ test('real server starts on a five-digit port with isolated runtime data', { tim
     cwd: new URL('..', import.meta.url), windowsHide: true,
     env: { ...process.env, CRUCIX_ENV_FILE: envFile, RUNS_DIR: join(directory, 'runs'), PORT: String(port), HOST: '127.0.0.1',
       NO_AUTO_OPEN: '1', AUTH_USER: '', AUTH_PASSWORD: '', LLM_PROVIDER: '', TELEGRAM_BOT_TOKEN: '',
-      DISCORD_BOT_TOKEN: '', DISCORD_WEBHOOK_URL: '', TELEGRAM_OSINT_ENABLED: 'false' },
+      DISCORD_BOT_TOKEN: '', DISCORD_WEBHOOK_URL: '', TELEGRAM_OSINT_ENABLED: 'false', SWEEP_ARCHIVE_COUNT: '', SWEEP_ARCHIVE_MAX_MB: '' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let logs = '';
@@ -34,7 +34,13 @@ test('real server starts on a five-digit port with isolated runtime data', { tim
     try {
       const response = await fetch(`http://127.0.0.1:${port}/api/health`);
       assert.equal(response.status, 200);
-      assert.equal((await response.json()).status, 'ok');
+      const health = await response.json();
+      assert.equal(health.status, 'ok');
+      assert.equal(health.archiveStatus, 'ok');
+      assert.ok(Number.isSafeInteger(health.archivedSweeps) && health.archivedSweeps >= 0);
+      const sweeps = await fetch(`http://127.0.0.1:${port}/api/sweeps`);
+      assert.equal(sweeps.status, 200);
+      assert.deepEqual((await sweeps.json()).retention, { count: 96, maxMb: 64 });
       const shell=await fetch(`http://127.0.0.1:${port}/offline-shell`);
       assert.equal(shell.status,200);assert.equal(shell.headers.get('cache-control'),'no-store');
       const html=await shell.text();const empty=JSON.parse(html.match(/^(?:let|const) D = (.*);\s*$/m)[1]);
