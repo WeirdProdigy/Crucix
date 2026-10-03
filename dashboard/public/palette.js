@@ -121,7 +121,7 @@
     sync(false);
     const replayOn=q.length>=MIN_QUERY&&replaying(),quiet=replayOn?say('replayNote'):failed?say('historyFailed'):'';
     write(nodes.note,[!shown.length&&!searching?say('empty'):'',replayOn?quiet:searching?say('searching'):quiet].filter(Boolean).join(' '));
-    write(nodes.status,[countText(shown.length),quiet].filter(Boolean).join(' '));
+    write(nodes.status,[countText(shown.length),quiet].filter(Boolean).join('. '));
   }
   // The selection lives on the input (aria-activedescendant) and the options (aria-selected); the focus never leaves the input.
   function sync(scroll){
@@ -194,14 +194,24 @@
     if(usable(target))target.focus({preventScroll:true});
   }
   function close(){if(opened)finish();}
-  // The item runs after the palette closed and the focus is back: a dialog it opens returns the focus to the same place.
+  // The item runs after the palette closed and the focus is back: a dialog it opens returns the focus to the same place. An item that
+  // rebuilds the top bar (a lens switch re-renders the dashboard) takes the restored focus with the old nodes: the focus then goes to
+  // the node that now carries the opener's id, or to the header button. An item that moved the focus itself is left alone.
   function choose(index){
     const item=shown[index];
     if(!item)return;
+    const back=opener&&typeof opener.id==='string'?opener.id:'';
     close();
     let result;
-    try{result=item.run();}catch(error){log(error);return;}
+    try{result=item.run();}catch(error){log(error);refocus(back);return;}
+    refocus(back);
     Promise.resolve(result).catch(log);
+  }
+  function refocus(back){
+    const now=document.activeElement;
+    if(now&&now!==document.body&&now.isConnected!==false)return;
+    const target=(back&&document.getElementById(back))||document.getElementById('paletteTrigger');
+    if(usable(target))target.focus({preventScroll:true});
   }
   function onKey(event){
     if(event.isComposing)return;

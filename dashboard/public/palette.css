@@ -39,6 +39,7 @@
 @media (prefers-reduced-motion: reduce){.pl-dialog[open]{animation:none}}
 @media (forced-colors: active){
   .pl-field:focus-within{outline:2px solid Highlight;outline-offset:-2px}
-  .pl-opt[aria-selected="true"]{outline:2px solid Highlight;outline-offset:-2px}
+  .pl-opt{border-left-color:Canvas}
+  .pl-opt[aria-selected="true"]{border-left-color:Highlight;outline:2px solid Highlight;outline-offset:-2px}
   .pl-kbd{border-color:CanvasText}
 }

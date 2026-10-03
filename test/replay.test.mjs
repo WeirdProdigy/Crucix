@@ -404,8 +404,8 @@ function pageFunctions(context, ...names) {
   vm.runInContext(code, context);
 }
 
-function pageRealm({ pwa = true } = {}) {
-  const realm = replayRealm({ routes: { '/api/sweeps': listOf(IDS), ...Object.fromEntries(IDS.map(id => ['/api/sweeps/' + id, snapshotOf(id, { events: [{ id: 'archived-event' }] })])) } });
+function pageRealm({ pwa = true, routes = {} } = {}) {
+  const realm = replayRealm({ routes: { '/api/sweeps': listOf(IDS), ...Object.fromEntries(IDS.map(id => ['/api/sweeps/' + id, snapshotOf(id, { events: [{ id: 'archived-event' }] })])), ...routes } });
   const { context, window } = realm, page = { reinit: 0, cache: [], marks: 0, alerts: [], inspector: 0, sources: null };
   const liveAlerts = { generatedAt: REAL, counts: {}, threat: { level: 2 }, live: true };
   const handlers = {};
@@ -636,10 +636,75 @@ test('the disabled header button has its reason as an accessible description', a
   const one = await entered(IDS.slice(0, 1));
   const markup = one.api.button();
   assert.match(markup, /aria-describedby="replayTriggerHint"/);
-  assert.match(markup, /<span class="rp-sr" id="replayTriggerHint">Replay needs at least two archived sweeps\.<\/span>/);
+  assert.match(markup, /<span class="rp-sr" id="replayTriggerHint" hidden>Replay needs at least two archived sweeps\.<\/span>/, 'hidden: only the reference reads it');
   assert.equal(one.trigger.getAttribute('aria-describedby'), 'replayTriggerHint');
   const two = await entered(IDS.slice(0, 2));
   assert.doesNotMatch(two.api.button(), /aria-describedby/); assert.equal(two.trigger.getAttribute('aria-describedby'), null);
+  // A screen reader must not read "Replay needs at least two archived sweeps." next to the working button: the node is hidden.
+  assert.match(two.api.button(), /<\/button><span class="rp-sr" id="replayTriggerHint" hidden>/, 'the enabled button\'s neighbour is hidden too');
+  assert.doesNotMatch(two.api.button(), /id="replayTriggerHint">/, 'never a visible-to-assistive-technology hint');
+});
+
+// ===== Final review fixes =====
+test('a failure before entry moves the focus to Dismiss: from the hidden slider, and from a page whose opener left (a pruned matrix cell)', async () => {
+  const realm = await entered(IDS, { routes: { ['/api/sweeps/' + IDS[3]]: () => Promise.reject(httpError(503)) } });
+  realm.trigger.focus(); realm.trigger.click(); await tick();
+  const dismiss = byAction(realm.root, 'exit');
+  assert.equal(dismiss.textContent, 'Dismiss');
+  assert.ok(realm.document.activeElement === dismiss, 'the slider took the focus while loading and is hidden now: Dismiss has it');
+  dismiss.click();
+  assert.ok(realm.document.activeElement === realm.trigger, 'Dismiss returns the focus to the header button');
+  // The matrix closes itself (focus: false) before the replay opens a sweep that left the archive: the focus is on the body.
+  realm.document.activeElement = realm.document.body;
+  assert.equal(await realm.api.open('sweep-20200101T000000Z'), false);
+  assert.match(statusText(realm), /no longer in the archive/);
+  assert.ok(realm.document.activeElement === byAction(realm.root, 'exit'), 'Dismiss takes the focus');
+  // A failed step inside a replay keeps the focus where it is (the replay goes on).
+  const inside = await entered(IDS, { routes: { ['/api/sweeps/' + IDS[2]]: () => Promise.reject(httpError(503)) } });
+  await inside.api.open();
+  byAction(inside.root, 'prev').focus(); byAction(inside.root, 'prev').click(); await tick();
+  assert.match(statusText(inside), /Could not load this sweep/);
+  assert.ok(inside.document.activeElement === byAction(inside.root, 'prev'), 'a step failure moves nothing');
+});
+
+test('re-entering while an exit still waits for /api/data keeps the pre-replay live snapshot: the archived one is never restored or cached as live', async () => {
+  const reads = [];
+  // /api/data: the first read (the first exit) waits, every later one fails.
+  const realm = pageRealm({ routes: { '/api/data': () => { const call = reads.length; reads.push(call); return call === 0 ? new Promise((_, no) => { reads.fail = no; }) : Promise.reject(new Error('offline')); } } });
+  const { context, page, api } = realm;
+  await tick();
+  const shown = context.D.meta.timestamp;
+  await api.open(IDS[2]);
+  api.exit();
+  assert.equal(context.D.meta.timestamp, sweepTime(IDS[2]), 'the first exit waits for /api/data: the archived sweep is still on screen');
+  assert.equal(await api.open(IDS[1]), true, 're-entered before the answer');
+  api.exit(); await tick();
+  assert.equal(reads.length, 2);
+  assert.equal(context.D.meta.timestamp, shown, 'the second exit (/api/data down) restores the live snapshot from before the first replay');
+  assert.ok(!page.cache.includes(sweepTime(IDS[2])) && !page.cache.includes(sweepTime(IDS[1])), 'no archived snapshot reached the offline cache');
+  assert.deepEqual(page.cache, [shown]);
+  reads.fail(new Error('late')); await tick();
+  assert.equal(context.D.meta.timestamp, shown, 'the stale first read changes nothing');
+  // A re-entry that fails before it starts: the page goes back to live data instead of keeping the archived sweep.
+  const failing = pageRealm({ routes: { '/api/data': () => { const call = reads.length; reads.push(call); return call === 2 ? new Promise(() => {}) : Promise.reject(new Error('offline')); }, ['/api/sweeps/' + IDS[0]]: () => Promise.reject(httpError(503)) } });
+  await tick();
+  const before = failing.context.D.meta.timestamp;
+  await failing.api.open(IDS[3]); failing.api.exit();
+  assert.equal(failing.context.D.meta.timestamp, sweepTime(IDS[3]), 'the exit waits for /api/data');
+  assert.equal(await failing.api.open(IDS[0]), false, 'the re-entry fails');
+  await tick();
+  assert.equal(failing.api.active(), false);
+  assert.equal(failing.context.D.meta.timestamp, before, 'the live snapshot from before the replay is back');
+  assert.ok(!failing.page.cache.includes(sweepTime(IDS[3])), 'the archived sweep was never cached as live');
+  // A live update applied by the page meanwhile is the live data: nothing older replaces it later.
+  let calls = 0;
+  const updated = pageRealm({ routes: { '/api/data': () => (calls++ === 0 ? new Promise(() => {}) : Promise.reject(new Error('offline'))) } });
+  await tick();
+  await updated.api.open(IDS[2]); updated.api.exit();
+  assert.equal(updated.api.offerLive(live(30)), true); updated.context.applySnapshot(live(30));
+  assert.equal(await updated.api.open(IDS[1]), true);
+  updated.api.exit(); await tick();
+  assert.equal(updated.context.D.meta.timestamp, live(30).meta.timestamp, 'the live update, not the older pre-replay snapshot, is what comes back');
 });
 
 test('open(): a later open wins over an earlier one whose list answer comes back last', async () => {

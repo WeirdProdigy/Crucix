@@ -21,9 +21,14 @@ button.live-group-head:focus-visible{outline:2px solid var(--accent);outline-off
 button.live-group-head[aria-expanded="true"] .lg-caret{transform:rotate(90deg)}
 .lg-name{flex:1 1 auto;min-width:0;font-size:12px;font-weight:600;letter-spacing:.02em;overflow-wrap:anywhere}
 .lg-worst{flex:0 0 auto;font-size:10px;font-weight:600;white-space:nowrap}.lg-worst i{font-style:normal}
-.lg-sub{flex-wrap:wrap;gap:3px 6px;margin-top:1px;padding-left:14px;font-size:10px;line-height:1.4;color:var(--dim)}
-.lg-chip{padding:0 5px;border:1px solid currentColor;border-radius:8px;color:var(--warn,#ffb84c);overflow-wrap:anywhere}.lg-chip.lg-error{color:var(--danger,#ff5f63)}.lg-chip.lg-more{color:var(--dim)}
+/* The counts and chips stay on one line whatever fails, so a collapsed group is always two lines (spec: <= 420 px collapsed): the source
+   chips shrink with an ellipsis (the button's accessible name and each chip's title keep the full text), the counts and "+N" stay whole. */
+.lg-sub{flex-wrap:nowrap;overflow:hidden;gap:6px;margin-top:1px;padding-left:14px;font-size:10px;line-height:1.4;color:var(--dim)}
+.lg-counts{flex:0 0 auto;white-space:nowrap}
+.lg-chip{flex:0 1 auto;min-width:0;padding:0 5px;border:1px solid currentColor;border-radius:8px;line-height:12px;color:var(--warn,#ffb84c);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.lg-chip.lg-error{color:var(--danger,#ff5f63)}.lg-chip.lg-more{flex:0 0 auto;color:var(--dim)}
 .lg-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 .live-group-body{padding:0 0 4px 14px}.live-group-body[hidden]{display:none}
 @media(max-width:700px){.live-open{min-height:44px}button.live-group-head{min-height:44px}}
 @media(prefers-reduced-motion:reduce){.lg-caret{transition:none}}
+/* Forced colours drop box-shadow: the attention bar becomes a real border (the "Needs attention" text is there for screen readers). */
+@media(forced-colors:active){.live-group[data-attention="true"]>.live-group-head{border-left:3px solid CanvasText}}

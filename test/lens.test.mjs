@@ -120,12 +120,35 @@ test('group expansion: attention groups start open, a choice persists while the 
   assert.equal(again.expanded('economy', true), true, 'a group that now needs attention is open');
   assert.equal(again.expanded('hazards', false), false, 'the old choice no longer applies: the calm default');
   assert.equal(again.expanded('hazards', true), true, 'and it does not come back');
-  assert.deepEqual(JSON.parse(storage.map.get('crucix.liveGroups')), {});
+  assert.deepEqual(JSON.parse(storage.map.get('crucix.liveGroups')), { economy: { open: true, attention: false } }, 'the collapsed choice is dropped, the opened one is kept');
   for (const stored of ['nope', '[1]', '{"__proto__":{"open":true,"attention":false},"hazards":{"open":"yes","attention":false},"bogus":{"open":true,"attention":false}}']) {
     const fresh = realm({ storage: memory({ 'crucix.liveGroups': stored }) }).window.CrucixLens;
     assert.equal(fresh.expanded('hazards', false), false, stored); assert.equal(fresh.expanded('bogus', true), true, stored);
   }
   assert.doesNotThrow(() => lens.toggle('__proto__')); assert.doesNotThrow(() => lens.toggle(null));
+});
+
+test('group expansion: a group the user opened stays open when its attention flips true -> false; a collapsed one is dropped when it starts needing attention', () => {
+  const storage = memory(), lens = realm({ storage }).window.CrucixLens;
+  // A calm group opened by hand, then it needs attention, then it is calm again: open all the way.
+  assert.equal(lens.expanded('economy', false), false);
+  assert.equal(lens.toggle('economy'), true);
+  assert.equal(lens.expanded('economy', true), true);
+  assert.equal(lens.expanded('economy', false), true, 'still open after the attention went away');
+  assert.equal(realm({ storage }).window.CrucixLens.expanded('economy', false), true, 'and on a new page');
+  // An attention group opened by hand (closed, then opened again) stays open when it calms down.
+  assert.equal(lens.expanded('cyber', true), true);
+  lens.toggle('cyber'); assert.equal(lens.expanded('cyber', true), false);
+  lens.toggle('cyber'); assert.equal(lens.expanded('cyber', true), true);
+  assert.equal(lens.expanded('cyber', false), true, 'opened by hand: open while calm');
+  // A collapsed calm group that starts needing attention opens (the choice is dropped) and is calm-closed afterwards.
+  lens.expanded('supply', false); lens.toggle('supply'); lens.toggle('supply');
+  assert.equal(lens.expanded('supply', false), false);
+  assert.equal(lens.expanded('supply', true), true, 'attention opens a collapsed group');
+  assert.equal(lens.expanded('supply', false), false, 'the dropped choice does not come back: the calm default');
+  assert.ok(!Object.hasOwn(JSON.parse(storage.map.get('crucix.liveGroups')), 'supply'));
+  // The user closes an opened group: closed until its attention state changes.
+  lens.toggle('economy'); assert.equal(lens.expanded('economy', false), false);
 });
 
 // Nineteen current sources, one record each (GDACS high, so hazards needs attention), at a fixed time.
@@ -208,9 +231,9 @@ test('a hostile source name is escaped in the attention chip and in the card att
   const html = api.renderPanel([liveRow('GDACS'), { ...liveRow(HOSTILE), status: 'error' }, { ...liveRow('EMSC'), status: 'error' }], t, [], now);
   const hazards = sections(html).find(section => groupOf(section) === 'hazards');
   assert.ok(hazards, 'the hostile source is grouped');
-  assert.ok(hazards.includes(`<span class="lg-chip lg-error">${ESCAPED}: Unavailable</span>`), 'the chip names it, escaped');
+  assert.ok(hazards.includes(`<span class="lg-chip lg-error" title="${ESCAPED}: Unavailable">${ESCAPED}: Unavailable</span>`), 'the chip names it, escaped (text and title)');
   assert.ok(hazards.includes(`data-live-source="${ESCAPED}"`), 'and so does the card attribute');
-  assert.ok(hazards.includes('<span class="lg-chip lg-error">EMSC: Unavailable</span>'), 'the other chip is as before');
+  assert.ok(hazards.includes('<span class="lg-chip lg-error" title="EMSC: Unavailable">EMSC: Unavailable</span>'), 'the other chip is as before');
   assert.ok(!html.includes('<img'), 'no markup from the name'); assert.ok(!html.includes('onerror="alert(1)"'), 'no raw quote in an attribute');
 });
 
@@ -226,6 +249,23 @@ test('a domain lens shows only its own group, open and not collapsible; a lens w
   assert.deepEqual(cardsIn(empty), []); assert.ok(empty.includes('No live source belongs to this domain'));
   window.CrucixLens.set('all');
   assert.equal(cardsIn(api.renderPanel(nineteen(), t, [], now)).length, 19);
+});
+
+test('the live panel badge counts the cards it shows: current / shown under a domain lens, like the source-health badge', () => {
+  const storage = memory(), { window } = realm({ files: PANEL_FILES, storage }), api = window.CrucixLiveSources;
+  const sources = nineteen({ GDACS: { status: 'error' }, ECB: { status: 'error' }, 'IMF-PortWatch': { observedAt: '2020-01-01T00:00:00Z' } });
+  const badge = html => html.match(/<span class="badge">([^<]*)<\/span>/)[1];
+  assert.equal(badge(api.renderPanel(sources, t, [], now)), '16/19', 'all: every card');
+  for (const lens of DOMAIN_IDS) {
+    window.CrucixLens.set(lens);
+    const html = api.renderPanel(sources, t, [], now), cards = Object.keys(POLICIES).filter(name => domainOfSource(name) === lens);
+    const ok = cards.filter(name => !['GDACS', 'ECB', 'IMF-PortWatch'].includes(name)).length;
+    assert.equal(badge(html), `${ok}/${cards.length}`, lens);
+    assert.equal(cardsIn(html).length, cards.length, lens + ': the badge counts the cards on screen');
+  }
+  assert.equal(badge((window.CrucixLens.set('all'), api.renderPanel(sources, t, [], now))), '16/19');
+  const flat = realm({ files: ['record-core.js', 'live-sources.js'] }).window.CrucixLiveSources;
+  assert.equal(badge(flat.renderPanel(sources, t, [], now)), '16/19', 'without the lens modules every card counts');
 });
 
 test('without domains.js or lens-core.js the panel keeps the flat card list', () => {
@@ -345,6 +385,67 @@ test('jarvis.html loads domains.js, lens-core.js and lens.js in order, mounts th
   for (const path of ['/domains.js', '/lens-core.js', '/lens.js', '/lens.css']) assert.ok(base.includes(path), path);
   assert.equal(new Set(base).size, base.length);
   for (const file of ['lens-core.js', 'lens.js']) { const source = read('dashboard/public/' + file); assert.ok(/^\(function\(window\)\{/.test(source), file); assert.ok(!/\son[a-z]+\s*=\s*["']/i.test(source), file + ': no inline handlers'); }
+});
+
+test('live-sources.css keeps the chip line to one line ("+N" whole) and both box-shadow markers have a forced-colours fallback', () => {
+  const css = read('dashboard/public/live-sources.css'), lens = read('dashboard/public/lens.css');
+  const rule = (text, selector) => text.match(new RegExp('(?:^|\\})' + selector.replace(/[.[\]()*+?^$|\\]/g, '\\$&') + '\\{([^}]*)\\}', 'm'))?.[1] ?? '';
+  assert.match(rule(css, '.lg-sub'), /flex-wrap:nowrap/, 'the chip line never wraps (spec 1.2: <= 420 px collapsed in every state)');
+  assert.match(rule(css, '.lg-sub'), /overflow:hidden/);
+  assert.match(rule(css, '.lg-chip'), /text-overflow:ellipsis/); assert.match(rule(css, '.lg-chip'), /white-space:nowrap/); assert.match(rule(css, '.lg-chip'), /min-width:0/);
+  assert.doesNotMatch(rule(css, '.lg-chip'), /overflow-wrap:anywhere/, 'a chip does not break onto a second line');
+  assert.match(rule(css, '.lg-chip.lg-more'), /flex:0 0 auto/, 'the "+N" chip never shrinks');
+  assert.match(rule(css, '.lg-counts'), /flex:0 0 auto/);
+  assert.match(css, /@media\s*\(forced-colors:\s*active\)\s*\{\s*\.live-group\[data-attention="true"\]>\.live-group-head\{[^}]*border-left:[^}]*solid/, 'the attention bar is a border in forced colours');
+  assert.match(lens, /@media\s*\(forced-colors:\s*active\)\s*\{\s*\.lens-btn\[aria-pressed="true"\]\{[^}]*text-decoration:underline/, 'the pressed lens is underlined in forced colours');
+});
+
+// keepLiveFocus, refreshLiveFreshness and rerenderDashboard in one realm with a fake page whose live panel is replaced with new nodes.
+function focusPage() {
+  const body = { tag: 'body' }, doc = { body, activeElement: body, buttons: [] };
+  const button = (name, value) => ({ name, value, isConnected: true, focused: 0, getAttribute(attribute) { return attribute === this.name ? this.value : null; }, focus(options) { this.focused++; this.options = options; doc.activeElement = this; } });
+  // The browser moves the focus to <body> when the focused node leaves the page.
+  const redraw = () => { for (const node of doc.buttons) node.isConnected = false; if (doc.buttons.includes(doc.activeElement)) doc.activeElement = body; doc.buttons = [button('data-live-group', 'hazards'), button('data-open-records', 'GDACS'), button('data-open-records', 'EMSC')]; };
+  redraw();
+  doc.querySelector = selector => (selector === '.live-sources-panel' ? { set outerHTML(_value) { redraw(); } } : null);
+  doc.querySelectorAll = selector => doc.buttons.filter(node => selector === '[' + node.name + ']');
+  const context = vm.createContext({ document: doc, window: {}, D: { liveSources: [{ source: 'GDACS' }] }, t, liveExpirySignature: '', flatG: null, plotMarkers() {}, buildSourceHealthPanel: () => '',
+    currentSnapshot: () => ({ events: [] }), CrucixLiveSources: { state: () => 'ok', observations: () => [], renderPanel: () => '<div class="live-sources-panel"></div>' },
+    renderTopbar() {}, renderMapVisibility() {}, renderLeftRail() {}, renderLower() {}, renderRight: redraw, isFixedModuleVisible: () => false });
+  for (const name of ['keepLiveFocus', 'refreshLiveFreshness', 'rerenderDashboard']) {
+    const start = html.indexOf(`\nfunction ${name}(`); assert.ok(start > 0, name);
+    vm.runInContext(html.slice(start, html.indexOf('\nfunction ', start + 1)), context);
+  }
+  return { doc, context, find: (name, value) => doc.buttons.find(node => node.name === name && node.value === value) };
+}
+
+test('the 30 s outerHTML swap and a live update keep the focus on the same live group header or "Open records" button', () => {
+  const page = focusPage(), { doc, context, find } = page;
+  find('data-live-group', 'hazards').focus();
+  context.refreshLiveFreshness();
+  const header = find('data-live-group', 'hazards');
+  assert.ok(doc.activeElement === header && header.isConnected, 'the new hazards header has the focus after the 30 s swap');
+  assert.equal(JSON.stringify(header.options), '{"preventScroll":true}', 'without scrolling the page');
+  find('data-open-records', 'EMSC').focus();
+  context.rerenderDashboard();
+  assert.ok(doc.activeElement === find('data-open-records', 'EMSC'), 'the new EMSC button has the focus after the rails were rebuilt (a live update)');
+  // Elsewhere on the page (a lens button): untouched; nothing at all focused: the body stays.
+  const other = { getAttribute: () => null, isConnected: true }; doc.activeElement = other;
+  context.liveExpirySignature = 'changed'; context.refreshLiveFreshness();
+  assert.ok(doc.activeElement === other, 'a focus outside the live panel is left alone');
+  doc.activeElement = doc.body; context.rerenderDashboard();
+  assert.ok(doc.activeElement === doc.body, 'no focus is invented');
+  // A group that is gone after the redraw: the focus is not moved anywhere else.
+  doc.buttons.push({ name: 'data-live-group', value: 'space', isConnected: true, getAttribute(attribute) { return attribute === this.name ? this.value : null; }, focus() { doc.activeElement = this; } });
+  doc.buttons.at(-1).focus(); context.rerenderDashboard();
+  assert.ok(doc.activeElement === doc.body, 'no node with that group: the focus stays where the browser put it');
+  // A render that moved the focus somewhere else on purpose, or that kept the focused node: nothing is taken back or refocused.
+  const gdacs = find('data-open-records', 'GDACS'), mover = { getAttribute: () => null, isConnected: true, focus() { doc.activeElement = this; } };
+  gdacs.focus(); const before = gdacs.focused;
+  context.keepLiveFocus(() => mover.focus());
+  assert.ok(doc.activeElement === mover, 'the render\'s own focus move wins');
+  gdacs.focus(); context.keepLiveFocus(() => {});
+  assert.ok(doc.activeElement === gdacs); assert.equal(gdacs.focused, before + 1, 'a node that stayed is not focused again');
 });
 
 test('the lenses locale group carries the group-header strings in en, hu and fr', () => {

@@ -140,6 +140,24 @@ test('render: every state has a glyph and a visually hidden word, never colour a
   assert.deepEqual([...row.matchAll(/data-hm-sweep="([^"]+)"/g)].map(match => match[1]), IDS, 'each cell names its own sweep');
 });
 
+test('render: each cell button is named by source, sweep time and state ("GDELT, Oct 3 09:00, OK"), escaped, in the page language', () => {
+  const { matrix } = mounted({ t: localT('en') });
+  const out = matrix.render(MODEL);
+  const labels = [...out.matchAll(/<button type="button" class="hm-cell"[^>]*aria-label="([^"]*)">/g)].map(match => match[1]);
+  assert.equal(labels.length, 15, 'every clickable cell has a name');
+  const time = (ms, locale = 'en-US') => { const date = new Date(ms); return date.toLocaleDateString(locale, { month: 'short', day: 'numeric' }) + ' ' + date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }); };
+  const at = MODEL.sweeps.map(entry => time(Date.parse(entry.timestamp)));
+  assert.deepEqual(labels.slice(0, 3), [`GDELT, ${at[0]}, OK`, `GDELT, ${at[1]}, OK`, `GDELT, ${at[2]}, Error`]);
+  assert.ok(labels.includes(`GDACS, ${at[0]}, No data`) && labels.includes(`GDACS, ${at[1]}, Disabled`) && labels.includes(`USGS, ${at[1]}, Stale`));
+  assert.match(out, /tabindex="-1" aria-label="[^"]*">/, 'the name is the last attribute of the cell (test/structure-chain.test.mjs reads the cells in order)');
+  // The page language (a broken list time falls back to the id's time, as the column header does) and a hostile source name.
+  const hu = mounted({ t: localT('hu'), locale: 'hu-HU' }).matrix.render({ sweeps: [{ id: IDS[1], timestamp: 'yesterday' }], sources: [{ source: '<img src=x onerror="alert(1)">', domain: 'hazards', cells: [[1, 5]] }] });
+  const name = /aria-label="([^"]*)"/.exec(hu)[1];
+  assert.equal(name, `&lt;img src=x onerror=&quot;alert(1)&quot;&gt;, ${time(Date.parse('2026-10-03T09:15:00Z'), 'hu-HU')}, ${strings('hu').get('matrix.stateStale')}`);
+  assert.ok(!hu.includes('<img'));
+  for (const [lang, word] of [['en', /arrow keys/], ['hu', /nyílbillentyű/], ['fr', /flèches/]]) assert.match(strings(lang).get('matrix.openHint'), word, lang + ': the hint names the arrow keys');
+});
+
 test('render: unknown codes and short or missing cell lists read as no data and keep the columns aligned', () => {
   const { matrix } = mounted({ t: localT('en') });
   const out = matrix.render({ sweeps: MODEL.sweeps, sources: [{ source: 'USGS', domain: 'hazards', cells: [[0, 1], [9, 1], 'x'] }, { source: 'ECB', domain: 'economy' }, { source: 'FRED', domain: 'economy', cells: [[2, 3]] }] });
@@ -862,4 +880,11 @@ test('the page wires one mount line, and the replay bar and the matrix share the
   assert.equal(count(html, /CrucixReplay\?\.mount\(/g), 1);
   assert.ok(html.includes('locale:uiLocale()'));
   assert.equal(count(html, /locale:uiLocale\(\)/g), 3, 'the replay bar, the matrix and the changes panel take their locale from the helper');
+});
+
+test('health-matrix.css: the column times keep room between them (measured at 390 px: 1 px padding left 2 px between labels)', () => {
+  const css = read('dashboard/public/health-matrix.css'), rule = css.match(/\.hm-time\{([^}]*)\}/)[1];
+  const [vertical, horizontal = vertical] = rule.match(/padding:([^;}]+)/)[1].trim().split(/\s+/);
+  assert.ok(parseFloat(horizontal) >= 3, 'side padding of a time header: ' + horizontal);
+  assert.ok(parseFloat(rule.match(/min-width:(\d+)px/)[1]) >= 36, 'a column fits the five-character time and its padding');
 });

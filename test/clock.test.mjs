@@ -184,7 +184,7 @@ function livePage(pick = row => [row], real) {
   context.CrucixLiveSources = window.CrucixLiveSources;
   window.CrucixIntelligence = { update: snapshot => { updates.push(snapshot.events.map(event => event.id)); } };
   window.CrucixRecordInspector = { refresh() {} };
-  pageFunctions(context, 'clockNow', 'getAge', 'esc', 'lensMatchesSource', 'sourceState', 'buildSourceHealthPanel', 'currentSnapshot', 'refreshLiveFreshness');
+  pageFunctions(context, 'clockNow', 'getAge', 'esc', 'lensMatchesSource', 'sourceState', 'buildSourceHealthPanel', 'currentSnapshot', 'keepLiveFocus', 'refreshLiveFreshness');
   return { window, state, context, swapped, updates, eventId };
 }
 

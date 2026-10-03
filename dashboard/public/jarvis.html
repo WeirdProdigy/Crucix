@@ -910,9 +910,8 @@ function renderMapVisibility(){
 function rerenderDashboard(forceMapRefresh=false){
   renderTopbar();
   renderMapVisibility();
-  renderLeftRail();
-  renderLower();
-  renderRight();
+  // The rails are rebuilt with innerHTML: a focused live-panel button gets its focus back on the new node (keepLiveFocus).
+  keepLiveFocus(()=>{renderLeftRail();renderLower();renderRight();});
   if(forceMapRefresh && isFixedModuleVisible('map')) requestAnimationFrame(() => refreshMapViewport(true));
 }
 
@@ -1705,6 +1704,18 @@ function applyLens(){
   window.CrucixRecordInspector?.refresh();
   plotMarkers();if(flatG){flatG.selectAll('.markers,.corridors-layer').remove();plotFlatMarkers();}
 }
+// The live panel is redrawn with outerHTML (the 30 s tick) and with the rails (every live update): a focused group header or "Open
+// records" button goes with its old node. After render() the button that carries the same group or source takes the focus back.
+function keepLiveFocus(render){
+  const node=document.activeElement,group=node?.getAttribute?.('data-live-group')??null,source=node?.getAttribute?.('data-open-records')??null;
+  render();
+  if(group===null&&source===null)return;
+  const now=document.activeElement;
+  if(now&&now!==document.body&&now.isConnected!==false)return;
+  const name=group!==null?'data-live-group':'data-open-records',value=group!==null?group:source;
+  const next=[...document.querySelectorAll('['+name+']')].find(item=>item.getAttribute(name)===value);
+  next?.focus({preventScroll:true});
+}
 function currentSnapshot(){
   const rows=CrucixLiveSources.observations(D.liveSources);
   const names=new Set(Object.keys(CrucixLiveSources.policies)),ids=new Set(rows.map(row=>row.eventId).filter(Boolean));
@@ -1719,7 +1730,7 @@ function refreshLiveFreshness(){
   window.CrucixIntelligence?.update(currentSnapshot());
   window.CrucixRecordInspector?.refresh();
   const panel=document.querySelector('.live-sources-panel');
-  if(panel)panel.outerHTML=CrucixLiveSources.renderPanel(D.liveSources,t,currentSnapshot().events);
+  if(panel)keepLiveFocus(()=>{panel.outerHTML=CrucixLiveSources.renderPanel(D.liveSources,t,currentSnapshot().events);});
   const healthPanel=document.querySelector('.source-health-panel');
   if(healthPanel)healthPanel.outerHTML=buildSourceHealthPanel();
   plotMarkers();if(flatG){flatG.selectAll('.markers,.corridors-layer').remove();plotFlatMarkers();}
@@ -2303,8 +2314,9 @@ function paletteActions(){
   const say=(key,fallback)=>t('palette.'+key,fallback),item=(id,label,run,hint='',keywords=[])=>({id,group:'action',label,hint,keywords,run});
   const archive=location.protocol!=='file:'&&!window.__CRUCIX_OFFLINE_SHELL__,list=[];
   if(document.getElementById('alertTray')&&window.CrucixAlerts?.open)list.push(item('alerts',say('openAlerts','Open alerts'),()=>window.CrucixAlerts.open()));
-  list.push(item('settings',say('openSettings','Open settings'),()=>openSettings()));
-  list.push(item('glossary',say('openGlossary','Open the signal guide'),()=>openGlossary()));
+  // The words of the header buttons are keywords too: searching what the button says ("signals mean", "jelentése", "réglages") finds its action.
+  list.push(item('settings',say('openSettings','Open settings'),()=>openSettings(),'',[t('dashboard.settings','Settings')]));
+  list.push(item('glossary',say('openGlossary','Open the signal guide'),()=>openGlossary(),'',[t('dashboard.guideBtn','What Signals Mean')]));
   if(archive&&window.CrucixHealthMatrix?.open)list.push(item('matrix',say('openMatrix','Open the source health matrix'),()=>window.CrucixHealthMatrix.open()));
   if(window.CrucixRecordInspector?.open)list.push(item('browser',say('openBrowser','Open the record browser (all sources)'),()=>window.CrucixRecordInspector.open('all')));
   if(archive&&window.CrucixReplay?.open)list.push(window.CrucixReplay.active?.()?item('replay',say('exitReplay','Back to live'),()=>window.CrucixReplay.exit()):item('replay',say('startReplay','Replay archived sweeps'),()=>window.CrucixReplay.open()));

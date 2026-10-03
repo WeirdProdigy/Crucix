@@ -150,6 +150,8 @@ test('the changes group has the same keys in the same order in en, hu and fr, ea
     assert.equal(new Set(['windowLast', 'window1h', 'window6h', 'window24h'].map(key => group[key])).size, 4, `${lang}: four distinct window labels`);
   }
   assert.deepEqual(LANGS.map(lang => locale(lang).changes.title), ['What changed', 'Mi változott', 'Ce qui a changé']);
+  // "Mind megjelenítése" reads as "show them" in Hungarian; "Összes megjelenítése" is the natural "Show all".
+  assert.deepEqual(LANGS.map(lang => locale(lang).changes.showAll), ['Show all {count}', 'Összes megjelenítése ({count})', 'Tout afficher ({count})']);
   const panelKeys = lang => Object.keys(locale(lang).panels);
   assert.deepEqual(panelKeys('hu'), panelKeys('en'));
   assert.deepEqual(panelKeys('fr'), panelKeys('en'));

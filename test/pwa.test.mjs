@@ -55,3 +55,11 @@ test('all pinned vendor assets match the SHA-256 ledger',()=>{
     assert.equal(createHash('sha256').update(data).digest('hex'),asset.sha256,asset.path);
   }
 });
+
+test('shell text: no mojibake (UTF-8 read as Latin-1) in the dashboard files and one list style for the shell paths',()=>{
+  const dir=new URL('../dashboard/public/',import.meta.url);
+  for(const name of ['pwa.js','sw.js','replay.js','palette.js','health-matrix.js','changes.js','live-sources.js','lens.js','jarvis.html'])assert.doesNotMatch(readFileSync(new URL(name,dir),'utf8'),/â€|Ã[\u0080-¿]/,name);
+  assert.match(readFileSync(new URL('pwa.js',dir),'utf8'),/Use your browser’s Install app menu/,'the install help fallback has a real apostrophe');
+  const sw=readFileSync(new URL('sw.js',dir),'utf8'),base=sw.match(/const BASE = \[([^\]]*)\];/)[1];
+  assert.doesNotMatch(base,/','/,'every shell path is followed by a comma and a space');
+});

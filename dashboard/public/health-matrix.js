@@ -18,7 +18,7 @@
   const STEPS=[12,24,48,96,192,384],DEFAULT_SWEEPS=48;
   const STATES={0:'ok',1:'stale',2:'error',3:'disabled'},GLYPHS={ok:'✓',stale:'◔',error:'✕',disabled:'–',nodata:'·'};
   const WORDS={ok:'stateOk',stale:'stateStale',error:'stateError',disabled:'stateDisabled',nodata:'stateNoData'};
-  const COPY={title:'Source health matrix',trigger:'Matrix',caption:'Source status in each archived sweep, oldest to newest',openHint:'The newest sweep is on the right. Select a cell to replay that sweep.',
+  const COPY={title:'Source health matrix',trigger:'Matrix',caption:'Source status in each archived sweep, oldest to newest',openHint:'The newest sweep is on the right. Select a cell to replay that sweep; the arrow keys move between the cells.',
     sweeps:'Sweeps shown',source:'Source',ms:'Last run (ms)',stateOk:'OK',stateStale:'Stale',stateError:'Error',stateDisabled:'Disabled',stateNoData:'No data',other:'Other sources',
     loading:'Loading the matrix…',empty:'No archived sweeps yet.',noSources:'No source reported for this domain in the shown sweeps.',
     error:'Could not load the source health. Close and reopen this window to try again.',close:'Close'};
@@ -69,17 +69,21 @@
     // Tab does not scroll it back); the arrow keys move between the cells.
     const valid=entry=>!!entry&&typeof entry==='object'&&typeof entry.id==='string'&&SWEEP_ID.test(entry.id);
     const stopColumn=sweeps.map(valid).lastIndexOf(true);
-    const cell=(code,entry,stop)=>{
+    // A cell button's accessible name says which source, which sweep and which state ("GDELT, Oct 3 09:00, OK"): the arrow keys move
+    // across rows and columns, so the word alone would not tell where the focus is.
+    // (A real sweep id always has a time: the id's own when the list's timestamp is unreadable.)
+    const when=sweeps.map(entry=>{if(!valid(entry))return '';const stamp=stamps(sweepTime(entry));return escHtml(stamp.day+' '+stamp.time);});
+    const cell=(code,entry,stop,source,index)=>{
       const state=typeof code==='number'&&Object.hasOwn(STATES,code)?STATES[code]:'nodata';
       const inner=`<span class="hm-g" aria-hidden="true">${GLYPHS[state]}</span><span class="hm-sr">${words[state]}</span>`;
       if(!valid(entry))return `<td class="hm-c"><span class="hm-cell" data-state="${state}">${inner}</span></td>`;
-      return `<td class="hm-c"><button type="button" class="hm-cell" data-state="${state}" data-hm-sweep="${escHtml(entry.id)}" tabindex="${stop?0:-1}">${inner}</button></td>`;
+      return `<td class="hm-c"><button type="button" class="hm-cell" data-state="${state}" data-hm-sweep="${escHtml(entry.id)}" tabindex="${stop?0:-1}" aria-label="${escHtml(source)}, ${when[index]}, ${words[state]}">${inner}</button></td>`;
     };
     const row=item=>{
       const cells=Array.isArray(item.cells)?item.cells:[],last=cells[sweeps.length-1],stopRow=firstRow;
       firstRow=false;
       const ms=Array.isArray(last)&&typeof last[1]==='number'&&Number.isFinite(last[1])&&last[1]>=0?Math.round(last[1]):null;
-      return `<tr class="hm-row"><th scope="row" class="hm-src">${escHtml(item.source)}</th>${sweeps.map((entry,index)=>cell(Array.isArray(cells[index])?cells[index][0]:undefined,entry,stopRow&&index===stopColumn)).join('')}<td class="hm-ms">${ms===null?`<span aria-hidden="true">—</span><span class="hm-sr">${words.nodata}</span>`:ms}</td></tr>`;
+      return `<tr class="hm-row"><th scope="row" class="hm-src">${escHtml(item.source)}</th>${sweeps.map((entry,index)=>cell(Array.isArray(cells[index])?cells[index][0]:undefined,entry,stopRow&&index===stopColumn,item.source,index)).join('')}<td class="hm-ms">${ms===null?`<span aria-hidden="true">—</span><span class="hm-sr">${words.nodata}</span>`:ms}</td></tr>`;
     };
     const body=groups.map(group=>`<tbody class="hm-group" data-domain="${group.domain===null?'other':escHtml(group.domain)}"><tr class="hm-group-row"><th scope="rowgroup" colspan="${sweeps.length+2}"><span class="hm-gl">${escHtml(groupName(group.domain))}</span></th></tr>${group.rows.map(row).join('')}</tbody>`).join('');
     return `<table class="hm-table"><caption class="hm-sr">${escHtml(say('caption'))}</caption><thead><tr><th scope="col" class="hm-src-h">${escHtml(say('source'))}</th>${heads}<th scope="col" class="hm-ms-h">${escHtml(say('ms'))}</th></tr></thead>${body}</table>`;

@@ -685,6 +685,7 @@ async function structureChecks() {
       await page.keyboard.press('Enter'); await page.locator('#palette').waitFor({ state: 'hidden' });
       assert.equal(await page.evaluate(() => CrucixLens.get()), 'hazards', 'Enter applied the lens');
       assert.deepEqual((await view(page)).groups, ['hazards']);
+      assert(await focused(page, '#paletteTrigger'), 'the lens switch rebuilt the top bar: the focus is on its new palette button, not on the body');
       await page.locator('#lensBar [data-lens="all"]').click();
       await page.locator('#eventsTrigger').focus(); await openPalette(page); await page.keyboard.press('Escape');
       await page.locator('#palette').waitFor({ state: 'hidden' }); assert(await focused(page, '#eventsTrigger'), 'Esc returns the focus to where it was');
@@ -813,6 +814,10 @@ async function structureChecks() {
         await page.locator('.source-health-panel [data-health-matrix]').scrollIntoViewIfNeeded(); await page.locator('.source-health-panel [data-health-matrix]').click();
         await page.waitForFunction(() => document.querySelectorAll('#health-matrix tr.hm-row').length > 0);
         await within('#health-matrix', 'the matrix dialog');
+        // The column times do not run into each other ("13:2614:26"): the rendered text of neighbouring labels keeps a gap.
+        const gaps = await page.evaluate(() => { const texts = [...document.querySelectorAll('#health-matrix th.hm-time .hm-t')].map(span => { const range = document.createRange(); range.selectNodeContents(span); const box = range.getBoundingClientRect(); return [box.left, box.right]; }); return texts.slice(1).map((text, i) => text[0] - texts[i][1]); });
+        assert(gaps.length > 0 && gaps.every(gap => gap >= 4), 'the matrix time headers keep at least 4 px apart at 390 px: ' + JSON.stringify(gaps));
+        measured.phoneMatrixGap = Math.min(...gaps);
         await fits('matrix'); await shot(page, '390-matrix'); await page.keyboard.press('Escape');
         await page.evaluate(() => { document.body.scrollTop = 0; }); await page.locator('#replayTrigger').click();
         await page.locator('#replayBar .rp-banner').waitFor(); await page.waitForFunction(() => CrucixClock.frozen());
@@ -821,6 +826,29 @@ async function structureChecks() {
         console.log('STRUCTURE 390 px PASS', measured.phone);
       } finally { await context.close(); }
     }
+    // (8) Spec 1.2: the collapsed live panel is at most 420 px tall at 1280 px in every state: no failing source, the first source of
+    // each domain failing (failed=group), every source failing (failed=all), in en, hu and fr. The chip line stays one line and keeps "+N".
+    measured.collapsedByState = {};
+    for (const [state, query] of [['none', ''], ['group', '&failed=group'], ['all', '&failed=all']]) {
+      await control('liveSources=true' + query);
+      for (const locale of ['en', 'hu', 'fr']) {
+        const { context, page } = await prepare({ width: 1280, height: 900 }, locale);
+        try {
+          const panel = page.locator('.live-sources-panel'), open = panel.locator('button.live-group-head[aria-expanded="true"]');
+          const [failing, domains] = await page.evaluate(() => [D.liveSources.filter(source => source.status === 'error').length, new Set(D.liveSources.map(source => CrucixDomains.domainOfSource(source.source))).size]);
+          assert.equal(failing, state === 'none' ? 0 : state === 'all' ? 19 : domains, `${state}: failing sources in the fixture`);
+          while (await open.count()) await open.first().click();
+          const height = Math.round((await panel.boundingBox()).height * 10) / 10;
+          (measured.collapsedByState[state] ||= {})[locale] = height;
+          assert(height <= 420, `the collapsed live panel is at most 420 px tall (${state}, ${locale}): ${height}`);
+          const lines = await panel.evaluate(node => [...node.querySelectorAll('.lg-sub')].map(sub => [sub.scrollHeight <= sub.clientHeight + 1, Math.round(sub.getBoundingClientRect().height), [...sub.querySelectorAll('.lg-more')].every(more => more.getBoundingClientRect().right <= sub.getBoundingClientRect().right + 0.5)]));
+          assert(lines.length > 0 && lines.every(([fits, tall, more]) => fits && tall <= 16 && more), `every chip line is one line with "+N" visible (${state}, ${locale}): ${JSON.stringify(lines)}`);
+          if (state === 'all') assert(await panel.locator('.lg-more').count() > 0, 'every source failing: a "+N" chip is shown');
+          await panel.scrollIntoViewIfNeeded(); await panel.screenshot({ path: path.join(artifacts, `structure-live-collapsed-${state}-${locale}.png`) });
+        } finally { await context.close(); }
+      }
+    }
+    console.log('STRUCTURE collapsed live panel PASS', measured.collapsedByState);
   } finally { await control('liveSources=false&archive=seed'); }
 }
 try {

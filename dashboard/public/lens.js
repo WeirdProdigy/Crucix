@@ -25,8 +25,9 @@
   }
   function onChange(fn){if(typeof fn==='function')listeners.push(fn);}
 
-  // A group's choice is kept with the attention state it was made under: once the group starts or stops needing attention, its
-  // default (open exactly when it needs attention) applies again and the old choice is dropped.
+  // A group's choice is kept with the attention state it was made under. A group the user opened stays open whatever its attention
+  // does; a collapsed choice holds while the attention state is unchanged and is dropped once it changes (a group that starts needing
+  // attention opens), and then the default (open exactly when it needs attention) applies again.
   function stored(){
     if(choices)return choices;
     choices=new Map();
@@ -45,7 +46,8 @@
     if(typeof attention==='boolean')seen.set(domain,attention);
     const need=seen.get(domain)===true,map=stored(),entry=map.get(domain);
     if(!entry)return need;
-    if(entry.attention===need)return entry.open;
+    if(entry.open)return true;
+    if(entry.attention===need)return false;
     map.delete(domain);persist();
     return need;
   }

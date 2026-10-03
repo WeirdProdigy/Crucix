@@ -947,7 +947,7 @@
     "title": "Source health matrix",
     "trigger": "Matrix",
     "caption": "Source status in each archived sweep, oldest to newest",
-    "openHint": "The newest sweep is on the right. Select a cell to replay that sweep.",
+    "openHint": "The newest sweep is on the right. Select a cell to replay that sweep; the arrow keys move between the cells.",
     "sweeps": "Sweeps shown",
     "source": "Source",
     "ms": "Last run (ms)",

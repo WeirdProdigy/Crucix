@@ -17,7 +17,9 @@
     historyUnavailable:'Event history and export read the live store, so they are off during the replay; the records shown are the replayed sweep’s own.',
     noSweeps:'Replay needs at least two archived sweeps.',position:'{index} of {total}',unknownTime:'Unknown time'};
   const ERRORS=['error','notFound','noSweeps'];
-  let opts=null,nodes=null,state=C.createState(),times={},listed=false,seq=0,listSeq=0,liveSeen=0,frozen=false,refocus=false,liveBefore=null;
+  // liveBefore: the live snapshot shown before the replay. restoring: that snapshot while an exit's /api/data read is pending (the page
+  // still shows the archived sweep then): a replay entered again meanwhile keeps it instead of taking the archived one for live data.
+  let opts=null,nodes=null,state=C.createState(),times={},listed=false,seq=0,listSeq=0,liveSeen=0,frozen=false,refocus=false,liveBefore=null,restoring=null;
   const log=error=>{try{console.error('[replay]',error);}catch{}};
   const guarded=fn=>(...args)=>{try{return fn(...args);}catch(error){log(error);}};
   const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -99,7 +101,11 @@
       setDisabled(prev,at<=0);setDisabled(next,at>=total-1);
     }
     write(status,[state.mode==='loading'?say('loading'):'',state.error?say(ERRORS.includes(state.error)?state.error:'error'):'',state.missed?say('newerLive',{count:state.missed}):''].filter(Boolean).join(' · '));
+    // A failure before entry: the slider that had the focus is hidden now, or the opener left (a matrix cell, the palette), so the
+    // focus goes to Dismiss next to the message instead of dropping to the page body.
+    const wasEntered=nodes.entered;nodes.entered=entered;
     if(wasHidden&&entered)range.focus();
+    else if(!entered&&(wasHidden||wasEntered))exitButton.focus();
   }
   // aria-disabled keeps the button focusable when an end is reached (a disabled button would drop the keyboard focus).
   function setDisabled(node,off){if(off)node.setAttribute('aria-disabled','true');else node.removeAttribute('aria-disabled');}
@@ -111,11 +117,12 @@
     else{node.setAttribute('aria-disabled','true');node.setAttribute('title',say('noSweeps'));node.setAttribute('aria-describedby',HINT);}
   }
   // The header button (renderTopbar includes it): disabled until two sweeps are archived, the reason in its title and in a
-  // visually hidden description (aria-describedby). Pressed only while a replay holds the page. Empty before mount.
+  // description (aria-describedby). The description node is `hidden`: a reference still reads it, but nothing reads it next to an
+  // enabled button (syncTrigger drops the reference once the button works). Pressed only while a replay holds the page. Empty before mount.
   function button(){
     if(!opts)return '';
     const on=active(),off=!on&&!available(),controls=opts.root.id?` aria-controls="${esc(opts.root.id)}"`:'',hint=esc(say('noSweeps'));
-    return `<button type="button" class="guide-btn rp-trigger" id="replayTrigger" aria-pressed="${on}"${controls}${off?` aria-disabled="true" title="${hint}" aria-describedby="${HINT}"`:''}>${esc(say('button'))}</button><span class="rp-sr" id="${HINT}">${hint}</span>`;
+    return `<button type="button" class="guide-btn rp-trigger" id="replayTrigger" aria-pressed="${on}"${controls}${off?` aria-disabled="true" title="${hint}" aria-describedby="${HINT}"`:''}>${esc(say('button'))}</button><span class="rp-sr" id="${HINT}" hidden>${hint}</span>`;
   }
 
   // ===== Loading =====
@@ -130,8 +137,14 @@
     listed=true;state=C.reduce(state,{type:'sweeps',sweeps:entries.map(entry=>entry.id)});draw();
     return true;
   }
-  function restore(snapshot){try{opts.restoreLive(snapshot);}catch(error){log(error);}}
+  function restore(snapshot){restoring=null;try{opts.restoreLive(snapshot);}catch(error){log(error);}}
   function redrive(){try{opts.redrive?.();}catch(error){log(error);}}
+  // Back on live data after a replay that never started: the newest live snapshot kept aside, or (an earlier exit's /api/data read
+  // went stale) the live data read again, the pre-replay snapshot as the fallback.
+  function settle(before){
+    if(before.pending)restore(before.pending);
+    else if(restoring)fromServer(restoring).catch(log);
+  }
   // `mine` is the request's sequence number: anything the user did since (a step, open, exit) makes its answer stale.
   async function load(mine){
     const id=state.target;draw();
@@ -141,9 +154,10 @@
     if(mine!==seq)return false;
     if(!error){
       const c=clock(),previous=frozen&&c?c.now():null,first=state.id===null;
-      // Entering: remember the live snapshot shown now, before the archived one replaces it.
-      let live=null;if(first){try{live=opts.getLive?.()??null;}catch(failure){log(failure);}}
-      try{if(c){c.freeze(snapshotTime(snapshot));frozen=true;}opts.applySnapshot(snapshot);if(first)liveBefore=live;}
+      // Entering: remember the live snapshot shown now, before the archived one replaces it (while an exit's restore is pending the page
+      // still shows the last archived sweep: the live snapshot is the one that exit kept).
+      let live=null;if(first){try{live=restoring??opts.getLive?.()??null;}catch(failure){log(failure);}}
+      try{if(c){c.freeze(snapshotTime(snapshot));frozen=true;}opts.applySnapshot(snapshot);if(first){liveBefore=live;restoring=null;}}
       catch(failure){
         log(failure);error='error';
         if(c){if(previous===null){c.release();frozen=false;}else c.freeze(previous);}
@@ -152,7 +166,7 @@
     if(error){
       const before=state;state=C.reduce(state,{type:'failed',id,error});
       // Never entered: the live snapshot that arrived meanwhile is applied now.
-      if(C.canApplyLive(state)&&before.pending)restore(before.pending);
+      if(C.canApplyLive(state))settle(before);
       draw();return false;
     }
     state=C.reduce(state,{type:'loaded',id});
@@ -172,7 +186,7 @@
     await refreshList();
     if(mine!==seq)return false;
     const before=state;state=C.reduce(state,{type:'open',id:typeof id==='string'?id:undefined});
-    if(C.canApplyLive(state)&&before.pending)restore(before.pending);
+    if(C.canApplyLive(state))settle(before);
     if(state.mode==='loading')return load(mine);
     draw();
     return state.mode==='replay';
@@ -193,9 +207,11 @@
   // Without /api/data the live snapshot from before the replay comes back: the archived one never stays on screen as live data.
   async function fromServer(kept){
     const mine=seq,seen=liveSeen;
+    restoring=kept;
     let data=null;
     try{data=await opts.fetchJson('/api/data');}catch{data=null;}
-    // A replay entered again, or a live update the page applied meanwhile, makes this answer stale.
+    // A replay entered again, or a live update the page applied meanwhile, makes this answer stale. (A replay entered again took
+    // `restoring` as its live snapshot; a live update cleared it.)
     if(mine!==seq||seen!==liveSeen)return;
     const live=snapshotTime(data)!==null?data:kept;
     if(!live)return;
@@ -205,7 +221,7 @@
   // SSE `update` and the poll fallback ask first: true = apply it (live mode); false = kept aside for the exit.
   function offerLive(snapshot){
     if(!active()){
-      liveSeen++;
+      liveSeen++;restoring=null;
       // A live sweep was archived meanwhile: the header button may become available.
       if(opts&&!available())refreshList().catch(log);
       return true;

@@ -520,8 +520,38 @@ test('a failed search keeps the static results and only shows a quiet note (no c
     await tick();
     assert.deepEqual(r.labels(), ['Open alerts', 'Open settings', 'Open the signal guide', 'Open records: GDACS'], 'the static results stay');
     assert.equal(r.note().textContent, locale('en').palette.historyFailed, route.toString());
+    assert.equal(r.status().textContent, '4 results. ' + locale('en').palette.historyFailed, 'the count and the note are two sentences in the status line');
     assert.deepEqual(r.errors, [], 'no console spam');
   }
+  const replaying = mounted({ replay: true });
+  replaying.api.open(); replaying.type('open');
+  assert.equal(replaying.status().textContent, '4 results. ' + locale('en').palette.replayNote);
+});
+
+test('an item that rebuilds the top bar (a lens switch) leaves the focus on the new node with the opener\'s id, or on the new palette button', () => {
+  let topbar;
+  // The lens switch re-renders the top bar with innerHTML: the browser drops the focus from the replaced nodes (onto <body>).
+  const rebuild = () => { const had = topbar.kids.includes(r.doc.activeElement); for (const node of topbar.kids.slice()) node.remove(); topbar.innerHTML = r.api.button() + '<button id="eventsTrigger">Events</button>'; if (had) r.doc.activeElement = r.doc.body; };
+  const elsewhere = { id: 'mover', label: 'Moves the focus itself', run: () => r.part('target').focus() };
+  const r = mounted({ actions: [{ id: 'lens', label: 'Lens: Natural hazards', run: rebuild }, { id: 'detach', label: 'Detach only', run: () => { for (const node of topbar.kids.slice()) node.remove(); topbar.innerHTML = r.api.button() + '<button id="eventsTrigger">Events</button>'; } }, elsewhere] });
+  topbar = r.add('div', { id: 'topbar' }); topbar.innerHTML = r.api.button() + '<button id="eventsTrigger">Events</button>';
+  r.add('button', { id: 'target' });
+  const opener = r.part('eventsTrigger'); opener.focus();
+  r.api.open(); r.key('Enter');
+  const fresh = r.part('eventsTrigger');
+  assert.ok(fresh !== opener && !opener.isConnected, 'the top bar was rebuilt');
+  assert.ok(r.doc.activeElement === fresh, 'the focus is on the new node that carries the opener\'s id, not on the body');
+  // Opened from the page body: no id to go back to, so the new palette button takes the focus.
+  r.doc.activeElement = r.doc.body;
+  r.api.open(); r.key('Enter');
+  assert.ok(r.doc.activeElement === r.part('paletteTrigger'), 'the rebuilt palette button has the focus');
+  // A detached node still counted as the active element (no browser fix-up) is replaced the same way.
+  r.part('eventsTrigger').focus(); r.api.open(); r.key('ArrowDown'); r.key('Enter');
+  assert.ok(r.doc.activeElement === r.part('eventsTrigger') && r.doc.activeElement.isConnected, 'a detached active element is not left focused');
+  // An item that moves the focus itself keeps it there.
+  r.part('eventsTrigger').focus(); r.api.open(); r.key('End'); r.key('Enter');
+  assert.ok(r.doc.activeElement === r.part('target'), 'the item\'s own focus move wins');
+  assert.deepEqual(r.errors, []);
 });
 
 test('hostile titles, kinds, sources and labels are escaped; invalid record ids are not offered', async () => {
@@ -710,6 +740,10 @@ test('palette.css: reduced motion, a narrow viewport without sideways scroll and
   const css = read('dashboard/public/palette.css');
   assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
   assert.match(css, /@media\s*\(forced-colors:\s*active\)[\s\S]*\.pl-opt\[aria-selected="true"\][^}]*outline/);
+  // The transparent left border of every option would paint as CanvasText in forced colours: Canvas, and Highlight on the active one.
+  const forced = css.slice(css.search(/@media\s*\(forced-colors:\s*active\)/));
+  assert.match(forced, /\n\s*\.pl-opt\{[^}]*border-left-color:Canvas[;}]/, 'inactive options: no visible bar');
+  assert.match(forced, /\.pl-opt\[aria-selected="true"\]\{[^}]*border-left-color:Highlight/, 'the active option: a Highlight bar');
   assert.match(css, /\.pl-dialog\{[^}]*width:min\([^)]*100vw[^)]*\)/, 'the dialog never exceeds the viewport');
   assert.match(css, /\.pl-label\{[^}]*overflow-wrap:anywhere/, 'long labels wrap instead of scrolling sideways');
   assert.match(css, /\.pl-opt\[aria-selected="true"\] \.pl-mark\{[^}]*visibility:visible/, 'the active option has a marker, not only a colour');
@@ -775,6 +809,18 @@ test('page: paletteActions leaves out what the page cannot do and offers "Back t
   assert.equal(exit.label, locale('en').palette.exitReplay);
   exit.run();
   assert.deepEqual(calls, [['exit']]);
+});
+
+test('page: the glossary and settings actions are found by the words of their header buttons ("signals mean", "jelentése", "réglages")', () => {
+  const core = (() => { const window = {}; vm.runInNewContext(read('dashboard/public/palette-core.js'), { window }); return window.CrucixPaletteCore; })();
+  for (const [lang, query, id] of [['en', 'signals mean', 'glossary'], ['hu', 'jelentése', 'glossary'], ['fr', 'signification', 'glossary'], ['fr', 'réglages', 'settings'], ['en', 'settings', 'settings']]) {
+    const { context } = pageWindow(), table = locale(lang), base = localT(lang);
+    context.t = (key, fallback) => (key === 'dashboard.guideBtn' ? table.dashboard.guideBtn : key === 'dashboard.settings' ? table.dashboard.settings : base(key, fallback));
+    const list = helper('paletteActions', context)();
+    assert.deepEqual(plain(list.find(item => item.id === 'glossary').keywords), [table.dashboard.guideBtn], lang + ': the glossary button text');
+    assert.deepEqual(plain(list.find(item => item.id === 'settings').keywords), [table.dashboard.settings], lang + ': the settings button text');
+    assert.equal(core.rank(list, query)[0]?.id, id, `${lang}: "${query}" finds ${id}`);
+  }
 });
 
 test('page: paletteSources has one item per source of the domain registry: live ones open their records, the others the health matrix', () => {
