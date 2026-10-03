@@ -638,6 +638,18 @@ async function structureChecks() {
     const { context, page } = await prepare({ width: 1280, height: 900 });
     try {
       // (1) The hazards lens: only hazards groups, health rows and live markers, and the chip counts the hazards changes; no reload.
+      // First on the 3D globe (plotMarkers; the flat map is the default at 1280 px), then the same on the flat map below.
+      const globeLive = () => page.evaluate(() => globe.pointsData().filter(point => Object.hasOwn(CrucixLiveSources.policies, point.popMeta)).map(point => point.popMeta + '|' + point.popHead).sort());
+      const globeExpected = lens => page.evaluate(lens => CrucixLiveSources.markerRows(D.liveSources, D.earthquakes).filter(row => lens === 'all' || CrucixDomains.domainOfSource(row.source) === lens).map(row => row.source + '|' + row.title).sort(), lens);
+      if (await page.evaluate(() => isFlat)) await page.locator('#projToggle').click();
+      await page.waitForFunction(() => !isFlat && globeInitialized && globe.pointsData().length > 0);
+      const globeAll = await globeLive(); assert.deepEqual(globeAll, await globeExpected('all'), 'globe: every located live row under all');
+      await page.locator('#lensBar [data-lens="hazards"]').click(); await page.waitForTimeout(300);
+      const globeHazards = await globeLive(); assert.deepEqual(globeHazards, await globeExpected('hazards'), 'globe: the hazards lens redraws the live points without a reload');
+      assert(globeHazards.length > 0 && globeHazards.length < globeAll.length, 'globe: the lens narrowed the live points');
+      await page.locator('#lensBar [data-lens="all"]').click(); await page.waitForTimeout(300);
+      assert.deepEqual(await globeLive(), globeAll, 'globe: back to all without a reload');
+      measured.globe = { all: globeAll.length, hazards: globeHazards.length };
       await flat(page);
       const all = await view(page), allExpected = await expected(page, 'all');
       assert.deepEqual(all, allExpected, 'lens all shows every group, source, marker and change');
@@ -719,14 +731,20 @@ async function structureChecks() {
       assert.equal(await page.locator('#changesPanel [data-changes-window="6h"]').getAttribute('aria-disabled'), 'true', 'the archive windows are off during the replay');
       await shot(page, 'replay-bar');
       // A live update during the replay is kept aside; Back to live applies it and releases the clock.
+      // What the page renders (the changes panel, source health, the live cards' states) must not move while the update is kept aside.
+      const rendered = () => page.evaluate(() => ({ changes: document.getElementById('changesPanel')?.innerText, health: document.querySelector('.source-health-panel')?.innerText,
+        cards: [...document.querySelectorAll('.live-sources-panel .live-source')].map(node => node.dataset.liveSource + ':' + node.dataset.liveState).join(',') }));
+      const replayed = await rendered();
       await control('update=true'); const pushed = (await json('/api/data')).meta.timestamp;
       await page.waitForFunction(() => /Newer live data waiting: 1/.test(document.querySelector('#replayBar .rp-status')?.textContent || ''));
-      assert.equal(await page.evaluate(() => D.meta.timestamp), old.timestamp, 'the live update did not change the replayed page');
+      assert.equal(await page.evaluate(() => D.meta.timestamp), old.timestamp, 'the live update did not change the replayed snapshot');
+      assert.deepEqual(await rendered(), replayed, 'the live update did not change the rendered page');
       await page.locator('#replayBar [data-replay="exit"]').click();
       await page.waitForFunction(ts => D.meta.timestamp === ts, pushed);
       assert(await page.locator('#replayBar').isHidden(), 'the bar is gone'); assert(await focused(page, '#replayTrigger'), 'the focus is on the replay button');
       assert.equal(await page.evaluate(() => CrucixClock.frozen()), false); assert(Math.abs(await page.evaluate(() => CrucixClock.now() - Date.now())) < 1000, 'the real clock is back');
       assert.equal(await page.locator('.live-source[data-live-source="ADSB-Military"]').getAttribute('data-live-state'), 'ok');
+      assert.notEqual((await rendered()).changes, replayed.changes, 'Back to live rendered the live changes (the fragment above is sensitive)');
       measured.replay = { sweep: old.id, position: `${sweeps.length - 2}/${sweeps.length}`, pushed };
       // (5) What changed: the new records of the fixture, every window fetched, a failing window keeps the content.
       const changes = await page.evaluate(() => D.changes), titles = changes.events.new.map(item => item.title);
@@ -742,6 +760,7 @@ async function structureChecks() {
       const six = await response.json();
       await page.waitForFunction(() => document.getElementById('changesPanel')?.dataset.window === '6h' && !document.getElementById('changesPanel').hasAttribute('aria-busy'));
       const sixTitles = await page.locator('#changesPanel [data-changes-section="records"] .ch-title').allTextContents();
+      assert(sixTitles.length > 0, 'the 6 h window lists records');
       assert.deepEqual(sixTitles, six.events.new.map(item => item.title), 'the 6 h window shows the merged answer');
       assert.equal(await page.locator('#changesPanel [data-changes-window="6h"]').getAttribute('aria-pressed'), 'true');
       await page.route('**/api/changes?window=24h', route => route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"fixture"}' }));
@@ -783,16 +802,21 @@ async function structureChecks() {
           assert(size.scrollWidth <= size.innerWidth && size.bodyScrollWidth <= size.innerWidth, 'no horizontal scroll at 390 px with the ' + what + ': ' + JSON.stringify(size));
           (measured.phone ||= {})[what] = size.scrollWidth;
         };
+        // Fixed layers do not widen the page (their overflow is clipped): their own boxes must fit the 390 px viewport.
+        const within = async (selector, what) => {
+          const box = await page.locator(selector).boundingBox();
+          assert(box && box.x >= 0 && box.x + box.width <= 390 + 0.5 && box.y >= 0 && box.y + box.height <= 844 + 0.5, what + ' inside the 390 px viewport: ' + JSON.stringify(box));
+        };
         await page.locator('#lensBar').scrollIntoViewIfNeeded(); await page.locator('#lensBar [data-lens="hazards"]').click(); await fits('lens bar'); await shot(page, '390-lens');
         await page.locator('#lensBar [data-lens="all"]').click();
-        await fromBody(page); await openPalette(page); await page.keyboard.type('haz'); await fits('palette'); await shot(page, '390-palette'); await page.keyboard.press('Escape');
+        await fromBody(page); await openPalette(page); await page.keyboard.type('haz'); await fits('palette'); await within('#palette', 'the palette'); await shot(page, '390-palette'); await page.keyboard.press('Escape');
         await page.locator('.source-health-panel [data-health-matrix]').scrollIntoViewIfNeeded(); await page.locator('.source-health-panel [data-health-matrix]').click();
         await page.waitForFunction(() => document.querySelectorAll('#health-matrix tr.hm-row').length > 0);
-        const dialog = await page.locator('#health-matrix').boundingBox(); assert(dialog.x >= 0 && dialog.x + dialog.width <= 390, 'the matrix dialog fits the width');
+        await within('#health-matrix', 'the matrix dialog');
         await fits('matrix'); await shot(page, '390-matrix'); await page.keyboard.press('Escape');
         await page.evaluate(() => { document.body.scrollTop = 0; }); await page.locator('#replayTrigger').click();
         await page.locator('#replayBar .rp-banner').waitFor(); await page.waitForFunction(() => CrucixClock.frozen());
-        await fits('replay bar'); await shot(page, '390-replay'); await noXss(page, 'phone');
+        await fits('replay bar'); await within('#replayBar', 'the replay bar'); await within('#replayBar [data-replay="exit"]', 'Back to live'); await shot(page, '390-replay'); await noXss(page, 'phone');
         await page.locator('#replayBar [data-replay="exit"]').click(); assert(await page.locator('#replayBar').isHidden());
         console.log('STRUCTURE 390 px PASS', measured.phone);
       } finally { await context.close(); }

@@ -132,6 +132,9 @@ const timingOf=snapshot=>Object.fromEntries(snapshot.health.map((row,i)=>[row.n,
 const seededArchive=new SweepArchive(historyDir,{logger:quietLog}),emptyArchive=new SweepArchive(join(historyDir,'empty-archive'),{logger:quietLog});
 let previousSweep=null;
 for(const hoursAgo of [5,4,3,2,1]){const snapshot=pastSweep(hoursAgo,Date.parse(data.meta.timestamp));archiveSweep({archive:seededArchive,snapshot,timing:timingOf(snapshot),previous:previousSweep,log:quietLog});previousSweep=snapshot;}
+// The newest archived sweep is the page's startup snapshot, without live sources: the fixture starts with them off because the other
+// QA phases expect that. /control?liveSources=true changes only the page's data (its changes are counted against the -1 h sweep again,
+// see rebuildEvents); the archive keeps this startup copy, so a replay of the newest sweep shows no live cards.
 archiveSweep({archive:seededArchive,snapshot:data,timing:timingOf(data),previous:previousSweep,log:quietLog});
 let archive=seededArchive;
 const archiveView={retention:()=>archive.retention(),list:options=>archive.list(options),get:id=>archive.get(id),latest:()=>archive.latest(),healthSeries:options=>archive.healthSeries(options)};
