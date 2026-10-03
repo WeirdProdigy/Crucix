@@ -912,5 +912,23 @@
     "supply": "Énergie et chaîne d’approvisionnement",
     "sanctions": "Sanctions et réglementation",
     "health": "Santé et environnement"
+  },
+  "replay": {
+    "button": "Relecture",
+    "region": "Relecture des scans",
+    "banner": "Relecture d’un scan archivé",
+    "slider": "Scan archivé",
+    "prev": "Scan précédent",
+    "next": "Scan suivant",
+    "backToLive": "Revenir au direct",
+    "loading": "Chargement du scan…",
+    "error": "Impossible de charger ce scan. La vue précédente est conservée.",
+    "notFound": "Ce scan ne figure plus dans l’archive.",
+    "newerLive": "Données en direct plus récentes en attente : {count}. Elles s’affichent au retour au direct.",
+    "alertsLive": "Les alertes restent en direct pendant la relecture.",
+    "historyUnavailable": "L’historique des événements et l’export lisent les données en direct : ils sont désactivés pendant la relecture ; les enregistrements affichés sont ceux du scan relu.",
+    "noSweeps": "La relecture nécessite au moins deux scans archivés.",
+    "position": "{index} sur {total}",
+    "unknownTime": "Heure inconnue"
   }
 }

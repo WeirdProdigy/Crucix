@@ -912,5 +912,23 @@
     "supply": "Energia és ellátási lánc",
     "sanctions": "Szankciók és szabályozás",
     "health": "Egészség és környezet"
+  },
+  "replay": {
+    "button": "Visszajátszás",
+    "region": "Lekérdezés-visszajátszás",
+    "banner": "Archivált lekérdezés visszajátszása",
+    "slider": "Archivált lekérdezés",
+    "prev": "Előző lekérdezés",
+    "next": "Következő lekérdezés",
+    "backToLive": "Vissza az élő nézethez",
+    "loading": "Lekérdezés betöltése…",
+    "error": "Ezt a lekérdezést nem sikerült betölteni. Az előző nézet marad.",
+    "notFound": "Ez a lekérdezés már nincs az archívumban.",
+    "newerLive": "Újabb élő adat vár: {count}. Az élő nézetre visszatérve jelenik meg.",
+    "alertsLive": "A riasztások visszajátszás közben is élőben frissülnek.",
+    "historyUnavailable": "Az eseményelőzmény és az export az élő tárból olvas, ezért visszajátszás közben nem érhető el; a látható rekordok a visszajátszott lekérdezésből származnak.",
+    "noSweeps": "A visszajátszáshoz legalább két archivált lekérdezés kell.",
+    "position": "{index}/{total}",
+    "unknownTime": "Ismeretlen időpont"
   }
 }

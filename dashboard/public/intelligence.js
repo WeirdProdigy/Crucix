@@ -31,6 +31,11 @@
     if (substitutions) for (const [name, text] of Object.entries(substitutions)) value = value.split('{' + name + '}').join(String(text));
     return value;
   }
+  // A sweep replay (replay.js) shows an archived snapshot; /api/history, /api/export and /api/events/:id read the live store, so
+  // those requests are off while it runs and the dialog says why. Records of the replayed snapshot itself still open.
+  const REPLAY_NOTE = 'Event history and export read the live store, so they are off during the replay; the records shown are the replayed sweep’s own.';
+  function replaying() { try { return !!window.CrucixReplay?.active?.(); } catch { return false; } }
+  function replayNote() { let value = REPLAY_NOTE; try { value = options.t?.('replay.historyUnavailable', REPLAY_NOTE); } catch { value = REPLAY_NOTE; } return typeof value === 'string' && value ? value : REPLAY_NOTE; }
   function label(prefix, value) { const code = bounded(value, 100); return COPY[prefix + '_' + code] ? tr(prefix + '_' + code) : code || tr('unknown'); }
   function element(tag, className, text) { const node = document.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = String(text); return node; }
   function button(text, action, className = 'ci-button') { const node = element('button', className, text); node.type = 'button'; if (action) node.addEventListener('click', action); return node; }
@@ -134,6 +139,7 @@
     if (record) { renderDetail(record); return true; }
     const id = bounded(recordOrId, 128);
     show('detail', tr('details')).appendChild(status(tr('loading')));
+    if (replaying()) { content.replaceChildren(status(tr('eventUnavailable'), true), status(replayNote())); return false; }
     if (!options.historyEnabled || !/^[a-zA-Z0-9_-]{1,128}$/.test(id)) { content.replaceChildren(status(tr('eventUnavailable'), true)); return false; }
     detailController = new AbortController();
     try {
@@ -168,6 +174,7 @@
   function openHistory() {
     if (!options.historyEnabled) return false;
     detailVersion++; detailController?.abort(); returnToHistory = false; detailId = null; stopHistory();
+    if (replaying()) { show('history', tr('history')).appendChild(status(replayNote())); return true; }
     const body = show('history', tr('history')), form = element('form', 'ci-history-filters'); form.setAttribute('aria-label', tr('history'));
     form.addEventListener('submit', event => { event.preventDefault(); clearTimeout(historyTimer); filters.offset = 0; fetchHistory(); });
     historyInput(form, 'q', 'search', 'search', true);
@@ -185,6 +192,7 @@
   }
   async function fetchHistory() {
     if (mode !== 'history') return;
+    if (replaying()) { stopHistory(); historyNodes.status?.replaceChildren(status(replayNote())); return; }
     clearTimeout(historyTimer); historyTimer = null;
     const version = ++historyVersion; historyController?.abort(); historyController = new AbortController(); historyResult = null;
     historyNodes.status.replaceChildren(status(tr('historyLoading'))); historyNodes.list.replaceChildren(); historyNodes.summary.replaceChildren(); historyNodes.pagination.replaceChildren();
@@ -221,6 +229,7 @@
   }
   function exportHistory(format) {
     if (!options.historyEnabled || !['json', 'csv', 'html', 'stix'].includes(format)) return;
+    if (replaying()) { historyNodes.status?.replaceChildren(status(replayNote())); return; }
     const query = queryString(false); query.set('format', format); const url = '/api/export?' + query;
     if (format === 'html') {
       const report = window.open(url, '_blank');

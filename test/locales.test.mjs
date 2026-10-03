@@ -32,6 +32,20 @@ test('the lenses group names "all", the lens bar and each domain of the registry
   assert.deepEqual(['en', 'hu', 'fr'].map(lang => locale(lang).lenses.all), ['All', 'Mind', 'Tous']);
 });
 
+// Every string replay.js renders, in locale order (the same order in en, hu and fr).
+const REPLAY_KEYS = ['button', 'region', 'banner', 'slider', 'prev', 'next', 'backToLive', 'loading', 'error', 'notFound', 'newerLive', 'alertsLive', 'historyUnavailable', 'noSweeps', 'position', 'unknownTime'];
+
+test('the replay group has the same keys in the same order in en, hu and fr, each a non-empty string', () => {
+  for (const lang of LANGS) {
+    const group = locale(lang).replay;
+    assert.deepEqual(Object.keys(group || {}), REPLAY_KEYS, `${lang}: replay keys`);
+    for (const key of REPLAY_KEYS) assert.ok(typeof group[key] === 'string' && group[key].trim() !== '', `${lang}: replay.${key}`);
+    assert.ok(group.newerLive.includes('{count}'), `${lang}: replay.newerLive names the count`);
+    assert.ok(group.position.includes('{index}') && group.position.includes('{total}'), `${lang}: replay.position`);
+  }
+  assert.deepEqual(LANGS.map(lang => locale(lang).replay.button), ['Replay', 'Visszajátszás', 'Relecture']);
+});
+
 test('the alert UI has every string it renders, a name for each built-in rule and the inspector level words', () => {
   assert.equal(BUILTIN_RULES.length, 8, 'the built-in rule pack');
   for (const lang of LANGS) {

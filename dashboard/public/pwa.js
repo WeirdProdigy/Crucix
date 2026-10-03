@@ -39,7 +39,10 @@
     if (new TextEncoder().encode(json).byteLength > MAX_BYTES) throw new Error('Snapshot exceeds local storage limit');
     return JSON.parse(json);
   }
+  // A sweep replay shows an archived snapshot: nothing is written while it is active (cacheLive, enabling, any caller).
+  const replaying = () => { try { return !!window.CrucixReplay?.active?.(); } catch { return false; } };
   async function saveSnapshot(snapshot) {
+    if (replaying()) return false;
     const value = safeSnapshot(snapshot); if (!value) return false;
     return transaction('readwrite', (store, result) => {
       const setting = store.get('enabled');

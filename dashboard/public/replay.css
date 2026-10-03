@@ -1,0 +1,32 @@
+/* Sweep replay bar (replay.js): a landmark docked at the bottom of the page. It sits under the record inspector (z 900) and the
+   alert tray (z 950), which close back to it, and over the dashboard. The replay is never colour-only: banner text + glyph. */
+#replayBar.rp-bar{position:fixed;left:0;right:0;bottom:0;z-index:890;box-sizing:border-box;max-width:100%;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:8px 16px calc(8px + env(safe-area-inset-bottom,0px));background:#0b0f14;border-top:2px solid var(--warn,#ffb84c);box-shadow:0 -10px 30px rgba(0,0,0,.55);font-family:var(--mono,monospace);font-size:11px;color:var(--text,#e8f4f0)}
+#replayBar[hidden],#replayBar [hidden]{display:none!important}
+.rp-head{margin:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;min-width:0;overflow-wrap:anywhere}
+.rp-mark,.rp-banner{color:var(--warn,#ffb84c)}
+.rp-banner{font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.rp-time{font-weight:600}
+.rp-position{color:var(--dim,#8aa0a8)}
+.rp-controls{display:flex;align-items:center;gap:6px;flex:1 1 280px;min-width:0}
+.rp-range{flex:1 1 auto;width:100%;min-width:0;margin:0;accent-color:var(--warn,#ffb84c)}
+.rp-btn{box-sizing:border-box;min-height:32px;padding:5px 10px;border:1px solid rgba(255,184,76,.45);background:rgba(255,184,76,.08);color:var(--text,#e8f4f0);font-family:inherit;font-size:11px;cursor:pointer;white-space:nowrap}
+.rp-btn:hover{background:rgba(255,184,76,.16)}
+.rp-btn[aria-disabled="true"]{opacity:.45;cursor:default}
+.rp-btn .rp-glyph{margin-right:4px}
+.rp-exit{border-color:var(--accent,#64f0c8);color:var(--accent,#64f0c8);font-weight:600}
+.rp-btn:focus-visible,.rp-range:focus-visible{outline:2px solid var(--accent,#64f0c8);outline-offset:2px}
+.rp-note,.rp-status{flex:1 1 100%;margin:0;font-size:10px;line-height:1.5;overflow-wrap:anywhere}
+.rp-note{color:var(--dim,#8aa0a8)}
+.rp-status:empty{display:none}
+/* The page keeps its last rows reachable above the bar (--rp-height: measured by replay.js; the fallback covers two rows). */
+body:has(> #replayBar:not([hidden])){padding-bottom:var(--rp-height,120px)}
+.rp-trigger[aria-pressed="true"]{border-color:var(--warn,#ffb84c);color:var(--warn,#ffb84c)}
+.rp-trigger[aria-disabled="true"]{opacity:.5;cursor:not-allowed}
+@media(max-width:700px){
+  #replayBar.rp-bar{gap:6px 8px;padding-left:12px;padding-right:12px}
+  .rp-btn .rp-label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .rp-btn .rp-glyph{margin-right:0}
+  .rp-controls{flex-basis:100%}
+  .rp-exit{flex:1 1 100%}
+}
+@media(prefers-reduced-motion:reduce){#replayBar,#replayBar *{transition:none!important;animation:none!important;scroll-behavior:auto}}

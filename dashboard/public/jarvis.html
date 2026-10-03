@@ -13,6 +13,8 @@
 <link rel="stylesheet" href="intelligence.css">
 <script src="intelligence.js"></script>
 <script src="clock.js"></script>
+<script src="replay-core.js"></script>
+<script src="replay.js"></script>
 <script src="record-core.js"></script>
 <script src="live-sources.js"></script>
 <script src="record-inspector.js"></script>
@@ -22,6 +24,7 @@
 <link rel="stylesheet" href="live-sources.css">
 <link rel="stylesheet" href="record-inspector.css">
 <link rel="stylesheet" href="alerts.css">
+<link rel="stylesheet" href="replay.css">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#020408">
 <script src="pwa.js"></script>
@@ -435,6 +438,7 @@ body.low-perf .ticker-wrap::-webkit-scrollbar-thumb{background:rgba(100,240,200,
     <div class="col" id="rightRail"></div>
   </div>
 </div>
+<div id="replayBar" hidden></div>
 <div class="glossary-overlay" id="glossaryOverlay" onclick="if(event.target===this) closeGlossary()">
   <div class="glossary-panel">
     <div class="glossary-head">
@@ -937,6 +941,7 @@ function renderTopbar(){
       <button class="guide-btn" id="settingsTrigger" onclick="openSettings()" aria-haspopup="dialog">${t('dashboard.settings','Settings')}</button>
       <button class="guide-btn" id="eventsTrigger" onclick="CrucixIntelligence.openEvents()" aria-haspopup="dialog">${t('intelligence.events','Events')}</button>
       <button class="guide-btn" id="historyTrigger" onclick="CrucixIntelligence.openHistory()" aria-haspopup="dialog">${t('intelligence.history','Event history')}</button>
+      ${window.CrucixReplay?.button?.()||''}
       <button class="guide-btn" id="profilesTrigger" onclick="CrucixIntelligence.openProfiles()" aria-haspopup="dialog">${t('intelligence.profiles','Workspace profiles')}</button>
       ${location.protocol==='file:'?'':`<button class="guide-btn" id="pwaTrigger" onclick="CrucixPWA.openSettings()" aria-haspopup="dialog">${t('pwa.menu','Install / offline')}</button>`}
       <button class="guide-btn" id="clusterTrigger" onclick="toggleNewsGrouping()" aria-pressed="${groupNews}">${t('intelligence.groupNews','Group nearby reports')}</button>
@@ -2326,13 +2331,35 @@ function updateRuntimeStatus(){
   if(air)air.textContent=D.airMeta?.fallback?t('status.airCached','Air positions are cached')+' · '+getAge(D.airMeta.timestamp):'';
   window.CrucixPWA?.renderStatus();
 }
-function applySnapshot(data,{cached=false}={}){
+// force: a sweep replay (and its way back to live) renders an older snapshot on purpose; live updates never pass it.
+function applySnapshot(data,{cached=false,force=false}={}){
   if(!validSnapshot(data))throw new Error('Invalid dashboard snapshot');
   const incomingTime=Date.parse(data.meta.timestamp),currentTime=Date.parse(D.meta?.timestamp);
-  if(Number.isFinite(currentTime)&&incomingTime<currentTime)return false;
-  D=normalizeSnapshot(data);lastSweepError='';reinit();updateRuntimeStatus();
-  if(!cached){window.CrucixPWA?.markLive();window.CrucixPWA?.cacheLive(D);}
+  if(!force&&Number.isFinite(currentTime)&&incomingTime<currentTime)return false;
+  // A replayed archive snapshot is not live data: it never reaches the offline cache and keeps the live sweep error.
+  const replaying=!!window.CrucixReplay?.active();
+  D=normalizeSnapshot(data);if(!replaying)lastSweepError='';reinit();updateRuntimeStatus();
+  if(!cached&&!replaying){window.CrucixPWA?.markLive();window.CrucixPWA?.cacheLive(D);}
   return true;
+}
+// Sweep replay (replay.js) hooks. An archived sweep goes through the live render path; the alert strip and tray stay live, so
+// the live alerts object is kept instead of the archived summary.
+function applyReplaySnapshot(data){return applySnapshot({...data,alerts:D.alerts},{force:true});}
+// Back to live: the newest live snapshot replaces the archived one, with whichever alert summary is newer (SSE `alerts`
+// messages kept updating the live one during the replay).
+function restoreLiveSnapshot(data){return applySnapshot({...data,alerts:newerAlerts(D.alerts,data?.alerts)},{force:true});}
+function newerAlerts(current,incoming){const at=value=>Number.isFinite(value?.generatedAt)?value.generatedAt:-Infinity;return at(incoming)>=at(current)?incoming:current;}
+// CrucixClock sends no change notification: after a freeze or a release every age label is redrawn here.
+function redriveClock(){
+  updateRuntimeStatus();
+  liveExpirySignature='';refreshLiveFreshness();
+  window.CrucixRecordInspector?.refresh();
+  window.CrucixAlerts?.update(D.alerts);
+}
+async function fetchJsonNoStore(url){
+  const response=await fetch(url,{cache:'no-store',credentials:'same-origin',headers:{Accept:'application/json'},signal:AbortSignal.timeout(10000)});
+  if(!response.ok){const error=new Error('HTTP '+response.status);error.status=response.status;throw error;}
+  return response.json();
 }
 async function pollSnapshot(){
   if(apiRequestRunning||location.protocol==='file:')return;
@@ -2341,7 +2368,8 @@ async function pollSnapshot(){
   try{
     const response=await fetch('/api/data',{cache:'no-store',signal:controller.signal});
     if(!response.ok)throw new Error('API unavailable '+response.status);
-    const data=await response.json();applySnapshot(data);
+    // During a sweep replay the live snapshot is kept aside (replay.js) instead of replacing the archived one.
+    const data=await response.json();if(window.CrucixReplay?.offerLive(data)!==false)applySnapshot(data);
     if(!sseConnected)connectionState='polling';
   }catch{if(!sseConnected)connectionState='offline';}
   finally{clearTimeout(timer);apiRequestRunning=false;updateRuntimeStatus();}
@@ -2353,7 +2381,8 @@ function connectSSE(){
   liveEvents.onmessage=event=>{
     try{
       const message=JSON.parse(event.data);
-      if(message.type==='update'){applySnapshot(message.data);connectionState='live';}
+      if(message.type==='update'){if(window.CrucixReplay?.offerLive(message.data)!==false)applySnapshot(message.data);connectionState='live';}
+      // Alerts stay live during a replay: D.alerts is the live summary then too (applyReplaySnapshot keeps it).
       else if(message.type==='alerts'){if(window.CrucixAlerts?.update(message.data))D.alerts=message.data;}
       else if(message.type==='sweep_start'){const badge=document.querySelector('.alert-badge');if(badge)badge.textContent=t('status.sweeping','SWEEPING…');}
       else if(message.type==='sweep_error'){lastSweepError=String(message.error||message.message||'Sweep failed');}
@@ -2386,6 +2415,9 @@ document.addEventListener('DOMContentLoaded',()=>{
   // Before the inspector: it docks below the alert strip.
   window.CrucixAlerts?.mount({getSummary:()=>D.alerts,t,now:clockNow});
   window.CrucixRecordInspector?.mount({getSources:()=>D.liveSources,getEvents:()=>currentSnapshot().events,t,now:clockNow});
+  // Before init: the first top bar already carries the replay button. Not on file pages or the offline shell (no archive there).
+  if(location.protocol!=='file:'&&!window.__CRUCIX_OFFLINE_SHELL__)window.CrucixReplay?.mount({root:document.getElementById('replayBar'),fetchJson:fetchJsonNoStore,
+    applySnapshot:applyReplaySnapshot,restoreLive:restoreLiveSnapshot,redrive:redriveClock,t,locale:L.meta?.code==='hu'?'hu-HU':L.meta?.code==='fr'?'fr-FR':'en-US'});
   init();
   if(location.protocol!=='file:')CrucixPWA.init({getSnapshot:()=>D,applySnapshot:data=>!D.meta.timestamp&&applySnapshot(data,{cached:true}),t});
   if(location.protocol!=='file:'){

@@ -168,6 +168,18 @@ test('history reports empty, failed and offline states and clamps invalid page s
   fail=true;change(h,'ci-history-kind','news');await tick();assert.match(byId(h,'ci-body').textContent,/Could not load/);assert.doesNotMatch(byId(h,'ci-body').textContent,/server failure/);h.window.navigator.onLine=false;change(h,'ci-history-kind','health');await tick();assert.match(byId(h,'ci-body').textContent,/Offline/);
 });
 
+test('during a sweep replay history, export and event lookups by id are off and say why',async()=>{
+  const urls=[];const h=harness({historyEnabled:true,translations:{'replay.historyUnavailable':'REPLAY NOTE <b>'},fetch:async url=>{urls.push(String(url));return {ok:true,json:async()=>({items:[fixture()],total:1,limit:50,offset:0,stats:{}})}}});
+  let replaying=true;h.window.CrucixReplay={active:()=>replaying};
+  assert.equal(h.api.openHistory(),true,'the dialog opens with the explanation');await tick();
+  assert.deepEqual(urls,[],'no /api/history request');assert.match(byId(h,'ci-body').textContent,/REPLAY NOTE <b>/);assert.equal(h.document.querySelectorAll('[data-ci-export]').length,0,'no export buttons');
+  assert.equal(await h.api.openEvent('event-not-in-snapshot'),false);assert.deepEqual(urls,[],'no /api/events/:id request');assert.match(byId(h,'ci-body').textContent,/REPLAY NOTE/);
+  h.setSnapshot({events:[fixture({id:'event-replayed',title:'Replayed record'})]});assert.equal(await h.api.openEvent('event-replayed'),true,'records of the replayed sweep still open');assert.equal(byId(h,'ci-title').textContent,'Replayed record');
+  replaying=false;h.api.openHistory();await tick();assert.equal(urls.length,1,'live again: history loads');
+  replaying=true;change(h,'ci-history-kind','news');await tick();assert.equal(urls.length,1,'a filter change during a replay fetches nothing');assert.match(byId(h,'ci-body').textContent,/REPLAY NOTE/);
+  click(h,'[data-ci-export="csv"]');click(h,'[data-ci-export="html"]');assert.equal(h.downloads.length,0);assert.equal(h.opened.length,0,'no export during a replay');
+});
+
 test('saved profiles normalize hostile settings and keep twelve own entries at most',()=>{
   const profiles=Array.from({length:20},(_,i)=>({id:'user-'+i,name:'Profile '+i,layout:{zones:{left:['sensorGrid','evil','sensorGrid'],right:['newsTicker']},visibility:{newsTicker:false,evil:false},fixed:{map:false,evil:false}},layers:{news:false,evil:false},region:'malicious'}));const storage={getItem:()=>JSON.stringify({version:1,profiles}),setItem(){}};const h=harness({profilesEnabled:true,storage});h.api.openProfiles();
   assert.equal(byId(h,'ci-body').querySelectorAll('[data-ci-profile-action="delete"]').length,12);click(h,'[data-ci-profile-action="apply"][data-profile-id="user-0"]');

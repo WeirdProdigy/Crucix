@@ -912,5 +912,23 @@
     "supply": "Energy and supply chain",
     "sanctions": "Sanctions and regulation",
     "health": "Health and environment"
+  },
+  "replay": {
+    "button": "Replay",
+    "region": "Sweep replay",
+    "banner": "Replay of an archived sweep",
+    "slider": "Archived sweep",
+    "prev": "Previous sweep",
+    "next": "Next sweep",
+    "backToLive": "Back to live",
+    "loading": "Loading sweep…",
+    "error": "Could not load this sweep. The previous view is kept.",
+    "notFound": "This sweep is no longer in the archive.",
+    "newerLive": "Newer live data waiting: {count}. It is shown when you go back to live.",
+    "alertsLive": "Alerts stay live during the replay.",
+    "historyUnavailable": "Event history and export read the live store, so they are off during the replay; the records shown are the replayed sweep’s own.",
+    "noSweeps": "Replay needs at least two archived sweeps.",
+    "position": "{index} of {total}",
+    "unknownTime": "Unknown time"
   }
 }
