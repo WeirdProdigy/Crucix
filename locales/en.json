@@ -68,7 +68,8 @@
     "spaceWatch": "Space Watch",
     "europeAlerts": "Europe Alerts",
     "ecbIndicators": "ECB Indicators",
-    "sourceHealth": "Source health"
+    "sourceHealth": "Source health",
+    "changes": "What changed"
   },
   "layers": {
     "airActivity": "Air Activity",
@@ -961,5 +962,38 @@
     "noSources": "No source reported for this domain in the shown sweeps.",
     "error": "Could not load the source health. Close and reopen this window to try again.",
     "close": "Close"
+  },
+  "changes": {
+    "title": "What changed",
+    "windowLabel": "Time window",
+    "windowLast": "Last sweep",
+    "window1h": "1 h",
+    "window6h": "6 h",
+    "window24h": "24 h",
+    "since": "Since {time}",
+    "byDomain": "Changes by domain",
+    "newRecords": "New records",
+    "sourceChanges": "Source changes",
+    "signals": "Signals",
+    "typeNew": "New",
+    "typeEscalated": "Escalated",
+    "typeDeescalated": "De-escalated",
+    "to": "changed to",
+    "upTo": "up to {count}",
+    "baseline": "First sweep, nothing to compare yet. Changes show up after the next sweep.",
+    "baselineWindow": "No earlier sweeps to compare in this window yet.",
+    "waiting": "Changes appear once the first sweep has finished.",
+    "nothing": "Nothing changed since the previous sweep.",
+    "nothingWindow": "Nothing changed in this window.",
+    "nothingLens": "Nothing changed in this domain.",
+    "loading": "Loading changes…",
+    "error": "Could not load the {window} changes. Showing {shown} instead.",
+    "replayNote": "Longer windows read the live archive, so they are off during the replay. The list is the replayed sweep’s own.",
+    "cappedRecords": "Showing {shown} of {total} new records, most severe first.",
+    "cappedRecordsAbout": "Showing {shown} of up to {total} new records, most severe first.",
+    "cappedList": "Showing {shown}. The list is capped, so more may exist.",
+    "chipLabel": "{count} changes since the previous sweep",
+    "chipLabelOne": "{count} change since the previous sweep",
+    "chipLabelAtLeast": "At least {count} changes since the previous sweep"
   }
 }

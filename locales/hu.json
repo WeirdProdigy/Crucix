@@ -68,7 +68,8 @@
     "spaceWatch": "Űrfigyelés",
     "europeAlerts": "Európai riasztások",
     "ecbIndicators": "EKB-mutatók",
-    "sourceHealth": "Források állapota"
+    "sourceHealth": "Források állapota",
+    "changes": "Mi változott"
   },
   "layers": {
     "airActivity": "Légi aktivitás",
@@ -961,5 +962,38 @@
     "noSources": "A megjelenített lekérdezésekben egyetlen forrás sem jelentett ebből a témából.",
     "error": "A források állapota nem tölthető be. Zárd be az ablakot, majd nyisd meg újra.",
     "close": "Bezárás"
+  },
+  "changes": {
+    "title": "Mi változott",
+    "windowLabel": "Időablak",
+    "windowLast": "Utolsó lekérdezés",
+    "window1h": "1 óra",
+    "window6h": "6 óra",
+    "window24h": "24 óra",
+    "since": "{time} óta",
+    "byDomain": "Változások témánként",
+    "newRecords": "Új rekordok",
+    "sourceChanges": "Forrásállapot-változások",
+    "signals": "Jelzések",
+    "typeNew": "Új",
+    "typeEscalated": "Erősödött",
+    "typeDeescalated": "Enyhült",
+    "to": "erre változott:",
+    "upTo": "legfeljebb {count}",
+    "baseline": "Első lekérdezés, még nincs mihez hasonlítani. A változások a következő lekérdezés után jelennek meg.",
+    "baselineWindow": "Ebben az időablakban még nincs összehasonlítható korábbi lekérdezés.",
+    "waiting": "A változások az első lekérdezés befejezése után jelennek meg.",
+    "nothing": "Az előző lekérdezés óta nem történt változás.",
+    "nothingWindow": "Ebben az időablakban nem történt változás.",
+    "nothingLens": "Ebben a témában nem történt változás.",
+    "loading": "Változások betöltése…",
+    "error": "Nem sikerült betölteni ezt az időablakot: {window}. Helyette ez látható: {shown}.",
+    "replayNote": "A hosszabb időablakok az élő archívumból olvasnak, ezért visszajátszás közben nem érhetők el. A lista a visszajátszott lekérdezés saját változásait mutatja.",
+    "cappedRecords": "{total} új rekordból {shown} látható, a legsúlyosabbak elöl.",
+    "cappedRecordsAbout": "Legfeljebb {total} új rekordból {shown} látható, a legsúlyosabbak elöl.",
+    "cappedList": "{shown} látható. A lista korlátozott, ezért lehet több is.",
+    "chipLabel": "{count} változás az előző lekérdezés óta",
+    "chipLabelOne": "{count} változás az előző lekérdezés óta",
+    "chipLabelAtLeast": "Legalább {count} változás az előző lekérdezés óta"
   }
 }

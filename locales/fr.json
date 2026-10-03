@@ -68,7 +68,8 @@
     "spaceWatch": "Surveillance Spatiale",
     "europeAlerts": "Alertes Europe",
     "ecbIndicators": "Indicateurs BCE",
-    "sourceHealth": "État des sources"
+    "sourceHealth": "État des sources",
+    "changes": "Ce qui a changé"
   },
   "layers": {
     "airActivity": "Activité Aérienne",
@@ -961,5 +962,38 @@
     "noSources": "Aucune source de ce domaine dans les scans affichés.",
     "error": "Impossible de charger l’état des sources. Fermez cette fenêtre puis rouvrez-la pour réessayer.",
     "close": "Fermer"
+  },
+  "changes": {
+    "title": "Ce qui a changé",
+    "windowLabel": "Période",
+    "windowLast": "Dernier scan",
+    "window1h": "1 h",
+    "window6h": "6 h",
+    "window24h": "24 h",
+    "since": "Depuis {time}",
+    "byDomain": "Changements par thème",
+    "newRecords": "Nouvelles données",
+    "sourceChanges": "Changements d’état des sources",
+    "signals": "Signaux",
+    "typeNew": "Nouveau",
+    "typeEscalated": "Escalade",
+    "typeDeescalated": "Désescalade",
+    "to": "est passé à",
+    "upTo": "jusqu’à {count}",
+    "baseline": "Premier scan : rien à comparer pour l’instant. Les changements apparaîtront après le prochain scan.",
+    "baselineWindow": "Aucun scan antérieur à comparer sur cette période pour l’instant.",
+    "waiting": "Les changements apparaîtront une fois le premier scan terminé.",
+    "nothing": "Rien n’a changé depuis le scan précédent.",
+    "nothingWindow": "Rien n’a changé sur cette période.",
+    "nothingLens": "Rien n’a changé dans ce thème.",
+    "loading": "Chargement des changements…",
+    "error": "Impossible de charger la période {window}. Affichage : {shown}.",
+    "replayNote": "Les périodes plus longues lisent l’archive en direct : elles sont désactivées pendant la relecture. La liste est celle du scan relu.",
+    "cappedRecords": "{shown} affichées sur {total} nouvelles données, les plus graves d’abord.",
+    "cappedRecordsAbout": "{shown} affichées sur {total} nouvelles données au plus, les plus graves d’abord.",
+    "cappedList": "{shown} affichés. La liste est plafonnée : il peut y en avoir davantage.",
+    "chipLabel": "{count} changements depuis le scan précédent",
+    "chipLabelOne": "{count} changement depuis le scan précédent",
+    "chipLabelAtLeast": "Au moins {count} changements depuis le scan précédent"
   }
 }

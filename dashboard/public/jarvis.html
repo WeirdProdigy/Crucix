@@ -19,6 +19,7 @@
 <script src="lens-core.js"></script>
 <script src="lens.js"></script>
 <script src="health-matrix.js"></script>
+<script src="changes.js"></script>
 <script src="record-core.js"></script>
 <script src="live-sources.js"></script>
 <script src="record-inspector.js"></script>
@@ -31,6 +32,7 @@
 <link rel="stylesheet" href="replay.css">
 <link rel="stylesheet" href="lens.css">
 <link rel="stylesheet" href="health-matrix.css">
+<link rel="stylesheet" href="changes.css">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#020408">
 <script src="pwa.js"></script>
@@ -517,7 +519,7 @@ const dashboardDefaultZones = {
   center1:['newsTicker'],
   center2:['macroMarkets'],
   center3:['tradeIdeas'],
-  right:['liveSources','crossSourceSignals','osintStream','signalCore','sourceHealth','internetOutages','healthAlerts','supplementalHealth','sweepDelta']
+  right:['changes','liveSources','crossSourceSignals','osintStream','signalCore','sourceHealth','internetOutages','healthAlerts','supplementalHealth','sweepDelta']
 };
 const dashboardPanelIds = Object.values(dashboardDefaultZones).flat();
 const dashboardFixedModuleIds = ['map','mapRegions'];
@@ -666,6 +668,7 @@ function getPanelLabel(panelId){
     case 'supplementalHealth': return 'Supplemental Health';
     case 'sourceHealth': return t('panels.sourceHealth','Source health');
     case 'sweepDelta': return t('panels.sweepDelta','Sweep Delta');
+    case 'changes': return t('panels.changes','What changed');
     default: return panelId;
   }
 }
@@ -953,6 +956,7 @@ function renderTopbar(){
       ${location.protocol==='file:'?'':`<button class="guide-btn" id="pwaTrigger" onclick="CrucixPWA.openSettings()" aria-haspopup="dialog">${t('pwa.menu','Install / offline')}</button>`}
       <button class="guide-btn" id="clusterTrigger" onclick="toggleNewsGrouping()" aria-pressed="${groupNews}">${t('intelligence.groupNews','Group nearby reports')}</button>
       <button class="guide-btn" onclick="openGlossary()">${t('dashboard.guideBtn','What Signals Mean')}</button>
+      ${window.CrucixChanges?.chipHtml?.(D.changes,window.CrucixLens?.get?.())||''}
       ${window.CrucixAlerts?.bell?.()||''}
       <span class="alert-badge">${D.delta?.summary?.criticalChanges>0?t('dashboard.highAlert','HIGH ALERT'):t('dashboard.monitoring','MONITORING')}</span>
     </div>
@@ -1242,6 +1246,7 @@ function buildPanelHtml(panelId, zone){
     case 'healthAlerts': return buildHealthAlertsPanel();
     case 'supplementalHealth': return buildSupplementalHealthPanel();
     case 'sweepDelta': return buildSweepDeltaPanel();
+    case 'changes': return window.CrucixChanges?.panelHtml(D.changes)||'';
     default: return '';
   }
 }
@@ -2324,6 +2329,7 @@ function syncResponsiveLayout(force=false){
 
 // === REINIT (for live updates without boot sequence) ===
 function reinit(){
+  window.CrucixChanges?.update(D.changes);
   window.CrucixAlerts?.update(D.alerts);
   window.CrucixIntelligence?.update(currentSnapshot());
   window.CrucixRecordInspector?.refresh();
@@ -2379,6 +2385,7 @@ function redriveClock(){
   liveExpirySignature='';refreshLiveFreshness();
   window.CrucixRecordInspector?.refresh();
   window.CrucixAlerts?.update(D.alerts);
+  window.CrucixChanges?.refresh();
 }
 async function fetchJsonNoStore(url){
   const response=await fetch(url,{cache:'no-store',credentials:'same-origin',headers:{Accept:'application/json'},signal:AbortSignal.timeout(10000)});
@@ -2448,6 +2455,11 @@ document.addEventListener('DOMContentLoaded',()=>{
   if(location.protocol!=='file:'&&!window.__CRUCIX_OFFLINE_SHELL__)window.CrucixHealthMatrix?.mount({fetchJson:fetchJsonNoStore,t,esc,locale:uiLocale(),onOpenSweep:id=>{window.CrucixHealthMatrix.close({focus:false});return window.CrucixReplay?.open(id);},onAvailability:redrawSourceHealth});
   // The lens bar under the top bar and the live panel's group headers; the first render below already reads the stored lens.
   window.CrucixLens?.mount(document.getElementById('lensBar'),{t});window.CrucixLens?.onChange(applyLens);
+  // "What changed" (panel and header chip) reads the snapshot's own changes; the longer windows and the matrix rows need the archive, so
+  // like the replay they are left out on file pages and in the offline shell. The window chosen lives in memory only.
+  const archiveApi=location.protocol!=='file:'&&!window.__CRUCIX_OFFLINE_SHELL__;
+  window.CrucixChanges?.mount({t,locale:uiLocale(),now:clockNow,getChanges:()=>D.changes,panelShown:()=>isPanelVisible('changes'),isReplay:()=>!!window.CrucixReplay?.active(),
+    openEvent:id=>window.CrucixIntelligence?.openEvent(id),openMatrix:archiveApi?()=>window.CrucixHealthMatrix?.open():undefined,fetchJson:archiveApi?fetchJsonNoStore:undefined});
   init();
   if(location.protocol!=='file:')CrucixPWA.init({getSnapshot:()=>D,applySnapshot:data=>!D.meta.timestamp&&applySnapshot(data,{cached:true}),t});
   if(location.protocol!=='file:'){
@@ -2455,7 +2467,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     fetch('/api/health',{cache:'no-store',signal:AbortSignal.timeout(10000)}).then(response=>response.ok?response.json():null).then(health=>{if(Number.isFinite(health?.refreshIntervalMinutes)&&health.refreshIntervalMinutes>0)refreshIntervalMinutes=health.refreshIntervalMinutes;updateRuntimeStatus();}).catch(()=>{});
     fallbackTimer=setInterval(()=>{if(!sseConnected)pollSnapshot();},60000);
   }
-  freshnessTimer=setInterval(()=>{updateRuntimeStatus();refreshLiveFreshness();},30000);
+  freshnessTimer=setInterval(()=>{updateRuntimeStatus();refreshLiveFreshness();window.CrucixChanges?.refresh();},30000);
   updateRuntimeStatus();
 });
 window.addEventListener('beforeunload',()=>{liveEvents?.close();clearInterval(fallbackTimer);clearInterval(freshnessTimer);});

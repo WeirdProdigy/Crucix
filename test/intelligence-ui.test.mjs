@@ -183,7 +183,7 @@ test('during a sweep replay history, export and event lookups by id are off and 
 test('saved profiles normalize hostile settings and keep twelve own entries at most',()=>{
   const profiles=Array.from({length:20},(_,i)=>({id:'user-'+i,name:'Profile '+i,layout:{zones:{left:['sensorGrid','evil','sensorGrid'],right:['newsTicker']},visibility:{newsTicker:false,evil:false},fixed:{map:false,evil:false}},layers:{news:false,evil:false},region:'malicious'}));const storage={getItem:()=>JSON.stringify({version:1,profiles}),setItem(){}};const h=harness({profilesEnabled:true,storage});h.api.openProfiles();
   assert.equal(byId(h,'ci-body').querySelectorAll('[data-ci-profile-action="delete"]').length,12);click(h,'[data-ci-profile-action="apply"][data-profile-id="user-0"]');
-  assert.equal(h.state.region,'world');assert.equal(h.state.layers.news,false);assert.equal(Object.hasOwn(h.state.layers,'evil'),false);assert.equal(Object.hasOwn(h.state.layout.visibility,'evil'),false);assert.equal(Object.values(h.state.layout.zones).flat().length,16);assert.equal(new Set(Object.values(h.state.layout.zones).flat()).size,16);
+  assert.equal(h.state.region,'world');assert.equal(h.state.layers.news,false);assert.equal(Object.hasOwn(h.state.layers,'evil'),false);assert.equal(Object.hasOwn(h.state.layout.visibility,'evil'),false);assert.equal(Object.values(h.state.layout.zones).flat().length,17);assert.equal(new Set(Object.values(h.state.layout.zones).flat()).size,17);
   change(h,'ci-profile-name','13th');click(h,'[data-ci-profile-action="save"]');assert.equal(byId(h,'ci-body').querySelectorAll('[data-ci-profile-action="delete"]').length,12);assert.match(byId(h,'ci-body').textContent,/12/);
 });
 
@@ -195,6 +195,13 @@ test('profiles save, rename and delete only own entries with blocked-storage ses
 
 test('preset switching retains the original custom workspace and allows restoring it',()=>{
   const h=harness({profilesEnabled:true});const before=JSON.parse(JSON.stringify(h.state));h.api.openProfiles();click(h,'[data-ci-profile-action="apply"][data-profile-id="research"]');click(h,'[data-ci-profile-action="apply"][data-profile-id="market"]');click(h,'[data-ci-profile-action="apply"][data-profile-id="custom"]');assert.equal(h.state.region,before.region);assert.equal(h.state.layout.visibility.tradeIdeas,true);assert.equal(h.state.layout.zones.center2[0],'macroMarkets');assert.equal(h.state.layers.news,true);
+});
+
+test('every workspace preset shows the What changed panel first in the right rail, and an older saved profile gets it too',()=>{
+  for(const id of ['research','market','infrastructure']){const h=harness({profilesEnabled:true});h.api.openProfiles();click(h,'[data-ci-profile-action="apply"][data-profile-id="'+id+'"]');assert.equal(h.state.layout.zones.right[0],'changes',id);assert.equal(h.state.layout.visibility.changes,true,id);}
+  const old={id:'user-old',name:'Before the panel',layout:{zones:{left:['sensorGrid'],right:['sweepDelta']},visibility:{sweepDelta:true},fixed:{}},layers:{},region:'world'};
+  const h=harness({profilesEnabled:true,storage:{getItem:()=>JSON.stringify({version:1,profiles:[old]}),setItem(){}}});h.api.openProfiles();click(h,'[data-ci-profile-action="apply"][data-profile-id="user-old"]');
+  assert.ok(h.state.layout.zones.right.includes('changes'));assert.equal(h.state.layout.visibility.changes,true);assert.equal(h.state.layout.zones.right[0],'sweepDelta','the saved order stays; the new panel is appended');
 });
 
 test('oversized and malformed profile storage leaves presets usable',()=>{
