@@ -484,7 +484,9 @@
         "conflict_fatalities": "Konfliktusok áldozatai",
         "sources_ok": "Működő források",
         "sources_failed": "Hibás források",
-        "sources_stale": "Elavult források"
+        "sources_stale": "Elavult források",
+        "risk_max_score": "Legmagasabb országkockázati pontszám",
+        "risk_countries_high": "Legalább 70-es kockázati pontszámú országok"
       },
       "current": "jelenleg",
       "operator": "Feltétel",
@@ -508,7 +510,9 @@
         "fatalities": "áldozat",
         "sources": "forrás",
         "transits/day": "áthaladás/nap",
-        "aircraft": "repülőgép"
+        "aircraft": "repülőgép",
+        "score": "pont",
+        "countries": "ország"
       },
       "summary": {
         "kinds": "típusok",
@@ -546,7 +550,16 @@
     }
   },
   "llm": {
-    "systemPrompt": "Te egy makrohírszerzési vállalat kvantitatív elemzője vagy. 25 forrásból származó strukturált OSINT- és gazdasági adatokat kapsz, és ezekből 5-8 végrehajtható kereskedési ötletet állítasz elő.\n\nSzabályok:\n- Minden ötlet hivatkozzon a bemenet konkrét adatpontjaira\n- Tartalmazza a belépési indoklást, a fő kockázatokat és az időtávot\n- Kapcsold össze a geopolitikai, gazdasági és piaci jelzéseket\n- Légy konkrét: nevezd meg az instrumentumokat (tickerek, futures, ETF-ek), ne csak általános szektorokat\n- Ha a delta jelentős változásokat mutat, azokkal kezdj\n- NE ismételd meg a \"previous ideas\" listában szereplő ötleteket, kivéve ha a feltételek érdemben változtak\n- A bizonyosság besorolása: HIGH (több megerősítő jelzés), MEDIUM (alátámasztott tézis), LOW (spekulatív)\n\nA kimenet CSAK érvényes JSON tömb legyen. Minden objektum:\n{\n  \"title\": \"Rövid magyar cím (max. 10 szó)\",\n  \"type\": \"LONG|SHORT|HEDGE|WATCH|AVOID\",\n  \"ticker\": \"Elsődleges instrumentum\",\n  \"confidence\": \"HIGH|MEDIUM|LOW\",\n  \"rationale\": \"2-3 magyar mondatos indoklás konkrét adathivatkozásokkal\",\n  \"risk\": \"Fő kockázati tényező magyarul\",\n  \"horizon\": \"Intraday|Days|Weeks|Months\",\n  \"signals\": [\"signal1\", \"signal2\"]\n}"
+    "systemPrompt": "Te egy makrohírszerzési vállalat kvantitatív elemzője vagy. 25 forrásból származó strukturált OSINT- és gazdasági adatokat kapsz, és ezekből 5-8 végrehajtható kereskedési ötletet állítasz elő.\n\nSzabályok:\n- Minden ötlet hivatkozzon a bemenet konkrét adatpontjaira\n- Tartalmazza a belépési indoklást, a fő kockázatokat és az időtávot\n- Kapcsold össze a geopolitikai, gazdasági és piaci jelzéseket\n- Légy konkrét: nevezd meg az instrumentumokat (tickerek, futures, ETF-ek), ne csak általános szektorokat\n- Ha a delta jelentős változásokat mutat, azokkal kezdj\n- NE ismételd meg a \"previous ideas\" listában szereplő ötleteket, kivéve ha a feltételek érdemben változtak\n- A bizonyosság besorolása: HIGH (több megerősítő jelzés), MEDIUM (alátámasztott tézis), LOW (spekulatív)\n\nA kimenet CSAK érvényes JSON tömb legyen. Minden objektum:\n{\n  \"title\": \"Rövid magyar cím (max. 10 szó)\",\n  \"type\": \"LONG|SHORT|HEDGE|WATCH|AVOID\",\n  \"ticker\": \"Elsődleges instrumentum\",\n  \"confidence\": \"HIGH|MEDIUM|LOW\",\n  \"rationale\": \"2-3 magyar mondatos indoklás konkrét adathivatkozásokkal\",\n  \"risk\": \"Fő kockázati tényező magyarul\",\n  \"horizon\": \"Intraday|Days|Weeks|Months\",\n  \"signals\": [\"signal1\", \"signal2\"]\n}",
+    "briefing": {
+      "event": "{kind}, {level}: {title}",
+      "country": "{country}: kockázati pontszám {score}/100, {change}.",
+      "changeUp": "24 óra alatt {value} ponttal nőtt",
+      "changeDown": "24 óra alatt {value} ponttal csökkent",
+      "changeFlat": "24 óra alatt nem változott",
+      "changeNone": "még nincs 24 órás összehasonlítás",
+      "convergence": "{country}: {count} eseménytípus legalább magas szinten 24 órán belül ({kinds})."
+    }
   },
   "api": {
     "errors": {

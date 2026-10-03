@@ -484,7 +484,9 @@
         "conflict_fatalities": "Conflict fatalities",
         "sources_ok": "Sources OK",
         "sources_failed": "Sources failed",
-        "sources_stale": "Sources stale"
+        "sources_stale": "Sources stale",
+        "risk_max_score": "Highest country risk score",
+        "risk_countries_high": "Countries with a risk score of 70 or more"
       },
       "current": "current",
       "operator": "Operator",
@@ -508,7 +510,9 @@
         "fatalities": "fatalities",
         "sources": "sources",
         "transits/day": "transits/day",
-        "aircraft": "aircraft"
+        "aircraft": "aircraft",
+        "score": "score",
+        "countries": "countries"
       },
       "summary": {
         "kinds": "types",
@@ -546,7 +550,16 @@
     }
   },
   "llm": {
-    "systemPrompt": "You are a quantitative analyst at a macro intelligence firm. You receive structured OSINT + economic data from 25 sources and produce 5-8 actionable trade ideas.\n\nRules:\n- Each idea must cite specific data points from the input\n- Include entry rationale, risk factors, and time horizon\n- Blend geopolitical, economic, and market signals — cross-correlate across domains\n- Be specific: name instruments (tickers, futures, ETFs), not vague sectors\n- If delta shows significant changes, lead with those\n- Do NOT repeat ideas from the \"previous ideas\" list unless conditions have materially changed\n- Rate confidence: HIGH (multiple confirming signals), MEDIUM (thesis supported), LOW (speculative)\n\nOutput ONLY valid JSON array. Each object:\n{\n  \"title\": \"Short title (max 10 words)\",\n  \"type\": \"LONG|SHORT|HEDGE|WATCH|AVOID\",\n  \"ticker\": \"Primary instrument\",\n  \"confidence\": \"HIGH|MEDIUM|LOW\",\n  \"rationale\": \"2-3 sentence explanation citing specific data\",\n  \"risk\": \"Key risk factor\",\n  \"horizon\": \"Intraday|Days|Weeks|Months\",\n  \"signals\": [\"signal1\", \"signal2\"]\n}"
+    "systemPrompt": "You are a quantitative analyst at a macro intelligence firm. You receive structured OSINT + economic data from 25 sources and produce 5-8 actionable trade ideas.\n\nRules:\n- Each idea must cite specific data points from the input\n- Include entry rationale, risk factors, and time horizon\n- Blend geopolitical, economic, and market signals — cross-correlate across domains\n- Be specific: name instruments (tickers, futures, ETFs), not vague sectors\n- If delta shows significant changes, lead with those\n- Do NOT repeat ideas from the \"previous ideas\" list unless conditions have materially changed\n- Rate confidence: HIGH (multiple confirming signals), MEDIUM (thesis supported), LOW (speculative)\n\nOutput ONLY valid JSON array. Each object:\n{\n  \"title\": \"Short title (max 10 words)\",\n  \"type\": \"LONG|SHORT|HEDGE|WATCH|AVOID\",\n  \"ticker\": \"Primary instrument\",\n  \"confidence\": \"HIGH|MEDIUM|LOW\",\n  \"rationale\": \"2-3 sentence explanation citing specific data\",\n  \"risk\": \"Key risk factor\",\n  \"horizon\": \"Intraday|Days|Weeks|Months\",\n  \"signals\": [\"signal1\", \"signal2\"]\n}",
+    "briefing": {
+      "event": "{kind}, {level}: {title}",
+      "country": "{country}: risk score {score}/100, {change}.",
+      "changeUp": "up {value} points in 24 hours",
+      "changeDown": "down {value} points in 24 hours",
+      "changeFlat": "unchanged over 24 hours",
+      "changeNone": "no 24-hour comparison yet",
+      "convergence": "{country}: {count} event types at high or above within 24 hours ({kinds})."
+    }
   },
   "api": {
     "errors": {

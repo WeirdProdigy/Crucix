@@ -47,6 +47,14 @@ function envList(name, accept, expected) {
   if (rejected) console.warn(`[Config] ${name} has entries that are not ${expected}; they are ignored`);
   return entries;
 }
+// An on/off switch from the environment: unset or empty gives the fallback; anything but true/false/1/0/yes/no/on/off stops startup.
+export function envBoolean(name, fallback) {
+  const raw = (process.env[name] ?? '').trim().toLowerCase();
+  if (raw === '') return fallback;
+  if (['true', '1', 'yes', 'on'].includes(raw)) return true;
+  if (['false', '0', 'no', 'off'].includes(raw)) return false;
+  throw new Error(`${name} must be true or false`);
+}
 const HOST_NAME = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/;
 
 export default {
@@ -144,6 +152,14 @@ export default {
   sweeps: {
     count: envInteger('SWEEP_ARCHIVE_COUNT', 96, 2, 672), // 96 = 24 hours at the default 15-minute sweep
     maxMb: envInteger('SWEEP_ARCHIVE_MAX_MB', 64, 4, 512),
+  },
+
+  // Country risk, logged predictions and cited briefings (<RUNS_DIR>/intelligence/countries.json and predictions.json).
+  // RISK_ENABLED=false skips the risk step entirely: no files are written and the /api/countries, /api/predictions and
+  // /api/briefing routes are not installed (404).
+  risk: {
+    enabled: envBoolean('RISK_ENABLED', true),
+    retentionDays: envInteger('RISK_RETENTION_DAYS', 35, 14, 90), // event references and score series kept
   },
 
   // Delta engine thresholds — override defaults from lib/delta/engine.mjs

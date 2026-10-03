@@ -14,7 +14,6 @@ const USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) Crucix/2.13 Safari/537.36';
 const REQUEST = Object.freeze({ timeout: 10000, retries: 0, maxBytes: 2 * 1024 * 1024, headers: Object.freeze({ 'User-Agent': USER_AGENT }) });
 const LIST_TTL = 24 * 3600000; // a newly published release is noticed within a day
 const SCORES_TTL = 7 * 24 * 3600000; // the scores of a release, cached against its WorkflowId
-const MAX_REQUESTS = 2; // per call, cold
 const MAX_WORKFLOWS = 500;
 const MAX_ROWS = 1000;
 const MAX_CACHE = 6;
@@ -92,22 +91,21 @@ function reply(response) {
   return response;
 }
 
-// At most two requests per call when cold: the release list of the current data year, then the scores. Releases of a
-// data year appear late (the current year's list is empty until the mid-year release), so an empty list falls back to
-// the previous year; that costs one more request, so the scores of such a release are fetched by the next sweep.
+// Two requests per call when cold: the release list of the current data year, then the scores. Releases of a data year
+// appear late (the current year's list is empty until the mid-year release, measured: January to August), so an empty
+// list falls back to the previous year's list: three requests in that case. The lists are cached for 24 hours and the
+// scores for 7 days, so a warm call makes none.
 export async function briefing(options = {}) {
   const now = options.now ?? Date.now();
   const fetcher = options.fetcher || safeFetch;
   const useCache = options.useCache ?? !options.fetcher;
   try {
-    let requests = 0;
     const year = new Date(now).getUTCFullYear();
     let workflows = null;
     let release = null;
     for (const candidate of [year, year - 1]) {
       let list = useCache ? recall(state.lists, candidate, LIST_TTL, now) : null;
       if (!list) {
-        requests += 1;
         list = reply(await fetcher(`${BASE}/Workflows/GetByYear/${candidate}`, REQUEST));
         if (!Array.isArray(list)) throw failure(SHAPE);
         latestRelease(list, now); // validates the list before it is kept
@@ -119,7 +117,6 @@ export async function briefing(options = {}) {
     if (!release) throw failure('INFORM lists no published release');
     let scores = useCache ? recall(state.scores, release.id, SCORES_TTL, now) : null;
     if (!scores) {
-      if (requests >= MAX_REQUESTS) throw failure('INFORM release found; its scores are fetched on the next sweep');
       scores = reply(await fetcher(`${BASE}/Countries/Scores/?WorkflowId=${release.id}&IndicatorId=INFORM`, REQUEST));
       const result = parseInform(workflows, scores, now);
       if (result.status !== 'ok') throw failure(result.error);

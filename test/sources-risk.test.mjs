@@ -65,7 +65,7 @@ test('VIEWS-Forecast: the newest run, three forecast months, ISO3 map, attributi
   assert.equal((await views({ fetcher: failing(500), now: NOW + 46 * DAY, useCache: true })).status, 'error', 'after 45 days the last good payload is gone');
 });
 
-test('INFORM-Risk: the newest published release, ISO3 scores, attribution; a changed shape is an error; the year fallback stays within two requests', async () => {
+test('INFORM-Risk: the newest published release, ISO3 scores, attribution; a changed shape is an error; the year fallback reads the previous year in the same call', async () => {
   const workflows = [workflow(530, 'INFORM Risk Mid 2027', null), workflow(10, 'INFORM LAC', '2026-09-30T00:00:00', { System: 'INFORM_LAC' }), risk2026, mid2026];
   const result = parseInform(workflows, scoreRows, NOW);
   assert.equal(result.status, 'ok');
@@ -84,8 +84,8 @@ test('INFORM-Risk: the newest published release, ISO3 scores, attribution; a cha
     assert.ok(typeof bad.error === 'string' && bad.error.length > 0 && !('countries' in bad));
   }
 
-  // briefing(): list + scores = two requests; in spring the current year's list is empty, the previous year's release is found
-  // with the second request and its scores are fetched by the next call (never more than two requests in one call).
+  // briefing(): list + scores = two requests; in spring the current year's list is empty, so the previous year's list is read
+  // too and the release's scores come with a third request in the same call.
   const urls = [];
   const fetcher = async url => {
     urls.push(url.replace('https://drmkc.jrc.ec.europa.eu/inform-index/API/InformAPI', ''));
@@ -101,15 +101,10 @@ test('INFORM-Risk: the newest published release, ISO3 scores, attribution; a cha
   urls.length = 0;
   now = Date.parse('2026-05-01T00:00:00Z');
   const first = await inform({ fetcher, now, useCache: true });
-  assert.equal(first.status, 'error');
-  assert.ok(/next sweep/.test(first.error));
-  assert.deepEqual(urls, ['/Workflows/GetByYear/2026', '/Workflows/GetByYear/2025']);
-  urls.length = 0;
-  const second = await inform({ fetcher, now: now + 900000, useCache: true });
-  assert.equal(second.status, 'ok');
-  assert.equal(second.release, 'INFORM Risk 2026');
-  assert.equal(second.workflowId, 505);
-  assert.deepEqual(urls, ['/Countries/Scores/?WorkflowId=505&IndicatorId=INFORM']);
+  assert.equal(first.status, 'ok');
+  assert.equal(first.release, 'INFORM Risk 2026');
+  assert.equal(first.workflowId, 505);
+  assert.deepEqual(urls, ['/Workflows/GetByYear/2026', '/Workflows/GetByYear/2025', '/Countries/Scores/?WorkflowId=505&IndicatorId=INFORM']);
   urls.length = 0;
   assert.equal((await inform({ fetcher, now: now + 2 * 900000, useCache: true })).status, 'ok');
   assert.equal(urls.length, 0, 'the release scores are cached for 7 days');

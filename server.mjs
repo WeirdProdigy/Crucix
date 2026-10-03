@@ -15,6 +15,11 @@ import { buildEvents, clusterEvents, stampLiveEventIds } from './lib/intelligenc
 import { freshLiveSnapshot } from './lib/intelligence/live-sources.mjs';
 import { HistoryStore } from './lib/intelligence/history.mjs';
 import { installIntelligenceRoutes } from './lib/intelligence/routes.mjs';
+import { EntityStore } from './lib/intelligence/entities.mjs';
+import { PredictionJournal } from './lib/intelligence/predictions.mjs';
+import { runRiskStep } from './lib/intelligence/risk-step.mjs';
+import { installRiskRoutes } from './lib/intelligence/risk-routes.mjs';
+import { createBriefingService } from './lib/llm/briefing.mjs';
 import { renderOfflineShell } from './lib/offline-shell.mjs';
 import config from './crucix.config.mjs';
 import { getLocale, currentLanguage, getSupportedLocales } from './lib/i18n.mjs';
@@ -62,6 +67,21 @@ function recordSnapshotEvents(snapshot) {
   snapshot.eventClusters = clusterEvents(snapshot.events);
   try { history.add(snapshot.events); historyStatus = 'ok'; }
   catch (error) { historyStatus = 'unavailable'; console.error('[History] Save failed:', error.message); }
+}
+// Country risk (runs/intelligence/countries.json and predictions.json): a missing or corrupt file starts empty. With
+// RISK_ENABLED=false nothing is created, the step never runs and the risk routes are not installed.
+const riskStore = config.risk.enabled ? new EntityStore(RUNS_DIR, { retentionDays: config.risk.retentionDays }) : null;
+const riskJournal = config.risk.enabled ? new PredictionJournal(RUNS_DIR) : null;
+riskStore?.load();
+riskJournal?.load();
+let riskStatus = config.risk.enabled ? 'unavailable' : 'disabled';
+let riskLatest = null; // the last successful step: {at, scores, inputs}
+// Never throws: on a failure the snapshot goes on without `risk` and /api/health says 'unavailable'.
+function recordRisk(snapshot, raw) {
+  if (!riskStore) return;
+  const result = runRiskStep({ store: riskStore, journal: riskJournal, snapshot, raw, now: Date.now() });
+  riskStatus = result.ok ? 'ok' : 'unavailable';
+  if (result.ok) riskLatest = result;
 }
 // Alert state lives in runs/alerts/; a missing or corrupt file starts empty and never stops the server.
 const alertEngine = new AlertEngine(RUNS_DIR, { config: { maxActivePerRule: config.alerts.maxActivePerRule } });
@@ -309,6 +329,12 @@ app.get('/api/data', (req, res) => {
 });
 
 installIntelligenceRoutes(app, { getSnapshot: () => freshLiveSnapshot(currentData), history, language: currentLanguage });
+if (riskStore) {
+  const briefing = createBriefingService({ provider: llmProvider, language: currentLanguage, store: riskStore, history,
+    getSnapshot: () => currentData, getScores: () => riskLatest?.scores ?? null });
+  installRiskRoutes(app, { store: riskStore, journal: riskJournal, getSnapshot: () => currentData, getState: () => riskLatest, history, briefing,
+    security: { publicUrl: config.alerts.publicUrl, allowedHosts: config.alerts.allowedHosts } });
+}
 // After an operator action the dashboards get the new summary; the next /api/data and page load carry it too.
 installAlertRoutes(app, { engine: alertEngine, getSnapshot: () => freshLiveSnapshot(currentData), onChange: (summary, newIds) => {
   if (currentData) currentData.alerts = summary;
@@ -340,6 +366,7 @@ app.get('/api/health', (req, res) => {
     refreshIntervalMinutes: config.refreshIntervalMinutes,
     language: currentLanguage,
     historyStatus,
+    riskStatus,
     archiveStatus: sweepArchive.status,
     archivedSweeps: archivedSweepCount(),
   });
@@ -438,6 +465,8 @@ async function runSweepCycle() {
     memory.pruneAlertedSignals();
 
     recordSnapshotEvents(synthesized);
+    // Country risk: sets synthesized.risk before the alert metrics read it and before the sweep is archived; never throws.
+    recordRisk(synthesized, rawData);
     // Alert engine: never throws and does not wait for the notifications it sends.
     runAlertStep(synthesized, { engine: alertEngine, notifier: alertNotifier, delta });
     // Sets synthesized.changes and stores the sweep; never throws. After a failed write the next changes are counted from
@@ -503,6 +532,9 @@ async function start() {
       const existing = JSON.parse(readFileSync(join(RUNS_DIR, 'latest.json'), 'utf8'));
       const data = await synthesize(existing, { news: [] });
       recordSnapshotEvents(data);
+      // The stored references and VIEWS/INFORM inputs of runs/latest.json give the dashboard a risk summary at once; the
+      // event ids are cached, so the next sweep does not count these events twice.
+      recordRisk(data, existing);
       // Stale data without a delta: show the stored alerts, do not evaluate. Not archived: this copy is re-synthesized without its
       // news, and the sweep behind runs/latest.json was archived when it ran - except on the first start after the upgrade to a
       // version with an archive, when that sweep ran before there was one. The initial sweep below is then the first one stored.

@@ -178,6 +178,15 @@ The **Current public data** panel grows from nine to 19 keyless sources: IMF Por
 
 The server stores every sweep in `RUNS_DIR/sweeps` (`SWEEP_ARCHIVE_COUNT`, `SWEEP_ARCHIVE_MAX_MB`; a measured real sweep with all 19 live sources current was 757,482 bytes of JSON and 110,404 bytes gzipped, so the default 96 sweeps take about 11 MB) and serves it through four read-only routes (see [API Endpoints](#api-endpoints)). Replay steps over stored sweeps, not continuous time, and only sweeps archived by 2.12.0 or later exist. Storage, retention and the known limits are in the Hungarian [operations guide](docs/OPERATIONS.md#söprés-archívum-és-változások). The measured numbers, the route contracts and the full list of known limits are in the [release notes](docs/releases/v2.12.0.md).
 
+### Country risk and cited briefings (v2.13, server side)
+
+- **Country risk 0–100.** After the events of each sweep the server links every event to at most three countries (trusted coordinates or a structured place name count as *located*; news and keyword-placed records only by a country named in their title or summary, as *mentioned*) and scores each country from six components: located events of the last 24 hours, persistence over 7 days, diversity of high-level event kinds, news attention (after 7 days of data), the [VIEWS](#tier-8-country-risk-inputs-2) conflict forecast for the current month and the INFORM baseline. A missing component is left out and the rest renormalised; `coverage` says how much of the model was available. It is a **heuristic index, not a probability** and not an official rating. Three or more physical event kinds at high or above in 24 hours mark a country as *convergent*.
+- **Logged predictions.** Once a day per active country the server logs "will a new located high-level physical event happen in the next 7 days?" and scores it from its own stored data after 7 days (Brier score, skill against the base rate, reliability bins). Until 30 predictions are resolved it says "not enough data yet".
+- **Cited briefings.** `POST /api/briefing` writes a global or per-country briefing of at most 8 bullets. With an LLM configured the model sees numbered rows, treated as untrusted observations, and must cite row numbers; the server drops invalid numbers and uncited bullets, strips markup and cuts each bullet to 400 characters. Without an LLM, or when it fails, a rule-based briefing in `CRUCIX_LANG` comes back in the same shape, every bullet citing a real record.
+- **Alerts.** Two new metrics, `risk_max_score` and `risk_countries_high` (countries scored 70 or more), work with the threshold and change rules; they are empty while no risk summary exists.
+
+The step runs before the alert step and the archive, never stops a sweep (`/api/health` reports `riskStatus`), and adds about 2 KB (`risk`) to each snapshot. Data lives in `RUNS_DIR/intelligence/countries.json` and `predictions.json` (`RISK_RETENTION_DAYS`, default 35); `RISK_ENABLED=false` turns all of it off. Files, measured sizes and the route contracts are in the Hungarian [operations guide](docs/OPERATIONS.md#országkockázat-előrejelzések-és-hivatkozott-összefoglaló-213).
+
 ---
 
 ## What You Get
@@ -575,6 +584,10 @@ All settings are in `.env` with sensible defaults:
 | `ALERT_MAX_ACTIVE_PER_RULE` | `50` | Open alerts per rule (1–500); further hits are counted, not opened |
 | `SWEEP_ARCHIVE_COUNT` | `96` | Sweeps kept in `RUNS_DIR/sweeps` for replay, changes and the source-health matrix (2–672; 96 = 24 hours at 15 minutes) |
 | `SWEEP_ARCHIVE_MAX_MB` | `64` | Disk budget of the sweep archive in MB (4–512); the oldest sweeps go first, the newest is always kept |
+| `RISK_ENABLED` | `true` | Country risk step, logged predictions and briefings; `false` writes no files and leaves `/api/countries`, `/api/predictions` and `/api/briefing` uninstalled (404) |
+| `RISK_RETENTION_DAYS` | `35` | Days of event references and score history kept in `RUNS_DIR/intelligence/countries.json` (14–90) |
+| `LLM_BRIEFING_MAX_TOKENS` | `1200` | Output budget of a cited briefing (128–8192) |
+| `LLM_BRIEFING_TIMEOUT_MS` | `60000` | Timeout of a cited briefing (1000–360000 ms); a failure gives the rule-based briefing |
 
 Delta engine thresholds (how sensitive the system is to changes between sweeps) can be customized in `crucix.config.mjs` under the `delta.thresholds` section. The defaults are tuned to filter out noise while catching meaningful moves.
 
@@ -600,9 +613,13 @@ When running `npm run dev`:
 | `GET /api/sweeps` | Archived sweeps, newest first: `{sweeps: [{id, timestamp, ok, total, changeCounts}], retention: {count, maxMb}}` (`limit` 1 to `SWEEP_ARCHIVE_COUNT`) |
 | `GET /api/sweeps/:id` | One archived snapshot as it was stored (`id` = `sweep-YYYYMMDDTHHMMSSZ`; unknown → 404). A client that accepts gzip gets the stored gzip file as it is (`Content-Encoding: gzip`), any other client the same JSON text; `Vary: Accept-Encoding` |
 | `GET /api/changes` | What changed: `window` = `last` (default, the current sweep's own changes), `1h`, `6h` or `24h` (merged over the archive) |
+| `GET /api/countries` | Countries with a risk score above 0, highest first (at most 100): `{version, at, total, countries: [{iso3, name, score, change24h, coverage, convergence}]}` |
+| `GET /api/countries/:iso3` | One country's profile: score, components with weights and availability, score series, VIEWS months (run id, attribution, licence note), INFORM release, convergence, the last 20 records and up to 8 linked countries (`iso3` upper-case ISO 3166-1 alpha-3: malformed → 400, unknown → 404) |
+| `GET /api/predictions` | The prediction journal: `{calibration, recent}` (the 20 newest predictions) |
+| `POST /api/briefing` | A cited briefing `{scope, generatedAt, language, source: llm or rules, bullets: [{text, refs: [{n, id, title}]}]}` for `{scope: "global" or an ISO3}`; guarded like the alert routes, body at most 1 KB |
 | `GET /api/source-health` | The source-health matrix: `{sweeps, sources: [{source, domain, cells}]}`, cells oldest to newest (`sweeps` 1 to `SWEEP_ARCHIVE_COUNT`, default 48) |
 
-The archive routes are read-only and `no-store`, behind the same Basic auth; a bad query parameter or sweep id is `400 {error, code, field}`, an unknown sweep `404`, any other failure a generic `503`.
+The country routes take no query parameters and, like the archive routes, answer `400 {error, code, field}`, `404` or a generic `503`. The archive routes are read-only and `no-store`, behind the same Basic auth; a bad query parameter or sweep id is `400 {error, code, field}`, an unknown sweep `404`, any other failure a generic `503`.
 
 The alert routes sit behind the Basic auth when it is configured. `POST`, `PUT` and `DELETE` need `Content-Type: application/json`, the page's own origin and a body of at most 8 KB; errors are `{error, code, field}`. Without Basic auth see the host rules in the [Alert engine](#alert-engine-v210) section.
 
