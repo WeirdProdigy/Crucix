@@ -874,8 +874,8 @@ test('jarvis.html: fetchJsonNoStore passes an abort signal along with its timeou
   assert.deepEqual(plain(seen[2]), { timeout: 10000 }, 'callers without a signal are unchanged');
 });
 
-test('the shell caches palette-core.js, palette.js and palette.css, once each; the cache name is unchanged', () => {
+test('the shell caches palette-core.js, palette.js and palette.css, once each; the cache name carries the release version', () => {
   const sw = read('dashboard/public/sw.js'), base = JSON.parse(sw.match(/const BASE = (\[[^\]]*\]);/)[1].replace(/'/g, '"'));
   for (const path of ['/palette-core.js', '/palette.js', '/palette.css']) assert.equal(base.filter(item => item === path).length, 1, path);
-  assert.match(sw, /const CACHE = 'crucix-shell-v2\.11\.0';/);
+  assert.match(sw, /const CACHE = 'crucix-shell-v2\.12\.0';/);
 });

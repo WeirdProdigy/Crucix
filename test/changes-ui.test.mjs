@@ -1110,7 +1110,7 @@ test('the shell caches changes.js and changes.css, once each', () => {
   const sw = read('dashboard/public/sw.js'), base = JSON.parse(sw.match(/const BASE = (\[[^\]]*\]);/)[1].replace(/'/g, '"'));
   for (const path of ['/changes.js', '/changes.css']) assert.equal(base.filter(item => item === path).length, 1, path);
   assert.equal(new Set(base).size, base.length);
-  assert.ok(sw.includes("const CACHE = 'crucix-shell-v2.11.0';"), 'the cache name is Task 12\'s');
+  assert.ok(sw.includes("const CACHE = 'crucix-shell-v2.12.0';"), 'the cache name carries the release version');
 });
 
 // ===== the server's object, as the page reads it =====

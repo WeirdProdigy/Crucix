@@ -1,5 +1,7 @@
 # Changelog / Változásnapló
 
+- [2.12.0 — Dashboard-szerkezet: témalencsék, Ctrl+K paletta, forrás-egészség mátrix, „Mi változott” és sweep-visszajátszás / Dashboard structure: domain lenses, Ctrl+K palette, source-health matrix, "What changed" and sweep replay](docs/releases/v2.12.0.md) — 2026-10-03
+
 - [2.11.1 — CI-javítás: időzítésfüggő riasztószabály-teszt Windowson / CI fix: a timing-dependent alert-rules test on Windows](docs/releases/v2.11.1.md) — 2026-10-03
 
 - [2.11.0 — Tíz új élő forrás: szorosok, légi forgalom, szankciók, energia és piacok / Ten new live sources: chokepoints, air traffic, sanctions, energy and markets](docs/releases/v2.11.0.md) — 2026-10-03
