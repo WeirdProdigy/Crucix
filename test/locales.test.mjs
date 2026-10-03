@@ -64,6 +64,23 @@ test('the matrix group has the same keys in the same order in en, hu and fr, eac
   for (const lang of LANGS) assert.equal(new Set(['stateOk', 'stateStale', 'stateError', 'stateDisabled', 'stateNoData'].map(key => locale(lang).matrix[key])).size, 5, `${lang}: five distinct state words`);
 });
 
+// Every string of the command palette (palette.js and the page's action/source items in jarvis.html), in locale order.
+const PALETTE_KEYS = ['dialogLabel', 'button', 'inputLabel', 'placeholder', 'resultsLabel', 'groupActions', 'groupSources', 'groupRecords', 'lens', 'lensHint', 'lensActive',
+  'openAlerts', 'openSettings', 'openGlossary', 'openMatrix', 'openBrowser', 'startReplay', 'exitReplay', 'openChanges', 'openRecords', 'showHealth',
+  'searching', 'empty', 'historyFailed', 'replayNote', 'count', 'countOne', 'countNone', 'keys'];
+
+test('the palette group has the same keys in the same order in en, hu and fr, each a plain non-empty string', () => {
+  for (const lang of LANGS) {
+    const group = locale(lang).palette;
+    assert.deepEqual(Object.keys(group || {}), PALETTE_KEYS, `${lang}: palette keys`);
+    for (const key of PALETTE_KEYS) assert.ok(typeof group[key] === 'string' && group[key].trim() !== '', `${lang}: palette.${key}`);
+    assert.ok(!/[<>]/.test(Object.values(group).join('')), `${lang}: plain text, no markup`);
+    for (const [key, name] of [['lens', 'name'], ['openRecords', 'source'], ['showHealth', 'source'], ['count', 'count'], ['countOne', 'count']]) assert.ok(group[key].includes(`{${name}}`), `${lang}: palette.${key} names {${name}}`);
+    for (const key of ['Enter', 'Esc']) assert.ok(group.keys.includes(key) || (lang === 'fr' && group.keys.includes(key === 'Enter' ? 'Entrée' : 'Échap')), `${lang}: palette.keys names ${key}`);
+  }
+  assert.deepEqual(LANGS.map(lang => locale(lang).palette.dialogLabel), ['Command palette', 'Parancspaletta', 'Palette de commandes']);
+});
+
 test('the alert UI has every string it renders, a name for each built-in rule and the inspector level words', () => {
   assert.equal(BUILTIN_RULES.length, 8, 'the built-in rule pack');
   for (const lang of LANGS) {

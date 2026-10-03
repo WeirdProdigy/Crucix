@@ -26,6 +26,8 @@
 <script src="alerts-core.js"></script>
 <script src="alerts.js"></script>
 <script src="alert-rules.js"></script>
+<script src="palette-core.js"></script>
+<script src="palette.js"></script>
 <link rel="stylesheet" href="live-sources.css">
 <link rel="stylesheet" href="record-inspector.css">
 <link rel="stylesheet" href="alerts.css">
@@ -33,6 +35,7 @@
 <link rel="stylesheet" href="lens.css">
 <link rel="stylesheet" href="health-matrix.css">
 <link rel="stylesheet" href="changes.css">
+<link rel="stylesheet" href="palette.css">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#020408">
 <script src="pwa.js"></script>
@@ -952,6 +955,7 @@ function renderTopbar(){
       <span class="meta-pill">${d} <span class="v">${timeStr}</span></span>
       <span class="meta-pill">${t('dashboard.sources','SOURCES')} <span class="v">${D.meta.sourcesOk}/${D.meta.sourcesQueried}</span></span>
       ${D.delta?.summary ? `<span class="meta-pill">${t('dashboard.delta','DELTA')} <span class="v">${D.delta.summary.direction==='risk-off'?'&#x25B2; '+t('dashboard.riskOff','RISK-OFF'):D.delta.summary.direction==='risk-on'?'&#x25BC; '+t('dashboard.riskOn','RISK-ON'):'&#x25C6; '+t('dashboard.mixed','MIXED')}</span></span>` : ''}
+      ${window.CrucixPalette?.button?.()||''}
       <button class="guide-btn" id="settingsTrigger" onclick="openSettings()" aria-haspopup="dialog">${t('dashboard.settings','Settings')}</button>
       <button class="guide-btn" id="eventsTrigger" onclick="CrucixIntelligence.openEvents()" aria-haspopup="dialog">${t('intelligence.events','Events')}</button>
       <button class="guide-btn" id="historyTrigger" onclick="CrucixIntelligence.openHistory()" aria-haspopup="dialog">${t('intelligence.history','Event history')}</button>
@@ -2292,6 +2296,37 @@ function closeGlossary(){
   document.body.style.overflow = document.getElementById('settingsOverlay')?.classList.contains('show') ? 'hidden' : '';
 }
 
+// The command palette's actions (palette.js ranks and runs them, after it closed): the dashboard's own entry points, then the lenses.
+// Built on every open, so what the page cannot do now is left out (no alert tray, no archive on file pages and in the offline shell,
+// the changes panel not in the layout); during a replay the replay action leads back to live.
+function paletteActions(){
+  const say=(key,fallback)=>t('palette.'+key,fallback),item=(id,label,run,hint='',keywords=[])=>({id,group:'action',label,hint,keywords,run});
+  const archive=location.protocol!=='file:'&&!window.__CRUCIX_OFFLINE_SHELL__,list=[];
+  if(document.getElementById('alertTray')&&window.CrucixAlerts?.open)list.push(item('alerts',say('openAlerts','Open alerts'),()=>window.CrucixAlerts.open()));
+  list.push(item('settings',say('openSettings','Open settings'),()=>openSettings()));
+  list.push(item('glossary',say('openGlossary','Open the signal guide'),()=>openGlossary()));
+  if(archive&&window.CrucixHealthMatrix?.open)list.push(item('matrix',say('openMatrix','Open the source health matrix'),()=>window.CrucixHealthMatrix.open()));
+  if(window.CrucixRecordInspector?.open)list.push(item('browser',say('openBrowser','Open the record browser (all sources)'),()=>window.CrucixRecordInspector.open('all')));
+  if(archive&&window.CrucixReplay?.open)list.push(window.CrucixReplay.active?.()?item('replay',say('exitReplay','Back to live'),()=>window.CrucixReplay.exit()):item('replay',say('startReplay','Replay archived sweeps'),()=>window.CrucixReplay.open()));
+  if(isPanelVisible('changes')&&document.getElementById('changesPanel')&&window.CrucixChanges?.focus)list.push(item('changes',say('openChanges','Go to “What changed”'),()=>window.CrucixChanges.focus()));
+  const lens=window.CrucixLens?.get?.()||'all';
+  for(const id of ['all',...(window.CrucixDomains?.DOMAIN_IDS||[])]){const name=t('lenses.'+id,id);list.push(item('lens:'+id,say('lens','Lens: {name}').split('{name}').join(name),()=>window.CrucixLens?.set?.(id),id===lens?say('lensActive','Current lens'):say('lensHint','Switch the domain lens'),[id,name]));}
+  return list;
+}
+
+// One palette item per source of the domain registry: a live source opens its records in the inspector, any other one the source
+// health matrix (switching to its domain first when the lens hides it). The domain is the hint and, with the name, a keyword.
+function paletteSources(){
+  const say=(key,fallback,name)=>t('palette.'+key,fallback).split('{source}').join(name),live=window.CrucixLiveSources?.policies||{};
+  const archive=location.protocol!=='file:'&&!window.__CRUCIX_OFFLINE_SHELL__,list=[];
+  for(const domain of window.CrucixDomains?.DOMAINS||[])for(const name of domain.sources){
+    const area=t('lenses.'+domain.id,domain.id),base={group:'source',hint:area,keywords:[name,area,domain.id]};
+    if(Object.hasOwn(live,name)&&window.CrucixRecordInspector?.open)list.push({...base,id:'records:'+name,label:say('openRecords','Open records: {source}',name),run:()=>window.CrucixRecordInspector.open(name)});
+    else if(archive&&window.CrucixHealthMatrix?.open)list.push({...base,id:'health:'+name,label:say('showHealth','Source health: {source}',name),run:()=>{if(!lensMatchesSource(name))window.CrucixLens?.set?.(domain.id);return window.CrucixHealthMatrix.open();}});
+  }
+  return list;
+}
+
 function refreshMapViewport(forceGlobeReflow=false){
   const container = document.getElementById('mapContainer');
   if(!container) return;
@@ -2391,8 +2426,11 @@ function redriveClock(){
   window.CrucixAlerts?.update(D.alerts);
   window.CrucixChanges?.refresh();
 }
-async function fetchJsonNoStore(url){
-  const response=await fetch(url,{cache:'no-store',credentials:'same-origin',headers:{Accept:'application/json'},signal:AbortSignal.timeout(10000)});
+// init.signal (the palette's history search) can end the request early; the 10 s timeout always applies (without AbortSignal.any
+// only the timeout does, and the caller drops a stale answer itself).
+async function fetchJsonNoStore(url,init){
+  const timeout=AbortSignal.timeout(10000),own=init&&init.signal;
+  const response=await fetch(url,{cache:'no-store',credentials:'same-origin',headers:{Accept:'application/json'},signal:own&&typeof AbortSignal.any==='function'?AbortSignal.any([own,timeout]):timeout});
   if(!response.ok){const error=new Error('HTTP '+response.status);error.status=response.status;throw error;}
   return response.json();
 }
@@ -2464,6 +2502,9 @@ document.addEventListener('DOMContentLoaded',()=>{
   const archiveApi=location.protocol!=='file:'&&!window.__CRUCIX_OFFLINE_SHELL__;
   window.CrucixChanges?.mount({t,locale:uiLocale(),now:clockNow,getChanges:()=>D.changes,panelShown:()=>isPanelVisible('changes'),isReplay:()=>!!window.CrucixReplay?.active(),
     openEvent:id=>window.CrucixIntelligence?.openEvent(id),openMatrix:archiveApi?()=>window.CrucixHealthMatrix?.open():undefined,fetchJson:archiveApi?fetchJsonNoStore:undefined});
+  // Ctrl+K / Cmd+K: before the first top bar (it carries the palette button). The record search reads /api/history, so like the archive
+  // hooks it is left out on file pages and in the offline shell; the items are built on every open.
+  window.CrucixPalette?.mount({fetchJson:archiveApi?fetchJsonNoStore:undefined,t,esc,actions:paletteActions,sources:paletteSources});
   init();
   if(location.protocol!=='file:')CrucixPWA.init({getSnapshot:()=>D,applySnapshot:data=>!D.meta.timestamp&&applySnapshot(data,{cached:true}),t});
   if(location.protocol!=='file:'){

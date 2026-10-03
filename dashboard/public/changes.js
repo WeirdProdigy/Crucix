@@ -318,5 +318,6 @@
     document.addEventListener('click',guarded(onClick));
     return true;
   }
-  window.CrucixChanges=Object.freeze({mount,panelHtml,chipHtml,update,refresh});
+  // focus(): the command palette's way to the panel (as the chip does); false while the panel is not on the page.
+  window.CrucixChanges=Object.freeze({mount,panelHtml,chipHtml,update,refresh,focus:guarded(focusPanel)});
 })(window,document);

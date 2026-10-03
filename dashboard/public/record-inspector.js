@@ -302,7 +302,21 @@
   }
   // After new data: re-render in place (scroll, focused row and selection kept); never reopens a closed view.
   function refresh(){try{if(aside&&R.store.get().source)render();}catch(e){console.error('[inspector]',e);}}
+  // The command palette: a live source opens in the docked inspector like its card's button (also from the browser), 'all' opens
+  // every record in the browser. false for a name that is not a live source, and before mount.
+  function open(name){
+    if(!aside||typeof name!=='string')return false;
+    try{
+      if(name==='all'){lastRec=null;set(R.openBrowser(R.openSource(R.store.get(),'all')));return true;}
+      if(!Object.hasOwn(live().policies,name))return false;
+      // The same source expanded in the browser docks again (its filters kept); openFrom opens any other one docked.
+      const state=R.store.get();
+      if(state.browserOpen&&state.source===name)set(R.closeBrowser(state));
+      openFrom(name);
+      return true;
+    }catch(e){console.error('[inspector]',e);return false;}
+  }
   // ===== End controller =====
 
-  window.CrucixRecordInspector={renderInspector,renderBrowser,mount,refresh};
+  window.CrucixRecordInspector={renderInspector,renderBrowser,mount,refresh,open};
 })(window);

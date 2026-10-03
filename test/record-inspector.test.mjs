@@ -157,3 +157,22 @@ test('mount does nothing without the live source module',()=>{
   const {window,errors}=dom('#src=GDACS',['record-core.js','record-inspector.js']);
   assert.doesNotThrow(()=>window.CrucixRecordInspector.mount(options)); assert.equal(errors.length,0);
 });
+
+test('open(name): the command palette opens a live source in the docked inspector and every record in the browser',()=>{
+  const {window,errors,created}=dom(''),I=window.CrucixRecordInspector,R=window.CrucixRecords;
+  assert.equal(I.open('GDACS'),false,'nothing before mount');
+  I.mount(options);
+  const dialog=created.find(node=>node.tag==='dialog');dialog.showModal=()=>{dialog.open=true;};
+  for(const name of ['Nope','',null,'constructor'])assert.equal(I.open(name),false,String(name));
+  assert.equal(R.store.get().source,null,'an unknown name changes nothing');
+  assert.equal(I.open('all'),true);
+  assert.equal(R.store.get().source,'all');assert.equal(R.store.get().browserOpen,true,'all = the record browser');assert.equal(dialog.open,true);
+  assert.equal(I.open('GDACS'),true);
+  assert.equal(R.store.get().source,'GDACS');assert.equal(R.store.get().browserOpen,false,'a source = the docked inspector, also from the browser');
+  assert.equal(created.find(node=>node.tag==='aside').hidden,false);
+  R.store.set(R.openBrowser(R.setFilters(R.store.get(),{text:'quake'})));
+  assert.equal(I.open('GDACS'),true);
+  assert.equal(R.store.get().browserOpen,false,'the same source expanded in the browser docks again');
+  assert.equal(R.store.get().filters.text,'quake','with its filters');
+  assert.deepEqual(errors,[]);
+});

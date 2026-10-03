@@ -351,6 +351,16 @@ test('chip click: scrolls to the panel and focuses its heading; no panel, no err
   assert.equal(bare.errors.length, 0);
 });
 
+test('focus(): the command palette goes to the panel the way the chip does; false while the panel is not on the page', () => {
+  const r = mounted({ changes: FULL });
+  assert.equal(r.api.focus(), false, 'not drawn (not in the layout)');
+  r.draw();
+  assert.equal(r.api.focus(), true);
+  assert.ok(r.doc.activeElement === r.rail.querySelector('#changesTitle'), 'the heading takes the focus');
+  assert.equal(r.panel().scrolled.length, 1, 'scrolled into view');
+  assert.deepEqual(r.errors, []);
+});
+
 // ===== clicks on rows =====
 
 test('a record row calls the open-record hook with the event id; a source row opens the matrix', async () => {

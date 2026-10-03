@@ -1,0 +1,44 @@
+/* Command palette (palette.js): a modal dialog near the top of the viewport with a search field over a listbox of grouped results.
+   The active option has a marker (›) and an outline besides its colour, so it is visible in forced colours too; labels wrap instead of
+   scrolling sideways, and the dialog never exceeds the viewport (390 px phones included). */
+.pl-trigger{display:inline-flex;align-items:center;gap:6px}
+.pl-kbd{padding:0 4px;border:1px solid rgba(68,204,255,.35);border-radius:3px;font:inherit;font-size:9px;letter-spacing:.04em;opacity:.85}
+.pl-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+.pl-dialog{box-sizing:border-box;width:min(640px,calc(100vw - 32px));max-width:none;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);margin:12vh auto auto;padding:0;border:1px solid var(--border-bright,rgba(100,240,200,.3));border-radius:8px;background:#060e16;color:var(--text,#e8f4f0);font-family:var(--sans,sans-serif);font-size:13px;line-height:1.45;overflow:hidden}
+.pl-dialog[open]{display:flex;flex-direction:column;animation:pl-in .12s ease-out}
+.pl-dialog::backdrop{background:rgba(2,6,10,.72)}
+@keyframes pl-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.pl-box{display:flex;flex-direction:column;flex:1 1 auto;min-width:0;min-height:0}
+.pl-field{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border,rgba(255,255,255,.12))}
+.pl-field:focus-within{border-bottom-color:var(--accent2,#44ccff)}
+.pl-icon{flex:none;color:var(--accent,#64f0c8);font-family:var(--mono,monospace);font-size:18px;line-height:1}
+.pl-input{flex:1 1 auto;min-width:0;margin:0;padding:6px 0;border:0;background:transparent;color:var(--text,#e8f4f0);font:inherit;font-size:16px;outline:none}
+.pl-input::placeholder{color:var(--dim,#8aa0a8);opacity:1}
+.pl-list{flex:1 1 auto;min-height:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;padding:2px 0 6px}
+.pl-group{margin:0;padding:0;list-style:none}
+.pl-head{padding:10px 14px 4px;color:var(--dim,#8aa0a8);font-family:var(--mono,monospace);font-size:10px;letter-spacing:.12em;text-transform:uppercase}
+.pl-opt{display:flex;align-items:flex-start;gap:8px;padding:7px 14px 7px 12px;border-left:2px solid transparent;cursor:pointer}
+.pl-opt:hover{background:rgba(255,255,255,.04)}
+.pl-opt[aria-selected="true"]{background:rgba(100,240,200,.1);border-left-color:var(--accent,#64f0c8);outline:1px solid rgba(100,240,200,.35);outline-offset:-1px}
+.pl-mark{flex:none;width:.8em;visibility:hidden;color:var(--accent,#64f0c8);font-family:var(--mono,monospace);font-weight:700}
+.pl-opt[aria-selected="true"] .pl-mark{visibility:visible}
+.pl-text{display:flex;flex:1 1 auto;flex-direction:column;min-width:0}
+.pl-label{overflow-wrap:anywhere}
+.pl-hint{color:var(--dim,#8aa0a8);font-size:11px;overflow-wrap:anywhere}
+.pl-note{margin:0;padding:6px 14px;color:var(--dim,#8aa0a8);font-size:12px;overflow-wrap:anywhere}
+.pl-note:empty{display:none}
+.pl-keys{margin:0;padding:6px 14px;border-top:1px solid var(--border,rgba(255,255,255,.12));color:var(--dim,#8aa0a8);font-family:var(--mono,monospace);font-size:10px;letter-spacing:.04em}
+
+/* No keyboard hint where there is no hover (touch screens); a phone gets the full width and the top of the screen. */
+@media (hover:none){.pl-kbd{display:none}}
+@media (max-width:700px){
+  .pl-dialog{width:calc(100vw - 16px);max-height:calc(100vh - 16px);max-height:calc(100dvh - 16px);margin:8px auto auto}
+  .pl-keys{display:none}
+}
+@media (prefers-reduced-motion: reduce){.pl-dialog[open]{animation:none}}
+@media (forced-colors: active){
+  .pl-field:focus-within{outline:2px solid Highlight;outline-offset:-2px}
+  .pl-opt[aria-selected="true"]{outline:2px solid Highlight;outline-offset:-2px}
+  .pl-kbd{border-color:CanvasText}
+}
