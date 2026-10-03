@@ -11,7 +11,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const target = new URL(process.env.QA_URL || 'http://127.0.0.1:3199/');
 assert(['127.0.0.1', 'localhost'].includes(target.hostname) && target.pathname === '/' && target.protocol === 'http:', 'Use the local deterministic QA fixture');
 const phase = process.env.QA_PHASE || 'detail';
-assert(['detail', 'history', 'profiles', 'inspector', 'live', 'alerts', 'all'].includes(phase), 'QA_PHASE is detail, history, profiles, inspector, live, alerts, or all');
+assert(['detail', 'history', 'profiles', 'inspector', 'live', 'alerts', 'structure', 'all'].includes(phase), 'QA_PHASE is detail, history, profiles, inspector, live, alerts, structure, or all');
 const artifacts = process.env.QA_ARTIFACT_DIR || path.join(os.tmpdir(), 'crucix-intelligence-qa');
 fs.mkdirSync(artifacts, { recursive: true });
 const vendor = fileURLToPath(new URL('../dashboard/public/vendor/', import.meta.url));
@@ -588,6 +588,217 @@ async function alertChecks() {
     } finally { await context.close(); }
   }
 }
+// Dashboard structure (2.12.0) over the fixture's seeded sweep archive (test/fixtures/dashboard-server.mjs): the domain lens (panels,
+// source health, live markers and the changes chip re-render without a reload, the choice survives one), the collapsed live panel,
+// Ctrl+K, the source-health matrix, a replay entered from a matrix cell (frozen clock, a live update kept aside, Back to live), an empty
+// archive, the changes panel and its windows, a hostile source name and record title, and the phone width with each new layer open.
+async function structureChecks() {
+  const control = async query => assert.equal(await (await fetch(target.origin + '/control?' + query)).text(), 'ok');
+  const json = async route => (await fetch(target.origin + route)).json();
+  const focused = (page, selector) => page.evaluate(selector => !!document.activeElement?.matches(selector), selector);
+  const shot = (page, name) => page.screenshot({ path: path.join(artifacts, `structure-${name}.png`) });
+  const HOUR = 3600000, HOSTILE = '<img src=x onerror="window.__structureXss=1">';
+  const SOURCES = ['GDELT', 'NOAA', 'FRED', 'WHO', HOSTILE, 'Fixture disabled', 'Fixture error', 'Fixture live', 'Fixture stale'];
+  const NEW_RECORDS = ['Fixture current GDACS', 'Fixture current Aviation-SIGMET', 'Fixture current IMF-PortWatch', 'Fixture current ADSB-Military', 'M6.2 earthquake — Test earthquake', 'Fixture structure record'];
+  const messages = JSON.parse(fs.readFileSync(new URL('../locales/en.json', import.meta.url), 'utf8'));
+  const measured = {};
+  // What the page shows, and what it must show for a lens computed from D with the domain registry (not with the code under test).
+  const view = page => page.evaluate(() => ({
+    lens: [...document.querySelectorAll('#lensBar [data-lens][aria-pressed="true"]')].map(node => node.dataset.lens),
+    groups: [...document.querySelectorAll('.live-sources-panel .live-group')].map(node => node.dataset.liveDomain),
+    cards: document.querySelectorAll('.live-sources-panel .live-source').length,
+    health: [...document.querySelectorAll('.source-health-panel .source-row > div')].map(node => node.firstChild?.textContent ?? ''),
+    markers: document.querySelectorAll('.markers [aria-label^="Fixture current "]').length,
+    chip: document.querySelector('#changesChip .ch-n')?.textContent ?? null,
+  }));
+  const expected = (page, lens) => page.evaluate(lens => {
+    const domainOf = CrucixDomains.domainOfSource, keep = name => lens === 'all' || domainOf(name) === lens, c = D.changes;
+    return {
+      lens: [lens],
+      groups: CrucixDomains.DOMAIN_IDS.filter(id => D.liveSources.some(source => domainOf(source.source) === id && keep(source.source))),
+      cards: D.liveSources.filter(source => keep(source.source)).length,
+      health: D.health.map(row => row.n).filter(keep),
+      markers: CrucixLiveSources.markerRows(D.liveSources, D.earthquakes).filter(row => keep(row.source)).length,
+      chip: String(lens === 'all' ? c.events.newTotal + c.sources.length + c.signals.length
+        : c.events.new.filter(item => domainOf(item.source) === lens).length + c.sources.filter(item => domainOf(item.source) === lens).length),
+    };
+  }, lens);
+  const flat = async page => { if (!await page.evaluate(() => isFlat)) await page.locator('#projToggle').click(); await page.waitForFunction(() => isFlat && document.querySelectorAll('.markers [aria-label^="Fixture current "]').length > 0); };
+  const fromBody = async page => { await page.evaluate(() => { document.activeElement?.blur?.(); }); assert(await page.evaluate(() => document.activeElement === document.body), 'the focus is on the page body'); };
+  const openPalette = async page => { await page.keyboard.press('Control+k'); await page.locator('#palette[open]').waitFor(); assert(await focused(page, '#palette-input'), 'the focus is in the palette input'); };
+  const noXss = async (page, where) => {
+    assert.equal(await page.evaluate(() => window.__structureXss), undefined, 'hostile names stay inert: ' + where);
+    assert.equal(await page.locator('#changesPanel img, #health-matrix img, #palette img, .source-health-panel img, #replayBar img').count(), 0, 'no image element from a hostile name: ' + where);
+  };
+  await control('liveSources=true&archive=seed');
+  try {
+    const sweeps = (await json('/api/sweeps')).sweeps, matrix = await json('/api/source-health');
+    assert(sweeps.length >= 5, 'the fixture archive holds at least five sweeps: ' + sweeps.length);
+    assert.equal(Date.parse(sweeps[0].timestamp) - Date.parse(sweeps[2].timestamp), 2 * HOUR, 'the third newest sweep is two hours older than the newest');
+    const { context, page } = await prepare({ width: 1280, height: 900 });
+    try {
+      // (1) The hazards lens: only hazards groups, health rows and live markers, and the chip counts the hazards changes; no reload.
+      await flat(page);
+      const all = await view(page), allExpected = await expected(page, 'all');
+      assert.deepEqual(all, allExpected, 'lens all shows every group, source, marker and change');
+      await page.locator('#lensBar [data-lens="hazards"]').click();
+      const hazards = await view(page), hazardsExpected = await expected(page, 'hazards');
+      assert.deepEqual(hazards, hazardsExpected, 'lens hazards re-renders panels, source health, live markers and the chip without a reload');
+      assert.deepEqual(hazards.groups, ['hazards']); assert.deepEqual(hazards.health, ['NOAA']);
+      assert(hazards.cards < all.cards && hazards.markers < all.markers && hazards.markers > 0 && Number(hazards.chip) < Number(all.chip), 'the lens narrowed every count');
+      assert(await page.locator('.live-sources-panel .live-group[data-live-domain="hazards"] .live-group-body').isVisible(), 'the lens group is open');
+      await shot(page, 'lens-hazards');
+      await page.reload({ waitUntil: 'domcontentloaded' }); await page.waitForSelector('#eventsTrigger'); await page.waitForTimeout(3800); await flat(page);
+      assert.deepEqual(await view(page), await expected(page, 'hazards'), 'the lens survives a reload');
+      await page.locator('#lensBar [data-lens="all"]').click();
+      assert.deepEqual(await view(page), await expected(page, 'all'), 'back to all without a reload');
+      measured.lens = { all: { cards: all.cards, health: all.health.length, markers: all.markers, chip: all.chip }, hazards: { cards: hazards.cards, health: hazards.health.length, markers: hazards.markers, chip: hazards.chip } };
+      // (2) Every group collapsed: the live panel stays short at 1280 x 900.
+      const panel = page.locator('.live-sources-panel');
+      for (const head of await panel.locator('button.live-group-head[aria-expanded="true"]').all()) await head.click();
+      assert.equal(await panel.locator('button.live-group-head[aria-expanded="true"]').count(), 0);
+      measured.collapsedPanel = Math.round((await panel.boundingBox()).height * 10) / 10;
+      assert(measured.collapsedPanel <= 420, 'the collapsed live panel is at most 420 px tall at 1280 px: ' + measured.collapsedPanel);
+      await panel.scrollIntoViewIfNeeded(); await panel.screenshot({ path: path.join(artifacts, 'structure-live-collapsed.png') });
+      // (3) Ctrl+K from the page body: "hazard" lists the lens action first, Enter switches the lens; Esc returns the focus to the opener.
+      await page.evaluate(() => { document.body.scrollTop = 0; });
+      await fromBody(page); await openPalette(page);
+      await page.keyboard.type('hazard');
+      const lensOption = page.locator('#palette-list [role="option"]', { hasText: 'Lens: ' + messages.lenses.hazards });
+      await lensOption.waitFor(); assert.equal(await lensOption.getAttribute('aria-selected'), 'true', 'the lens action is the active result');
+      assert.equal(await page.locator('#palette-input').getAttribute('aria-activedescendant'), await lensOption.getAttribute('id'));
+      measured.paletteHazardResults = await page.locator('#palette-list [role="option"]').count();
+      assert(measured.paletteHazardResults <= 12, 'at most 12 results');
+      await shot(page, 'palette');
+      await page.keyboard.press('Enter'); await page.locator('#palette').waitFor({ state: 'hidden' });
+      assert.equal(await page.evaluate(() => CrucixLens.get()), 'hazards', 'Enter applied the lens');
+      assert.deepEqual((await view(page)).groups, ['hazards']);
+      await page.locator('#lensBar [data-lens="all"]').click();
+      await page.locator('#eventsTrigger').focus(); await openPalette(page); await page.keyboard.press('Escape');
+      await page.locator('#palette').waitFor({ state: 'hidden' }); assert(await focused(page, '#eventsTrigger'), 'Esc returns the focus to where it was');
+      // A history query lists records (the last group); End + Enter opens the record in the event detail.
+      await fromBody(page); await openPalette(page); await page.keyboard.type('Test earthquake');
+      const records = page.locator('#palette-list ul.pl-group:has(#pl-h-record) [role="option"]'); await records.first().waitFor();
+      const recordTitle = (await records.last().locator('.pl-label').textContent()).trim();
+      assert.match(recordTitle, /Test earthquake/);
+      await page.keyboard.press('End'); assert.equal(await records.last().getAttribute('aria-selected'), 'true');
+      await page.keyboard.press('Enter'); await page.waitForSelector('#ci-dialog');
+      assert.equal(await page.locator('#ci-title').innerText(), recordTitle, 'the record opened in the event detail'); await page.keyboard.press('Escape');
+      await fromBody(page); await openPalette(page); await page.keyboard.type('structure record');
+      const hostile = page.locator('#palette-list ul.pl-group:has(#pl-h-record) [role="option"]', { hasText: 'Fixture structure record' }); await hostile.waitFor();
+      assert((await hostile.textContent()).includes(HOSTILE), 'the hostile title is listed as text'); await noXss(page, 'palette');
+      await page.keyboard.press('Escape');
+      // (4) The matrix from the source-health panel: one row per source, every cell as the API says, glyph and word.
+      await page.locator('.source-health-panel [data-health-matrix]').click();
+      await page.waitForFunction(() => document.getElementById('health-matrix')?.open && document.querySelectorAll('#health-matrix tr.hm-row').length > 0);
+      const grid = await page.evaluate(() => [...document.querySelectorAll('#health-matrix tr.hm-row')].map(row => ({ source: row.querySelector('th.hm-src').textContent,
+        cells: [...row.querySelectorAll('td.hm-c .hm-cell')].map(cell => [cell.dataset.state, cell.querySelector('.hm-g').textContent, cell.querySelector('.hm-sr').textContent, cell.getAttribute('data-hm-sweep')]), ms: row.querySelector('td.hm-ms').textContent })));
+      assert.deepEqual(grid.map(row => row.source), matrix.sources.map(row => row.source), 'one row per source of the API, in its order');
+      assert.deepEqual(grid.map(row => row.source).sort(), [...SOURCES].sort(), 'one row per fixture source');
+      assert.equal(await page.locator('#health-matrix thead th.hm-time').count(), matrix.sweeps.length);
+      const STATE = [['ok', '✓', 'OK'], ['stale', '◔', 'Stale'], ['error', '✕', 'Error'], ['disabled', '–', 'Disabled']], NODATA = ['nodata', '·', 'No data'];
+      for (const [r, row] of matrix.sources.entries()) for (const [c, cell] of row.cells.entries()) assert.deepEqual(grid[r].cells[c], [...(cell ? STATE[cell[0]] : NODATA), matrix.sweeps[c].id], `cell ${row.source} @ ${c}`);
+      const newest = Object.fromEntries(grid.map(row => [row.source, row.cells.at(-1).slice(0, 3)]));
+      assert.deepEqual([newest['Fixture live'], newest['Fixture stale'], newest['Fixture error'], newest['Fixture disabled']], STATE, 'ok / stale / error / disabled: glyph and word');
+      assert.deepEqual(grid.find(row => row.source === 'GDELT').cells[0].slice(0, 3), NODATA, 'a sweep without the source is "no data"');
+      assert.equal(grid.find(row => row.source === 'Fixture live').ms, '120', 'the last run time of the newest sweep');
+      await noXss(page, 'matrix'); await shot(page, 'matrix');
+      // A cell of the sweep two hours ago enters the replay: banner, frozen clock, two live sources that are current only at that time.
+      const old = sweeps[2], oldMs = Date.parse(old.timestamp);
+      await page.locator(`#health-matrix button.hm-cell[data-hm-sweep="${old.id}"]`).first().click();
+      await page.waitForFunction(ts => D.meta.timestamp === ts, old.timestamp);
+      assert.equal(await page.evaluate(() => document.getElementById('health-matrix').open), false, 'the matrix closed');
+      assert(await page.locator('#replayBar').isVisible() && await page.locator('#replayBar .rp-banner').isVisible(), 'the replay bar is shown');
+      assert.equal(await page.locator('#replayBar .rp-banner').textContent(), messages.replay.banner);
+      assert.equal(await page.locator('#replayBar .rp-position').innerText(), `${sweeps.length - 2} of ${sweeps.length}`);
+      assert.equal(await page.locator('#replayTrigger').getAttribute('aria-pressed'), 'true');
+      assert.deepEqual(await page.evaluate(() => [CrucixClock.frozen(), CrucixClock.now()]), [true, oldMs], 'the clock is frozen at the sweep time');
+      const frozen = await page.evaluate(names => names.map(name => [name, document.querySelector(`.live-source[data-live-source="${name}"]`)?.dataset.liveState, CrucixLiveSources.state(D.liveSources.find(source => source.source === name), Date.now())]), ['ADSB-Military', 'NOAA-SWPC']);
+      assert.deepEqual(frozen, [['ADSB-Military', 'ok', 'stale'], ['NOAA-SWPC', 'ok', 'stale']], 'observed ~2 h 10 min ago: ok at the sweep time, expired at the real time');
+      assert.equal(await page.evaluate(() => D.changes.at), old.timestamp, 'the changes panel shows the replayed sweep\'s own changes');
+      assert.equal(await page.locator('#changesPanel [data-changes-window="6h"]').getAttribute('aria-disabled'), 'true', 'the archive windows are off during the replay');
+      await shot(page, 'replay-bar');
+      // A live update during the replay is kept aside; Back to live applies it and releases the clock.
+      await control('update=true'); const pushed = (await json('/api/data')).meta.timestamp;
+      await page.waitForFunction(() => /Newer live data waiting: 1/.test(document.querySelector('#replayBar .rp-status')?.textContent || ''));
+      assert.equal(await page.evaluate(() => D.meta.timestamp), old.timestamp, 'the live update did not change the replayed page');
+      await page.locator('#replayBar [data-replay="exit"]').click();
+      await page.waitForFunction(ts => D.meta.timestamp === ts, pushed);
+      assert(await page.locator('#replayBar').isHidden(), 'the bar is gone'); assert(await focused(page, '#replayTrigger'), 'the focus is on the replay button');
+      assert.equal(await page.evaluate(() => CrucixClock.frozen()), false); assert(Math.abs(await page.evaluate(() => CrucixClock.now() - Date.now())) < 1000, 'the real clock is back');
+      assert.equal(await page.locator('.live-source[data-live-source="ADSB-Military"]').getAttribute('data-live-state'), 'ok');
+      measured.replay = { sweep: old.id, position: `${sweeps.length - 2}/${sweeps.length}`, pushed };
+      // (5) What changed: the new records of the fixture, every window fetched, a failing window keeps the content.
+      const changes = await page.evaluate(() => D.changes), titles = changes.events.new.map(item => item.title);
+      assert(!changes.baseline && changes.events.newTotal === titles.length, 'a real changes object');
+      for (const title of NEW_RECORDS) assert(titles.some(item => item.startsWith(title)), 'new record: ' + title);
+      const box = page.locator('#changesPanel'); await box.scrollIntoViewIfNeeded();
+      await box.locator('[data-changes-more="records"]').click();
+      assert.deepEqual(await page.locator('#changesPanel [data-changes-section="records"] .ch-title').allTextContents(), titles, 'every new record, in the server order');
+      assert.deepEqual(await page.locator('#changesPanel [data-changes-section="sources"] .ch-name').allTextContents(), changes.sources.map(item => item.source));
+      assert.deepEqual(changes.sources.map(item => [item.source, item.from, item.to]), [['NOAA', 'stale', 'ok'], [HOSTILE, 'error', 'ok']]);
+      await noXss(page, 'changes panel'); await page.locator('#changesPanel').screenshot({ path: path.join(artifacts, 'structure-changes.png') });
+      const [response] = await Promise.all([page.waitForResponse(r => r.url().endsWith('/api/changes?window=6h')), page.locator('#changesPanel [data-changes-window="6h"]').click()]);
+      const six = await response.json();
+      await page.waitForFunction(() => document.getElementById('changesPanel')?.dataset.window === '6h' && !document.getElementById('changesPanel').hasAttribute('aria-busy'));
+      const sixTitles = await page.locator('#changesPanel [data-changes-section="records"] .ch-title').allTextContents();
+      assert.deepEqual(sixTitles, six.events.new.map(item => item.title), 'the 6 h window shows the merged answer');
+      assert.equal(await page.locator('#changesPanel [data-changes-window="6h"]').getAttribute('aria-pressed'), 'true');
+      await page.route('**/api/changes?window=24h', route => route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"fixture"}' }));
+      await page.locator('#changesPanel [data-changes-window="24h"]').click(); await page.locator('#changesPanel .ch-error').waitFor();
+      assert.match(await page.locator('#changesPanel .ch-error').innerText(), /Could not load the 24 h changes/);
+      assert.deepEqual(await page.locator('#changesPanel [data-changes-section="records"] .ch-title').allTextContents(), sixTitles, 'a failed window keeps the content');
+      assert.equal(await page.locator('#changesPanel').getAttribute('data-window'), '6h');
+      await page.unroute('**/api/changes?window=24h'); await page.locator('#changesPanel [data-changes-window="last"]').click();
+      measured.changes = { newTotal: changes.events.newTotal, sources: changes.sources.length, window6h: six.events.newTotal };
+      // (6) The hostile source name and record title are text everywhere.
+      assert((await page.locator('.source-health-panel').innerText()).includes(HOSTILE)); await noXss(page, 'desktop');
+      console.log('STRUCTURE desktop PASS', measured);
+    } finally { await context.close(); }
+    // An empty archive: the replay button is disabled with its reason, no matrix button, the palette's replay says why.
+    await control('archive=empty');
+    {
+      const { context, page } = await prepare({ width: 1280, height: 900 });
+      try {
+        const trigger = page.locator('#replayTrigger'), before = await page.evaluate(() => D.meta.timestamp);
+        assert.deepEqual([await trigger.getAttribute('aria-disabled'), await trigger.getAttribute('title'), await trigger.getAttribute('aria-describedby')], ['true', messages.replay.noSweeps, 'replayTriggerHint']);
+        assert.equal(await page.locator('#replayTriggerHint').textContent(), messages.replay.noSweeps);
+        assert.equal(await page.locator('[data-health-matrix]').count(), 0, 'no matrix button without archived sweeps');
+        await trigger.click({ force: true }); await page.waitForTimeout(300);
+        assert(await page.locator('#replayBar').isHidden(), 'the disabled button opens nothing'); assert.equal(await page.evaluate(() => D.meta.timestamp), before);
+        await fromBody(page); await openPalette(page); await page.keyboard.type('Replay archived'); await page.keyboard.press('Enter');
+        await page.waitForFunction(text => document.querySelector('#replayBar .rp-status')?.textContent === text, messages.replay.noSweeps);
+        assert(await page.locator('#replayBar .rp-head').isHidden(), 'no banner: the replay never started'); assert.equal(await page.evaluate(() => D.meta.timestamp), before);
+        await shot(page, 'replay-empty');
+        await page.locator('#replayBar [data-replay="exit"]').click(); assert(await page.locator('#replayBar').isHidden());
+        console.log('STRUCTURE empty archive PASS');
+      } finally { await context.close(); await control('archive=seed'); }
+    }
+    // (7) 390 px: no horizontal page scroll with the lens bar, the palette, the matrix and the replay bar, each in turn.
+    {
+      const { context, page } = await prepare({ width: 390, height: 844 });
+      try {
+        const fits = async what => {
+          const size = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, bodyScrollWidth: document.body.scrollWidth, innerWidth }));
+          assert(size.scrollWidth <= size.innerWidth && size.bodyScrollWidth <= size.innerWidth, 'no horizontal scroll at 390 px with the ' + what + ': ' + JSON.stringify(size));
+          (measured.phone ||= {})[what] = size.scrollWidth;
+        };
+        await page.locator('#lensBar').scrollIntoViewIfNeeded(); await page.locator('#lensBar [data-lens="hazards"]').click(); await fits('lens bar'); await shot(page, '390-lens');
+        await page.locator('#lensBar [data-lens="all"]').click();
+        await fromBody(page); await openPalette(page); await page.keyboard.type('haz'); await fits('palette'); await shot(page, '390-palette'); await page.keyboard.press('Escape');
+        await page.locator('.source-health-panel [data-health-matrix]').scrollIntoViewIfNeeded(); await page.locator('.source-health-panel [data-health-matrix]').click();
+        await page.waitForFunction(() => document.querySelectorAll('#health-matrix tr.hm-row').length > 0);
+        const dialog = await page.locator('#health-matrix').boundingBox(); assert(dialog.x >= 0 && dialog.x + dialog.width <= 390, 'the matrix dialog fits the width');
+        await fits('matrix'); await shot(page, '390-matrix'); await page.keyboard.press('Escape');
+        await page.evaluate(() => { document.body.scrollTop = 0; }); await page.locator('#replayTrigger').click();
+        await page.locator('#replayBar .rp-banner').waitFor(); await page.waitForFunction(() => CrucixClock.frozen());
+        await fits('replay bar'); await shot(page, '390-replay'); await noXss(page, 'phone');
+        await page.locator('#replayBar [data-replay="exit"]').click(); assert(await page.locator('#replayBar').isHidden());
+        console.log('STRUCTURE 390 px PASS', measured.phone);
+      } finally { await context.close(); }
+    }
+  } finally { await control('liveSources=false&archive=seed'); }
+}
 try {
   if (phase === 'detail' || phase === 'all') await detailChecks();
   if (phase === 'history' || phase === 'all') { await historyChecks(); await clusterChecks(); }
@@ -595,6 +806,7 @@ try {
   if (phase === 'inspector' || phase === 'all') await inspectorChecks();
   if (phase === 'live' || phase === 'all') await liveChecks();
   if (phase === 'alerts' || phase === 'all') await alertChecks();
+  if (phase === 'structure' || phase === 'all') await structureChecks();
   assert.deepEqual(errors, [], 'No browser runtime errors'); assert.deepEqual(external, [], 'No unexpected external requests');
   if (phase === 'profiles' || phase === 'all') assert.deepEqual(legacyAssets, [], 'PWA phase loads all assets locally without legacy CDN routing');
   console.log('Intelligence UI QA passed', { phase, target: target.origin, artifacts, browserPlugin: 'not available; existing Playwright used' });

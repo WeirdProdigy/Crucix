@@ -15,6 +15,10 @@ import { normalizeLiveSources, FACT_FIELDS } from '../../lib/intelligence/live-s
 import { AlertEngine } from '../../lib/alerts/engine.mjs';
 import { installAlertRoutes } from '../../lib/alerts/routes.mjs';
 import { writeJsonAtomic } from '../../lib/atomic-json.mjs';
+import { SweepArchive } from '../../lib/sweeps/archive.mjs';
+import { installSweepRoutes } from '../../lib/sweeps/routes.mjs';
+import { archiveSweep } from '../../lib/sweeps/step.mjs';
+import { buildChanges } from '../../lib/sweeps/changes.mjs';
 const template = readFileSync(new URL('../../dashboard/public/jarvis.html', import.meta.url), 'utf8');
 const embedded = template.match(/^(?:let|const) D = (.*);\s*$/m);
 const data = JSON.parse(embedded[1]);
@@ -32,6 +36,11 @@ data.ideas = [{ type: 'HEDGE', title: 'Fixture idea', rationale: 'Safe text <img
 data.ideasSource = 'rules';
 const reports = [1,2].map(n=>({title:'Fixture Hungary flood response '+n,headline:'Fixture Hungary flood response '+n,source:'Fixture Report '+n,date:data.meta.timestamp,publishedAt:data.meta.timestamp,url:`https://fixture${n}.example/report`,lat:47.5,lon:19.1,locationMethod:'headline-keyword',locationPrecision:'approximate'}));
 data.news.push(...reports);data.newsFeed.push(...reports);
+// Sweep archive (structure QA): sources of four domains next to the domain-less "Fixture" rows, and a hostile source name and record
+// title that reach the source-health panel, the matrix, the changes panel and the palette's record search.
+const HOSTILE='<img src=x onerror="window.__structureXss=1">';
+data.health.push(...['GDELT','NOAA','FRED','WHO',HOSTILE].map(n=>({n,err:false,timestamp:data.meta.timestamp})));
+data.newsFeed.push({headline:'Fixture structure record '+HOSTILE,source:'Fixture structure',timestamp:data.meta.timestamp,type:'rss'});
 data.events = buildEvents(data);
 data.eventClusters = clusterEvents(data.events);
 const historyDir = mkdtempSync(join(tmpdir(),'crucix-fixture-'));
@@ -98,6 +107,37 @@ function liveSamples(now){
       attribution:source+' public source attribution',...(spec.metrics?{metrics:spec.metrics}:{}),observations:spec.rows===false?[]:[row,...more]}];
   }));
 }
+// The live sources of a sweep at `now`, as synthesis stores them (normalized at that time, rows stamped with their event ids).
+const liveAt=(now,names=Object.keys(POLICIES))=>stampLiveEventIds(normalizeLiveSources(Object.fromEntries(Object.entries(liveSamples(now)).filter(([name])=>names.includes(name))),now));
+// Sweep archive: the real SweepArchive, archive step and routes over the fixture's tmp dir. Five past sweeps an hour apart (the oldest a
+// baseline) and the page's own snapshot as the newest, each with `changes` from buildChanges against the one before. The past sweeps carry
+// every live source sampled at their own time (so a replayed one is current only under the frozen clock) except that the sweep an hour
+// ago misses four (their records are new now), none of them has the USGS quake or the hostile record, and the extra sources change state:
+// [code per sweep, -5 h .. -1 h] with 0 ok, 1 stale, 2 error, 3 disabled, null = not reported. The newest sweep has them all ok.
+// /control?archive=empty|seed swaps the archive the routes read (an empty one: replay and matrix unavailable); seed is the default.
+const HOUR=3600000,FLAGS=[{},{stale:true},{err:true},{disabled:true}];
+const PAST={GDELT:[null,0,0,0,0],NOAA:[0,0,0,1,1],FRED:[0,2,0,0,0],WHO:[0,0,3,3,0],[HOSTILE]:[0,0,0,0,2]};
+const MISSING_AN_HOUR_AGO=['GDACS','Aviation-SIGMET','IMF-PortWatch','ADSB-Military'];
+const quietLog={warn(){},error(){},log(){}};
+function pastSweep(hoursAgo,start){
+  const time=start-hoursAgo*HOUR,timestamp=new Date(time).toISOString(),index=5-hoursAgo;
+  const health=[...data.health.slice(0,4).map(row=>({...row,timestamp})),...Object.entries(PAST).filter(([,codes])=>codes[index]!==null).map(([n,codes])=>({n,err:false,...FLAGS[codes[index]],timestamp}))];
+  const snapshot={...structuredClone(data),meta:{...data.meta,timestamp},health,earthquakes:[],newsFeed:data.newsFeed.filter(item=>!item.headline.includes(HOSTILE)),
+    liveSources:liveAt(time,hoursAgo===1?Object.keys(POLICIES).filter(name=>!MISSING_AN_HOUR_AGO.includes(name)):undefined)};
+  snapshot.events=buildEvents(snapshot,{now:time});snapshot.eventClusters=clusterEvents(snapshot.events);
+  return snapshot;
+}
+// The briefing's timing of a snapshot: the health state of each source and a fixed run time, so the matrix has a "last run" column.
+const timingOf=snapshot=>Object.fromEntries(snapshot.health.map((row,i)=>[row.n,{status:row.disabled?'disabled':row.err?'error':row.stale?'stale':'ok',ms:120+i*15}]));
+const seededArchive=new SweepArchive(historyDir,{logger:quietLog}),emptyArchive=new SweepArchive(join(historyDir,'empty-archive'),{logger:quietLog});
+let previousSweep=null;
+for(const hoursAgo of [5,4,3,2,1]){const snapshot=pastSweep(hoursAgo,Date.parse(data.meta.timestamp));archiveSweep({archive:seededArchive,snapshot,timing:timingOf(snapshot),previous:previousSweep,log:quietLog});previousSweep=snapshot;}
+archiveSweep({archive:seededArchive,snapshot:data,timing:timingOf(data),previous:previousSweep,log:quietLog});
+let archive=seededArchive;
+const archiveView={retention:()=>archive.retention(),list:options=>archive.list(options),get:id=>archive.get(id),latest:()=>archive.latest(),healthSeries:options=>archive.healthSeries(options)};
+installSweepRoutes(api,{archive:archiveView,getCurrent:()=>data});
+// Every rebuild of the page's events is a new sweep of the same kind: its changes are counted against the sweep an hour ago again.
+function rebuildEvents(){data.events=buildEvents(data);data.eventClusters=clusterEvents(data.events);history.add(data.events);data.changes=buildChanges(previousSweep,data);}
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/control') {
@@ -107,8 +147,11 @@ const server = http.createServer((req, res) => {
       if(enabled&&url.searchParams.get('expired')==='true')data.liveSources[0].observedAt='2025-01-01T00:00:00Z';
       // Rows carry eventId as in 2.9.0 snapshots; legacyIds=true keeps the 2.8.0 shape without it.
       if(url.searchParams.get('legacyIds')!=='true')data.liveSources=stampLiveEventIds(data.liveSources);
-      data.events=buildEvents(data);data.eventClusters=clusterEvents(data.events);history.add(data.events);
+      rebuildEvents();
     }
+    if(['empty','seed'].includes(url.searchParams.get('archive')))archive=url.searchParams.get('archive')==='empty'?emptyArchive:seededArchive;
+    // update=true: a new live sweep (now) goes out to every open event stream, as the server's broadcast does.
+    if(url.searchParams.get('update')==='true'){data.meta.timestamp=new Date().toISOString();rebuildEvents();for(const client of streams)client.write(`data: ${JSON.stringify({type:'update',data})}\n\n`);}
     if(['seed','newcritical','clear'].includes(url.searchParams.get('alerts')))seedAlerts(url.searchParams.get('alerts'));
     if(['en','hu','fr'].includes(url.searchParams.get('language')))fixtureLanguage=url.searchParams.get('language');
     online = url.searchParams.get('online') !== 'false';
@@ -130,8 +173,7 @@ const server = http.createServer((req, res) => {
     const timer = setTimeout(() => {
       data.meta.timestamp = new Date().toISOString();
       data.newsFeed[0].headline = 'Fixture SSE updated';
-      data.events = buildEvents(data);
-      data.eventClusters = clusterEvents(data.events);history.add(data.events);
+      rebuildEvents();
       res.write(`data: ${JSON.stringify({ type: 'update', data })}\n\n`);
     }, 3000);
     req.on('close', () => { clearTimeout(timer); streams.delete(res); }); return;
@@ -140,7 +182,7 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/offline-shell') {
     res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});res.end(renderOfflineShell(readFileSync(new URL('../../dashboard/public/jarvis.html',import.meta.url),'utf8'),getLocaleForLanguage(fixtureLanguage)));return;
   }
-  if (['/api/history','/api/export','/api/alerts'].includes(url.pathname)||url.pathname.startsWith('/api/events/')||url.pathname.startsWith('/api/alerts/')) { api(req,res);return; }
+  if (['/api/history','/api/export','/api/alerts','/api/sweeps','/api/changes','/api/source-health'].includes(url.pathname)||['/api/events/','/api/alerts/','/api/sweeps/'].some(prefix=>url.pathname.startsWith(prefix))) { api(req,res);return; }
   if (url.pathname !== '/') {
     const root = resolve('dashboard/public');const file = resolve(root, '.' + url.pathname);
     if (file.startsWith(root + sep) && existsSync(file) && statSync(file).isFile()) {
