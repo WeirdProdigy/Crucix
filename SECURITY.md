@@ -4,7 +4,7 @@
 
 If you discover a security issue in Crucix, please report it privately instead of opening a public GitHub issue.
 
-Email: `celesthioailabs@gmail.com`
+Email: `mp3pintyo@gmail.com`
 
 Use a subject line like:
 
