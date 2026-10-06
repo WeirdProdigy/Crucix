@@ -1,5 +1,7 @@
 # Changelog / Változásnapló
 
+- [2.13.2 — README: a kapcsolat és a Star History szakasz eltávolítva / README: Contact and Star History sections removed](docs/releases/v2.13.2.md) — 2026-10-06
+
 - [2.13.1 — A fork saját arca: az upstream demó- és közösségi hivatkozások eltávolítva, proxy-addr frissítve / The fork's own face: upstream demo and community links removed, proxy-addr updated](docs/releases/v2.13.1.md) — 2026-10-06
 
 - [2.13.0 — Intelligencia-réteg: országkockázat, naplózott előrejelzések, konfliktus-előrejelzés és hivatkozott összefoglalók / Intelligence layer: country risk, logged predictions, conflict forecasts and cited briefings](docs/releases/v2.13.0.md) — 2026-10-03

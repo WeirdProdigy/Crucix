@@ -710,24 +710,6 @@ If you find this useful, a star helps others find it too.
 
 For contribution guidelines, review expectations, and source-add rules, see `CONTRIBUTING.md`. For security reports, see `SECURITY.md`.
 
-## Contact
-
-For partnerships, integrations, or other non-issue inquiries, you can reach me at `celesthioailabs@gmail.com`.
-
-For bugs and feature requests, please use GitHub Issues so discussion stays visible and actionable.
-
----
-
-## Star History
-
-<a href="https://www.star-history.com/?repos=calesthio%2FCrucix&type=date&legend=top-left">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=calesthio/Crucix&type=date&theme=dark&legend=top-left" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=calesthio/Crucix&type=date&legend=top-left" />
-    <img alt="Star History Chart" src="https://api.star-history.com/image?repos=calesthio/Crucix&type=date&legend=top-left" />
-  </picture>
-</a>
-
 ---
 
 ## License
