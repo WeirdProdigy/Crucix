@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="hu" data-lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crucix — nyílt forrású hírszerző terminál</title>
+<meta name="description" content="Crucix: 52 nyílt adatforrás, egyetlen parancs, helyben futó Jarvis-stílusú irányítópult. Glóbusz, riasztómotor, országkockázat, visszajátszás.">
+<meta name="theme-color" content="#020408">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23020408'/%3E%3Ccircle cx='16' cy='16' r='8' fill='none' stroke='%2364f0c8' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='2.6' fill='%2364f0c8'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/vendor/fonts.css">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<noscript><p style="position:relative;z-index:5;margin:90px 24px;font-family:monospace;color:#64f0c8">Crucix — open-source intelligence terminal. This showcase page needs JavaScript; see https://github.com/mp3pintyo/Crucix</p></noscript>
+<canvas id="globe" aria-hidden="true"></canvas>
+<div class="vignette" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+<div class="progress" aria-hidden="true"><i></i></div>
+
+<div class="boot" id="boot" aria-hidden="true">
+  <div class="boot-lines" id="bootLines"></div>
+</div>
+
+<header class="nav" id="nav">
+  <a class="brand" href="#top" aria-label="Crucix"><span class="brand-mark"></span><span>CRUCIX</span></a>
+  <nav class="nav-links" aria-label="Fő menü">
+    <a href="#why" data-i18n="nav.why">Miért</a>
+    <a href="#sources" data-i18n="nav.sources">Források</a>
+    <a href="#features" data-i18n="nav.features">Funkciók</a>
+    <a href="#pipeline" data-i18n="nav.pipeline">Működés</a>
+    <a href="#deep" data-i18n="nav.deep">Mélyebben</a>
+    <a href="#principles" data-i18n="nav.principles">Elvek</a>
+    <a href="#start" data-i18n="nav.start">Indítás</a>
+  </nav>
+  <div class="nav-right">
+    <div class="lang" role="group" aria-label="Language">
+      <button type="button" data-set-lang="hu" aria-pressed="true">HU</button>
+      <button type="button" data-set-lang="en" aria-pressed="false">EN</button>
+    </div>
+    <a class="btn btn-small" href="https://github.com/mp3pintyo/Crucix" target="_blank" rel="noopener"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.05-.49.05-.49.8.06 1.23.83 1.23.83.71 1.22 1.87.87 2.33.66.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.03 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.66 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg><span>GitHub</span></a>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ============ HERO ============ -->
+<section class="hero" id="hero" data-globe="hero">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <p class="kicker"><span class="dot live"></span><span data-i18n="hero.kicker" data-scramble>NYÍLT FORRÁSÚ HÍRSZERZŐ TERMINÁL</span></p>
+      <h1 class="logo" aria-label="Crucix"><span class="logo-word" id="logoWord">CRUCIX</span></h1>
+      <p class="tagline" data-i18n-html="hero.tagline">A világ nyílt adatai. <em>Egyetlen képernyőn.</em> A te gépeden.</p>
+      <p class="lede" data-i18n="hero.lede">52 OSINT forrás — műholdas tűzészlelés, repülőforgalom, sugárzásmérés, konfliktusok, szankciók, piacok — párhuzamosan lekérdezve 15 percenként, egyetlen Jarvis-stílusú irányítópulton.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="#start"><span data-i18n="hero.cta1">Indítás 60 másodperc alatt</span><i class="arrow" aria-hidden="true"></i></a>
+        <a class="btn" href="#features" data-i18n="hero.cta2">Mit tud?</a>
+      </div>
+    </div>
+    <aside class="termcard" aria-label="Sweep simulation">
+      <div class="termcard-bar"><span></span><span></span><span></span><b data-i18n="hero.term">SÖPRÉS-SZIMULÁCIÓ · illusztráció</b></div>
+      <div class="termcard-body" id="sweepLog"></div>
+    </aside>
+  </div>
+  <div class="wrap">
+    <ul class="stats" id="stats">
+      <li><b data-count="52">52</b><span data-i18n="stat.sources">forrás</span></li>
+      <li><b data-count="15">15</b><span data-i18n="stat.minutes">perces frissítés</span></li>
+      <li><b data-count="1">1</b><span data-i18n="stat.dep">futásidejű függőség</span></li>
+      <li><b data-count="0">0</b><span data-i18n="stat.telemetry">beépített telemetria</span></li>
+      <li><b data-count="8">8</b><span data-i18n="stat.lenses">tématerület-lencse</span></li>
+      <li><b data-count="10">10</b><span data-i18n="stat.llm">LLM-szolgáltató</span></li>
+    </ul>
+  </div>
+  <a class="scroll-hint" href="#why" aria-label="Scroll"><span data-i18n="hero.scroll">görgess</span><i></i></a>
+</section>
+
+<div class="marquee" aria-hidden="true"><div class="marquee-track" id="marquee"></div></div>
+
+<!-- ============ WHY ============ -->
+<section class="sec" id="why" data-globe="why">
+  <div class="wrap">
+    <p class="eyebrow" data-i18n="why.eyebrow" data-scramble>01 // MIÉRT</p>
+    <h2 class="h2 split" data-i18n-html="why.title">A világ látható.<br><em>Csak szétszórva.</em></h2>
+    <p class="lead" data-i18n="why.lead">A valós idejű információ nagy része — műholdképek, sugárzásszintek, konfliktusesemények, gazdasági mutatók, repülő- és hajóforgalom — nyilvános. Csak épp tucatnyi kormányzati API, kutatóintézet és nyílt adatcsatorna között szóródik szét, amit senkinek nincs ideje egyenként nézni.</p>
+    <div class="why-grid">
+      <article class="card tilt" data-reveal>
+        <div class="num">01</div>
+        <h3 data-i18n="why.c1.t">Szétszórt</h3>
+        <p data-i18n="why.c1.p">Kormányzati API-k, egyetemek, civil mérőhálózatok. Mindegyiknek más formátuma, más késése, más szabálya.</p>
+        <svg class="viz viz-scatter" viewBox="0 0 200 90" aria-hidden="true"></svg>
+      </article>
+      <article class="card tilt" data-reveal>
+        <div class="num">02</div>
+        <h3 data-i18n="why.c2.t">Egy helyen</h3>
+        <p data-i18n="why.c2.p">A Crucix mindet párhuzamosan lekérdezi, összeveti és keresztkorrelálja — a saját gépeden, 15 percenként frissítve.</p>
+        <svg class="viz viz-converge" viewBox="0 0 200 90" aria-hidden="true"></svg>
+      </article>
+      <article class="card tilt" data-reveal>
+        <div class="num">03</div>
+        <h3 data-i18n="why.c3.t">Bárkinek</h3>
+        <p data-i18n="why.c3.p">Nem fizetőfal mögött, nem vállalati platformban, nem kell hozzá biztonsági átvilágítás. Nyílt adat, nyílt kód.</p>
+        <ul class="chips" data-i18n-list="why.personas"></ul>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SOURCES ============ -->
+<section class="sec sources" id="sources" data-globe="sources">
+  <div class="wrap">
+    <p class="eyebrow" data-i18n="src.eyebrow" data-scramble>02 // FORRÁSOK</p>
+    <h2 class="h2" data-i18n-html="src.title">52 forrás. <em>8 tématerület.</em></h2>
+    <p class="lead" data-i18n="src.lead">Görgess: a szétszórt adatfolyamok tématerületek szerint rendeződnek. Kattints egy lencsére, és kiemeled a hozzá tartozó forrásokat — pont úgy, ahogy az irányítópulton.</p>
+  </div>
+  <div class="wrap wide pinbox" id="pinbox">
+    <div class="lenses" id="lenses" role="group" aria-label="Domain lenses"></div>
+    <div class="stage" id="stage"></div>
+  </div>
+  <div class="wrap">
+    <p class="fine" data-i18n="src.fine">Kulcs nélkül is működik: 18+ forrás hitelesítés nélkül elérhető; a kulcsot igénylő források szerkezetesen hibát jeleznek, a söprés megy tovább.</p>
+  </div>
+</section>
+
+<!-- ============ FEATURES ============ -->
+<section class="sec" id="features" data-globe="features">
+  <div class="wrap">
+    <p class="eyebrow" data-i18n="feat.eyebrow" data-scramble>03 // FUNKCIÓK</p>
+    <h2 class="h2" data-i18n-html="feat.title">Nem csak adatok. <em>Egy teljes elemzői munkaállomás.</em></h2>
+    <div class="bento" id="bento"></div>
+  </div>
+</section>
+
+<!-- ============ PIPELINE ============ -->
+<section class="sec" id="pipeline" data-globe="pipeline">
+  <div class="wrap">
+    <p class="eyebrow" data-i18n="pipe.eyebrow" data-scramble>04 // MŰKÖDÉS</p>
+    <h2 class="h2" data-i18n-html="pipe.title">Egy söprés. <em>Hét lépés.</em> Negyedóránként.</h2>
+    <p class="lead" data-i18n="pipe.lead">A szerver 15 percenként (állítható) végigfuttat egy ciklust, és az eredményt SSE-n át tolja minden csatlakozott böngészőnek. Nincs kézi frissítés.</p>
+    <div class="timeline" id="timeline">
+      <div class="tl-line"><i id="tlFill"></i></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DEEP DIVE ============ -->
+<section class="sec" id="deep" data-globe="deep">
+  <div class="wrap">
+    <p class="eyebrow" data-i18n="deep.eyebrow" data-scramble>05 // MÉLYEBBEN</p>
+    <h2 class="h2" data-i18n-html="deep.title">Próbáld ki <em>a logikát.</em></h2>
+    <p class="lead" data-i18n="deep.lead">Két apró, valódi szabályokra épülő demó. Az értékek illusztratívak — a logika, a súlyok és a szintek viszont megegyeznek a Crucix kódjával.</p>
+
+    <div class="deep-grid">
+      <!-- threat level -->
+      <article class="panel" id="alertPanel">
+        <header class="panel-h"><h3 data-i18n="alert.t">Riasztómotor és veszélyszint</h3><span class="tag" data-i18n="demo">DEMÓ</span></header>
+        <p class="muted" data-i18n="alert.p">A veszélyszint a legsúlyosabb élő (firing) riasztás szintje. Válassz egy szintet, és nézd, mit mutatna a riasztósáv.</p>
+        <div class="levels" id="levels" role="radiogroup" aria-label="Severity"></div>
+        <div class="strip" id="strip" aria-live="polite">
+          <div class="strip-level"><small data-i18n="alert.threat">VESZÉLYSZINT</small><b id="stripNum">1</b></div>
+          <div class="strip-body"><span class="glyph" id="stripGlyph">–</span><div><strong id="stripTitle">—</strong><small id="stripSub">—</small></div></div>
+          <div class="strip-actions"><span data-i18n="alert.ack">Tudomásul</span><span data-i18n="alert.snooze">Szundi</span><span data-i18n="alert.open">Megnyit</span></div>
+        </div>
+        <h4 class="mini-h" data-i18n="alert.kinds">Hat szabálytípus</h4>
+        <div class="kinds" id="kinds" role="tablist"></div>
+        <p class="kind-desc" id="kindDesc"></p>
+        <p class="fine" data-i18n-html="alert.life">Életciklus: <b>firing → acknowledged / snoozed → resolved</b>. Az első kiértékelés néma alapállapot — a már létező eseményekről nem jön értesítés.</p>
+      </article>
+
+      <!-- risk calculator -->
+      <article class="panel" id="riskPanel">
+        <header class="panel-h"><h3 data-i18n="risk.t">Országkockázat 0–100</h3><span class="tag" data-i18n="demo">DEMÓ</span></header>
+        <p class="muted" data-i18n-html="risk.p">Hat komponensből számolt <b>heurisztikus index</b>, nem valószínűség és nem hivatalos minősítés. Kapcsold ki egy komponens adatát: a hiányzó rész kimarad, a többi súlya újraosztódik, a <i>lefedettség</i> pedig csökken.</p>
+        <div class="gauge-row">
+          <div class="gauge"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" class="g-bg"/><circle cx="60" cy="60" r="52" class="g-fg" id="gFg"/></svg><div class="g-num"><b id="gScore">0</b><small data-i18n="risk.score">pont</small></div></div>
+          <div class="gauge-meta"><div><small data-i18n="risk.cov">LEFEDETTSÉG</small><b id="gCov">100%</b></div><div><small data-i18n="risk.lvl">SÁV</small><b id="gBand">—</b></div></div>
+        </div>
+        <div class="comps" id="comps"></div>
+        <p class="fine" data-i18n="risk.fine">Súlyok a kódból: események 35 · tartósság 15 · sokféleség 15 · hírfigyelem 10 · VIEWS-előrejelzés 15 · INFORM-alapvonal 10. Naplózott 7 napos előrejelzések, Brier-pontszámmal értékelve — 30 lezárt jóslatig a rendszer őszintén kiírja: „még nincs elég adat”.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SHOWCASE ============ -->
+<section class="sec" id="shots" data-globe="shots">
+  <div class="wrap">
+    <p class="eyebrow" data-i18n="shot.eyebrow" data-scramble>06 // KÉPERNYŐK</p>
+    <h2 class="h2" data-i18n-html="shot.title">Így néz ki <em>élesben.</em></h2>
+    <div class="shots">
+      <div class="shot-tabs" id="shotTabs" role="tablist"></div>
+      <div class="browser tilt-lg" id="browser">
+        <div class="browser-bar"><span></span><span></span><span></span><em>localhost:3117</em></div>
+        <div class="browser-screen" id="shotScreen"></div>
+      </div>
+      <p class="shot-cap" id="shotCap"></p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PRINCIPLES ============ -->
+<section class="sec" id="principles" data-globe="principles">
+  <div class="wrap">
+    <p class="eyebrow" data-i18n="prin.eyebrow" data-scramble>07 // ELVEK</p>
+    <h2 class="h2" data-i18n-html="prin.title">Helyi. Karcsú. <em>Őszinte.</em></h2>
+    <div class="prin-grid" id="prin"></div>
+  </div>
+</section>
+
+<!-- ============ START ============ -->
+<section class="sec" id="start" data-globe="start">
+  <div class="wrap">
+    <p class="eyebrow" data-i18n="start.eyebrow" data-scramble>08 // INDÍTÁS</p>
+    <h2 class="h2" data-i18n-html="start.title">Egy parancs. <em>Egy böngészőfül.</em></h2>
+    <div class="start-grid">
+      <div class="term" id="term">
+        <div class="term-bar">
+          <div class="term-tabs" role="tablist">
+            <button type="button" role="tab" aria-selected="true" data-tab="node">Node.js</button>
+            <button type="button" role="tab" aria-selected="false" data-tab="docker">Docker</button>
+          </div>
+          <button type="button" class="copy" id="copyBtn"><span data-i18n="copy">Másolás</span></button>
+        </div>
+        <pre class="term-body" id="termBody" tabindex="0"></pre>
+      </div>
+      <ol class="steps" id="steps"></ol>
+    </div>
+    <div class="keys" id="keys"></div>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot" data-globe="foot">
+  <div class="wrap">
+    <div class="warn" role="note">
+      <b data-i18n="foot.warnT">Token / eszköz figyelmeztetés</b>
+      <p data-i18n="foot.warn">A Crucixnak nincs hivatalos tokenje, érméje, NFT-je, airdropja vagy más blokklánc-alapú eszköze. A Crucix nevét, logóját használó bármely token nincs kapcsolatban a projekttel. Ne vásárold, ne népszerűsítsd, ne kösd be a tárcádat, és ne küldj pénzt harmadik felek posztjai, privát üzenetei vagy weboldalai alapján.</p>
+    </div>
+    <div class="foot-grid">
+      <div>
+        <a class="brand" href="#top"><span class="brand-mark"></span><span>CRUCIX</span></a>
+        <p class="muted" data-i18n="foot.tag">Saját hírszerző terminálod. 52 forrás. Egy parancs. Helyi feldolgozás.</p>
+      </div>
+      <ul class="links">
+        <li><a href="https://github.com/mp3pintyo/Crucix" target="_blank" rel="noopener">GitHub (fork)</a></li>
+        <li><a href="https://github.com/calesthio/Crucix" target="_blank" rel="noopener">Upstream — calesthio/Crucix</a></li>
+        <li><a href="../../README.md" target="_blank" rel="noopener">README</a></li>
+        <li><a href="../../CHANGELOG.md" target="_blank" rel="noopener">Changelog</a></li>
+        <li><a href="../OPERATIONS.md" target="_blank" rel="noopener" data-i18n="foot.ops">Üzemeltetési útmutató</a></li>
+      </ul>
+      <p class="muted small" data-i18n-html="foot.legal">Licenc: AGPL-3.0. Az oldal a <code>docs/site</code> mappában él; three.js, GSAP, d3 — helyi másolatból, külső kérés nélkül.</p>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/vendor/d3-7.9.0.min.js"></script>
+<script src="assets/vendor/topojson-client-3.1.0.min.js"></script>
+<script src="assets/vendor/countries-110m-2.0.2.js"></script>
+<script src="assets/vendor/gsap.min.js"></script>
+<script src="assets/vendor/ScrollTrigger.min.js"></script>
+<script src="assets/vendor/ScrambleTextPlugin.min.js"></script>
+<script src="assets/globe.bundle.js"></script>
+<script src="assets/content.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

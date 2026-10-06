@@ -29,6 +29,8 @@
 
 > **Fork:** this repository is a fork of [calesthio/Crucix](https://github.com/calesthio/Crucix).
 > This fork's releases, audit and installation instructions are below.
+>
+> **Showcase site:** an animated, bilingual (HU/EN) presentation of what Crucix does lives in [docs/site](docs/site/index.html) — open `docs/site/index.html` in a browser, no build step.
 
 Crucix pulls satellite fire detection, flight tracking, radiation monitoring, satellite constellation tracking, economic indicators, live market prices, conflict data, sanctions lists, and social sentiment from 31 open-source intelligence feeds — in parallel, every 15 minutes — and renders everything on a single self-contained Jarvis-style dashboard.
 
