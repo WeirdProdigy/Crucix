@@ -4,21 +4,11 @@
 
 **Your own intelligence terminal. 52 sources. One command. Local processing.**
 
-## [Visit The Upstream Demo: crucix.live](https://www.crucix.live/)
-
-[![Live Website](https://img.shields.io/badge/live-crucix.live-00d4ff?style=for-the-badge)](https://www.crucix.live/)
-[![Open Demo](https://img.shields.io/badge/open-live%20dashboard-0b1220?style=for-the-badge&logo=googlechrome&logoColor=white)](https://www.crucix.live/)
-
 [![Node.js 22+](https://img.shields.io/badge/node-22%2B-brightgreen)](#quick-start)
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPLv3-blue.svg)](LICENSE)
 [![Dependencies](https://img.shields.io/badge/dependencies-1%20(express)-orange)](#architecture)
 [![Sources](https://img.shields.io/badge/OSINT%20sources-52-cyan)](#data-sources-52)
 [![Docker](https://img.shields.io/badge/docker-ready-blue?logo=docker)](#docker)
-
-**Enter The Signal Network**
-
-[![Signal Wire](https://img.shields.io/badge/Signal%20Wire-%40crucixmonitor-111111?style=for-the-badge&logo=x&logoColor=white)](https://x.com/crucixmonitor)
-[![Ops Room](https://img.shields.io/badge/Ops%20Room-Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/ChVy7SF4)
 
 ![Crucix Dashboard](docs/dashboard.png)
 
@@ -37,14 +27,12 @@
 
 </div>
 
-> **Upstream demo:** [crucix.live](https://www.crucix.live/) is maintained by the original project and may differ from this fork.
+> **Fork:** this repository is a fork of [calesthio/Crucix](https://github.com/calesthio/Crucix).
 > This fork's releases, audit and installation instructions are below.
 
 Crucix pulls satellite fire detection, flight tracking, radiation monitoring, satellite constellation tracking, economic indicators, live market prices, conflict data, sanctions lists, and social sentiment from 31 open-source intelligence feeds — in parallel, every 15 minutes — and renders everything on a single self-contained Jarvis-style dashboard.
 
 Hook it up to an LLM and it becomes a **two-way intelligence assistant** — pushing multi-tier alerts to Telegram and Discord when something meaningful changes, responding to commands like `/brief` and `/sweep` from your phone, and generating actionable trade ideas grounded in real cross-domain data. Your own analyst that watches the world while you sleep.
-
-Try the live demo first at [https://www.crucix.live/](https://www.crucix.live/), then clone the repo when you want the full local stack.
 
 The server and data run on your machine. External feeds need network access; browser map/font libraries are pinned local assets. Cloud AI and paid APIs are optional. The app has no built-in telemetry. Start with `node server.mjs`.
 
