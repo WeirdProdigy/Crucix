@@ -1115,52 +1115,70 @@ function buildNewsTickerPanel(){
 }
 
 function buildMacroMarketsPanel(){
-  const spread=D.fred.find(f=>f.id==='T10Y2Y');
-  const ff=D.fred.find(f=>f.id==='DFF');
-  const ue=D.bls.find(b=>b.id==='LNS14000000');
-  const cpi=D.bls.find(b=>b.id==='CUUR0000SA0');
-  const gscpi=D.gscpi;
-  const mkt=D.markets||{};
-  const metals=D.metals||{};
-  const wtiH = D.energy.wtiRecent||[];
-  const wtiMax=Math.max(...wtiH),wtiMin=Math.min(...wtiH);
-  const sparkHtml=wtiH.map(v=>{
-    const pct=wtiMax===wtiMin?50:((v-wtiMin)/(wtiMax-wtiMin))*100;
-    return `<div class="spark-bar" style="height:${Math.max(pct,8)}%"></div>`;
-  }).join('');
+  const fredList = Array.isArray(D.fred) ? D.fred : [];
+  const blsList = Array.isArray(D.bls) ? D.bls : [];
+  const spread = fredList.find(f => f?.id === 'T10Y2Y');
+  const ff = fredList.find(f => f?.id === 'DFF');
+  const ue = blsList.find(b => b?.id === 'LNS14000000');
+  const cpi = blsList.find(b => b?.id === 'CUUR0000SA0');
+  const gscpi = D.gscpi;
+  const mkt = (D.markets && typeof D.markets === 'object') ? D.markets : {};
+  const metals = (D.metals && typeof D.metals === 'object') ? D.metals : {};
+  const wtiH = (Array.isArray(D.energy?.wtiRecent) && D.energy.wtiRecent.length > 0) ? D.energy.wtiRecent : [];
+  const hasWtiH = wtiH.length > 0;
+  const wtiMax = hasWtiH ? Math.max(...wtiH) : 0, wtiMin = hasWtiH ? Math.min(...wtiH) : 0;
+  const sparkHtml = hasWtiH ? wtiH.map(v => {
+    const pct = wtiMax === wtiMin ? 50 : ((v - wtiMin) / (wtiMax - wtiMin)) * 100;
+    return `<div class="spark-bar" style="height:${Math.max(pct, 8)}%"></div>`;
+  }).join('') : '';
   const mktCard = (q) => {
-    if(!q||q.error) return '';
-    const clr = q.changePct>=0?'var(--accent)':'var(--warn)';
-    const arrow = q.changePct>=0?'&#9650;':'&#9660;';
-    const isCrypto = q.symbol.includes('BTC') || q.symbol.includes('ETH');
-    const isIndex = q.symbol.startsWith('^');
-    const price = isCrypto ? `$${q.price.toLocaleString()}` : isIndex ? q.price.toLocaleString(undefined, {maximumFractionDigits: 2}) : `$${q.price}`;
-    return `<div class="mc"><div class="ml">${esc(q.name||q.symbol)}</div><span class="mv" style="color:${clr}">${price}</span><span class="ms" style="color:${clr}">${arrow} ${q.changePct>=0?'+':''}${q.changePct}%</span></div>`;
+    if (!q || typeof q !== 'object' || q.error) return '';
+    const sym = typeof q.symbol === 'string' ? q.symbol : '';
+    const name = typeof q.name === 'string' && q.name ? q.name : sym;
+    const isCrypto = sym.includes('BTC') || sym.includes('ETH');
+    const isIndex = sym.startsWith('^');
+    const hasPrice = typeof q.price === 'number' && Number.isFinite(q.price);
+    const price = hasPrice
+      ? (isCrypto ? `$${q.price.toLocaleString(undefined, {maximumFractionDigits: 2})}` : isIndex ? q.price.toLocaleString(undefined, {maximumFractionDigits: 2}) : `$${q.price.toLocaleString(undefined, {maximumFractionDigits: 2})}`)
+      : '—';
+    const hasChange = typeof q.changePct === 'number' && Number.isFinite(q.changePct);
+    const clr = hasChange ? (q.changePct >= 0 ? 'var(--accent)' : 'var(--warn)') : 'var(--dim)';
+    const arrow = hasChange ? (q.changePct >= 0 ? '&#9650;' : '&#9660;') : '';
+    const changeText = hasChange
+      ? `${arrow} ${q.changePct >= 0 ? '+' : ''}${q.changePct.toFixed(2)}%`
+      : t('common.noData', 'Nincs adat');
+    return `<div class="mc"><div class="ml">${esc(name || '—')}</div><span class="mv" style="color:${clr}">${price}</span><span class="ms" style="color:${clr}">${changeText}</span></div>`;
   };
   const vixLive = mkt.vix;
-  const vixFred = D.fred.find(f=>f.id==='VIXCLS');
-  const vixVal = vixLive?.value || vixFred?.value;
-  const vixChg = vixLive?.changePct != null ? `${vixLive.changePct>=0?'+':''}${vixLive.changePct}%` : '';
-  const fmtMarketPrice = (price) => price != null ? `$${price.toLocaleString(undefined,{maximumFractionDigits:2})}` : '--';
-  const dayMove = (pct) => pct != null ? `${pct>=0?'+':''}${pct}% today` : '';
+  const vixFred = fredList.find(f => f?.id === 'VIXCLS');
+  const vixVal = (typeof vixLive?.value === 'number' && Number.isFinite(vixLive.value)) ? vixLive.value : (typeof vixFred?.value === 'number' && Number.isFinite(vixFred.value)) ? vixFred.value : null;
+  const vixChg = (typeof vixLive?.changePct === 'number' && Number.isFinite(vixLive.changePct)) ? `${vixLive.changePct >= 0 ? '+' : ''}${vixLive.changePct.toFixed(2)}%` : '';
+  const fmtMarketPrice = (price) => typeof price === 'number' && Number.isFinite(price) ? `$${price.toLocaleString(undefined, {maximumFractionDigits: 2})}` : '—';
+  const dayMove = (pct) => typeof pct === 'number' && Number.isFinite(pct) ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}% today` : '';
+  const fmtNum = (val, prefix='', suffix='', digits=null) => {
+    if (typeof val === 'number' && Number.isFinite(val)) {
+      return `${prefix}${digits != null ? val.toFixed(digits) : val}${suffix}`;
+    }
+    return '—';
+  };
   const metrics=[
-    {l:'WTI Crude',v:`$${D.energy.wti}`,s:'$/bbl',p:70},
-    {l:'Brent',v:`$${D.energy.brent}`,s:'$/bbl',p:75},
-    {l:'Nat Gas',v:`$${D.energy.natgas||'--'}`,s:'$/MMBtu',p:30},
+    {l:'WTI Crude',v:fmtNum(D.energy?.wti, '$', '', 2),s:'$/bbl',p:70},
+    {l:'Brent',v:fmtNum(D.energy?.brent, '$', '', 2),s:'$/bbl',p:75},
+    {l:'Nat Gas',v:fmtNum(D.energy?.natgas, '$', '', 2),s:'$/MMBtu',p:30},
     {l:'Gold',v:fmtMarketPrice(metals.gold),s:dayMove(metals.goldChangePct)||'COMEX proxy',p:58},
     {l:'Silver',v:fmtMarketPrice(metals.silver),s:dayMove(metals.silverChangePct)||'COMEX proxy',p:54},
-    {l:'VIX',v:vixVal?vixVal.toFixed(1):'--',s:vixChg||'volatility index',p:vixVal?Math.min(vixVal*2.5,100):30},
-    {l:'Fed Funds',v:ff?`${ff.value}%`:'--',s:ff?.date||'',p:36},
-    {l:'GSCPI',v:gscpi?gscpi.value.toFixed(2):'--',s:gscpi?.interpretation||'',p:49},
-    {l:'CPI MoM',v:cpi?`+${cpi.momChangePct?.toFixed(2)}%`:'--',s:cpi?.date||'',p:37},
-    {l:'Unemployment',v:ue?`${ue.value}%`:'--',s:ue?`${ue.momChange>0?'+':''}${ue.momChange} vs prior`:'',p:44},
+    {l:'VIX',v:vixVal != null ? vixVal.toFixed(1) : '—',s:vixChg||'volatility index',p:vixVal?Math.min(vixVal*2.5,100):30},
+    {l:'Fed Funds',v:fmtNum(ff?.value, '', '%', 2),s:ff?.date||'',p:36},
+    {l:'GSCPI',v:fmtNum(gscpi?.value, '', '', 2),s:gscpi?.interpretation||'',p:49},
+    {l:'CPI MoM',v:fmtNum(cpi?.momChangePct, '+', '%', 2),s:cpi?.date||'',p:37},
+    {l:'Unemployment',v:fmtNum(ue?.value, '', '%', 1),s:ue ? `${ue.momChange > 0 ? '+' : ''}${ue.momChange} vs prior` : '',p:44},
   ];
-  metrics[0] = {...metrics[0], spark: D.energy.wtiRecent, sparkUp: false};
+  metrics[0] = {...metrics[0], spark: D.energy?.wtiRecent, sparkUp: false};
   metrics[3] = {...metrics[3], spark: metals.goldRecent, sparkUp: (metals.goldChangePct ?? 0) >= 0};
   metrics[4] = {...metrics[4], spark: metals.silverRecent, sparkUp: (metals.silverChangePct ?? 0) >= 0};
-  const indexCards = (mkt.indexes||[]).map(mktCard).join('');
-  const cryptoCards = (mkt.crypto||[]).map(mktCard).join('');
-  const hasMarkets = indexCards || cryptoCards;
+  const indexCards = (Array.isArray(mkt.indexes) ? mkt.indexes : []).map(mktCard).join('');
+  const cryptoCards = (Array.isArray(mkt.crypto) ? mkt.crypto : []).map(mktCard).join('');
+  const hasMarkets = Boolean(indexCards || cryptoCards);
   return `<div class="g-panel lp-macro">
     <div class="sec-head"><h3>${t('panels.macroMarkets','Macro + Markets')}</h3><span class="badge">${mkt.timestamp?t('badges.live','LIVE'):t('badges.delayed','DELAYED')}</span></div>
     ${hasMarkets?`<div style="margin-bottom:8px"><div style="font-family:var(--mono);font-size:9px;color:var(--dim);margin-bottom:4px;letter-spacing:1px">INDEXES</div><div class="metrics-row">${indexCards}</div></div><div style="margin-bottom:8px"><div style="font-family:var(--mono);font-size:9px;color:var(--dim);margin-bottom:4px;letter-spacing:1px">CRYPTO</div><div class="metrics-row">${cryptoCards}</div></div>`:''}
