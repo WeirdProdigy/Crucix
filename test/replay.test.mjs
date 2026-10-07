@@ -421,7 +421,7 @@ function pageRealm({ pwa = true, routes = {} } = {}) {
   if (pwa) window.CrucixPWA = { cacheLive: snapshot => page.cache.push(snapshot.meta.timestamp), markLive: () => { page.marks++; } };
   window.CrucixAlerts = { update: summary => { page.alerts.push(summary); return true; } };
   window.CrucixRecordInspector = { refresh: () => { page.inspector++; } };
-  pageFunctions(context, 'validSnapshot', 'normalizeSnapshot', 'applySnapshot', 'applyReplaySnapshot', 'restoreLiveSnapshot', 'newerAlerts', 'redriveClock', 'pollSnapshot', 'connectSSE');
+  pageFunctions(context, 'validSnapshot', 'normalizeSnapshot', 'applySnapshot', 'applyReplaySnapshot', 'restoreLiveSnapshot', 'newerAlerts', 'redriveClock', 'pollSnapshot', 'connectSSE', 'hasSnapshot');
   // The page's own hooks, as DOMContentLoaded hands them over.
   Object.assign(realm.options, { applySnapshot: context.applyReplaySnapshot, restoreLive: context.restoreLiveSnapshot, redrive: context.redriveClock, getLive: () => context.D });
   return { ...realm, page, handlers, liveAlerts };

@@ -1,5 +1,7 @@
 # Changelog / Változásnapló
 
+- [2.13.6 — CI-javítás: a v2.13.5 egyik oldal-tesztje / CI fix: a page test of v2.13.5](docs/releases/v2.13.6.md) — 2026-10-07
+
 - [2.13.5 — Az üres dashboard javítása (SSE-megszakadás) és a Codex-modell követése / Fixing the empty dashboard (SSE cut) and following the Codex model](docs/releases/v2.13.5.md) — 2026-10-07
 
 - [2.13.4 — Bemutató weboldal: animált, kétnyelvű showcase a docs/site mappában / Showcase website: an animated, bilingual page in docs/site](docs/releases/v2.13.4.md) — 2026-10-06
