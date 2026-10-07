@@ -4,6 +4,9 @@ services:
     container_name: crucix-v2
     ports:
       - "${PORT:-3118}:${PORT:-3118}"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     environment:
       - HOST=0.0.0.0
       - PORT=${PORT:-3118}
