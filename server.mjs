@@ -21,6 +21,7 @@ import { runRiskStep } from './lib/intelligence/risk-step.mjs';
 import { installRiskRoutes } from './lib/intelligence/risk-routes.mjs';
 import { createBriefingService } from './lib/llm/briefing.mjs';
 import { renderOfflineShell } from './lib/offline-shell.mjs';
+import { broadcastEvent, writeToClient } from './lib/sse.mjs';
 import config from './crucix.config.mjs';
 import { getLocale, currentLanguage, getSupportedLocales } from './lib/i18n.mjs';
 import { fullBriefing } from './apis/briefing.mjs';
@@ -395,17 +396,14 @@ app.get('/events', (req, res) => {
   res.write('data: {"type":"connected"}\n\n');
   sseClients.add(res);
   const heartbeat = setInterval(() => {
-    if (!res.write(': heartbeat\n\n')) res.destroy();
+    if (!writeToClient(res, ': heartbeat\n\n')) sseClients.delete(res);
   }, 15000);
   heartbeat.unref();
   req.on('close', () => { clearInterval(heartbeat); sseClients.delete(res); });
 });
 
 function broadcast(data) {
-  const msg = `data: ${JSON.stringify(data)}\n\n`;
-  for (const client of sseClients) {
-    try { if (!client.write(msg)) client.destroy(); } catch { client.destroy(); sseClients.delete(client); }
-  }
+  broadcastEvent(sseClients, data);
 }
 
 // === Sweep Cycle ===

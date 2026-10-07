@@ -1,5 +1,7 @@
 # Changelog / Változásnapló
 
+- [2.13.5 — Az üres dashboard javítása (SSE-megszakadás) és a Codex-modell követése / Fixing the empty dashboard (SSE cut) and following the Codex model](docs/releases/v2.13.5.md) — 2026-10-07
+
 - [2.13.4 — Bemutató weboldal: animált, kétnyelvű showcase a docs/site mappában / Showcase website: an animated, bilingual page in docs/site](docs/releases/v2.13.4.md) — 2026-10-06
 
 - [2.13.3 — Biztonsági bejelentések a fork saját címére / Security reports to the fork's own address](docs/releases/v2.13.3.md) — 2026-10-06

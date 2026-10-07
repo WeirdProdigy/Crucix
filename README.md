@@ -310,7 +310,7 @@ Set `LLM_PROVIDER` to one of: `anthropic`, `openai`, `gemini`, `codex`, `openrou
 | `openai` | `LLM_API_KEY` | gpt-5.4 |
 | `gemini` | `LLM_API_KEY` | gemini-3.1-pro |
 | `openrouter` | `LLM_API_KEY` | openrouter/auto |
-| `codex` | None (uses `~/.codex/auth.json`) | gpt-5.3-codex |
+| `codex` | None (uses `~/.codex/auth.json`) | first listed model of your account (gpt-6.1-sol) |
 | `minimax` | `LLM_API_KEY` | MiniMax-M2.5 |
 | `mistral` | `LLM_API_KEY` | mistral-large-latest |
 | `grok` | `LLM_API_KEY` | grok-4-latest |

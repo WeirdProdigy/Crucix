@@ -2478,6 +2478,8 @@ async function fetchJsonNoStore(url,init){
   if(!response.ok){const error=new Error('HTTP '+response.status);error.status=response.status;throw error;}
   return response.json();
 }
+// The page served before the first sweep carries no snapshot; the stream alone cannot be trusted to deliver one.
+function hasSnapshot(){return Number.isFinite(Date.parse(D.meta?.timestamp));}
 async function pollSnapshot(){
   if(apiRequestRunning||location.protocol==='file:')return;
   apiRequestRunning=true;
@@ -2494,7 +2496,7 @@ async function pollSnapshot(){
 function connectSSE(){
   if(location.protocol==='file:'||typeof EventSource==='undefined'||liveEvents)return;
   liveEvents=new EventSource('/events');
-  liveEvents.onopen=()=>{sseConnected=true;connectionState='live';updateRuntimeStatus();};
+  liveEvents.onopen=()=>{sseConnected=true;connectionState='live';updateRuntimeStatus();if(!hasSnapshot())pollSnapshot();};
   liveEvents.onmessage=event=>{
     try{
       const message=JSON.parse(event.data);
@@ -2562,7 +2564,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   if(location.protocol!=='file:'){
     connectSSE();pollSnapshot();
     fetch('/api/health',{cache:'no-store',signal:AbortSignal.timeout(10000)}).then(response=>response.ok?response.json():null).then(health=>{if(Number.isFinite(health?.refreshIntervalMinutes)&&health.refreshIntervalMinutes>0)refreshIntervalMinutes=health.refreshIntervalMinutes;updateRuntimeStatus();}).catch(()=>{});
-    fallbackTimer=setInterval(()=>{if(!sseConnected)pollSnapshot();},60000);
+    fallbackTimer=setInterval(()=>{if(!sseConnected||!hasSnapshot())pollSnapshot();},60000);
   }
   freshnessTimer=setInterval(()=>{updateRuntimeStatus();refreshLiveFreshness();window.CrucixChanges?.refresh();},30000);
   updateRuntimeStatus();
