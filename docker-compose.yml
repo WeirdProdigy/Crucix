@@ -38,3 +38,8 @@ volumes:
   crucix_v2_runs:
     name: crucix_v2_runs
 
+networks:
+  default:
+    name: crucix_default
+    external: true
+
