@@ -1,13 +1,37 @@
 services:
-  crucix:
+  crucix-v2:
     build: .
+    container_name: crucix-v2
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${PORT:-3117}:${PORT:-3117}"
+      - "${PORT:-3118}:${PORT:-3118}"
     environment:
-      HOST: 0.0.0.0
-      NO_AUTO_OPEN: 1
-    env_file:
-      - .env
+      - HOST=0.0.0.0
+      - PORT=${PORT:-3118}
+      - NO_AUTO_OPEN=1
+      - CRUCIX_LANG=${CRUCIX_LANG:-hu}
+      - TRADE_IDEAS_LANG=${TRADE_IDEAS_LANG:-hu}
+      - REFRESH_INTERVAL_MINUTES=${REFRESH_INTERVAL_MINUTES:-15}
+      - FRED_API_KEY=${FRED_API_KEY:-}
+      - FIRMS_MAP_KEY=${FIRMS_MAP_KEY:-}
+      - EIA_API_KEY=${EIA_API_KEY:-}
+      - AISSTREAM_API_KEY=${AISSTREAM_API_KEY:-}
+      - ACLED_EMAIL=${ACLED_EMAIL:-}
+      - ACLED_PASSWORD=${ACLED_PASSWORD:-}
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
+      - LLM_PROVIDER=${LLM_PROVIDER:-}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-}
+      - LLM_BASE_URL=${LLM_BASE_URL:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+      - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID:-}
     volumes:
-      - ./runs:/app/runs
+      - crucix_v2_runs:/app/runs
     restart: unless-stopped
+
+volumes:
+  crucix_v2_runs:
+    name: crucix_v2_runs
+
