@@ -77,6 +77,7 @@ riskStore?.load();
 riskJournal?.load();
 let riskStatus = config.risk.enabled ? 'unavailable' : 'disabled';
 let riskLatest = null; // the last successful step: {at, scores, inputs}
+let briefingService = null;
 // Never throws: on a failure the snapshot goes on without `risk` and /api/health says 'unavailable'.
 function recordRisk(snapshot, raw) {
   if (!riskStore) return;
@@ -331,9 +332,9 @@ app.get('/api/data', (req, res) => {
 
 installIntelligenceRoutes(app, { getSnapshot: () => freshLiveSnapshot(currentData), history, language: currentLanguage });
 if (riskStore) {
-  const briefing = createBriefingService({ provider: llmProvider, language: currentLanguage, store: riskStore, history,
+  briefingService = createBriefingService({ provider: llmProvider, language: currentLanguage, store: riskStore, history,
     getSnapshot: () => currentData, getScores: () => riskLatest?.scores ?? null });
-  installRiskRoutes(app, { store: riskStore, journal: riskJournal, getSnapshot: () => currentData, getState: () => riskLatest, history, briefing,
+  installRiskRoutes(app, { store: riskStore, journal: riskJournal, getSnapshot: () => currentData, getState: () => riskLatest, history, briefing: briefingService,
     security: { publicUrl: config.alerts.publicUrl, allowedHosts: config.alerts.allowedHosts } });
 }
 // After an operator action the dashboards get the new summary; the next /api/data and page load carry it too.
@@ -479,6 +480,12 @@ async function runSweepCycle() {
     console.log(`[Crucix] ${currentData.ideas.length} ideas (${synthesized.ideasSource}) | ${currentData.news.length} news | ${currentData.newsFeed.length} feed items`);
     if (delta?.summary) console.log(`[Crucix] Delta: ${delta.summary.totalChanges} changes, ${delta.summary.criticalChanges} critical, direction: ${delta.summary.direction}`);
     console.log(`[Crucix] Next sweep at ${new Date(Date.now() + config.refreshIntervalMinutes * 60000).toLocaleTimeString()}`);
+    // Eager briefing caching in the background: pre-compute global briefing so opening the dashboard is instant
+    if (briefingService && llmProvider?.isConfigured) {
+      briefingService.generate('global')
+        .then(() => console.log('[Crucix] Eager global briefing pre-cached'))
+        .catch(err => console.warn('[Crucix] Eager global briefing pre-cache failed:', err.message));
+    }
 
   } catch (err) {
     console.error('[Crucix] Sweep failed:', err.message);
