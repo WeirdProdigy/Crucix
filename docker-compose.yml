@@ -3,13 +3,13 @@ services:
     build: .
     container_name: crucix-v2
     ports:
-      - "${PORT:-3118}:${PORT:-3118}"
+      - "${PORT:-3117}:${PORT:-3117}"
     dns:
       - 1.1.1.1
       - 8.8.8.8
     environment:
       - HOST=0.0.0.0
-      - PORT=${PORT:-3118}
+      - PORT=${PORT:-3117}
       - NO_AUTO_OPEN=1
       - CRUCIX_LANG=${CRUCIX_LANG:-hu}
       - TRADE_IDEAS_LANG=${TRADE_IDEAS_LANG:-hu}
@@ -23,13 +23,13 @@ services:
       - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
       - LLM_PROVIDER=${LLM_PROVIDER:-}
       - LLM_API_KEY=${LLM_API_KEY:-}
-      - LLM_MODEL=${LLM_MODEL:-}
+      - LLM_MODEL=${LLM_MODEL:-qwen2.5:3b-instruct}
       - LLM_BASE_URL=${LLM_BASE_URL:-}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-}
       - LLM_BRIEFING_MAX_TOKENS=${LLM_BRIEFING_MAX_TOKENS:-4096}
       - LLM_BRIEFING_TIMEOUT_MS=${LLM_BRIEFING_TIMEOUT_MS:-120000}
-      - TELEGRAM_BOT_TOKEN=
-      - TELEGRAM_CHAT_ID=
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
       - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID:-}
     volumes:
