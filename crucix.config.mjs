@@ -108,7 +108,6 @@ export default {
     baseUrl: process.env.OLLAMA_BASE_URL || null,
     compatibleBaseUrl: process.env.LLM_BASE_URL || null,
     reasoningEffort: process.env.OLLAMA_REASONING_EFFORT || null,
-    keepAlive: process.env.OLLAMA_KEEP_ALIVE || '25m',
     ideasMaxTokens: envInteger('LLM_IDEAS_MAX_TOKENS', 4096, 128, 16384),
     ideasTimeoutMs: envInteger('LLM_IDEAS_TIMEOUT_MS', 90000, 1000, 360000),
     alertMaxTokens: envInteger('LLM_ALERT_MAX_TOKENS', 800, 128, 4096),

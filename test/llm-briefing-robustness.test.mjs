@@ -110,6 +110,18 @@ test('stripCitationArtifacts strips parenthesized and bracketed refs while prese
     stripCitationArtifacts('M6.3-es földrengés történt Vanuatu térségében (10 km mélységben).'),
     'M6.3-es földrengés történt Vanuatu térségében (10 km mélységben).'
   );
+  // Mid-sentence numbers like age (24) or ordinal/count (3) MUST be preserved
+  assert.equal(
+    stripCitationArtifacts('Kovács Péter (24) mentőorvos irányította a mentést.'),
+    'Kovács Péter (24) mentőorvos irányította a mentést.'
+  );
+  assert.equal(
+    stripCitationArtifacts('A 3. emeleten (3) történt a tűzeset.'),
+    'A 3. emeleten (3) történt a tűzeset.'
+  );
+  // Explicit refs with those numbers are stripped
+  assert.equal(stripCitationArtifacts('Riasztás kiadva (refs: 24).'), 'Riasztás kiadva.');
+  assert.equal(stripCitationArtifacts('Riasztás kiadva (3).'), 'Riasztás kiadva.');
 });
 
 test('plainText strips markdown, markup and citation artifacts in one pass', () => {
@@ -154,9 +166,9 @@ test('generateBriefing supplies responseFormat json_schema to provider.complete'
   assert.equal(result.bullets[0].refs[0].id, VALID_EVENT_ID);
 });
 
-// ─── d) 12 Sweep Scenarios: Before/After & Mistranslation Detector ───
+// ─── d) 12 Fixture-alapú tisztító-teszt (determinisztikus regex és szószedet, nem modellmérés) ───
 
-test('12 sweep scenarios: before/after text cleaning and mistranslation auditing', () => {
+test('12 fixture-alapú tisztító-teszt: determinisztikus szövegtisztítás és szószedet ellenőrzés (nem modellminőség)', () => {
   const BANNED_MISTRANSLATIONS = [
     /\bszélenergia\b/i,
     /\bvolánás por\b/i,

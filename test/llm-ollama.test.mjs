@@ -193,34 +193,6 @@ describe('OllamaProvider', () => {
       globalThis.fetch = originalFetch;
     }
   });
-
-  it('should include keep_alive in request body from config or opts', async () => {
-    const provider = new OllamaProvider({ keepAlive: '15m' });
-    let capturedOpts;
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = mock.fn((url, opts) => {
-      capturedOpts = opts;
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({
-          choices: [{ message: { content: 'ok' } }],
-          usage: { prompt_tokens: 1, completion_tokens: 1 },
-          model: 'llama3.1:8b',
-        }),
-      });
-    });
-    try {
-      await provider.complete('sys', 'user');
-      let body = JSON.parse(capturedOpts.body);
-      assert.equal(body.keep_alive, '15m');
-
-      await provider.complete('sys', 'user', { keepAlive: '30m' });
-      body = JSON.parse(capturedOpts.body);
-      assert.equal(body.keep_alive, '30m');
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
 });
 
 // ─── Factory Tests ───
