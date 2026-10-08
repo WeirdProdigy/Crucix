@@ -144,6 +144,83 @@ describe('OllamaProvider', () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it('should include response_format in request body when provided', async () => {
+    const provider = new OllamaProvider({});
+    let capturedOpts;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mock.fn((url, opts) => {
+      capturedOpts = opts;
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          choices: [{ message: { content: '{"bullets":[]}' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1 },
+          model: 'llama3.1:8b',
+        }),
+      });
+    });
+    try {
+      const customSchema = { type: 'json_schema', json_schema: { name: 'test', strict: true, schema: { type: 'object' } } };
+      await provider.complete('sys', 'user', { responseFormat: customSchema });
+      const body = JSON.parse(capturedOpts.body);
+      assert.deepEqual(body.response_format, customSchema);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('should default response_format to json_object when purpose is briefing', async () => {
+    const provider = new OllamaProvider({});
+    let capturedOpts;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mock.fn((url, opts) => {
+      capturedOpts = opts;
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          choices: [{ message: { content: '{"bullets":[]}' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1 },
+          model: 'llama3.1:8b',
+        }),
+      });
+    });
+    try {
+      await provider.complete('sys', 'user', { purpose: 'briefing' });
+      const body = JSON.parse(capturedOpts.body);
+      assert.deepEqual(body.response_format, { type: 'json_object' });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('should include keep_alive in request body from config or opts', async () => {
+    const provider = new OllamaProvider({ keepAlive: '15m' });
+    let capturedOpts;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = mock.fn((url, opts) => {
+      capturedOpts = opts;
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          choices: [{ message: { content: 'ok' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1 },
+          model: 'llama3.1:8b',
+        }),
+      });
+    });
+    try {
+      await provider.complete('sys', 'user');
+      let body = JSON.parse(capturedOpts.body);
+      assert.equal(body.keep_alive, '15m');
+
+      await provider.complete('sys', 'user', { keepAlive: '30m' });
+      body = JSON.parse(capturedOpts.body);
+      assert.equal(body.keep_alive, '30m');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
 
 // ─── Factory Tests ───
