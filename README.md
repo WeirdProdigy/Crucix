@@ -129,11 +129,11 @@ For reproducible and safe container deployment via Portainer CE (without automat
    - To roll back instantly in Portainer, update the Stack or Container image reference back to `crucix-v2:rollback-pre-llm-patch` without rebuilding.
 4. **Current LLM Configuration (Ollama / Local Inference):**
    - **Provider:** Ollama OpenAI-compatible endpoint (`/v1/chat/completions`) configured via `OLLAMA_BASE_URL`.
-   - **Active Model:** `gemma4:e4b-8k` (or configured `LLM_MODEL`).
+   - **Active Model:** `gemma4:e4b-8k` (or configured `LLM_MODEL`). Note: `gemma4:e4b-8k` is a locally created Ollama alias derived from the base `gemma4:e4b` model via a custom Modelfile setting `PARAMETER num_ctx 8192`.
    - **Reasoning Effort:** Configured to `OLLAMA_REASONING_EFFORT=none` (disables reasoning token overhead for faster, deterministic structured JSON generation).
    - **Structured Output:** Enforces strict `json_schema` via `response_format` for reliable briefing generation.
    - **Deterministic Cleaner:** Built-in `stripCitationArtifacts` cleans leaked citation patterns while preserving mid-sentence quantities and values.
-   - **Keep-Alive:** Nincs külön host-szintű konfiguráció vagy kliensoldali keep_alive paraméter; az Ollama beépített, alapértelmezett modell-kiürítési mechanizmusa (5 perc tétlenség utáni unloading) érvényesül.
+   - **Keep-Alive:** No custom host-level configuration or client-side keep_alive parameter; Ollama's built-in default unloading behavior (unloading after 5 minutes of inactivity) applies.
 
 ### Data reliability and local models (v2.2)
 
