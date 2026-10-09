@@ -107,6 +107,34 @@ The container runs as UID 1000. On Linux, prepare the bind-mounted directory wit
 
 Run `npm run check` and `npm test` before submitting changes. See [the bilingual changelog](CHANGELOG.md) and [the audit plan](docs/audit/implementation-plan-2026-10-01.md).
 
+### Portainer Build, Tagging & Rollback Workflow
+
+For reproducible and safe container deployment via Portainer CE (without automated GitOps or secret leakage):
+
+1. **Clean context archive generation (git archive):**
+   Create a prefix-free tar archive anchored to the exact commit SHA, ensuring no uncommitted files or local untracked logs are bundled:
+   ```bash
+   git archive --format=tar -o ./scratch/crucix-<short-sha>.tar <full-commit-sha>
+   ```
+2. **Portainer image build & labeling:**
+   - In Portainer CE, navigate to **Images → Build image**.
+   - Select the **Upload** method and upload the prepared `crucix-<short-sha>.tar` archive.
+   - Set the image name explicitly using the short commit SHA (e.g. `crucix-v2:<short-sha>`).
+   - *Note on build arguments:* The Portainer CE Upload/Web editor interface does not provide a build argument input field; Dockerfile `ARG COMMIT_SHA=""` defaults to an empty string, meaning image labels like `org.opencontainers.image.revision` remain empty (`""`). The authoritative commit identification is maintained through the image tag name.
+3. **Rollback strategy:**
+   - Before deploying a new build, preserve the known-good working image by tagging it with a permanent rollback tag:
+     ```
+     crucix-v2:rollback-pre-llm-patch
+     ```
+   - To roll back instantly in Portainer, update the Stack or Container image reference back to `crucix-v2:rollback-pre-llm-patch` without rebuilding.
+4. **Current LLM Configuration (Ollama / Local Inference):**
+   - **Provider:** Ollama OpenAI-compatible endpoint (`/v1/chat/completions`) configured via `OLLAMA_BASE_URL`.
+   - **Active Model:** `gemma4:e4b-8k` (or configured `LLM_MODEL`). Note: `gemma4:e4b-8k` is a locally created Ollama alias derived from the base `gemma4:e4b` model via a custom Modelfile setting `PARAMETER num_ctx 8192`.
+   - **Reasoning Effort:** Configured to `OLLAMA_REASONING_EFFORT=none` (disables reasoning token overhead for faster, deterministic structured JSON generation).
+   - **Structured Output:** Enforces strict `json_schema` via `response_format` for reliable briefing generation.
+   - **Deterministic Cleaner:** Built-in `stripCitationArtifacts` cleans leaked citation patterns while preserving mid-sentence quantities and values.
+   - **Keep-Alive:** No custom host-level configuration or client-side keep_alive parameter; Ollama's built-in default unloading behavior (unloading after 5 minutes of inactivity) applies.
+
 ### Data reliability and local models (v2.2)
 
 The source registry now queries 31 adapters, including this fork's IODA and the keyless USGS significant-day earthquake feed. USGS coverage is significant earthquakes in the past day, not every earthquake above a magnitude threshold. Its tsunami flag does not establish that a warning was issued. Maritime chokepoints are reference locations; no live AIS connection is claimed by the briefing adapter.
