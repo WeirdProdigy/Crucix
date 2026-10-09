@@ -133,7 +133,7 @@ For reproducible and safe container deployment via Portainer CE (without automat
    - **Reasoning Effort:** Configured to `OLLAMA_REASONING_EFFORT=none` (disables reasoning token overhead for faster, deterministic structured JSON generation).
    - **Structured Output:** Enforces strict `json_schema` via `response_format` for reliable briefing generation.
    - **Deterministic Cleaner:** Built-in `stripCitationArtifacts` cleans leaked citation patterns while preserving mid-sentence quantities and values.
-   - **Keep-Alive:** Controlled strictly at the host Ollama daemon level (no client-side keep_alive query tampering).
+   - **Keep-Alive:** Nincs külön host-szintű konfiguráció vagy kliensoldali keep_alive paraméter; az Ollama beépített, alapértelmezett modell-kiürítési mechanizmusa (5 perc tétlenség utáni unloading) érvényesül.
 
 ### Data reliability and local models (v2.2)
 
