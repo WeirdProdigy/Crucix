@@ -332,6 +332,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .tk-src.anz{color:#80cbc4;border-color:rgba(128,203,196,0.3)}
 .tk-src.us{color:#90caf9;border-color:rgba(144,202,249,0.3)}
 .tk-src.haon{color:#81c784;border-color:rgba(129,199,132,0.3)}
+.tk-src.dehir{color:#ffb74d;border-color:rgba(255,183,77,0.3)}
 .tk-src.other{color:#b0bec5;border-color:rgba(176,190,197,0.2)}
 .tk-head{font-size:11px;line-height:1.35;color:#c8d8d2;margin-top:3px}
 .tk-time{font-family:var(--mono);font-size:8px;color:var(--dim);margin-top:2px}
@@ -1087,6 +1088,7 @@ function buildNewsTickerPanel(){
     const sl = s.toLowerCase();
     if (sl.includes('dw africa') || sl.includes('africa news') || sl.includes('nyt africa') || sl.includes('rfi')) return 'af';
     if (sl.includes('haon')) return 'haon';
+    if (sl.includes('dehir')) return 'dehir';
     if (sl.includes('mercopress')) return 'sa';
     if (sl.includes('indian express') || sl.includes('the hindu')) return 'ind';
     if (sl.includes('sbs')) return 'anz';

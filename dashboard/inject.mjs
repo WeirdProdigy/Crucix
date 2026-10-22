@@ -362,7 +362,9 @@ export function loadOpenSkyFallback(currentTimestamp, runsDir = config.runsDir |
   return candidates.sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))[0] || null;
 }
 
-// === RSS Fetching ===
+// === RSS Fetching & Health Tracking ===
+export const rssFeedState = new Map();
+
 function cleanRssText(str) {
   if (typeof str !== 'string') return '';
   return str
@@ -378,11 +380,56 @@ function cleanRssText(str) {
     .trim();
 }
 
-async function fetchRSS(url, source) {
+export async function fetchRssFeed(url, source, opts = {}) {
+  const start = Date.now();
+  const prior = rssFeedState.get(source) || {
+    source,
+    url,
+    status: 'unknown',
+    error: null,
+    errorType: null,
+    lastAttempt: null,
+    lastSuccess: null,
+    retainedItems: []
+  };
+
+  const attemptTime = new Date().toISOString();
   try {
-    const response = await safeFetch(url, { timeout: 8000, retries: 0, format: 'text', maxBytes: 2 * 1024 * 1024 });
-    if (response.error) throw new Error(response.error);
+    const response = await safeFetch(url, {
+      timeout: opts.timeout || 8000,
+      retries: opts.retries ?? 0,
+      format: 'text',
+      maxBytes: 2 * 1024 * 1024
+    });
+
+    if (response.error) {
+      const isHttp = typeof response.status === 'number' && response.status >= 400;
+      const isTimeout = String(response.error).toLowerCase().includes('timeout');
+      const errorType = isHttp ? 'http' : isTimeout ? 'network' : 'network';
+      const state = {
+        ...prior,
+        status: 'error',
+        error: response.error,
+        errorType,
+        lastAttempt: attemptTime,
+      };
+      rssFeedState.set(source, state);
+      return { ...state, items: prior.retainedItems.map(item => ({ ...item, stale: true })), durationMs: Date.now() - start };
+    }
+
     const xml = response.rawText;
+    if (!xml || (!xml.includes('<rss') && !xml.includes('<feed') && !xml.includes('<channel'))) {
+      const state = {
+        ...prior,
+        status: 'error',
+        error: 'Malformed XML or non-RSS response',
+        errorType: 'xml',
+        lastAttempt: attemptTime,
+      };
+      rssFeedState.set(source, state);
+      return { ...state, items: prior.retainedItems.map(item => ({ ...item, stale: true })), durationMs: Date.now() - start };
+    }
+
     const items = [];
     const itemRegex = /<item>([\s\S]*?)<\/item>/g;
     let match;
@@ -396,18 +443,49 @@ async function fetchRSS(url, source) {
       const summary = rawDesc || undefined;
       if (title && title !== source) items.push({ title, date: pubDate, source, url: link || undefined, ...(summary ? { summary } : {}) });
     }
-    return items;
-  } catch (e) {
-    console.log(`RSS fetch failed (${source}):`, e.message);
-    return [];
+
+    const isZeroItems = items.length === 0;
+    const state = {
+      source,
+      url,
+      status: 'ok',
+      empty: isZeroItems,
+      error: null,
+      errorType: null,
+      lastAttempt: attemptTime,
+      lastSuccess: attemptTime,
+      retainedItems: items
+    };
+    rssFeedState.set(source, state);
+    return { ...state, items, durationMs: Date.now() - start };
+
+  } catch (err) {
+    const isXml = String(err.message).toLowerCase().includes('xml');
+    const isTimeout = String(err.message).toLowerCase().includes('timeout');
+    const errorType = isXml ? 'xml' : isTimeout ? 'network' : 'network';
+    const state = {
+      ...prior,
+      status: 'error',
+      error: err.message,
+      errorType,
+      lastAttempt: attemptTime,
+    };
+    rssFeedState.set(source, state);
+    return { ...state, items: prior.retainedItems.map(item => ({ ...item, stale: true })), durationMs: Date.now() - start };
   }
+}
+
+async function fetchRSS(url, source) {
+  const result = await fetchRssFeed(url, source);
+  return result.items;
 }
 
 const SOURCE_DEFAULT_REGIONS = {
   'HAON': 'Hajdú-Bihar',
+  'Dehir': 'Debrecen',
 };
 
-const REGIONAL_NEWS_SOURCES = ['MercoPress', 'Indian Express', 'The Hindu', 'SBS Australia', 'HAON'];
+const REGIONAL_NEWS_SOURCES = ['MercoPress', 'Indian Express', 'The Hindu', 'SBS Australia', 'HAON', 'Dehir'];
 
 export async function fetchAllNews(customFeeds) {
   const feeds = customFeeds || [
@@ -439,6 +517,7 @@ export async function fetchAllNews(customFeeds) {
     ['https://en.mercopress.com/rss/latin-america', 'MercoPress'],
     // Hungary & Regional
     ['https://www.haon.hu/feed/', 'HAON'],
+    ['https://www.dehir.hu/rss.php', 'Dehir'],
   ];
 
   const results = await Promise.allSettled(
@@ -453,21 +532,18 @@ export async function fetchAllNews(customFeeds) {
   const seen = new Set();
   const geoNews = [];
   for (const item of allNews) {
-    const key = item.title.substring(0, 40).toLowerCase();
+    const key = `${item.source}:${item.url || item.title.substring(0, 50).toLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
     const geo = geoTagText(item.title);
     const defaultRegion = SOURCE_DEFAULT_REGIONS[item.source] || 'Global';
-    const hasExplicitCountry = item.summary?.includes('Magyarország') || item.title?.includes('Magyarország');
-    const enrichedSummary = (item.source === 'HAON' && !hasExplicitCountry)
-      ? (item.summary ? `${item.summary} (Magyarország)` : 'Hajdú-Bihar megyei hír (Magyarország)')
-      : item.summary;
     geoNews.push({
       title: item.title.substring(0, 2000),
       source: item.source,
       date: item.date,
       url: item.url,
-      ...(enrichedSummary ? { summary: enrichedSummary.substring(0, 2000) } : {}),
+      sourceRegion: defaultRegion,
+      ...(item.summary ? { summary: item.summary.substring(0, 2000) } : {}),
       ...(geo ? { lat: geo.lat, lon: geo.lon, region: geo.region, locationMethod: 'headline-keyword', locationPrecision: 'approximate' }
         : { region: defaultRegion, locationMethod: 'unknown' }),
     });
@@ -493,6 +569,12 @@ export async function fetchAllNews(customFeeds) {
   }
   filtered.forEach(pushUnique);
   return selected.slice(0, 50);
+}
+
+export function getRssFeedStatuses() {
+  return Object.fromEntries(rssFeedState);
+
+
 }
 
 // === Leverageable Ideas from Signals ===
@@ -922,6 +1004,7 @@ export function buildNewsFeed(rssNews, gdeltData, tgUrgent, tgTop) {
   recent.forEach(pushUnique);
   return selected.slice(0, 50);
 }
+
 
 // === CLI Mode: inject into HTML file ===
 function getCliArg(flag) {
