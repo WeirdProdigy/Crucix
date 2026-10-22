@@ -41,20 +41,47 @@ function coordinates(entry) {
 }
 
 /**
- * Extracts referenced alert IDs from a CAP references field.
- * Format: space-separated "sender,identifier,sent" triples.
+ * Extracts structured referenced alert objects from a CAP references field.
+ * Format: space-separated "sender,identifier,sent" triples (CAP 1.2 standard).
  */
-export function extractReferencedIds(rawReferences) {
+export function parseCapReferences(rawReferences) {
   const raw = text(rawReferences, 2000);
   if (!raw) return [];
   const tokens = raw.split(/\s+/).filter(Boolean);
-  const ids = [];
+  const refs = [];
   for (const token of tokens) {
     const parts = token.split(',');
-    if (parts.length >= 2 && parts[1]) ids.push(parts[1]);
-    else if (token) ids.push(token);
+    if (parts.length >= 3) {
+      refs.push({
+        sender: parts[0].trim(),
+        identifier: parts[1].trim(),
+        sent: parts[2].trim(),
+        raw: token
+      });
+    } else if (parts.length === 2) {
+      refs.push({
+        sender: parts[0].trim(),
+        identifier: parts[1].trim(),
+        sent: null,
+        raw: token
+      });
+    } else if (token) {
+      refs.push({
+        sender: null,
+        identifier: token.trim(),
+        sent: null,
+        raw: token
+      });
+    }
   }
-  return ids;
+  return refs;
+}
+
+/**
+ * Extracts referenced alert IDs from a CAP references field.
+ */
+export function extractReferencedIds(rawReferences) {
+  return parseCapReferences(rawReferences).map(r => r.identifier).filter(Boolean);
 }
 
 /**
@@ -166,7 +193,8 @@ function warning(entry, country, now, territoryConfig) {
   const territory = matchTerritory(geocodes, area, territoryConfig);
 
   const rawRefs = text(entry.references, 2000);
-  const referencedIds = extractReferencedIds(rawRefs);
+  const parsedReferences = parseCapReferences(rawRefs);
+  const referencedIds = parsedReferences.map(r => r.identifier).filter(Boolean);
   const chainKey = referencedIds.length > 0 ? referencedIds[0] : providerId;
 
   return {
@@ -181,7 +209,7 @@ function warning(entry, country, now, territoryConfig) {
     chainKey,
     observedAt,
     publishedAt,
-    validUntil: validUntil || null,
+    ...(validUntil ? { validUntil } : {}),
     ...(startsAt ? { startsAt } : {}),
     country: COUNTRIES[country] || country,
     sourceRegion: country === 'hungary' ? 'Hungary' : undefined,
@@ -192,7 +220,9 @@ function warning(entry, country, now, territoryConfig) {
     status: text(entry.status, 50) || 'Actual',
     scope: text(entry.scope, 50) || 'Public',
     msgType,
-    ...(rawRefs ? { references: rawRefs, referencedIds } : {}),
+    sender: text(entry.sender, 200) || 'meteoalarm.org',
+    sent: text(entry.sent, 200) || publishedAt,
+    ...(rawRefs ? { references: rawRefs, parsedReferences, referencedIds } : {}),
     ...(awarenessLevel ? { awarenessLevel } : {}),
     ...(awarenessType ? { awarenessType } : {}),
     geocodes,
@@ -203,32 +233,203 @@ function warning(entry, country, now, territoryConfig) {
 }
 
 /**
- * Resolves Alert -> Update -> Cancel chains across warning rows.
- * Updates superseded entries and links message identities.
+ * Resolves Alert -> Update -> Cancel chains across warning rows and persistent history.
+ * Supports triple matching (sender, identifier, sent) per CAP 1.2 standard.
  */
-export function resolveWarningChains(warnings = []) {
+export function resolveWarningChains(warnings = [], { history = null, now = Date.now() } = {}) {
   if (!Array.isArray(warnings)) return [];
   const byId = new Map();
-  for (const w of warnings) byId.set(w.providerId, w);
+  const byTriple = new Map();
 
+  const register = (item) => {
+    if (!item || typeof item !== 'object') return;
+    if (item.providerId) byId.set(item.providerId, item);
+    if (item.id) byId.set(item.id, item);
+    const sender = item.sender || item.source?.name || item.source;
+    const sent = item.sent || item.publishedAt;
+    if (item.providerId && sender && sent) {
+      byTriple.set(`${sender},${item.providerId},${sent}`, item);
+    }
+  };
+
+  // 1. Index history if provided (HistoryStore or Map or Array)
+  if (history) {
+    if (typeof history.query === 'function') {
+      try {
+        const qRes = history.query({ limit: 200 });
+        for (const h of qRes.items || []) register(h);
+      } catch {}
+    } else if (typeof history.list === 'function') {
+      try { for (const h of history.list()) register(h); } catch {}
+    } else if (typeof history.values === 'function') {
+      for (const h of history.values()) register(h);
+    } else if (Array.isArray(history)) {
+      for (const h of history) register(h);
+    }
+  }
+
+  // 2. Index current batch
+  for (const w of warnings) register(w);
+
+  // 3. Resolve incoming references
   for (const w of warnings) {
-    if (Array.isArray(w.referencedIds) && w.referencedIds.length > 0) {
-      for (const refId of w.referencedIds) {
-        const target = byId.get(refId);
-        if (target) {
-          if (w.msgType?.toLowerCase() === 'cancel') {
-            target.lifecycle = 'cancelled';
-            target.cancelledBy = w.providerId;
-          } else if (w.msgType?.toLowerCase() === 'update') {
-            target.lifecycle = 'superseded';
-            target.supersededBy = w.providerId;
-          }
-          w.chainKey = target.chainKey || target.providerId;
+    const refs = Array.isArray(w.parsedReferences) ? w.parsedReferences : parseCapReferences(w.references);
+    for (const ref of refs) {
+      let target = null;
+      if (ref.sender && ref.identifier && ref.sent) {
+        target = byTriple.get(`${ref.sender},${ref.identifier},${ref.sent}`);
+      }
+      if (!target && ref.identifier) {
+        target = byId.get(ref.identifier);
+      }
+      if (target) {
+        const nowIso = new Date(now).toISOString();
+        if (w.msgType?.toLowerCase() === 'cancel') {
+          target.lifecycle = 'cancelled';
+          target.cancelled = true;
+          target.cancelledBy = w.providerId;
+          target.collectedAt = nowIso;
+          if (history && typeof history.add === 'function') history.add([target]);
+        } else if (w.msgType?.toLowerCase() === 'update') {
+          target.lifecycle = 'superseded';
+          target.superseded = true;
+          target.supersededBy = w.providerId;
+          target.collectedAt = nowIso;
+          if (history && typeof history.add === 'function') history.add([target]);
         }
+        w.chainKey = target.chainKey || target.providerId || ref.identifier;
+      } else if (ref.identifier && !w.chainKey) {
+        w.chainKey = ref.identifier;
       }
     }
   }
   return warnings;
+}
+
+/**
+ * Evaluates alerting eligibility and notification action for a weather warning.
+ *
+ * Rules:
+ * 1. Test/Exercise or non-public: eligible = false, action = 'drop'
+ * 2. Feed error: eligible = false, action = 'feed_error' (never treated as cancellation)
+ * 3. Territory unknown or outside:
+ *    - if territory.matchState === 'unknown': eligible = false, action = 'review_only', alertEligibleLocal = false
+ *    - if territory.matchState === 'no_match': eligible = false, action = 'outside_scope', alertEligibleLocal = false
+ * 4. Cancel message: eligible = true, action = 'cancel', alertType = 'revocation'
+ * 5. Naturally expired (now >= expires): eligible = false, action = 'expired', alertType = 'expiry'
+ * 6. Update message / repeated sweep:
+ *    - if previousWarning exists with same chainKey / providerId:
+ *      * if material change (severity changed, awarenessLevel changed, area changed):
+ *        eligible = true, action = 'update', alertType = 'revision'
+ *      * if materially unchanged:
+ *        eligible = false, action = 'suppress_duplicate', alertType = 'none' (no duplicate initial alert!)
+ * 7. Initial new warning: eligible = true, action = 'initial_alert', alertType = 'new_danger'
+ */
+export function evaluateWarningNotification(currentWarning, { previousWarning = null, channel = 'telegram' } = {}) {
+  // Feed error handling
+  if (!currentWarning || currentWarning.status === 'error' || currentWarning.error) {
+    return {
+      eligible: false,
+      action: 'feed_error',
+      alertType: 'none',
+      reason: 'Feed transport or parsing error must not trigger cancellation of existing alerts'
+    };
+  }
+
+  // Test / Exercise filter
+  const status = (currentWarning.status || '').toLowerCase();
+  if (status !== 'actual' || (currentWarning.scope && currentWarning.scope.toLowerCase() !== 'public')) {
+    return {
+      eligible: false,
+      action: 'drop',
+      alertType: 'none',
+      reason: 'Test or Exercise messages have no live notification eligibility'
+    };
+  }
+
+  // Unknown or outside territorial matching
+  const terr = currentWarning.territory;
+  if (!terr || terr.matchState === 'unknown' || terr.isConfirmedLocal !== true) {
+    return {
+      eligible: false,
+      action: terr?.matchState === 'unknown' ? 'review_only' : 'outside_scope',
+      alertType: 'none',
+      isConfirmedLocal: false,
+      reason: terr?.matchState === 'unknown'
+        ? 'Indeterminate territorial geocode: retained for review, but cannot trigger confirmed local warning'
+        : 'Warning territory outside watched local area'
+    };
+  }
+
+  // Formal cancellation
+  const isCancel = currentWarning.msgType?.toLowerCase() === 'cancel' || currentWarning.lifecycle === 'cancelled';
+  if (isCancel) {
+    return {
+      eligible: true,
+      action: 'cancel',
+      alertType: 'revocation',
+      isConfirmedLocal: true,
+      chainKey: currentWarning.chainKey,
+      title: `VISSZAVONÁS: ${currentWarning.title}`,
+      reason: 'Official CAP cancellation message'
+    };
+  }
+
+  // Naturally expired
+  if (currentWarning.lifecycle === 'expired') {
+    return {
+      eligible: false,
+      action: 'expired',
+      alertType: 'expiry',
+      isConfirmedLocal: true,
+      chainKey: currentWarning.chainKey,
+      reason: 'Natural validity expiration: distinct from formal cancellation, no cancellation message emitted'
+    };
+  }
+
+  // Previous warning comparison
+  if (previousWarning) {
+    const prevSev = previousWarning.severity || previousWarning.awarenessLevel;
+    const currSev = currentWarning.severity || currentWarning.awarenessLevel;
+    const prevArea = previousWarning.area || '';
+    const currArea = currentWarning.area || '';
+    
+    const isEscalation = currSev !== prevSev;
+    const isAreaChanged = currArea !== prevArea && Math.abs(currArea.length - prevArea.length) > 10;
+    
+    if (isEscalation || isAreaChanged) {
+      return {
+        eligible: true,
+        action: 'update',
+        alertType: 'revision',
+        isConfirmedLocal: true,
+        chainKey: currentWarning.chainKey,
+        title: `FRISSÍTÉS: ${currentWarning.title}`,
+        reason: isEscalation ? `Material change: severity updated from ${prevSev} to ${currSev}` : 'Material change: warning area updated'
+      };
+    }
+
+    // Materially unchanged -> suppress duplicate initial alert
+    return {
+      eligible: false,
+      action: 'suppress_duplicate',
+      alertType: 'none',
+      isConfirmedLocal: true,
+      chainKey: currentWarning.chainKey,
+      reason: 'Unchanged warning: already notified, duplicate initial alert suppressed'
+    };
+  }
+
+  // Initial alert
+  return {
+    eligible: true,
+    action: 'initial_alert',
+    alertType: 'new_danger',
+    isConfirmedLocal: true,
+    chainKey: currentWarning.chainKey,
+    title: `RIASZTÁS: ${currentWarning.title}`,
+    reason: 'New active confirmed local weather hazard'
+  };
 }
 
 export function parseMeteoalarm(xml, { country = 'hungary', now = Date.now(), recordLimit = 500, territoryConfig, includeAllLifecycles = false } = {}) {

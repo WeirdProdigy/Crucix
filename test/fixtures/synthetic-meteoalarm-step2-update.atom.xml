@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2" xmlns:georss="http://www.georss.org/georss">
+  <id>https://feeds.meteoalarm.org/feeds/meteoalarm-legacy-atom-hungary</id>
+  <title>Meteoalarm - Weather Warnings for Hungary</title>
+  <updated>2026-10-22T10:00:00+02:00</updated>
+  <link rel="self" href="https://feeds.meteoalarm.org/feeds/meteoalarm-legacy-atom-hungary" />
+  <entry>
+    <id>https://feeds.meteoalarm.org/api/v1/warnings/HU.CHAIN.002</id>
+    <title>Orange wind warning for Észak-Alföld</title>
+    <updated>2026-10-22T10:00:00+02:00</updated>
+    <published>2026-10-22T10:00:00+02:00</published>
+    <link rel="related" type="application/cap+xml" href="https://feeds.meteoalarm.org/api/v1/warnings/HU.CHAIN.002.cap" />
+    <link rel="alternate" type="text/html" href="https://meteoalarm.org/en/live/warning/HU.CHAIN.002" />
+    <summary>Severe wind gusts up to 95 km/h in Észak-Alföld</summary>
+    <cap:identifier>HU.CHAIN.002</cap:identifier>
+    <cap:sender>meteoalarm@meteoalarm.org</cap:sender>
+    <cap:sent>2026-10-22T10:00:00+02:00</cap:sent>
+    <cap:status>Actual</cap:status>
+    <cap:msgType>Update</cap:msgType>
+    <cap:scope>Public</cap:scope>
+    <cap:references>meteoalarm@meteoalarm.org,HU.CHAIN.001,2026-10-22T08:00:00+02:00</cap:references>
+    <cap:event>Wind</cap:event>
+    <cap:urgency>Immediate</cap:urgency>
+    <cap:severity>Severe</cap:severity>
+    <cap:certainty>Observed</cap:certainty>
+    <cap:onset>2026-10-22T10:00:00+02:00</cap:onset>
+    <cap:expires>2026-10-22T22:00:00+02:00</cap:expires>
+    <cap:areaDesc>Észak-Alföld (Northern Great Plain)</cap:areaDesc>
+    <cap:geocode>
+      <valueName>NUTS2</valueName>
+      <value>HU32</value>
+    </cap:geocode>
+    <cap:parameter>
+      <valueName>awareness_level</valueName>
+      <value>3; orange; Severe</value>
+    </cap:parameter>
+    <cap:parameter>
+      <valueName>awareness_type</valueName>
+      <value>1; Wind</value>
+    </cap:parameter>
+  </entry>
+</feed>
