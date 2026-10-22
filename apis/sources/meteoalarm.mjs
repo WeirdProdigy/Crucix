@@ -85,10 +85,11 @@ export function extractReferencedIds(rawReferences) {
 }
 
 /**
- * Computes the lifecycle state of a weather warning.
- * Distinct states: 'future', 'active', 'expired', 'cancelled', 'superseded', 'unknown'.
+ * Computes the official provider lifecycle state of a weather warning per CAP specification.
+ * Distinct states: 'future', 'active', 'expired', 'cancelled', 'superseded'.
+ * Note: Exceeding local freshness limits does not alter the provider's lifecycle state.
  */
-export function determineLifecycleStatus({ msgType, startsAt, validUntil, cancelled = false, superseded = false, publishedAt, now = Date.now(), maxAgeMs = 24 * 60 * 60 * 1000 }) {
+export function determineLifecycleStatus({ msgType, startsAt, validUntil, cancelled = false, superseded = false, now = Date.now() }) {
   const type = (msgType || '').toLowerCase();
   if (type === 'cancel' || cancelled) return 'cancelled';
   if (superseded) return 'superseded';
@@ -97,16 +98,47 @@ export function determineLifecycleStatus({ msgType, startsAt, validUntil, cancel
   const validMs = validUntil ? Date.parse(validUntil) : null;
   if (validMs && nowMs >= validMs) return 'expired';
   if (startsMs && nowMs < startsMs) return 'future';
+  return 'active';
+}
 
-  // Warnings without explicit expiration: cannot stay active indefinitely.
-  // Provider freshness threshold (24 hours) governs lifecycle expiry.
-  const baselineMs = publishedAt ? Date.parse(publishedAt) : (startsMs || null);
-  if (!validMs && baselineMs && (nowMs - baselineMs) >= maxAgeMs) {
-    return 'expired';
+/**
+ * Checks local data freshness policy for warnings, especially those lacking official expires.
+ * - When validUntil is null, the warning is subject to a 24-hour local freshness threshold.
+ * - Under 24h: freshnessStatus = 'fresh', label = 'A kibocsátó nem adott meg lejáratot.'
+ * - Over 24h: freshnessStatus = 'stale', isFreshnessLimitExceeded = true,
+ *   label = 'Aktualitása nem igazolt: a helyi frissességi korlát letelt.'
+ */
+export function checkFreshnessPolicy({ validUntil, publishedAt, startsAt, now = Date.now(), maxAgeMs = 24 * 60 * 60 * 1000 }) {
+  const nowMs = typeof now === 'number' ? now : Date.now();
+  if (validUntil) {
+    const validMs = Date.parse(validUntil);
+    const isExpired = Number.isFinite(validMs) && nowMs >= validMs;
+    return {
+      hasExplicitExpires: true,
+      freshnessStatus: isExpired ? 'expired' : 'fresh',
+      isFreshnessLimitExceeded: false,
+      freshnessReason: isExpired ? 'Hivatalos lejárati idő letelt.' : 'Hivatalos érvényességi időn belül.',
+      validityLabel: validUntil
+    };
   }
 
-  if (startsMs || validMs || baselineMs) return 'active';
-  return 'unknown';
+  const baseline = publishedAt || startsAt;
+  const baselineMs = baseline ? Date.parse(baseline) : null;
+  const ageMs = baselineMs ? Math.max(0, nowMs - baselineMs) : 0;
+  const isFreshnessLimitExceeded = baselineMs ? ageMs >= maxAgeMs : false;
+
+  return {
+    hasExplicitExpires: false,
+    freshnessStatus: isFreshnessLimitExceeded ? 'stale' : 'fresh',
+    isFreshnessLimitExceeded,
+    freshnessLimitExpiresAt: baselineMs ? new Date(baselineMs + maxAgeMs).toISOString() : null,
+    freshnessReason: isFreshnessLimitExceeded
+      ? 'Aktualitása nem igazolt: a helyi frissességi korlát letelt.'
+      : 'A kibocsátó nem adott meg lejáratot.',
+    validityLabel: isFreshnessLimitExceeded
+      ? 'Aktualitása nem igazolt: a helyi frissességi korlát letelt.'
+      : 'A kibocsátó nem adott meg lejáratot.'
+  };
 }
 
 /**
@@ -167,7 +199,13 @@ function warning(entry, country, now, territoryConfig) {
     startsAt,
     validUntil,
     cancelled: isCancel,
+    now
+  });
+
+  const freshnessPolicy = checkFreshnessPolicy({
+    validUntil,
     publishedAt,
+    startsAt,
     now
   });
 
@@ -219,6 +257,10 @@ function warning(entry, country, now, territoryConfig) {
     observedAt,
     publishedAt,
     ...(validUntil ? { validUntil } : {}),
+    hasExplicitExpires: freshnessPolicy.hasExplicitExpires,
+    freshnessStatus: freshnessPolicy.freshnessStatus,
+    isFreshnessLimitExceeded: freshnessPolicy.isFreshnessLimitExceeded,
+    freshnessReason: freshnessPolicy.freshnessReason,
     ...(startsAt ? { startsAt } : {}),
     country: COUNTRIES[country] || country,
     sourceRegion: country === 'hungary' ? 'Hungary' : undefined,
@@ -241,8 +283,10 @@ function warning(entry, country, now, territoryConfig) {
       { label: 'territory', value: area || territory?.areaDesc || 'Unknown area' },
       { label: 'matchState', value: territory?.matchState || 'unknown' },
       { label: 'lifecycle', value: lifecycle },
+      { label: 'freshnessStatus', value: freshnessPolicy.freshnessStatus },
       ...(awarenessLevel ? [{ label: 'awarenessLevel', value: awarenessLevel }] : []),
-      { label: 'validity', value: validUntil ? `${startsAt || publishedAt} – ${validUntil}` : (lifecycle === 'expired' ? 'Elévült (24h elévülési ablak lejárt)' : 'Érvényes visszavonásig (max. 24h)') },
+      { label: 'validity', value: freshnessPolicy.validityLabel },
+      ...(freshnessPolicy.isFreshnessLimitExceeded ? [{ label: 'freshnessReason', value: freshnessPolicy.freshnessReason }] : []),
       { label: 'isConfirmedLocal', value: Boolean(territory?.isConfirmedLocal) },
     ],
     ...point
@@ -389,6 +433,17 @@ export function evaluateWarningNotification(currentWarning, { previousWarning = 
   if (isCancel) {
     const wasNotified = Boolean(previousWarning?.notified || previousWarning?.wasNotified || currentWarning?.wasNotified);
     const wasLocal = previousWarning?.territory?.isConfirmedLocal === true || terr?.isConfirmedLocal === true;
+    const alreadyCancelled = Boolean(previousWarning?.cancelled || previousWarning?.cancelNotified || (previousWarning?.msgType?.toLowerCase() === 'cancel' && (previousWarning?.notified || previousWarning?.wasNotified)));
+    if (alreadyCancelled) {
+      return {
+        eligible: false,
+        action: 'suppress_duplicate',
+        alertType: 'none',
+        isConfirmedLocal: wasLocal,
+        chainKey: currentWarning.chainKey,
+        reason: 'Repeated cancellation: cancellation already processed and notified, duplicate suppressed'
+      };
+    }
     if (!wasNotified || !wasLocal) {
       return {
         eligible: false,
@@ -412,7 +467,19 @@ export function evaluateWarningNotification(currentWarning, { previousWarning = 
     };
   }
 
-  // Naturally expired
+  // Local freshness limit exceeded (missing expires older than local 24h threshold)
+  if (currentWarning.isFreshnessLimitExceeded || currentWarning.freshnessStatus === 'stale') {
+    return {
+      eligible: false,
+      action: 'freshness_exceeded',
+      alertType: 'none',
+      isConfirmedLocal: true,
+      chainKey: currentWarning.chainKey,
+      reason: 'Aktualitása nem igazolt: a helyi frissességi korlát letelt.'
+    };
+  }
+
+  // Official provider expiration (per CAP expires / validUntil)
   if (currentWarning.lifecycle === 'expired') {
     return {
       eligible: false,
@@ -420,7 +487,7 @@ export function evaluateWarningNotification(currentWarning, { previousWarning = 
       alertType: 'expiry',
       isConfirmedLocal: true,
       chainKey: currentWarning.chainKey,
-      reason: 'Natural validity expiration: distinct from formal cancellation, no cancellation message emitted'
+      reason: 'Hivatalos szolgáltatói lejárati idő elérve'
     };
   }
 
@@ -490,6 +557,7 @@ export function parseMeteoalarm(xml, { country = 'hungary', now = Date.now(), re
       : resolvedRows.filter(row => {
           if (row.lifecycle === 'cancelled' || row.lifecycle === 'superseded' || row.lifecycle === 'expired') return false;
           if (row.validUntil && Date.parse(row.validUntil) <= now) return false;
+          if (row.isFreshnessLimitExceeded) return false;
           return true;
         });
 

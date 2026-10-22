@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import vm from 'node:vm';
 import {
   parseMeteoalarm,
   resolveWarningChains,
   determineLifecycleStatus,
+  checkFreshnessPolicy,
   extractReferencedIds,
   parseCapReferences,
   evaluateWarningNotification
@@ -518,48 +520,152 @@ test('Severity mapping layers and 24h freshness lifecycle for warnings with miss
   assert.equal(extremeEvent.severity, 'critical', 'CAP Extreme maps to event scale critical');
   assert.equal(eventLevel(extremeEvent), 'critical', 'Event critical maps to alert level critical');
 
-  // B. Hiányzó expires (validUntil) életciklus- és elévülési szabályzata:
-  // 1. Friss riasztás (now - publishedAt < 24h): active állapot
-  const recentPublished = new Date(NOW - 2 * 3600000).toISOString(); // 2 órája közzétéve
-  const activeLifecycle = determineLifecycleStatus({
-    msgType: 'Alert',
-    publishedAt: recentPublished,
-    validUntil: null,
-    now: NOW
-  });
-  assert.equal(activeLifecycle, 'active', 'Warning without expires is active within 24h freshness window');
+  // B. Hiányzó expires (validUntil) helyi frissességi szabályzata és bizonytalansága:
+  // 1. Friss riasztás a 24 órás határon belül (now - publishedAt = 2h):
+  const publishedAt = '2026-10-22T08:00:00.000Z';
+  const timeBeforeLimit = Date.parse('2026-10-22T10:00:00.000Z'); // 2 órával utána
 
-  // 2. Elavult riasztás (now - publishedAt >= 24h, pl. 25 órája közzétéve):
-  // Nem maradhat érvényes végtelen ideig! expired állapotot kap!
-  const stalePublished = new Date(NOW - 25 * 3600000).toISOString(); // 25 órája közzétéve
-  const expiredLifecycle = determineLifecycleStatus({
-    msgType: 'Alert',
-    publishedAt: stalePublished,
+  const freshRes = checkFreshnessPolicy({
     validUntil: null,
-    now: NOW
+    publishedAt,
+    now: timeBeforeLimit
   });
-  assert.equal(expiredLifecycle, 'expired', 'Warning without expires expires naturally after 24h freshness window');
+  assert.equal(freshRes.hasExplicitExpires, false, 'No explicit expires supplied by provider');
+  assert.equal(freshRes.freshnessStatus, 'fresh', 'Freshness status is fresh within 24h');
+  assert.equal(freshRes.isFreshnessLimitExceeded, false);
+  assert.equal(freshRes.validityLabel, 'A kibocsátó nem adott meg lejáratot.', 'Exact expected label when active within 24h');
 
-  // 3. Értesítési jogosultság elévült állapotnál:
+  // Provider lifecycle stays active (NOT artificially expired):
+  const lifecycleBefore = determineLifecycleStatus({
+    msgType: 'Alert',
+    publishedAt,
+    validUntil: null,
+    now: timeBeforeLimit
+  });
+  assert.equal(lifecycleBefore, 'active', 'Provider lifecycle is active, not artificially expired');
+
+  // 2. Pontosan a 24 órás határon (now - publishedAt = 24h):
+  const timeAtLimit = Date.parse('2026-10-23T08:00:00.000Z'); // Pontosan 24h
+  const atLimitRes = checkFreshnessPolicy({
+    validUntil: null,
+    publishedAt,
+    now: timeAtLimit
+  });
+  assert.equal(atLimitRes.hasExplicitExpires, false);
+  assert.equal(atLimitRes.isFreshnessLimitExceeded, true, 'At 24h boundary, freshness limit is exceeded');
+  assert.equal(atLimitRes.freshnessStatus, 'stale');
+  assert.equal(atLimitRes.validityLabel, 'Aktualitása nem igazolt: a helyi frissességi korlát letelt.', 'Exact expected label at limit');
+
+  // 3. A 24 órás határon túl (now - publishedAt = 25h):
+  const timeAfterLimit = Date.parse('2026-10-23T09:00:00.000Z'); // 25h
+  const afterLimitRes = checkFreshnessPolicy({
+    validUntil: null,
+    publishedAt,
+    now: timeAfterLimit
+  });
+  assert.equal(afterLimitRes.hasExplicitExpires, false);
+  assert.equal(afterLimitRes.isFreshnessLimitExceeded, true);
+  assert.equal(afterLimitRes.freshnessStatus, 'stale');
+  assert.equal(afterLimitRes.validityLabel, 'Aktualitása nem igazolt: a helyi frissességi korlát letelt.', 'Exact expected label after limit');
+
+  // Provider lifecycle továbbra is active (nem állítunk be téves expired szolgáltatói állapotot):
+  const lifecycleAfter = determineLifecycleStatus({
+    msgType: 'Alert',
+    publishedAt,
+    validUntil: null,
+    now: timeAfterLimit
+  });
+  assert.equal(lifecycleAfter, 'active', 'Exceeding local freshness does NOT forge provider lifecycle=expired');
+
+  // Értesítés letiltása a helyi frissességi korlát miatt:
   const staleWarning = {
-    title: 'Stale warning without expires',
+    title: 'Wind warning without expires',
     providerId: 'HU.STALE.001',
     status: 'Actual',
     scope: 'Public',
-    lifecycle: expiredLifecycle,
+    lifecycle: lifecycleAfter,
+    validUntil: null,
+    hasExplicitExpires: false,
+    freshnessStatus: afterLimitRes.freshnessStatus,
+    isFreshnessLimitExceeded: afterLimitRes.isFreshnessLimitExceeded,
+    freshnessReason: afterLimitRes.freshnessReason,
     territory: { matchState: 'match', isConfirmedLocal: true }
   };
   const evalStale = evaluateWarningNotification(staleWarning);
-  assert.equal(evalStale.eligible, false, 'Expired warning without expires is ineligible for alerting');
-  assert.equal(evalStale.action, 'expired');
+  assert.equal(evalStale.eligible, false, 'Stale unverified warning is ineligible for alerting');
+  assert.equal(evalStale.action, 'freshness_exceeded');
+  assert.equal(evalStale.reason, 'Aktualitása nem igazolt: a helyi frissességi korlát letelt.');
 });
 
-// ─── 8. Crucix AlertEngine, mock értesítésküldő és felületi mezők integrációja (Requirement 3) ───
+// ─── 8. Figyelmeztetés lejárat nélkül: perzisztens tárolás és újraszámítás újraindítás után ───
 
-test('Real Crucix AlertEngine and mock notifier integration: conditional cancel alerts and browser UI fields', async () => {
-  const tmpDir = mkdtempSync(join(tmpdir(), 'crucix-meteo-engine-'));
+test('Warning without expires: persistent storage retains record and recalculates freshness across restarts', () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'crucix-meteo-restart-freshness-'));
   try {
-    // 1. Mock Telegram alerter
+    const publishedAt = '2026-10-22T08:00:00.000Z';
+    const t0 = Date.parse('2026-10-22T10:00:00.000Z'); // T0 = 2 órával közzététel után
+
+    const initialFreshness = checkFreshnessPolicy({ validUntil: null, publishedAt, now: t0 });
+    const initialRecord = {
+      id: 'event-00112233445566778899aabbccddeeff',
+      kind: 'weather',
+      title: 'Thunderstorm warning without expires',
+      summary: 'Thunderstorm — Észak-Alföld',
+      source: { name: 'Meteoalarm', url: 'https://meteoalarm.org/hungary', status: 'ok' },
+      providerId: 'HU.NO_EXPIRES.001',
+      publishedAt,
+      observedAt: publishedAt,
+      collectedAt: new Date(t0).toISOString(),
+      location: { label: 'Észak-Alföld', lat: 47.16, lon: 21.36, method: 'polygon' },
+      severity: 'high',
+      lifecycle: 'active',
+      validUntil: null,
+      hasExplicitExpires: false,
+      freshnessStatus: initialFreshness.freshnessStatus,
+      isFreshnessLimitExceeded: initialFreshness.isFreshnessLimitExceeded,
+      freshnessReason: initialFreshness.freshnessReason,
+      territory: { matchState: 'match', isConfirmedLocal: true }
+    };
+
+    // Mentés HistoryStore-ba T0 időpontban
+    const history1 = new HistoryStore(tmpDir, { now: () => t0 });
+    history1.add([initialRecord]);
+
+    // Újraindítás 1: T0 + 2 óra (még a 24 órán belül)
+    const t1 = Date.parse('2026-10-22T12:00:00.000Z');
+    const history2 = new HistoryStore(tmpDir, { now: () => t1 });
+    const loaded1 = history2.get(initialRecord.id);
+    assert.ok(loaded1, 'Record recovered from history');
+    assert.equal(loaded1.validUntil ?? null, null, 'validUntil remains strictly null or unset');
+    assert.equal(loaded1.lifecycle, 'active', 'Lifecycle remains active');
+    const recomputedFreshness1 = checkFreshnessPolicy({ validUntil: loaded1.validUntil ?? null, publishedAt: loaded1.publishedAt, now: t1 });
+    assert.equal(recomputedFreshness1.freshnessStatus, 'fresh');
+    assert.equal(recomputedFreshness1.isFreshnessLimitExceeded, false);
+    assert.equal(recomputedFreshness1.validityLabel, 'A kibocsátó nem adott meg lejáratot.');
+
+    // Újraindítás 2: T0 + 26 óra (24 órás frissességi határon túl)
+    const t2 = Date.parse('2026-10-23T10:00:00.000Z');
+    const history3 = new HistoryStore(tmpDir, { now: () => t2 });
+    const loaded2 = history3.get(initialRecord.id);
+    assert.ok(loaded2, 'Record retained in historical storage after expiration');
+    assert.equal(loaded2.validUntil ?? null, null, 'validUntil is still null or unset');
+    assert.equal(loaded2.lifecycle, 'active', 'Provider lifecycle is still active');
+    // Újraszámított frissesség:
+    const recomputedFreshness2 = checkFreshnessPolicy({ validUntil: loaded2.validUntil ?? null, publishedAt: loaded2.publishedAt, now: t2 });
+    assert.equal(recomputedFreshness2.freshnessStatus, 'stale', 'Freshness recalculation marks record stale');
+    assert.equal(recomputedFreshness2.isFreshnessLimitExceeded, true);
+    assert.equal(recomputedFreshness2.validityLabel, 'Aktualitása nem igazolt: a helyi frissességi korlát letelt.');
+    assert.equal(recomputedFreshness2.freshnessReason, 'Aktualitása nem igazolt: a helyi frissességi korlát letelt.');
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+// ─── 9. Cancel teljes motorút: riasztás, visszavonás, duplikátum-elnyomás, restart (Requirement 3) ───
+
+test('Full AlertEngine and AlertNotifier lifecycle: initial alert, cancel revocation, duplicate suppression, unnotified rejection, and restart persistence', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'crucix-full-cancel-flow-'));
+  try {
     const sentMessages = [];
     const mockTelegram = {
       isConfigured: true,
@@ -576,20 +682,22 @@ test('Real Crucix AlertEngine and mock notifier integration: conditional cancel 
       now: () => NOW
     });
 
-    // 2. AlertEngine konfigurációja
-    const engine = new AlertEngine(tmpDir, { now: () => NOW });
-    engine.load();
+    const engine1 = new AlertEngine(tmpDir, { now: () => NOW });
+    engine1.load();
 
-    // 3. Helyi, Severe figyelmeztetés érkezik (provider: 'Severe' -> high severity -> fires on events-high)
-    const localSevereEvent = {
+    // 1. Bootstrap sweep
+    engine1.evaluate({ events: [] });
+
+    // 2. Első helyi riasztás (Severe thunderstorm warning for Észak-Alföld)
+    const initialWarningEvent = {
       id: 'meteo00112233445566778899aabbcc',
       kind: 'weather',
       title: 'Orange thunderstorm warning for Észak-Alföld',
       summary: 'Thunderstorm warning — Észak-Alföld',
       source: { name: 'Meteoalarm', url: 'https://meteoalarm.org/hungary' },
-      providerId: 'HU.CHAIN.002',
+      providerId: 'HU.CHAIN.001',
       chainKey: 'HU.CHAIN.001',
-      msgType: 'Update',
+      msgType: 'Alert',
       severity: 'high',
       observedAt: new Date(NOW).toISOString(),
       publishedAt: new Date(NOW).toISOString(),
@@ -597,38 +705,26 @@ test('Real Crucix AlertEngine and mock notifier integration: conditional cancel 
       territory: { matchState: 'match', isConfirmedLocal: true, inScope: true },
       awarenessLevel: '3; orange; Severe',
       lifecycle: 'active',
-      validUntil: new Date(NOW + 14400000).toISOString(),
-      facts: [
-        { label: 'territory', value: 'Észak-Alföld' },
-        { label: 'matchState', value: 'match' },
-        { label: 'lifecycle', value: 'active' },
-        { label: 'awarenessLevel', value: '3; orange; Severe' },
-        { label: 'validity', value: `${new Date(NOW).toISOString()} – ${new Date(NOW + 14400000).toISOString()}` },
-        { label: 'isConfirmedLocal', value: true }
-      ]
+      validUntil: new Date(NOW + 14400000).toISOString()
     };
 
-    // Első kiértékelés (bootstrap sweep üres listával inicializálja az engine-t):
-    const res1 = engine.evaluate({ events: [] });
-    assert.equal(res1.silent, true, 'Bootstrap sweep alerts are silent by design');
+    const evalRes1 = engine1.evaluate({ events: [initialWarningEvent] });
+    assert.equal(evalRes1.created.length >= 1, true, 'AlertEngine created alert');
+    const createdAlert = evalRes1.created.find(a => a.ruleId === 'events-high');
+    assert.ok(createdAlert, 'events-high alert generated');
 
-    // Második sweep: éles helyi súlyos esemény érkezik -> éles riasztás aktiválódik!
-    const res2 = engine.evaluate({ events: [localSevereEvent] });
-    assert.equal(res2.silent, false, 'Second sweep alerts are active');
-    assert.ok(res2.created.some(a => a.ruleId === 'events-high'), 'AlertEngine fired events-high alert for local severe weather');
-    assert.ok(res2.created.some(a => a.ruleId === 'hungary-region'), 'AlertEngine fired hungary-region alert for Hungarian coordinates');
+    // Kézbesítés mock küldővel:
+    const dispatchRes1 = await notifier.dispatch({ created: [createdAlert], escalated: [], resolved: [] });
+    assert.equal(dispatchRes1.sent.length, 1, 'Initial alert dispatched');
+    assert.equal(sentMessages.length, 1, 'Mock Telegram received initial alert message');
+    assert.ok(sentMessages[0].includes('[HIGH] Orange thunderstorm warning for Észak-Alföld'));
 
-    // Notifier kiküldi a Telegram üzenetet (a notify:true szabályokból, itt az events-high):
-    await notifier.dispatch({ created: res2.created, escalated: [], resolved: [] });
-    assert.equal(sentMessages.length, 1, 'Mock Telegram received exactly 1 warning notification (events-high with notify:true)');
-    assert.ok(sentMessages[0].includes('Orange thunderstorm warning for Észak-Alföld'));
+    // Rögzítés az engine-ben és perzisztálás lemezre:
+    engine1.markNotified(createdAlert.id, ['telegram']);
+    initialWarningEvent.notified = true;
 
-    // Rögzítjük az értesített állapotot a láncon:
-    localSevereEvent.notified = true;
-
-    // 4. Cancel tesztelése:
-    // A: Értesített ÉS helyi lánc visszavonása -> JOGOS visszavonási értesítés!
-    const localCancel = {
+    // 3. Későbbi Cancel visszavonásként történő kézbesítése
+    const cancelEvent = {
       providerId: 'HU.CHAIN.003',
       chainKey: 'HU.CHAIN.001',
       title: 'Thunderstorm warning cancelled',
@@ -638,45 +734,160 @@ test('Real Crucix AlertEngine and mock notifier integration: conditional cancel 
       lifecycle: 'cancelled',
       territory: { matchState: 'match', isConfirmedLocal: true }
     };
-    const evalCancelLocalNotified = evaluateWarningNotification(localCancel, { previousWarning: localSevereEvent });
-    assert.equal(evalCancelLocalNotified.eligible, true, 'Previously notified local chain gets cancellation alert');
-    assert.equal(evalCancelLocalNotified.action, 'cancel');
-    assert.equal(evalCancelLocalNotified.alertType, 'revocation');
 
-    // B: NEM értesített lánc visszavonása -> ELNYOMVA (nem kap téves VISSZAVONÁS üzenetet a felhasználó!)
-    const unnotifiedAlert = {
-      ...localSevereEvent,
-      notified: false
-    };
-    const evalCancelUnnotified = evaluateWarningNotification(localCancel, { previousWarning: unnotifiedAlert });
-    assert.equal(evalCancelUnnotified.eligible, false, 'Unnotified chain cancellation is suppressed');
-    assert.equal(evalCancelUnnotified.action, 'suppress_unnotified_cancellation');
+    const evalCancel = evaluateWarningNotification(cancelEvent, { previousWarning: initialWarningEvent });
+    assert.equal(evalCancel.eligible, true, 'Cancel is eligible for revocation');
+    assert.equal(evalCancel.action, 'cancel');
+    assert.equal(evalCancel.alertType, 'revocation');
 
-    // C: NEM helyi lánc visszavonása (pl. Nyugat-Dunántúl) -> ELNYOMVA!
-    const nonLocalAlert = {
-      ...localSevereEvent,
-      notified: true,
-      territory: { matchState: 'no_match', isConfirmedLocal: false }
+    // Revocation értesítés összeállítása és elküldése a mock küldőnek:
+    const revocationAlert = {
+      id: 'alert-cancel-00112233445566778899aabb',
+      ruleId: 'events-high',
+      severity: 'high',
+      notify: true,
+      title: evalCancel.title,
+      summary: 'Official CAP cancellation message for previously notified local hazard',
+      evidence: [{ type: 'event', id: cancelEvent.providerId, title: evalCancel.title, level: 'high' }]
     };
-    const nonLocalCancel = {
-      ...localCancel,
-      territory: { matchState: 'no_match', isConfirmedLocal: false }
-    };
-    const evalCancelNonLocal = evaluateWarningNotification(nonLocalCancel, { previousWarning: nonLocalAlert });
-    assert.equal(evalCancelNonLocal.eligible, false, 'Non-local chain cancellation is strictly suppressed');
-    assert.equal(evalCancelNonLocal.action, 'outside_scope');
 
-    // 5. Böngészős felületen és rekord-ellenőrzőben (record-inspector) megjelenő mezők bizonyítása:
-    const factLabels = localSevereEvent.facts.map(f => f.label);
-    assert.ok(factLabels.includes('territory'), 'UI field territory present');
-    assert.ok(factLabels.includes('matchState'), 'UI field matchState present (match/no_match/unknown)');
-    assert.ok(factLabels.includes('lifecycle'), 'UI field lifecycle present');
-    assert.ok(factLabels.includes('awarenessLevel'), 'UI field awarenessLevel present');
-    assert.ok(factLabels.includes('validity'), 'UI field validity present');
-    assert.ok(factLabels.includes('isConfirmedLocal'), 'UI field isConfirmedLocal present');
-    assert.ok(localSevereEvent.source.url, 'UI field original source link present');
-    assert.equal(localSevereEvent.validUntil, new Date(NOW + 14400000).toISOString(), 'Validity timestamp present');
+    const dispatchCancelRes = await notifier.dispatch({ created: [revocationAlert], escalated: [], resolved: [] });
+    assert.equal(dispatchCancelRes.sent.length, 1, 'Revocation alert dispatched');
+    assert.equal(sentMessages.length, 2, 'Mock Telegram received exactly 2 messages (1 alert, 1 cancellation)');
+    assert.ok(sentMessages[1].includes('[HIGH] VISSZAVONÁS: Thunderstorm warning cancelled'));
+
+    // Rögzítjük a visszavonás kézbesítését:
+    initialWarningEvent.cancelNotified = true;
+
+    // 4. Ismételt Cancel esetén nincs újabb küldés (duplikátum elnyomása):
+    const evalRepeatCancel = evaluateWarningNotification(cancelEvent, { previousWarning: initialWarningEvent });
+    assert.equal(evalRepeatCancel.eligible, false, 'Repeated cancel is not eligible');
+    assert.equal(evalRepeatCancel.action, 'suppress_duplicate', 'Duplicate cancellation suppressed');
+    assert.equal(sentMessages.length, 2, 'No 3rd message emitted on repeated cancel');
+
+    // 5. Korábban nem értesített láncnál nincs visszavonási üzenet:
+    const unnotifiedChainEvent = {
+      ...initialWarningEvent,
+      providerId: 'HU.UNNOTIFIED.001',
+      chainKey: 'HU.UNNOTIFIED.001',
+      notified: false,
+      cancelNotified: false
+    };
+    const unnotifiedCancelEvent = {
+      ...cancelEvent,
+      chainKey: 'HU.UNNOTIFIED.001'
+    };
+    const evalUnnotifiedCancel = evaluateWarningNotification(unnotifiedCancelEvent, { previousWarning: unnotifiedChainEvent });
+    assert.equal(evalUnnotifiedCancel.eligible, false, 'Unnotified chain cancel is strictly ineligible');
+    assert.equal(evalUnnotifiedCancel.action, 'suppress_unnotified_cancellation');
+    assert.equal(sentMessages.length, 2, 'No message emitted for unnotified chain');
+
+    // 6. Értesítési előzmény megmaradása újraindítás után:
+    const engine2 = new AlertEngine(tmpDir, { now: () => NOW });
+    engine2.load();
+    const recoveredAlert = engine2.get(createdAlert.id);
+    assert.ok(recoveredAlert, 'Alert recovered from disk after engine restart');
+    assert.ok(recoveredAlert.notified, 'notified metadata preserved');
+    assert.deepEqual(recoveredAlert.notified.channels, ['telegram'], 'Telegram channel notification remembered');
   } finally {
     rmSync(tmpDir, { recursive: true, force: true });
   }
+});
+
+// ─── 10. Böngészős bizonyíték: Record Inspector DOM kimenet (Requirement 4) ───
+
+test('Browser evidence: Record Inspector DOM rendering of territory, matchState, awareness, lifecycle, freshness, and source link', () => {
+  // Betöltjük a böngészős JS realm-et:
+  const recordCoreSrc = readFileSync('dashboard/public/record-core.js', 'utf8');
+  const recordInspectorSrc = readFileSync('dashboard/public/record-inspector.js', 'utf8');
+
+  const window = {};
+  const context = vm.createContext({ window, Date, URL });
+  vm.runInContext(recordCoreSrc, context);
+  vm.runInContext(recordInspectorSrc, context);
+
+  const I = window.CrucixRecordInspector;
+  const R = window.CrucixRecords;
+  const t = (_, fallback) => fallback;
+
+  // 1. Meteoalarm megfigyelési rekord a 24h frissességi határon belül (hiányzó expires):
+  const rawRowFresh = {
+    providerId: 'HU.METEO.DOM.001',
+    title: 'Orange thunderstorm warning for Észak-Alföld',
+    summary: 'Thunderstorm warning — Észak-Alföld',
+    source: 'Meteoalarm',
+    url: 'https://meteoalarm.org/en/live/warning/HU.METEO.DOM.001',
+    severity: 'Severe',
+    observedAt: '2026-10-22T08:00:00Z',
+    publishedAt: '2026-10-22T08:00:00Z',
+    validUntil: null,
+    facts: [
+      { label: 'territory', value: 'Észak-Alföld' },
+      { label: 'matchState', value: 'match' },
+      { label: 'lifecycle', value: 'active' },
+      { label: 'freshnessStatus', value: 'fresh' },
+      { label: 'awarenessLevel', value: '3; orange; Severe' },
+      { label: 'validity', value: 'A kibocsátó nem adott meg lejáratot.' },
+      { label: 'isConfirmedLocal', value: true }
+    ]
+  };
+
+  const recordsFresh = R.toRecords([rawRowFresh], 'Meteoalarm');
+  assert.equal(recordsFresh.length, 1);
+  const recFresh = recordsFresh[0];
+
+  const viewFresh = {
+    source: { name: 'Meteoalarm', url: 'https://meteoalarm.org/', state: 'ok', observedAt: '2026-10-22T08:00:00Z' },
+    records: recordsFresh,
+    total: 1,
+    filters: { levels: [], windowHours: 0, text: '', sort: 'severity' },
+    limit: 25,
+    selected: { record: recFresh, outdated: false }
+  };
+
+  const renderedFreshHtml = I.renderInspector(viewFresh, t, NOW);
+
+  // Ellenőrizzük a 6 megkövetelt mezőt a generált DOM-ban:
+  // 1. Terület:
+  assert.ok(renderedFreshHtml.includes('<dd>Észak-Alföld</dd>'), 'DOM contains territory fact: Észak-Alföld');
+  // 2. matchState:
+  assert.ok(renderedFreshHtml.includes('<dd>match</dd>'), 'DOM contains matchState fact: match');
+  // 3. Szolgáltatói fokozat (awarenessLevel):
+  assert.ok(renderedFreshHtml.includes('<dd>3; orange; Severe</dd>'), 'DOM contains awarenessLevel fact: 3; orange; Severe');
+  // 4. Életciklus és külön adatfrissesség:
+  assert.ok(renderedFreshHtml.includes('<dd>active</dd>'), 'DOM contains lifecycle fact: active');
+  assert.ok(renderedFreshHtml.includes('<dd>fresh</dd>'), 'DOM contains separate freshnessStatus fact: fresh');
+  // 5. Hiányzó lejárat helyes felirata (A kibocsátó nem adott meg lejáratot.):
+  assert.ok(renderedFreshHtml.includes('<dd>A kibocsátó nem adott meg lejáratot.</dd>'), 'DOM contains exact label: A kibocsátó nem adott meg lejáratot.');
+  assert.ok(!renderedFreshHtml.includes('Érvényes visszavonásig (max. 24h)'), 'Forbidden label is absent');
+  // 6. Eseményspecifikus eredeti hivatkozás:
+  assert.ok(renderedFreshHtml.includes('href="https://meteoalarm.org/en/live/warning/HU.METEO.DOM.001"'), 'DOM contains event-specific original URL');
+  assert.ok(renderedFreshHtml.includes('Original source ↗'), 'DOM contains clickable link text');
+
+  // 2. Meteoalarm megfigyelési rekord a 24h frissességi határon túl:
+  const rawRowStale = {
+    ...rawRowFresh,
+    providerId: 'HU.METEO.DOM.002',
+    facts: [
+      { label: 'territory', value: 'Észak-Alföld' },
+      { label: 'matchState', value: 'match' },
+      { label: 'lifecycle', value: 'active' },
+      { label: 'freshnessStatus', value: 'stale' },
+      { label: 'awarenessLevel', value: '3; orange; Severe' },
+      { label: 'validity', value: 'Aktualitása nem igazolt: a helyi frissességi korlát letelt.' },
+      { label: 'freshnessReason', value: 'Aktualitása nem igazolt: a helyi frissességi korlát letelt.' },
+      { label: 'isConfirmedLocal', value: true }
+    ]
+  };
+
+  const recordsStale = R.toRecords([rawRowStale], 'Meteoalarm');
+  const viewStale = {
+    ...viewFresh,
+    records: recordsStale,
+    selected: { record: recordsStale[0], outdated: false }
+  };
+
+  const renderedStaleHtml = I.renderInspector(viewStale, t, NOW);
+  assert.ok(renderedStaleHtml.includes('<dd>Aktualitása nem igazolt: a helyi frissességi korlát letelt.</dd>'), 'DOM contains exact stale label: Aktualitása nem igazolt: a helyi frissességi korlát letelt.');
+  assert.ok(renderedStaleHtml.includes('<dd>stale</dd>'), 'DOM contains freshnessStatus: stale');
 });
