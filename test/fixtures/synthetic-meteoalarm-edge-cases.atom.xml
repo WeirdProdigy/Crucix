@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Synthetic Meteoalarm Edge Cases fixture.
+  Reference epoch: 2026-10-22T12:00:00Z
+-->
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2">
+  <id>tag:meteoalarm.org,2026:HU-EDGE-CASES-FIXTURE</id>
+  <title>MeteoAlarm - Edge Cases Fixture</title>
+  <updated>2026-10-22T12:00:00Z</updated>
+  <rights>Licensed under CC BY 4.0 terms equivalent.</rights>
+
+  <!-- 1. Expired warning without cancellation (expires at 11:00, now is 12:00) -->
+  <entry>
+    <id>https://feeds.meteoalarm.org/api/v1/warnings/HU.EDGE.EXPIRED</id>
+    <cap:identifier>HU.EDGE.EXPIRED</cap:identifier>
+    <title>Yellow rain warning for Hungary - Northern Great Plain</title>
+    <cap:event>yellow rain warning</cap:event>
+    <cap:severity>Moderate</cap:severity>
+    <cap:urgency>Past</cap:urgency>
+    <cap:certainty>Observed</cap:certainty>
+    <cap:status>Actual</cap:status>
+    <cap:scope>Public</cap:scope>
+    <cap:message_type>Alert</cap:message_type>
+    <cap:sent>2026-10-22T06:00:00Z</cap:sent>
+    <cap:onset>2026-10-22T06:00:00Z</cap:onset>
+    <cap:effective>2026-10-22T06:00:00Z</cap:effective>
+    <cap:expires>2026-10-22T11:00:00Z</cap:expires>
+    <published>2026-10-22T06:00:00Z</published>
+    <updated>2026-10-22T06:00:00Z</updated>
+    <cap:areaDesc>Northern Great Plain</cap:areaDesc>
+    <cap:geocode><valueName>NUTS2</valueName><value>HU32</value></cap:geocode>
+    <link title="Northern Great Plain" href="https://meteoalarm.org?geocode=EMMA_ID:HU006" hreflang="en"/>
+  </entry>
+
+  <!-- 2. Future warning (onset at 16:00, now is 12:00) -->
+  <entry>
+    <id>https://feeds.meteoalarm.org/api/v1/warnings/HU.EDGE.FUTURE</id>
+    <cap:identifier>HU.EDGE.FUTURE</cap:identifier>
+    <title>Yellow thunderstorm warning for Hungary - Hajdú-Bihar</title>
+    <cap:event>yellow thunderstorm warning</cap:event>
+    <cap:severity>Moderate</cap:severity>
+    <cap:urgency>Future</cap:urgency>
+    <cap:certainty>Possible</cap:certainty>
+    <cap:status>Actual</cap:status>
+    <cap:scope>Public</cap:scope>
+    <cap:message_type>Alert</cap:message_type>
+    <cap:sent>2026-10-22T11:30:00Z</cap:sent>
+    <cap:onset>2026-10-22T16:00:00Z</cap:onset>
+    <cap:effective>2026-10-22T16:00:00Z</cap:effective>
+    <cap:expires>2026-10-22T22:00:00Z</cap:expires>
+    <published>2026-10-22T11:30:00Z</published>
+    <updated>2026-10-22T11:30:00Z</updated>
+    <cap:areaDesc>Hajdú-Bihar</cap:areaDesc>
+    <cap:geocode><valueName>NUTS3</valueName><value>HU321</value></cap:geocode>
+    <link title="Hajdú-Bihar" href="https://meteoalarm.org?geocode=HU321" hreflang="en"/>
+  </entry>
+
+  <!-- 3. Open-ended warning without expires tag -->
+  <entry>
+    <id>https://feeds.meteoalarm.org/api/v1/warnings/HU.EDGE.NO_EXPIRES</id>
+    <cap:identifier>HU.EDGE.NO_EXPIRES</cap:identifier>
+    <title>Yellow flood warning for Hungary - Püspökladányi járás</title>
+    <cap:event>yellow flood warning</cap:event>
+    <cap:severity>Moderate</cap:severity>
+    <cap:urgency>Immediate</cap:urgency>
+    <cap:certainty>Likely</cap:certainty>
+    <cap:status>Actual</cap:status>
+    <cap:scope>Public</cap:scope>
+    <cap:message_type>Alert</cap:message_type>
+    <cap:sent>2026-10-22T10:00:00Z</cap:sent>
+    <cap:onset>2026-10-22T10:00:00Z</cap:onset>
+    <cap:effective>2026-10-22T10:00:00Z</cap:effective>
+    <published>2026-10-22T10:00:00Z</published>
+    <updated>2026-10-22T10:00:00Z</updated>
+    <cap:areaDesc>Püspökladányi járás</cap:areaDesc>
+    <cap:geocode><valueName>ksh_district_id</valueName><value>102</value></cap:geocode>
+    <link title="Püspökladány" href="https://meteoalarm.org?district=102" hreflang="en"/>
+  </entry>
+
+  <!-- 4. Test / Exercise message (MUST BE EXCLUDED) -->
+  <entry>
+    <id>https://feeds.meteoalarm.org/api/v1/warnings/HU.EDGE.EXERCISE</id>
+    <cap:identifier>HU.EDGE.EXERCISE</cap:identifier>
+    <title>EXERCISE - Tornado Warning</title>
+    <cap:event>tornado warning</cap:event>
+    <cap:severity>Extreme</cap:severity>
+    <cap:urgency>Immediate</cap:urgency>
+    <cap:certainty>Observed</cap:certainty>
+    <cap:status>Exercise</cap:status>
+    <cap:scope>Public</cap:scope>
+    <cap:message_type>Alert</cap:message_type>
+    <cap:sent>2026-10-22T11:00:00Z</cap:sent>
+    <cap:onset>2026-10-22T11:00:00Z</cap:onset>
+    <cap:expires>2026-10-22T18:00:00Z</cap:expires>
+    <published>2026-10-22T11:00:00Z</published>
+    <updated>2026-10-22T11:00:00Z</updated>
+    <cap:areaDesc>Hajdú-Bihar</cap:areaDesc>
+    <cap:geocode><valueName>NUTS3</valueName><value>HU321</value></cap:geocode>
+  </entry>
+
+  <!-- 5. Outside watched territory (Western Transdanubia: HU22) -->
+  <entry>
+    <id>https://feeds.meteoalarm.org/api/v1/warnings/HU.EDGE.WESTERN</id>
+    <cap:identifier>HU.EDGE.WESTERN</cap:identifier>
+    <title>Yellow wind warning for Hungary - Western Transdanubia</title>
+    <cap:event>yellow wind warning</cap:event>
+    <cap:severity>Moderate</cap:severity>
+    <cap:urgency>Future</cap:urgency>
+    <cap:certainty>Likely</cap:certainty>
+    <cap:status>Actual</cap:status>
+    <cap:scope>Public</cap:scope>
+    <cap:message_type>Alert</cap:message_type>
+    <cap:sent>2026-10-22T11:00:00Z</cap:sent>
+    <cap:onset>2026-10-22T11:00:00Z</cap:onset>
+    <cap:expires>2026-10-22T18:00:00Z</cap:expires>
+    <published>2026-10-22T11:00:00Z</published>
+    <updated>2026-10-22T11:00:00Z</updated>
+    <cap:areaDesc>Western Transdanubia</cap:areaDesc>
+    <cap:geocode><valueName>NUTS2</valueName><value>HU22</value></cap:geocode>
+    <link title="Western Transdanubia" href="https://meteoalarm.org?geocode=EMMA_ID:HU002" hreflang="en"/>
+  </entry>
+
+  <!-- 6. Indeterminate geocode / unknown territory -->
+  <entry>
+    <id>https://feeds.meteoalarm.org/api/v1/warnings/HU.EDGE.UNKNOWN</id>
+    <cap:identifier>HU.EDGE.UNKNOWN</cap:identifier>
+    <title>Special advisory for unmapped region</title>
+    <cap:event>special advisory</cap:event>
+    <cap:severity>Moderate</cap:severity>
+    <cap:urgency>Future</cap:urgency>
+    <cap:certainty>Possible</cap:certainty>
+    <cap:status>Actual</cap:status>
+    <cap:scope>Public</cap:scope>
+    <cap:message_type>Alert</cap:message_type>
+    <cap:sent>2026-10-22T11:00:00Z</cap:sent>
+    <cap:onset>2026-10-22T11:00:00Z</cap:onset>
+    <cap:expires>2026-10-22T18:00:00Z</cap:expires>
+    <published>2026-10-22T11:00:00Z</published>
+    <updated>2026-10-22T11:00:00Z</updated>
+    <cap:areaDesc>Sector X</cap:areaDesc>
+    <cap:geocode><valueName>CUSTOM_UNMAPPED</valueName><value>SEC_99</value></cap:geocode>
+  </entry>
+</feed>

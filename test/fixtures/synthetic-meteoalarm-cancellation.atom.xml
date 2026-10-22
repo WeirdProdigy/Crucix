@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Synthetic Meteoalarm Cancel fixture referencing HU.CHAIN.002.
+-->
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2">
+  <id>tag:meteoalarm.org,2026:HU-CANCEL-FIXTURE</id>
+  <title>MeteoAlarm - Cancellation Fixture</title>
+  <updated>2026-10-22T14:00:00Z</updated>
+  <rights>Licensed under CC BY 4.0 terms equivalent.</rights>
+  <entry>
+    <id>https://feeds.meteoalarm.org/api/v1/warnings/HU.CHAIN.003</id>
+    <cap:identifier>HU.CHAIN.003</cap:identifier>
+    <title>Cancellation of wind warning for Hungary - Northern Great Plain</title>
+    <cap:event>wind warning cancelled</cap:event>
+    <cap:severity>Moderate</cap:severity>
+    <cap:urgency>Past</cap:urgency>
+    <cap:certainty>Observed</cap:certainty>
+    <cap:status>Actual</cap:status>
+    <cap:scope>Public</cap:scope>
+    <cap:message_type>Cancel</cap:message_type>
+    <cap:references>riaszt@met.hu,HU.CHAIN.002,2026-10-22T10:00:00Z</cap:references>
+    <cap:sent>2026-10-22T14:00:00Z</cap:sent>
+    <cap:onset>2026-10-22T10:00:00Z</cap:onset>
+    <cap:effective>2026-10-22T14:00:00Z</cap:effective>
+    <cap:expires>2026-10-22T14:00:00Z</cap:expires>
+    <published>2026-10-22T14:00:00Z</published>
+    <updated>2026-10-22T14:00:00Z</updated>
+    <cap:areaDesc>Northern Great Plain</cap:areaDesc>
+    <cap:geocode>
+      <valueName>NUTS2</valueName>
+      <value>HU32</value>
+    </cap:geocode>
+    <link title="Northern Great Plain" href="https://meteoalarm.org?geocode=EMMA_ID:HU006" hreflang="en"/>
+    <link type="application/cap+xml" href="https://feeds.meteoalarm.org/api/v1/warnings/HU.CHAIN.003.cap"/>
+  </entry>
+</feed>

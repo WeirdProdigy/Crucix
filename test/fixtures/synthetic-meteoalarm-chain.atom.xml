@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Synthetic Meteoalarm Alert -> Update -> Cancel chain fixture.
+  Fixed reference epoch: 2026-10-22T12:00:00Z
+-->
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2">
+  <id>tag:meteoalarm.org,2026:HU-CHAIN-FIXTURE</id>
+  <title>MeteoAlarm - Alert Chain Fixture</title>
+  <updated>2026-10-22T12:00:00Z</updated>
+  <rights>Licensed under CC BY 4.0 terms equivalent.</rights>
+  <!-- 1. Initial Alert: Yellow wind warning for Northern Great Plain (HU32) -->
+  <entry>
+    <id>https://feeds.meteoalarm.org/api/v1/warnings/HU.CHAIN.001</id>
+    <cap:identifier>HU.CHAIN.001</cap:identifier>
+    <title>Yellow wind warning issued for Hungary - Northern Great Plain</title>
+    <cap:event>yellow wind warning</cap:event>
+    <cap:severity>Moderate</cap:severity>
+    <cap:urgency>Future</cap:urgency>
+    <cap:certainty>Likely</cap:certainty>
+    <cap:status>Actual</cap:status>
+    <cap:scope>Public</cap:scope>
+    <cap:message_type>Alert</cap:message_type>
+    <cap:sent>2026-10-22T08:00:00Z</cap:sent>
+    <cap:onset>2026-10-22T08:00:00Z</cap:onset>
+    <cap:effective>2026-10-22T08:00:00Z</cap:effective>
+    <cap:expires>2026-10-22T18:00:00Z</cap:expires>
+    <published>2026-10-22T08:00:00Z</published>
+    <updated>2026-10-22T08:00:00Z</updated>
+    <cap:areaDesc>Northern Great Plain</cap:areaDesc>
+    <cap:geocode>
+      <valueName>NUTS2</valueName>
+      <value>HU32</value>
+    </cap:geocode>
+    <link title="Northern Great Plain" href="https://meteoalarm.org?geocode=EMMA_ID:HU006" hreflang="en"/>
+    <link type="application/cap+xml" href="https://feeds.meteoalarm.org/api/v1/warnings/HU.CHAIN.001.cap"/>
+    <cap:parameter>
+      <valueName>awareness_level</valueName>
+      <value>2; yellow; Moderate</value>
+    </cap:parameter>
+    <cap:parameter>
+      <valueName>awareness_type</valueName>
+      <value>1; Wind</value>
+    </cap:parameter>
+  </entry>
+  <!-- 2. Update Message: Severity escalation to Orange (Severe) with references pointing to 001 -->
+  <entry>
+    <id>https://feeds.meteoalarm.org/api/v1/warnings/HU.CHAIN.002</id>
+    <cap:identifier>HU.CHAIN.002</cap:identifier>
+    <title>Orange wind warning issued for Hungary - Northern Great Plain</title>
+    <cap:event>orange wind warning</cap:event>
+    <cap:severity>Severe</cap:severity>
+    <cap:urgency>Immediate</cap:urgency>
+    <cap:certainty>Observed</cap:certainty>
+    <cap:status>Actual</cap:status>
+    <cap:scope>Public</cap:scope>
+    <cap:message_type>Update</cap:message_type>
+    <cap:references>riaszt@met.hu,HU.CHAIN.001,2026-10-22T08:00:00Z</cap:references>
+    <cap:sent>2026-10-22T10:00:00Z</cap:sent>
+    <cap:onset>2026-10-22T10:00:00Z</cap:onset>
+    <cap:effective>2026-10-22T10:00:00Z</cap:effective>
+    <cap:expires>2026-10-22T18:00:00Z</cap:expires>
+    <published>2026-10-22T10:00:00Z</published>
+    <updated>2026-10-22T10:00:00Z</updated>
+    <cap:areaDesc>Northern Great Plain</cap:areaDesc>
+    <cap:geocode>
+      <valueName>NUTS2</valueName>
+      <value>HU32</value>
+    </cap:geocode>
+    <link title="Northern Great Plain" href="https://meteoalarm.org?geocode=EMMA_ID:HU006" hreflang="en"/>
+    <link type="application/cap+xml" href="https://feeds.meteoalarm.org/api/v1/warnings/HU.CHAIN.002.cap"/>
+    <cap:parameter>
+      <valueName>awareness_level</valueName>
+      <value>3; orange; Severe</value>
+    </cap:parameter>
+    <cap:parameter>
+      <valueName>awareness_type</valueName>
+      <value>1; Wind</value>
+    </cap:parameter>
+  </entry>
+</feed>
