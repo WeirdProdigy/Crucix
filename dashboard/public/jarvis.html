@@ -336,6 +336,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .tk-src.telex{color:#4fc3f7;border-color:rgba(79,195,247,0.3)}
 .tk-src.portfolio{color:#ffd54f;border-color:rgba(255,213,79,0.3)}
 .tk-src.agrarszektor{color:#aed581;border-color:rgba(174,213,129,0.3)}
+.tk-src.katved{color:#ef5350;border-color:rgba(239,83,80,0.3)}
 .tk-src.other{color:#b0bec5;border-color:rgba(176,190,197,0.2)}
 .tk-head{font-size:11px;line-height:1.35;color:#c8d8d2;margin-top:3px}
 .tk-time{font-family:var(--mono);font-size:8px;color:var(--dim);margin-top:2px}
@@ -1095,6 +1096,7 @@ function buildNewsTickerPanel(){
     if (sl.includes('telex')) return 'telex';
     if (sl.includes('portfolio')) return 'portfolio';
     if (sl.includes('agrarszektor') || sl.includes('agrárszektor')) return 'agrarszektor';
+    if (sl.includes('katasztrofavedelem') || sl.includes('katved')) return 'katved';
     if (sl.includes('mercopress')) return 'sa';
     if (sl.includes('indian express') || sl.includes('the hindu')) return 'ind';
     if (sl.includes('sbs')) return 'anz';

@@ -486,9 +486,11 @@ const SOURCE_DEFAULT_REGIONS = {
   'Telex': 'Hungary',
   'Portfolio': 'Hungary',
   'Agrárszektor': 'Hungary',
+  'Katasztrófavédelem Vész': 'Hungary',
+  'Katasztrófavédelem Hírek': 'Hungary',
 };
 
-const REGIONAL_NEWS_SOURCES = ['MercoPress', 'Indian Express', 'The Hindu', 'SBS Australia', 'HAON', 'Dehir', 'Telex', 'Portfolio', 'Agrárszektor'];
+const REGIONAL_NEWS_SOURCES = ['MercoPress', 'Indian Express', 'The Hindu', 'SBS Australia', 'HAON', 'Dehir', 'Telex', 'Portfolio', 'Agrárszektor', 'Katasztrófavédelem Vész', 'Katasztrófavédelem Hírek'];
 
 export async function fetchAllNews(customFeeds) {
   const feeds = customFeeds || [
@@ -524,6 +526,8 @@ export async function fetchAllNews(customFeeds) {
     ['https://telex.hu/rss', 'Telex'],
     ['https://www.portfolio.hu/rss/all.xml', 'Portfolio'],
     ['https://www.agrarszektor.hu/rss', 'Agrárszektor'],
+    ['https://www.katasztrofavedelem.hu/10466/RSS_VESZ', 'Katasztrófavédelem Vész'],
+    ['https://www.katasztrofavedelem.hu/10417/RSS_hirek', 'Katasztrófavédelem Hírek'],
   ];
 
   const results = await Promise.allSettled(
