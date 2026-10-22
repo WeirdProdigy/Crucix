@@ -88,7 +88,7 @@ export function extractReferencedIds(rawReferences) {
  * Computes the lifecycle state of a weather warning.
  * Distinct states: 'future', 'active', 'expired', 'cancelled', 'superseded', 'unknown'.
  */
-export function determineLifecycleStatus({ msgType, startsAt, validUntil, cancelled = false, superseded = false, now = Date.now() }) {
+export function determineLifecycleStatus({ msgType, startsAt, validUntil, cancelled = false, superseded = false, publishedAt, now = Date.now(), maxAgeMs = 24 * 60 * 60 * 1000 }) {
   const type = (msgType || '').toLowerCase();
   if (type === 'cancel' || cancelled) return 'cancelled';
   if (superseded) return 'superseded';
@@ -97,7 +97,15 @@ export function determineLifecycleStatus({ msgType, startsAt, validUntil, cancel
   const validMs = validUntil ? Date.parse(validUntil) : null;
   if (validMs && nowMs >= validMs) return 'expired';
   if (startsMs && nowMs < startsMs) return 'future';
-  if (startsMs || validMs) return 'active';
+
+  // Warnings without explicit expiration: cannot stay active indefinitely.
+  // Provider freshness threshold (24 hours) governs lifecycle expiry.
+  const baselineMs = publishedAt ? Date.parse(publishedAt) : (startsMs || null);
+  if (!validMs && baselineMs && (nowMs - baselineMs) >= maxAgeMs) {
+    return 'expired';
+  }
+
+  if (startsMs || validMs || baselineMs) return 'active';
   return 'unknown';
 }
 
@@ -159,6 +167,7 @@ function warning(entry, country, now, territoryConfig) {
     startsAt,
     validUntil,
     cancelled: isCancel,
+    publishedAt,
     now
   });
 
@@ -228,6 +237,14 @@ function warning(entry, country, now, territoryConfig) {
     geocodes,
     territory,
     lifecycle,
+    facts: [
+      { label: 'territory', value: area || territory?.areaDesc || 'Unknown area' },
+      { label: 'matchState', value: territory?.matchState || 'unknown' },
+      { label: 'lifecycle', value: lifecycle },
+      ...(awarenessLevel ? [{ label: 'awarenessLevel', value: awarenessLevel }] : []),
+      { label: 'validity', value: validUntil ? `${startsAt || publishedAt} – ${validUntil}` : (lifecycle === 'expired' ? 'Elévült (24h elévülési ablak lejárt)' : 'Érvényes visszavonásig (max. 24h)') },
+      { label: 'isConfirmedLocal', value: Boolean(territory?.isConfirmedLocal) },
+    ],
     ...point
   };
 }
@@ -252,12 +269,18 @@ export function resolveWarningChains(warnings = [], { history = null, now = Date
     }
   };
 
-  // 1. Index history if provided (HistoryStore or Map or Array)
+  // 1. Index history if provided (HistoryStore or Map or Array) with full pagination
   if (history) {
     if (typeof history.query === 'function') {
       try {
-        const qRes = history.query({ limit: 200 });
-        for (const h of qRes.items || []) register(h);
+        let offset = 0;
+        while (true) {
+          const qRes = history.query({ limit: 200, offset });
+          const items = qRes?.items || [];
+          for (const h of items) register(h);
+          offset += items.length;
+          if (!items.length || offset >= (qRes?.total || 0)) break;
+        }
       } catch {}
     } else if (typeof history.list === 'function') {
       try { for (const h of history.list()) register(h); } catch {}
@@ -364,6 +387,20 @@ export function evaluateWarningNotification(currentWarning, { previousWarning = 
   // Formal cancellation
   const isCancel = currentWarning.msgType?.toLowerCase() === 'cancel' || currentWarning.lifecycle === 'cancelled';
   if (isCancel) {
+    const wasNotified = Boolean(previousWarning?.notified || previousWarning?.wasNotified || currentWarning?.wasNotified);
+    const wasLocal = previousWarning?.territory?.isConfirmedLocal === true || terr?.isConfirmedLocal === true;
+    if (!wasNotified || !wasLocal) {
+      return {
+        eligible: false,
+        action: 'suppress_unnotified_cancellation',
+        alertType: 'none',
+        isConfirmedLocal: wasLocal,
+        chainKey: currentWarning.chainKey,
+        reason: !wasNotified
+          ? 'Cancellation suppressed: warning chain was never previously notified to user'
+          : 'Cancellation suppressed: warning chain was not confirmed local'
+      };
+    }
     return {
       eligible: true,
       action: 'cancel',
@@ -371,7 +408,7 @@ export function evaluateWarningNotification(currentWarning, { previousWarning = 
       isConfirmedLocal: true,
       chainKey: currentWarning.chainKey,
       title: `VISSZAVONÁS: ${currentWarning.title}`,
-      reason: 'Official CAP cancellation message'
+      reason: 'Official CAP cancellation message for previously notified local hazard'
     };
   }
 
@@ -451,7 +488,7 @@ export function parseMeteoalarm(xml, { country = 'hungary', now = Date.now(), re
     const rows = includeAllLifecycles
       ? resolvedRows
       : resolvedRows.filter(row => {
-          if (row.lifecycle === 'cancelled' || row.lifecycle === 'superseded') return false;
+          if (row.lifecycle === 'cancelled' || row.lifecycle === 'superseded' || row.lifecycle === 'expired') return false;
           if (row.validUntil && Date.parse(row.validUntil) <= now) return false;
           return true;
         });

@@ -22,6 +22,9 @@ import { HistoryStore } from '../lib/intelligence/history.mjs';
 import { EntityStore, resolveEventCountries } from '../lib/intelligence/entities.mjs';
 import { generateBriefing } from '../lib/llm/briefing.mjs';
 import { eventLevel } from '../lib/alerts/levels.mjs';
+import { AlertEngine } from '../lib/alerts/engine.mjs';
+import { AlertNotifier } from '../lib/alerts/notify.mjs';
+import { normalizeSeverity } from '../lib/intelligence/events.mjs';
 
 const NOW = Date.parse('2026-10-22T12:00:00.000Z');
 
@@ -264,10 +267,16 @@ test('Notification decision evaluation: mock alerting paths for all 8 required c
     msgType: 'Cancel',
     lifecycle: 'cancelled'
   };
-  const evalCancel = evaluateWarningNotification(cancelMsg, { previousWarning: escalatedUpdate });
+  // Korábban értesített lánc visszavonása -> visszavonási értesítés:
+  const evalCancel = evaluateWarningNotification(cancelMsg, { previousWarning: { ...escalatedUpdate, notified: true } });
   assert.equal(evalCancel.eligible, true);
   assert.equal(evalCancel.action, 'cancel');
   assert.equal(evalCancel.alertType, 'revocation', 'Revocation notification emitted, not a new danger');
+
+  // Korábban NEM értesített lánc visszavonása -> elnyomva (nem küldünk téves visszavonást):
+  const evalCancelUnnotified = evaluateWarningNotification(cancelMsg, { previousWarning: { ...escalatedUpdate, notified: false } });
+  assert.equal(evalCancelUnnotified.eligible, false);
+  assert.equal(evalCancelUnnotified.action, 'suppress_unnotified_cancellation');
 
   // 6. Természetes lejárat: elkülönül a visszavonástól, nincs téves cancel küldés!
   const expiredMsg = {
@@ -378,4 +387,296 @@ test('Separation of local Bihartorda and national HUN scope, no fake pinpoints',
   assert.ok(hunBriefing.bullets.length > 0, 'HUN briefing produced bullets');
   const allRefIds = hunBriefing.bullets.flatMap(b => b.refs).map(r => r.id);
   assert.ok(allRefIds.includes(localEvent.id) || allRefIds.includes(westernEvent.id), 'National briefing covers Hungarian warnings');
+});
+
+// ─── 6. CAP-lánckeresés lapozása >200 rekordos tárolóban (Requirement 1) ───
+
+test('CAP warning chain pagination finds referenced warning buried past 200 records in history', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'crucix-meteo-paging-'));
+  try {
+    const history = new HistoryStore(tmpDir, { now: () => NOW });
+
+    // 1. Eredeti Alert rekord (HU.CHAIN.001) a tárolóban, régebbi időbélyeggel
+    const originalAlert = {
+      id: 'event-0123456789abcdef0123456789abcdef',
+      kind: 'weather',
+      title: 'Severe wind warning for Észak-Alföld',
+      summary: 'Wind warning — Észak-Alföld',
+      source: { name: 'Meteoalarm', url: 'https://meteoalarm.org/hungary', status: 'ok' },
+      providerId: 'HU.CHAIN.001',
+      sender: 'meteoalarm@meteoalarm.org',
+      sent: '2026-10-22T08:00:00+02:00',
+      observedAt: '2026-10-22T08:00:00+02:00',
+      publishedAt: '2026-10-22T08:00:00+02:00',
+      collectedAt: new Date(NOW - 3600000).toISOString(),
+      location: { label: 'Észak-Alföld', lat: 47.16, lon: 21.36, method: 'polygon' },
+      severity: 'high',
+      lifecycle: 'active',
+      chainKey: 'HU.CHAIN.001',
+      territory: { matchState: 'match', isConfirmedLocal: true, inScope: true }
+    };
+    history.add([originalAlert]);
+
+    // 2. 250 darab újabb esemény hozzáadása a tárolóhoz, hogy az Alert a 200-as offset mögé kerüljön
+    const dummyRecords = [];
+    for (let i = 0; i < 250; i++) {
+      const hex = i.toString(16).padStart(8, '0');
+      dummyRecords.push({
+        id: `event-${hex}000000000000000000000000`,
+        kind: 'weather',
+        title: `Dummy weather record ${i}`,
+        summary: `Dummy summary ${i}`,
+        source: { name: 'Meteoalarm', url: `https://meteoalarm.org/dummy/${i}`, status: 'ok' },
+        providerId: `HU.DUMMY.${i}`,
+        sender: 'meteoalarm@meteoalarm.org',
+        sent: new Date(NOW - 1800000 + i * 1000).toISOString(),
+        observedAt: new Date(NOW - 1800000 + i * 1000).toISOString(),
+        publishedAt: new Date(NOW - 1800000 + i * 1000).toISOString(),
+        collectedAt: new Date(NOW - 1800000 + i * 1000).toISOString(),
+        location: { label: 'Hungary', lat: 47.0, lon: 19.0, method: 'centroid' },
+        severity: 'low',
+        lifecycle: 'active',
+        territory: { matchState: 'no_match', isConfirmedLocal: false }
+      });
+    }
+    history.add(dummyRecords);
+
+    // Ellenőrizzük, hogy az egyedi limit:200 lekérés NEM tartalmazza az eredeti alertet (mivel az a 251. helyen van)
+    const page1 = history.query({ limit: 200 });
+    assert.equal(page1.items.length, 200);
+    assert.ok(!page1.items.some(r => r.providerId === 'HU.CHAIN.001'), 'Original alert is buried beyond first 200 records');
+    assert.equal(page1.total, 251, 'Total records in history is 251');
+
+    // 3. Érkezik az Update üzenet (HU.CHAIN.002), amely a HU.CHAIN.001-re hivatkozik
+    const incomingUpdate = {
+      providerId: 'HU.CHAIN.002',
+      msgType: 'Update',
+      title: 'Update wind warning for Észak-Alföld',
+      references: 'meteoalarm@meteoalarm.org,HU.CHAIN.001,2026-10-22T08:00:00+02:00',
+      parsedReferences: [{
+        sender: 'meteoalarm@meteoalarm.org',
+        identifier: 'HU.CHAIN.001',
+        sent: '2026-10-22T08:00:00+02:00'
+      }],
+      referencedIds: ['HU.CHAIN.001'],
+      lifecycle: 'active',
+      territory: { matchState: 'match', isConfirmedLocal: true }
+    };
+
+    // 4. resolveWarningChains a lapozó historyval:
+    resolveWarningChains([incomingUpdate], { history, now: NOW });
+
+    // Igazolás: a lapozás sikeresen megtalálta az eltemetett rekordot
+    assert.equal(incomingUpdate.chainKey, 'HU.CHAIN.001', 'ChainKey correctly resolved from buried record via pagination');
+    const updatedAlertInHistory = history.get(originalAlert.id);
+    assert.equal(updatedAlertInHistory.lifecycle, 'superseded', 'Buried alert marked superseded in history');
+    assert.equal(updatedAlertInHistory.supersededBy, 'HU.CHAIN.002');
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+// ─── 7. Súlyosság és hiányzó lejárati idő szemantikája (Requirement 2) ───
+
+test('Severity mapping layers and 24h freshness lifecycle for warnings with missing expires', () => {
+  // A. Szolgáltatói súlyosság és belső besorolás elkülönülése:
+  // 1. Meteoalarm Moderate (2; yellow; Moderate):
+  //    - provider: 'Moderate'
+  //    - canonical event severity: 'moderate'
+  //    - Crucix internal alert level: 'watch' (levelRank = 1)
+  //    - illeszkedik: 'hungary-region' (minLevel: 'watch'), de NEM illeszkedik 'events-high' (minLevel: 'high')
+  const moderateEvent = {
+    title: 'Yellow wind warning',
+    severity: normalizeSeverity('Moderate'),
+    source: { name: 'Meteoalarm' }
+  };
+  assert.equal(moderateEvent.severity, 'moderate', 'CAP Moderate maps to event scale moderate');
+  assert.equal(eventLevel(moderateEvent), 'watch', 'Event moderate maps to alert level watch');
+
+  // 2. Meteoalarm Severe (3; orange; Severe):
+  //    - provider: 'Severe'
+  //    - canonical event severity: 'high'
+  //    - Crucix internal alert level: 'high' (levelRank = 2)
+  //    - illeszkedik mindkettőre: 'hungary-region' és 'events-high'
+  const severeEvent = {
+    title: 'Orange wind warning',
+    severity: normalizeSeverity('Severe'),
+    source: { name: 'Meteoalarm' }
+  };
+  assert.equal(severeEvent.severity, 'high', 'CAP Severe maps to event scale high');
+  assert.equal(eventLevel(severeEvent), 'high', 'Event high maps to alert level high');
+
+  // 3. Meteoalarm Extreme (4; red; Extreme):
+  //    - provider: 'Extreme'
+  //    - canonical event severity: 'critical'
+  //    - Crucix internal alert level: 'critical' (levelRank = 3)
+  const extremeEvent = {
+    title: 'Red wind warning',
+    severity: normalizeSeverity('Extreme'),
+    source: { name: 'Meteoalarm' }
+  };
+  assert.equal(extremeEvent.severity, 'critical', 'CAP Extreme maps to event scale critical');
+  assert.equal(eventLevel(extremeEvent), 'critical', 'Event critical maps to alert level critical');
+
+  // B. Hiányzó expires (validUntil) életciklus- és elévülési szabályzata:
+  // 1. Friss riasztás (now - publishedAt < 24h): active állapot
+  const recentPublished = new Date(NOW - 2 * 3600000).toISOString(); // 2 órája közzétéve
+  const activeLifecycle = determineLifecycleStatus({
+    msgType: 'Alert',
+    publishedAt: recentPublished,
+    validUntil: null,
+    now: NOW
+  });
+  assert.equal(activeLifecycle, 'active', 'Warning without expires is active within 24h freshness window');
+
+  // 2. Elavult riasztás (now - publishedAt >= 24h, pl. 25 órája közzétéve):
+  // Nem maradhat érvényes végtelen ideig! expired állapotot kap!
+  const stalePublished = new Date(NOW - 25 * 3600000).toISOString(); // 25 órája közzétéve
+  const expiredLifecycle = determineLifecycleStatus({
+    msgType: 'Alert',
+    publishedAt: stalePublished,
+    validUntil: null,
+    now: NOW
+  });
+  assert.equal(expiredLifecycle, 'expired', 'Warning without expires expires naturally after 24h freshness window');
+
+  // 3. Értesítési jogosultság elévült állapotnál:
+  const staleWarning = {
+    title: 'Stale warning without expires',
+    providerId: 'HU.STALE.001',
+    status: 'Actual',
+    scope: 'Public',
+    lifecycle: expiredLifecycle,
+    territory: { matchState: 'match', isConfirmedLocal: true }
+  };
+  const evalStale = evaluateWarningNotification(staleWarning);
+  assert.equal(evalStale.eligible, false, 'Expired warning without expires is ineligible for alerting');
+  assert.equal(evalStale.action, 'expired');
+});
+
+// ─── 8. Crucix AlertEngine, mock értesítésküldő és felületi mezők integrációja (Requirement 3) ───
+
+test('Real Crucix AlertEngine and mock notifier integration: conditional cancel alerts and browser UI fields', async () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'crucix-meteo-engine-'));
+  try {
+    // 1. Mock Telegram alerter
+    const sentMessages = [];
+    const mockTelegram = {
+      isConfigured: true,
+      sendMessage: async (text) => {
+        sentMessages.push(text);
+        return { ok: true };
+      }
+    };
+
+    const notifier = new AlertNotifier({
+      telegram: mockTelegram,
+      notifyChannels: ['telegram'],
+      minSeverity: 'high',
+      now: () => NOW
+    });
+
+    // 2. AlertEngine konfigurációja
+    const engine = new AlertEngine(tmpDir, { now: () => NOW });
+    engine.load();
+
+    // 3. Helyi, Severe figyelmeztetés érkezik (provider: 'Severe' -> high severity -> fires on events-high)
+    const localSevereEvent = {
+      id: 'meteo00112233445566778899aabbcc',
+      kind: 'weather',
+      title: 'Orange thunderstorm warning for Észak-Alföld',
+      summary: 'Thunderstorm warning — Észak-Alföld',
+      source: { name: 'Meteoalarm', url: 'https://meteoalarm.org/hungary' },
+      providerId: 'HU.CHAIN.002',
+      chainKey: 'HU.CHAIN.001',
+      msgType: 'Update',
+      severity: 'high',
+      observedAt: new Date(NOW).toISOString(),
+      publishedAt: new Date(NOW).toISOString(),
+      location: { label: 'Észak-Alföld', lat: 47.16, lon: 21.36, method: 'polygon' },
+      territory: { matchState: 'match', isConfirmedLocal: true, inScope: true },
+      awarenessLevel: '3; orange; Severe',
+      lifecycle: 'active',
+      validUntil: new Date(NOW + 14400000).toISOString(),
+      facts: [
+        { label: 'territory', value: 'Észak-Alföld' },
+        { label: 'matchState', value: 'match' },
+        { label: 'lifecycle', value: 'active' },
+        { label: 'awarenessLevel', value: '3; orange; Severe' },
+        { label: 'validity', value: `${new Date(NOW).toISOString()} – ${new Date(NOW + 14400000).toISOString()}` },
+        { label: 'isConfirmedLocal', value: true }
+      ]
+    };
+
+    // Első kiértékelés (bootstrap sweep üres listával inicializálja az engine-t):
+    const res1 = engine.evaluate({ events: [] });
+    assert.equal(res1.silent, true, 'Bootstrap sweep alerts are silent by design');
+
+    // Második sweep: éles helyi súlyos esemény érkezik -> éles riasztás aktiválódik!
+    const res2 = engine.evaluate({ events: [localSevereEvent] });
+    assert.equal(res2.silent, false, 'Second sweep alerts are active');
+    assert.ok(res2.created.some(a => a.ruleId === 'events-high'), 'AlertEngine fired events-high alert for local severe weather');
+    assert.ok(res2.created.some(a => a.ruleId === 'hungary-region'), 'AlertEngine fired hungary-region alert for Hungarian coordinates');
+
+    // Notifier kiküldi a Telegram üzenetet (a notify:true szabályokból, itt az events-high):
+    await notifier.dispatch({ created: res2.created, escalated: [], resolved: [] });
+    assert.equal(sentMessages.length, 1, 'Mock Telegram received exactly 1 warning notification (events-high with notify:true)');
+    assert.ok(sentMessages[0].includes('Orange thunderstorm warning for Észak-Alföld'));
+
+    // Rögzítjük az értesített állapotot a láncon:
+    localSevereEvent.notified = true;
+
+    // 4. Cancel tesztelése:
+    // A: Értesített ÉS helyi lánc visszavonása -> JOGOS visszavonási értesítés!
+    const localCancel = {
+      providerId: 'HU.CHAIN.003',
+      chainKey: 'HU.CHAIN.001',
+      title: 'Thunderstorm warning cancelled',
+      status: 'Actual',
+      scope: 'Public',
+      msgType: 'Cancel',
+      lifecycle: 'cancelled',
+      territory: { matchState: 'match', isConfirmedLocal: true }
+    };
+    const evalCancelLocalNotified = evaluateWarningNotification(localCancel, { previousWarning: localSevereEvent });
+    assert.equal(evalCancelLocalNotified.eligible, true, 'Previously notified local chain gets cancellation alert');
+    assert.equal(evalCancelLocalNotified.action, 'cancel');
+    assert.equal(evalCancelLocalNotified.alertType, 'revocation');
+
+    // B: NEM értesített lánc visszavonása -> ELNYOMVA (nem kap téves VISSZAVONÁS üzenetet a felhasználó!)
+    const unnotifiedAlert = {
+      ...localSevereEvent,
+      notified: false
+    };
+    const evalCancelUnnotified = evaluateWarningNotification(localCancel, { previousWarning: unnotifiedAlert });
+    assert.equal(evalCancelUnnotified.eligible, false, 'Unnotified chain cancellation is suppressed');
+    assert.equal(evalCancelUnnotified.action, 'suppress_unnotified_cancellation');
+
+    // C: NEM helyi lánc visszavonása (pl. Nyugat-Dunántúl) -> ELNYOMVA!
+    const nonLocalAlert = {
+      ...localSevereEvent,
+      notified: true,
+      territory: { matchState: 'no_match', isConfirmedLocal: false }
+    };
+    const nonLocalCancel = {
+      ...localCancel,
+      territory: { matchState: 'no_match', isConfirmedLocal: false }
+    };
+    const evalCancelNonLocal = evaluateWarningNotification(nonLocalCancel, { previousWarning: nonLocalAlert });
+    assert.equal(evalCancelNonLocal.eligible, false, 'Non-local chain cancellation is strictly suppressed');
+    assert.equal(evalCancelNonLocal.action, 'outside_scope');
+
+    // 5. Böngészős felületen és rekord-ellenőrzőben (record-inspector) megjelenő mezők bizonyítása:
+    const factLabels = localSevereEvent.facts.map(f => f.label);
+    assert.ok(factLabels.includes('territory'), 'UI field territory present');
+    assert.ok(factLabels.includes('matchState'), 'UI field matchState present (match/no_match/unknown)');
+    assert.ok(factLabels.includes('lifecycle'), 'UI field lifecycle present');
+    assert.ok(factLabels.includes('awarenessLevel'), 'UI field awarenessLevel present');
+    assert.ok(factLabels.includes('validity'), 'UI field validity present');
+    assert.ok(factLabels.includes('isConfirmedLocal'), 'UI field isConfirmedLocal present');
+    assert.ok(localSevereEvent.source.url, 'UI field original source link present');
+    assert.equal(localSevereEvent.validUntil, new Date(NOW + 14400000).toISOString(), 'Validity timestamp present');
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true });
+  }
 });
