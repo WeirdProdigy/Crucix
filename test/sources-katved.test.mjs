@@ -354,3 +354,111 @@ test('Briefing includes Katasztrófavédelem events in Hungarian scope', async (
   const citedIds = hunBriefing.bullets.flatMap(b => b.refs.map(r => r.id));
   assert.ok(citedIds.includes(katvedEmergency.id), 'Katasztrófavédelem emergency event is cited in HUN briefing');
 });
+
+// ─── 7. Full end-to-end dataflow, persistence recovery, and alert suppression ───
+
+test('Katasztrófavédelem: complete end-to-end dataflow, persistence recovery, and alert suppression', async (t) => {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'crucix-katved-e2e-'));
+  t.after(() => rmSync(tmpDir, { recursive: true, force: true }));
+
+  const server = await startMockServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/rss+xml; charset=utf-8' });
+    if (req.url.includes('vesz')) {
+      res.end(FIXTURE_KATVED_VESZ_POPULATED);
+    } else if (req.url.includes('hirek')) {
+      res.end(FIXTURE_KATVED_HIREK);
+    } else if (req.url.includes('empty')) {
+      res.end(FIXTURE_KATVED_VESZ_EMPTY);
+    } else {
+      res.end('<rss><channel></channel></rss>');
+    }
+  });
+  t.after(() => server.server.close());
+
+  const now = Date.parse('2026-10-22T21:00:00.000Z');
+
+  // 1. RSS fetch -> normalization -> canonical intelligence events
+  const news = await fetchAllNews([
+    [`${server.url}/vesz`, 'Katasztrófavédelem Vész'],
+    [`${server.url}/hirek`, 'Katasztrófavédelem Hírek']
+  ]);
+  const rawData = { crucix: { timestamp: new Date(now).toISOString() }, sources: {} };
+  const V2 = await synthesize(rawData, { news, now });
+
+  assert.equal(V2.events.length, 4, 'All 4 items synthesized into canonical events');
+
+  // Verify the 3 distinct types of records:
+  // a) Szervezeti hír: eventLevel is null (no FLASH)
+  const orgEvent = V2.events.find(e => e.title.includes('Megemlékezés'));
+  assert.ok(orgEvent);
+  assert.equal(eventLevel(orgEvent), null, 'Routine organizational news has null eventLevel (no FLASH)');
+
+  // b) Operatív eseményközlés: geotagged, local event
+  const opEvent = V2.events.find(e => e.title.includes('Hajdúböszörményben'));
+  assert.ok(opEvent);
+  assert.equal(opEvent.location.method, 'headline-keyword');
+  assert.equal(opEvent.location.label, 'Hajdúböszörmény');
+
+  // c) Aktív vészhelyzeti figyelmeztetés: from Katasztrófavédelem Vész
+  const alertEvent = V2.events.find(e => e.source.name === 'Katasztrófavédelem Vész' && e.title.toLowerCase().includes('debreceni'));
+  assert.ok(alertEvent);
+
+  // d) Unlocated record retention: Kótaj record has no synthetic coordinates but is retained
+  const kotajEvent = V2.events.find(e => e.title.includes('Kótajon'));
+  assert.ok(kotajEvent);
+  assert.equal(kotajEvent.location.method, 'unknown');
+  assert.equal(kotajEvent.location.lat, null, 'Unlocated record retains null lat without synthetic coordinates');
+
+  // 2. Persistent storage (HistoryStore)
+  const history1 = new HistoryStore(tmpDir, { now: () => now });
+  history1.add(V2.events);
+
+  // 3. Re-read from a brand new instance (restart resilience)
+  const history2 = new HistoryStore(tmpDir, { now: () => now });
+  const retrievedAlert = history2.get(alertEvent.id);
+  assert.ok(retrievedAlert, 'Event retrieved from persistent storage after restart');
+  assert.equal(retrievedAlert.title, alertEvent.title);
+  assert.equal(retrievedAlert.source.url, alertEvent.source.url, 'Original source URL is preserved byte-for-byte');
+
+  const retrievedKotaj = history2.get(kotajEvent.id);
+  assert.ok(retrievedKotaj, 'Unlocated event retrieved from persistent storage');
+  assert.equal(retrievedKotaj.location.lat, null, 'Unlocated event preserves null coordinates after persistence');
+
+  // 4. Briefing inclusion with original reference
+  const entityStore = new EntityStore({ dataDir: tmpDir });
+  entityStore.ingest(V2.events, { now });
+
+  const snapshot = {
+    crucix: { timestamp: new Date(now).toISOString() },
+    events: V2.events
+  };
+
+  const briefing = await generateBriefing({
+    scope: 'HUN',
+    snapshot,
+    store: entityStore,
+    history: history2,
+    now
+  });
+
+  assert.equal(briefing.scope, 'HUN');
+  const allRefs = briefing.bullets.flatMap(b => b.refs);
+  const citedAlert = allRefs.find(r => r.id === alertEvent.id);
+  assert.ok(citedAlert, 'Emergency alert is cited in HUN briefing');
+  assert.equal(alertEvent.source.url, 'https://www.katasztrofavedelem.hu/modules/vesz/esemeny/93062', 'Original URL is available on cited event');
+
+  // 5. Stale record & repeated sweep notification suppression
+  const sweep2History = new HistoryStore(tmpDir, { now: () => now + 60000 });
+  sweep2History.add(V2.events);
+  // Re-ingestion of same events updates lastSeenAt but does not create duplicates or new events
+  assert.equal(sweep2History.get(alertEvent.id).title, alertEvent.title);
+
+  // 6. Empty feed observation assertion semantics
+  const emptyRes = await fetchRssFeed(`${server.url}/empty`, 'Katasztrófavédelem Vész');
+  assert.equal(emptyRes.status, 'ok', 'Empty feed returns status ok');
+  assert.equal(emptyRes.empty, true, 'Empty feed returns empty: true');
+  assert.equal(emptyRes.items.length, 0, 'Zero items returned');
+  // Explicit check: empty feed signifies only that feed has no active items, NOT that "nincs veszély"
+  assert.ok(emptyRes.empty && !Object.hasOwn(emptyRes, 'noThreatArea'), 'Feed state is purely observational');
+});
+

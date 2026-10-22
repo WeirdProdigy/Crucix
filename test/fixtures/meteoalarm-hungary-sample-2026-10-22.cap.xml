@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+  <identifier>2.49.0.0.348.0.HU.261021224855.311_9513_109214</identifier>
+  <sender>riaszt@met.hu</sender>
+  <sent>2026-10-22T00:48:55+02:00</sent>
+  <status>Actual</status>
+  <msgType>Alert</msgType>
+  <scope>Public</scope>
+  <info>
+    <language>hu-HU</language>
+    <category>Met</category>
+    <event>sárga széllökés figyelmeztetés</event>
+    <responseType>None</responseType>
+    <urgency>Future</urgency>
+    <severity>Moderate</severity>
+    <certainty>Likely</certainty>
+    <effective>2026-10-22T00:48:55+02:00</effective>
+    <onset>2026-10-22T00:48:55+02:00</onset>
+    <expires>2026-10-22T00:59:59+02:00</expires>
+    <senderName>Hungarian Meteorologial Service</senderName>
+    <headline>sárga széllökés figyelmeztetés Magyarországra</headline>
+    <description>A várt legerősebb széllökések meghaladhatják a 70 km/h-t.</description>
+    <instruction>Ágak törhetnek le, esetleg fák is kidőlhetnek. Legyünk elővigyázatosak az épületekről hulló esetleges törmelék miatt. Egyes helyeken fennakadások lehetnek a közlekedésben a letört ágak, kidőlt fák miatt. A kitett útszakaszokon a szél rontja a menetstabilitást, a magasabb járműveket esetleg ki is billentheti egyensúlyukból.</instruction>
+    <web>https://www.met.hu/idojaras/veszelyjelzes/</web>
+    <parameter>
+      <valueName>awareness_level</valueName>
+      <value>2; yellow; Moderate</value>
+    </parameter>
+    <parameter>
+      <valueName>awareness_type</valueName>
+      <value>1; Wind</value>
+    </parameter>
+    <area>
+      <areaDesc>Nyugat-Dunántúl</areaDesc>
+      <geocode>
+        <valueName>NUTS2</valueName>
+        <value>HU22</value>
+      </geocode>
+    </area>
+  </info>
+  <info>
+    <language>en-GB</language>
+    <category>Met</category>
+    <event>yellow wind warning</event>
+    <responseType>None</responseType>
+    <urgency>Future</urgency>
+    <severity>Moderate</severity>
+    <certainty>Likely</certainty>
+    <effective>2026-10-22T00:48:55+02:00</effective>
+    <onset>2026-10-22T00:48:55+02:00</onset>
+    <expires>2026-10-22T00:59:59+02:00</expires>
+    <senderName>Hungarian Meteorologial Service</senderName>
+    <headline>yellow wind warning for Hungary</headline>
+    <description>The windspeed can temporarily exceed 70 km/h.</description>
+    <instruction>Some branches or trees brought down. Localised travel disruption. Localised problems for high-sided vehicles on prone routes. Drive with care, especially on exposed routes. Be aware of possible debris being blown around.</instruction>
+    <web>https://www.met.hu/idojaras/veszelyjelzes/</web>
+    <parameter>
+      <valueName>awareness_level</valueName>
+      <value>2; yellow; Moderate</value>
+    </parameter>
+    <parameter>
+      <valueName>awareness_type</valueName>
+      <value>1; Wind</value>
+    </parameter>
+    <area>
+      <areaDesc>Western Transdanubia</areaDesc>
+      <geocode>
+        <valueName>NUTS2</valueName>
+        <value>HU22</value>
+      </geocode>
+    </area>
+  </info>
+</alert>
