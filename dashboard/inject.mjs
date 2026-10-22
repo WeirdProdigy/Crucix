@@ -74,6 +74,29 @@ const geoKeywords = {
   'Berlin':[52.5,13.4],'Paris':[48.9,2.3],'Madrid':[40.4,-3.7],
   'Rome':[41.9,12.5],'Warsaw':[52.2,21],'Prague':[50.1,14.4],
   'Vienna':[48.2,16.4],'Budapest':[47.5,19.1],'Bucharest':[44.4,26.1],
+  // Hajdú-Bihar region
+  'Debrecen':[47.5316,21.6273,'Debrecen'],
+  'debreceni':[47.5316,21.6273,'Debrecen'],
+  'Hajdúszoboszló':[47.4447,21.3961,'Hajdúszoboszló'],
+  'hajdúszoboszlói':[47.4447,21.3961,'Hajdúszoboszló'],
+  'Hajdúböszörmény':[47.6725,21.5097,'Hajdúböszörmény'],
+  'hajdúböszörményi':[47.6725,21.5097,'Hajdúböszörmény'],
+  'Berettyóújfalu':[47.2167,21.5500,'Berettyóújfalu'],
+  'berettyóújfalui':[47.2167,21.5500,'Berettyóújfalu'],
+  'Hajdúnánás':[47.8444,21.4267,'Hajdúnánás'],
+  'hajdúnánási':[47.8444,21.4267,'Hajdúnánás'],
+  'Balmazújváros':[47.6125,21.3444,'Balmazújváros'],
+  'balmazújvárosi':[47.6125,21.3444,'Balmazújváros'],
+  'Püspökladány':[47.3167,21.1167,'Püspökladány'],
+  'püspökladányi':[47.3167,21.1167,'Püspökladány'],
+  'Hajdúhadház':[47.6792,21.6644,'Hajdúhadház'],
+  'hajdúhadházi':[47.6792,21.6644,'Hajdúhadház'],
+  'Nyíradony':[47.6917,21.9278,'Nyíradony'],
+  'nyíradonyi':[47.6917,21.9278,'Nyíradony'],
+  'Derecske':[47.3500,21.5700,'Derecske'],
+  'derecskei':[47.3500,21.5700,'Derecske'],
+  'Nádudvar':[47.4200,21.1700,'Nádudvar'],
+  'nádudvari':[47.4200,21.1700,'Nádudvar'],
   'Kyiv':[50.4,30.5],'Oslo':[59.9,10.7],'Copenhagen':[55.7,12.6],
   'Brussels':[50.8,4.4],'Zurich':[47.4,8.5],'Dublin':[53.3,-6.3],
   'Lisbon':[38.7,-9.1],'Athens':[37.9,23.7],'Minsk':[53.9,27.6],
@@ -90,9 +113,10 @@ const geoKeywords = {
 
 function geoTagText(text) {
   if (!text) return null;
-  for (const [keyword, [lat, lon]] of Object.entries(geoKeywords)) {
+  for (const [keyword, entry] of Object.entries(geoKeywords)) {
+    const [lat, lon, label] = entry;
     if (text.includes(keyword)) {
-      return { lat, lon, region: keyword };
+      return { lat, lon, region: label || keyword };
     }
   }
   return null;
@@ -339,6 +363,21 @@ export function loadOpenSkyFallback(currentTimestamp, runsDir = config.runsDir |
 }
 
 // === RSS Fetching ===
+function cleanRssText(str) {
+  if (typeof str !== 'string') return '';
+  return str
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&(?:amp|lt|gt|quot|apos|#\d{1,7}|#x[0-9a-fA-F]{1,6});/g, token => {
+      const known = { '&amp;':'&', '&lt;':'<', '&gt;':'>', '&quot;':'"', '&apos;':"'" };
+      if (known[token]) return known[token];
+      const point = token.startsWith('&#x') ? parseInt(token.slice(3,-1),16) : Number(token.slice(2,-1));
+      return point>0 && point<=0x10ffff && !(point>=0xd800 && point<=0xdfff) ? String.fromCodePoint(point) : '';
+    })
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 async function fetchRSS(url, source) {
   try {
     const response = await safeFetch(url, { timeout: 8000, retries: 0, format: 'text', maxBytes: 2 * 1024 * 1024 });
@@ -349,10 +388,13 @@ async function fetchRSS(url, source) {
     let match;
     while ((match = itemRegex.exec(xml)) !== null) {
       const block = match[1];
-      const title = (block.match(/<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/)?.[1] || '').trim();
-      const link = sanitizeExternalUrl((block.match(/<link>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/link>/)?.[1] || '').trim());
-      const pubDate = block.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || '';
-      if (title && title !== source) items.push({ title, date: pubDate, source, url: link || undefined });
+      const title = cleanRssText(block.match(/<title>([\s\S]*?)<\/title>/)?.[1] || '');
+      const rawLink = cleanRssText(block.match(/<link>([\s\S]*?)<\/link>/)?.[1] || '');
+      const link = sanitizeExternalUrl(rawLink);
+      const pubDate = (block.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || '').trim();
+      const rawDesc = cleanRssText(block.match(/<description>([\s\S]*?)<\/description>/)?.[1] || '');
+      const summary = rawDesc || undefined;
+      if (title && title !== source) items.push({ title, date: pubDate, source, url: link || undefined, ...(summary ? { summary } : {}) });
     }
     return items;
   } catch (e) {
@@ -361,7 +403,11 @@ async function fetchRSS(url, source) {
   }
 }
 
-const REGIONAL_NEWS_SOURCES = ['MercoPress', 'Indian Express', 'The Hindu', 'SBS Australia'];
+const SOURCE_DEFAULT_REGIONS = {
+  'HAON': 'Hajdú-Bihar',
+};
+
+const REGIONAL_NEWS_SOURCES = ['MercoPress', 'Indian Express', 'The Hindu', 'SBS Australia', 'HAON'];
 
 export async function fetchAllNews(customFeeds) {
   const feeds = customFeeds || [
@@ -391,6 +437,8 @@ export async function fetchAllNews(customFeeds) {
     ['https://www.thehindu.com/news/national/feeder/default.rss', 'The Hindu'],
     // South America
     ['https://en.mercopress.com/rss/latin-america', 'MercoPress'],
+    // Hungary & Regional
+    ['https://www.haon.hu/feed/', 'HAON'],
   ];
 
   const results = await Promise.allSettled(
@@ -409,14 +457,20 @@ export async function fetchAllNews(customFeeds) {
     if (seen.has(key)) continue;
     seen.add(key);
     const geo = geoTagText(item.title);
-      geoNews.push({
-        title: item.title.substring(0, 2000),
-        source: item.source,
-        date: item.date,
-        url: item.url,
-        ...(geo ? { lat: geo.lat, lon: geo.lon, region: geo.region, locationMethod: 'headline-keyword', locationPrecision: 'approximate' }
-          : { region: 'Global', locationMethod: 'unknown' }),
-      });
+    const defaultRegion = SOURCE_DEFAULT_REGIONS[item.source] || 'Global';
+    const hasExplicitCountry = item.summary?.includes('Magyarország') || item.title?.includes('Magyarország');
+    const enrichedSummary = (item.source === 'HAON' && !hasExplicitCountry)
+      ? (item.summary ? `${item.summary} (Magyarország)` : 'Hajdú-Bihar megyei hír (Magyarország)')
+      : item.summary;
+    geoNews.push({
+      title: item.title.substring(0, 2000),
+      source: item.source,
+      date: item.date,
+      url: item.url,
+      ...(enrichedSummary ? { summary: enrichedSummary.substring(0, 2000) } : {}),
+      ...(geo ? { lat: geo.lat, lon: geo.lon, region: geo.region, locationMethod: 'headline-keyword', locationPrecision: 'approximate' }
+        : { region: defaultRegion, locationMethod: 'unknown' }),
+    });
   }
 
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -811,7 +865,8 @@ export function buildNewsFeed(rssNews, gdeltData, tgUrgent, tgTop) {
     feed.push({
       headline: n.title, source: n.source, type: 'rss',
       timestamp: sourceTimestamp(n.date), publishedAt: sourceTimestamp(n.date), region: n.region, urgent: false, url: sanitizeExternalUrl(n.url),
-      lat: n.lat, lon: n.lon, locationMethod: n.locationMethod || 'unknown', locationPrecision: n.locationPrecision || 'unknown'
+      lat: n.lat, lon: n.lon, locationMethod: n.locationMethod || 'unknown', locationPrecision: n.locationPrecision || 'unknown',
+      ...(n.summary ? { summary: n.summary } : {})
     });
   }
 
