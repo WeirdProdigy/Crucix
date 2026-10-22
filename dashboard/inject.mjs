@@ -483,9 +483,12 @@ async function fetchRSS(url, source) {
 const SOURCE_DEFAULT_REGIONS = {
   'HAON': 'Hajdú-Bihar',
   'Dehir': 'Debrecen',
+  'Telex': 'Hungary',
+  'Portfolio': 'Hungary',
+  'Agrárszektor': 'Hungary',
 };
 
-const REGIONAL_NEWS_SOURCES = ['MercoPress', 'Indian Express', 'The Hindu', 'SBS Australia', 'HAON', 'Dehir'];
+const REGIONAL_NEWS_SOURCES = ['MercoPress', 'Indian Express', 'The Hindu', 'SBS Australia', 'HAON', 'Dehir', 'Telex', 'Portfolio', 'Agrárszektor'];
 
 export async function fetchAllNews(customFeeds) {
   const feeds = customFeeds || [
@@ -518,6 +521,9 @@ export async function fetchAllNews(customFeeds) {
     // Hungary & Regional
     ['https://www.haon.hu/feed/', 'HAON'],
     ['https://www.dehir.hu/rss.php', 'Dehir'],
+    ['https://telex.hu/rss', 'Telex'],
+    ['https://www.portfolio.hu/rss/all.xml', 'Portfolio'],
+    ['https://www.agrarszektor.hu/rss', 'Agrárszektor'],
   ];
 
   const results = await Promise.allSettled(
