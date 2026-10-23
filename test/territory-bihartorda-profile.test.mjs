@@ -199,7 +199,9 @@ test('Multiple watched settlements in a single text event preserve single event 
   // Egyetlen strukturált objektum keletkezik, nem többszöröződik meg az eseményrekord:
   assert.equal(typeof res, 'object');
   assert.ok(!Array.isArray(res));
-  assert.equal(res.isConfirmedLocal, true);
+  assert.equal(res.isConfirmedLocal, false, 'Text mention is unconfirmed local reviewable match');
+  assert.equal(res.localRelevanceReason, 'text_mention');
+  assert.equal(res.needsLocalReview, true);
   assert.equal(res.recordRetained, true);
 });
 
@@ -223,9 +225,11 @@ test('Territorial profile is configurable without hardcoding or retrospective ca
   assert.equal(matchSap.matchState, 'match');
   assert.equal(matchSap.territoryName, 'Sáp');
 
-  // Nagyrábé nem része a szűkített profilnak, így nem illeszkedik helyiként:
+  // Nagyrábé nem része a szűkített profilnak, így nem illeszkedik helyiként (resolved identity, out of watch scope):
   const matchNagyrabe = matchTerritory([{ valueName: 'ksh_settlement_id', value: '06309' }], 'Nagyrábé', customConfig);
-  assert.equal(matchNagyrabe.matchState, 'unknown', 'Nagyrábé is unknown when excluded from custom watched settlements');
+  assert.equal(matchNagyrabe.matchState, 'no_match', 'Nagyrábé is no_match when excluded from custom watched settlements');
+  assert.equal(matchNagyrabe.watchScope, 'out');
+  assert.equal(matchNagyrabe.inScope, false);
 
   // C. Teljes járási nézet bekapcsolása (includeFullDistrict: true):
   const districtFullConfig = createTerritoryConfig({

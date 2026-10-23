@@ -3,7 +3,7 @@
 // Public data reuse under Act CI of 2023 (Nahtv.) and Act CXII of 2011 (Infotv.).
 import { safeFetch } from '../utils/fetch.mjs';
 import { providerTime } from '../utils/freshness.mjs';
-import { resolveSettlement, DEFAULT_TERRITORY_CONFIG } from '../../lib/intelligence/territory.mjs';
+import { resolveSettlement, DEFAULT_TERRITORY_CONFIG, LOCAL_RELEVANCE_REASONS } from '../../lib/intelligence/territory.mjs';
 import { createHash } from 'node:crypto';
 
 const SOURCE = 'Nebih-ASP';
@@ -331,7 +331,10 @@ export function parseNebihAsp(html, { now = Date.now(), territoryConfig = DEFAUL
       }
 
       // Territorial resolution
-      const resolved = resolveSettlement(rawSettlement, rawCounty, { territoryConfig });
+      const resolved = resolveSettlement(rawSettlement, rawCounty, {
+        territoryConfig,
+        localRelevanceReason: LOCAL_RELEVANCE_REASONS.OFFICIAL_AREA_ASSIGNMENT
+      });
 
       // If scoped to watched catalog, skip settlements outside the catalog
       if (scopeToWatched && (!resolved.settlementId || resolved.certainty === 'unresolved_identity')) {
@@ -393,6 +396,12 @@ export function parseNebihAsp(html, { now = Date.now(), territoryConfig = DEFAUL
           kshDistrictCode: resolved.kshDistrictCode,
           countyCode: resolved.countyCode,
           countyName: resolved.countyName || rawCounty,
+          identityStatus: resolved.identityStatus,
+          watchScope: resolved.watchScope,
+          matchState: resolved.matchState,
+          inScope: resolved.inScope,
+          localRelevanceReason: resolved.localRelevanceReason || LOCAL_RELEVANCE_REASONS.OFFICIAL_AREA_ASSIGNMENT,
+          territoryLevel: 'settlement',
           point_in_polygon: null, // Név/vármegye illesztés: geometriai pont-poligon vizsgálat nem futott (null). False csak tényleges negatív geometriai eredmény lehet.
           geometryCheckStatus: 'not_evaluated',
           settlement_overlap_ratio: null,

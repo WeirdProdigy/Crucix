@@ -77,7 +77,9 @@ test('Three-state territory matching: match / no_match / unknown and permission 
   assert.equal(matchRes.matchState, 'match');
   assert.equal(matchRes.inScope, true);
   assert.equal(matchRes.recordRetained, true);
-  assert.equal(matchRes.isConfirmedLocal, true);
+  assert.equal(matchRes.isConfirmedLocal, false, 'County level is source_region_only, not confirmed local settlement');
+  assert.equal(matchRes.localRelevanceReason, 'source_region_only');
+  assert.equal(matchRes.territoryLevel, 'county');
   assert.equal(matchRes.needsLocalReview, false);
   assert.equal(matchRes.alertEligibleLocal, true);
 
@@ -87,6 +89,8 @@ test('Three-state territory matching: match / no_match / unknown and permission 
   assert.equal(noMatchRes.inScope, false);
   assert.equal(noMatchRes.recordRetained, true, 'Outside record is preserved');
   assert.equal(noMatchRes.isConfirmedLocal, false);
+  assert.equal(noMatchRes.localRelevanceReason, 'source_region_only');
+  assert.equal(noMatchRes.territoryLevel, 'region');
   assert.equal(noMatchRes.needsLocalReview, false);
   assert.equal(noMatchRes.alertEligibleLocal, false);
   assert.equal(noMatchRes.alertEligibleNational, true, 'Available in national HUN scope');
@@ -94,7 +98,7 @@ test('Three-state territory matching: match / no_match / unknown and permission 
   // C: Unknown / Indeterminate (nem igazolt geokód, pl. unverified custom code)
   const unknownRes = matchTerritory([{ valueName: 'CUSTOM_CODE', value: 'XYZ_UNKNOWN' }], 'Szektor 99');
   assert.equal(unknownRes.matchState, 'unknown');
-  assert.equal(unknownRes.inScope, null, 'inScope is null for unknown, NOT true!');
+  assert.equal(unknownRes.inScope, false, 'inScope is strictly boolean false for unknown');
   assert.equal(unknownRes.recordRetained, true, 'Record is retained without data loss');
   assert.equal(unknownRes.isConfirmedLocal, false, 'Never confirmed local');
   assert.equal(unknownRes.needsLocalReview, true, 'Flagged for local review');
@@ -337,13 +341,16 @@ test('Separation of local Bihartorda and national HUN scope, no fake pinpoints',
   const localEvent = events.find(e => e.providerId === 'HU.EDGE.NO_EXPIRES');
   assert.ok(localEvent);
   assert.equal(localEvent.territory.matchState, 'match');
-  assert.equal(localEvent.territory.isConfirmedLocal, true);
+  assert.equal(localEvent.territory.inScope, true);
+  assert.equal(localEvent.territory.isConfirmedLocal, false, 'Regional alert is source_region_only, not confirmed local settlement');
+  assert.equal(localEvent.territory.localRelevanceReason, 'source_region_only');
   assert.equal(localEvent.location.lat, null, 'No fake point for district warning');
 
   // 2. HU22 (Nyugat-Dunántúl) riasztás:
   const westernEvent = events.find(e => e.providerId === 'HU.EDGE.WESTERN');
   assert.ok(westernEvent);
   assert.equal(westernEvent.territory.matchState, 'no_match');
+  assert.equal(westernEvent.territory.inScope, false);
   assert.equal(westernEvent.territory.isConfirmedLocal, false, 'HU22 is NOT a local match for Bihartorda');
   assert.equal(westernEvent.location.lat, null, 'No fake point for regional warning');
 
@@ -351,11 +358,12 @@ test('Separation of local Bihartorda and national HUN scope, no fake pinpoints',
   const unknownEvent = events.find(e => e.providerId === 'HU.EDGE.UNKNOWN');
   assert.ok(unknownEvent);
   assert.equal(unknownEvent.territory.matchState, 'unknown');
+  assert.equal(unknownEvent.territory.inScope, false);
   assert.equal(unknownEvent.territory.needsLocalReview, true, 'Marked as needing review');
   assert.equal(unknownEvent.territory.isConfirmedLocal, false);
 
   // 4. Szűrés helyi vs országos nézetben:
-  const localList = events.filter(e => e.territory?.isConfirmedLocal === true);
+  const localList = events.filter(e => e.territory?.matchState === 'match' && e.territory?.inScope === true);
   const localReviewList = events.filter(e => e.territory?.needsLocalReview === true);
   const nationalList = events.filter(e => e.country === 'Hungary');
 
