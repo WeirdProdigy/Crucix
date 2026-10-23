@@ -65,6 +65,7 @@ export default {
   auth: { user: process.env.AUTH_USER || '', password: process.env.AUTH_PASSWORD || '' },
   maxSseClients: envInteger('MAX_SSE_CLIENTS', 100, 1, 10000),
   refreshIntervalMinutes: envInteger('REFRESH_INTERVAL_MINUTES', 15, 1, 1440),
+  enableSweeps: envBoolean('ENABLE_SWEEPS', true),
 
   // Small public watchlists. Adapters validate/cap these values; no API keys.
   publicSources: {

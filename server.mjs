@@ -138,6 +138,7 @@ if (telegramAlerter.isConfigured) {
   });
 
   telegramAlerter.onCommand('/sweep', async () => {
+    if (!config.enableSweeps) return '⚠️ Automatikus és kézi sweepek konfigurációval letiltva.';
     if (sweepInProgress) return '🔄 Sweep already in progress. Please wait.';
     // Fire and forget — don't block the bot response
     runSweepCycle().catch(err => console.error('[Crucix] Manual sweep failed:', err.message));
@@ -236,6 +237,7 @@ if (discordAlerter.isConfigured) {
   });
 
   discordAlerter.onCommand('sweep', async () => {
+    if (!config.enableSweeps) return '⚠️ Automatikus és kézi sweepek konfigurációval letiltva.';
     if (sweepInProgress) return '🔄 Sweep already in progress. Please wait.';
     runSweepCycle().catch(err => console.error('[Crucix] Manual sweep failed:', err.message));
     return '🚀 Manual sweep triggered. You\'ll receive alerts if anything significant is detected.';
@@ -409,6 +411,10 @@ function broadcast(data) {
 
 // === Sweep Cycle ===
 async function runSweepCycle() {
+  if (!config.enableSweeps) {
+    console.log('[Crucix] Automatikus és kézi sweepek konfigurációval letiltva.');
+    return;
+  }
   if (sweepInProgress) {
     console.log('[Crucix] Sweep already in progress, skipping');
     return;
@@ -549,17 +555,25 @@ async function start() {
       console.log('[Crucix] Loaded existing data from runs/latest.json — dashboard ready instantly');
       broadcast({ type: 'update', data: currentData });
     } catch {
-      console.log('[Crucix] No existing data found — first sweep required');
+      if (!config.enableSweeps) {
+        console.log('[Crucix] Hiányzó vagy hibás pillanatkép (latest.json); élő sweep-indítás letiltva.');
+      } else {
+        console.log('[Crucix] No existing data found — first sweep required');
+      }
     }
 
-    // Run first sweep (refreshes data in background)
+    if (config.enableSweeps) {
+      // Run first sweep (refreshes data in background)
     console.log('[Crucix] Running initial sweep...');
     runSweepCycle().catch(err => {
       console.error('[Crucix] Initial sweep failed:', err.message || err);
     });
 
     // Schedule recurring sweeps
-    setInterval(runSweepCycle, config.refreshIntervalMinutes * 60 * 1000);
+      setInterval(runSweepCycle, config.refreshIntervalMinutes * 60 * 1000);
+    } else {
+      console.log('[Crucix] Automatikus és kézi sweepek konfigurációval letiltva.');
+    }
   });
 }
 
