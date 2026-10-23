@@ -41,10 +41,13 @@ test('parseNebihAsp extracts baseline records, preserves raw cells, and separate
   assert.equal(bihartorda.raw.coveragePercent, '100');
   assert.equal(bihartorda.raw.vgeCode, '904960');
 
-  // Verify namespaces
+  // Verify namespaces and territorial flags
   assert.equal(bihartorda.territorialMatching.kshSettlementCode, '29887');
   assert.equal(bihartorda.territorialMatching.matching_certainty, 'exact_name_and_county_match');
-  assert.equal(bihartorda.territorialMatching.point_in_polygon, true);
+  assert.equal(bihartorda.territorialMatching.point_in_polygon, false, 'Name-based match must not claim verified polygon intersection');
+  assert.equal(bihartorda.territorialMatching.boundary_status, 'unverified', 'Boundary status must remain unverified for name match');
+  assert.equal(bihartorda.source.url, 'https://portal.nebih.gov.hu/asp_telepulesek', 'URL must be the authentic portal page without synthetic query params');
+  assert.equal(bihartorda.levelCalculation, 'crucix_calculated', 'Severity level must be explicitly marked as Crucix-calculated');
   assert.equal(bihartorda.territorialMatching.official_assignment_percentage, 100);
   assert.deepEqual(bihartorda.huntingDistrict, { namespace: 'VGE', code: '904960' });
 
@@ -54,6 +57,18 @@ test('parseNebihAsp extracts baseline records, preserves raw cells, and separate
 
   // Verify stable key format
   assert.equal(bihartorda.stableKey, 'ASP|afrikai_sertes_pestis|hajdu_bihar|bihartorda|2026_10_12');
+});
+
+test('scopeToWatched filters persistent observations to watched territorial catalog while validating all rows', () => {
+  const html = readFixture('fixture_asp_minimal_baseline.html');
+  const scoped = parseNebihAsp(html, { scopeToWatched: true });
+
+  assert.equal(scoped.examinedRecords, 4, 'All 4 rows must be examined during table validation');
+  assert.equal(scoped.observations.length, 3, 'Only 3 catalog settlements emitted as persistent observations');
+  assert.ok(scoped.observations.find(o => o.raw.settlement === 'Bihartorda'));
+  assert.ok(scoped.observations.find(o => o.raw.settlement === 'Püspökladány'));
+  assert.ok(scoped.observations.find(o => o.raw.settlement === 'Báránd'));
+  assert.equal(scoped.observations.find(o => o.raw.settlement === 'Aba'), undefined, 'Aba is outside watched catalog');
 });
 
 test('first run baseline establishes state and generates NO alerts', () => {

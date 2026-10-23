@@ -13,8 +13,11 @@ const META = Object.freeze({
   attribution: 'Nemzeti Élelmiszerlánc-biztonsági Hivatal (Nébih) – portal.nebih.gov.hu',
   license: 'Közadat-újrahasznosítás (2023. évi CI. tv. és 2011. évi CXII. tv.)',
   licenseUrl: 'https://portal.nebih.gov.hu/kozadatok-ujrahasznositasa',
+  legalStatus: 'feltételek nem tisztázottak; döntés/megkeresés szükséges',
+  robotsTxtUrl: 'https://portal.nebih.gov.hu/robots.txt',
+  robotsTxtPolicy: 'User-Agent: *; Disallow: /search; Sitemap: https://portal.nebih.gov.hu/sitemap.xml',
   coverage: 'Magyarország afrikai sertéspestis (ASP) által érintett településeinek hatósági kockázati besorolása',
-  rights: 'A Nébih által közzétett közigazgatási és járványügyi tájékoztató adatok forrásmegjelöléssel szabadon felhasználhatók.'
+  rights: 'A Nébih által közzétett közigazgatási és járványügyi tájékoztató adatok újrahasznosítása a Nahtv. szerinti igénybejelentéshez kötött.'
 });
 
 const clean = (val, max = 200) => typeof val === 'string'
@@ -120,11 +123,14 @@ export function evaluateNebihAspNotification(currentRecord, { previousRecord = n
   }
 
   // First run baseline: establishes known state, suppresses all alerts
+  const isPrimary = Boolean(currentRecord.territorialMatching?.isPrimarySettlement);
+  const isConfirmedLocal = Boolean(currentRecord.territorialMatching?.point_in_polygon);
+
   if (isFirstRun) {
     return {
       eligible: false,
       action: 'baseline',
-      isConfirmedLocal: Boolean(currentRecord.territorialMatching?.point_in_polygon),
+      isConfirmedLocal,
       chainKey: currentRecord.stableKey,
       reason: 'Első beolvasás (baseline): riasztás mellőzve'
     };
@@ -135,13 +141,15 @@ export function evaluateNebihAspNotification(currentRecord, { previousRecord = n
     return {
       eligible: false,
       action: 'vanished_unverified',
-      isConfirmedLocal: Boolean(currentRecord.territorialMatching?.point_in_polygon),
+      isConfirmedLocal,
       chainKey: currentRecord.stableKey,
       reason: 'A tétel kikerült a hatósági nyilvántartásból; hatósági feloldás nem igazolt'
     };
   }
 
   // Previous record comparison
+  // Crucial: notification triggers look strictly at official raw values,
+  // NOT Crucix-calculated severity levels (forrás nélküli leképezés nem hathat értesítésre).
   if (previousRecord) {
     const prevCat = previousRecord.raw?.riskCategory;
     const currCat = currentRecord.raw?.riskCategory;
@@ -149,9 +157,8 @@ export function evaluateNebihAspNotification(currentRecord, { previousRecord = n
     const currCov = currentRecord.raw?.coveragePercent;
 
     if (prevCat !== currCat || prevCov !== currCov) {
-      const isConfirmedLocal = Boolean(currentRecord.territorialMatching?.point_in_polygon);
       return {
-        eligible: true,
+        eligible: isPrimary,
         action: 'category_changed',
         alertType: 'restriction_update',
         isConfirmedLocal,
@@ -165,16 +172,15 @@ export function evaluateNebihAspNotification(currentRecord, { previousRecord = n
     return {
       eligible: false,
       action: 'unchanged',
-      isConfirmedLocal: Boolean(currentRecord.territorialMatching?.point_in_polygon),
+      isConfirmedLocal,
       chainKey: currentRecord.stableKey,
       reason: 'Változatlan hatósági besorolás: ismételt értesítés letiltva'
     };
   }
 
   // New record after baseline
-  const isConfirmedLocal = Boolean(currentRecord.territorialMatching?.point_in_polygon);
   return {
-    eligible: isConfirmedLocal,
+    eligible: isPrimary,
     action: 'new_restriction',
     alertType: 'new_danger',
     isConfirmedLocal,
@@ -188,7 +194,7 @@ export function evaluateNebihAspNotification(currentRecord, { previousRecord = n
  * Parses the raw HTML response of portal.nebih.gov.hu/asp_telepulesek.
  * Extracts headers, reference dates, raw cell values, namespaces, and territorial matching.
  */
-export function parseNebihAsp(html, { now = Date.now(), territoryConfig = DEFAULT_TERRITORY_CONFIG } = {}) {
+export function parseNebihAsp(html, { now = Date.now(), territoryConfig = DEFAULT_TERRITORY_CONFIG, scopeToWatched = false } = {}) {
   const meta = { ...META };
 
   if (typeof html !== 'string' || !html.trim()) {
@@ -250,14 +256,19 @@ export function parseNebihAsp(html, { now = Date.now(), territoryConfig = DEFAUL
 
     const harvestedAt = new Date(now).toISOString();
 
-    // 5. Parse data rows
+    // 5. Parse data rows and compute integrity metrics across all rows
     const dataRowMatches = rowMatches.slice(1);
     const observations = [];
     const occurrences = new Map();
+    let malformedRows = 0;
+    const tableChecksum = hashString(tableHtml);
 
     for (const rowHtml of dataRowMatches) {
       const cells = [...rowHtml.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => clean(m[1]));
-      if (cells.length < 5) continue; // skip incomplete rows or spacer rows
+      if (cells.length < 5) {
+        malformedRows++;
+        continue;
+      }
 
       const rawSettlement = cells[0];
       const rawCounty = cells[1];
@@ -272,7 +283,12 @@ export function parseNebihAsp(html, { now = Date.now(), territoryConfig = DEFAUL
       // Territorial resolution
       const resolved = resolveSettlement(rawSettlement, rawCounty, { territoryConfig });
 
-      // Stable composite key
+      // If scoped to watched catalog, skip settlements outside the catalog
+      if (scopeToWatched && (!resolved.settlementId || resolved.certainty === 'unresolved_identity')) {
+        continue;
+      }
+
+      // Stable composite key (disease + county + settlement + reference date)
       const normCounty = normalizeKey(rawCounty);
       const normSettlement = normalizeKey(rawSettlement);
       const normStartDate = referenceDate ? referenceDate.replace(/-/g, '_') : 'unknown';
@@ -290,19 +306,29 @@ export function parseNebihAsp(html, { now = Date.now(), territoryConfig = DEFAUL
         id: eventId,
         stableKey,
         chainKey: stableKey,
+        url: ENDPOINT,
+        webUrl: ENDPOINT,
         source: {
           name: SOURCE,
-          url: `${ENDPOINT}?settlement=${encodeURIComponent(rawSettlement)}&vge=${encodeURIComponent(rawVgeCode)}`,
+          url: ENDPOINT,
           hostname: 'portal.nebih.gov.hu',
           status: 'ok'
         },
         kind: 'health',
         level: severity,
+        levelCalculation: 'crucix_calculated',
         title: `Nébih ASP besorolás: ${rawSettlement} - ${rawRiskCategory}`,
         summary: `A Nébih hivatalos afrikai sertéspestis (ASP) területi kockázati besorolása alapján ${rawSettlement} (${rawCounty} vármegye) besorolása: ${rawRiskCategory} (${rawCoveragePercent}%). Vadgazdálkodási egység: ${rawVgeCode}. Vonatkozási idő: ${referenceDate || 'nem jelölt'}. Hatósági területi besorolás, nem házisertés-kitörés.`,
         observedAt: referenceDate ? `${referenceDate}T00:00:00Z` : null,
         publishedAt: sourceUpdatedAt,
         harvestedAt,
+        countries: ['HUN'],
+        sourceRegion: rawCounty,
+        location: {
+          country: 'Hungary',
+          region: rawCounty,
+          settlement: rawSettlement
+        },
         territorialMatching: {
           settlementId: resolved.settlementId,
           settlementName: resolved.settlementName || rawSettlement,
@@ -310,14 +336,15 @@ export function parseNebihAsp(html, { now = Date.now(), territoryConfig = DEFAUL
           kshDistrictCode: resolved.kshDistrictCode,
           countyCode: resolved.countyCode,
           countyName: resolved.countyName || rawCounty,
-          point_in_polygon: resolved.isConfirmedLocal,
-          settlement_overlap_ratio: null, // Boundary geometry not available
+          point_in_polygon: false, // Név alapú illesztés: a térbeli határkapcsolat/metszet nem igazolt
+          settlement_overlap_ratio: null,
           official_settlement_assignment: rawRiskCategory,
           official_assignment_percentage: coverageNum,
           matching_certainty: resolved.certainty,
-          boundary_status: resolved.boundaryStatus || 'unverified',
+          boundary_status: 'unverified',
           dataQualityFlag: resolved.dataQualityFlag || null,
-          validUntil: null
+          validUntil: null,
+          isPrimarySettlement: Boolean(resolved.isConfirmedLocal)
         },
         huntingDistrict: {
           namespace: 'VGE',
@@ -334,6 +361,7 @@ export function parseNebihAsp(html, { now = Date.now(), territoryConfig = DEFAUL
           { label: 'telepules', value: rawSettlement },
           { label: 'megye', value: rawCounty },
           { label: 'kockazatiBesorolas', value: rawRiskCategory },
+          { label: 'besorolasModja', value: 'Crucix-számított (forrásban szöveges kockázati zóna)' },
           { label: 'teruletiAranyPercent', value: String(coverageNum) },
           { label: 'vadgazdalkodasiEgysegVGE', value: rawVgeCode },
           { label: 'vonatkozasIdo', value: referenceDate || 'nem jelölt' },
@@ -344,17 +372,17 @@ export function parseNebihAsp(html, { now = Date.now(), territoryConfig = DEFAUL
       observations.push(record);
     }
 
-    if (!observations.length) {
+    if (!observations.length && !scopeToWatched) {
       return {
         ...aspUnavailableResult(SOURCE, 'empty_table_anomaly: A táblázatban nincs érvényes települési rekord', meta, now),
         status: 'empty_table_anomaly'
       };
     }
 
-    // Prioritize confirmed local and watched settlements first
+    // Prioritize primary and watched settlements first
     observations.sort((a, b) => {
-      const aScore = a.territorialMatching?.point_in_polygon ? 2 : (a.territorialMatching?.kshSettlementCode ? 1 : 0);
-      const bScore = b.territorialMatching?.point_in_polygon ? 2 : (b.territorialMatching?.kshSettlementCode ? 1 : 0);
+      const aScore = a.territorialMatching?.isPrimarySettlement ? 2 : (a.territorialMatching?.kshSettlementCode ? 1 : 0);
+      const bScore = b.territorialMatching?.isPrimarySettlement ? 2 : (b.territorialMatching?.kshSettlementCode ? 1 : 0);
       return bScore - aScore;
     });
 
@@ -365,6 +393,8 @@ export function parseNebihAsp(html, { now = Date.now(), territoryConfig = DEFAUL
       referenceDate,
       sourceUpdatedAt,
       harvestedAt,
+      tableChecksum,
+      malformedRows,
       examinedRecords: dataRowMatches.length,
       acceptedRecords: observations.length
     }, now);
@@ -381,9 +411,23 @@ export function parseNebihAsp(html, { now = Date.now(), territoryConfig = DEFAUL
 
 /**
  * Live harvest briefing adapter for Nébih ASP data.
+ * NOTE: Live network requests are disabled by default because official public reuse terms
+ * require a formal application procedure under Nahtv.
  */
 export async function briefing(options = {}) {
   const now = options.now ?? Date.now();
+
+  if (!options.allowLiveNetwork) {
+    return {
+      source: SOURCE,
+      status: 'disabled',
+      disabled: true,
+      legalStatus: 'feltételek nem tisztázottak; döntés/megkeresés szükséges',
+      reason: 'Élő hálózati lekérés letiltva: a Nébih közadat-újrahasznosítási feltételei nem tisztázottak; döntés/megkeresés szükséges. Kizárólag offline fixture-teszt támogatott.',
+      observations: []
+    };
+  }
+
   const timeout = Math.max(1, Math.min(30000, Number(options.timeout) || 15000));
 
   const data = await safeFetch(ENDPOINT, {
@@ -402,6 +446,7 @@ export async function briefing(options = {}) {
 
   return parseNebihAsp(data.rawText, {
     now,
-    territoryConfig: options.territoryConfig
+    territoryConfig: options.territoryConfig,
+    scopeToWatched: options.scopeToWatched ?? true
   });
 }

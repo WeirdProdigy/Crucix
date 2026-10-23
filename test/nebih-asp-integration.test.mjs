@@ -31,22 +31,25 @@ test('Nébih ASP end-to-end integration: ingestion, persistence, restart recover
     publishedAt: obs.publishedAt,
     collectedAt: obs.harvestedAt,
     severity: obs.level,
+    territory: obs.territorialMatching,
     territorialMatching: obs.territorialMatching,
     huntingDistrict: obs.huntingDistrict,
     raw: obs.raw,
     facts: obs.facts
   }));
 
-  // Ingest into HistoryStore
-  history.add(events);
-  assert.equal(history.query().total, 4, '4 ASP events stored in history');
-
-  // Find Bihartorda event
+  // Ingest Bihartorda into HistoryStore
   const bihartorda = events.find(e => e.raw.settlement === 'Bihartorda');
+  history.add([bihartorda]);
+  assert.equal(history.query().total, 1, '1 Bihartorda ASP event stored in history');
+
   const storedBihartorda = history.get(bihartorda.id);
   assert.ok(storedBihartorda, 'Stored Bihartorda event found');
   assert.equal(storedBihartorda.title, 'Nébih ASP besorolás: Bihartorda - Fertőzött terület (SZKT-n kívüli része)');
   assert.ok(storedBihartorda.summary.includes('Hatósági területi besorolás, nem házisertés-kitörés'));
+  assert.equal(storedBihartorda.source.url, 'https://portal.nebih.gov.hu/asp_telepulesek', 'Must be authentic portal page URL');
+  assert.equal(storedBihartorda.territory.point_in_polygon, false, 'Name-based match must not be verified polygon intersection');
+  assert.equal(storedBihartorda.territory.boundary_status, 'unverified', 'Boundary status must be unverified');
 
   // 2. Restart Store from same directory (persistence verification)
   const restarted = new HistoryStore(dir, { now: () => nowMs + 60000 });
@@ -55,12 +58,13 @@ test('Nébih ASP end-to-end integration: ingestion, persistence, restart recover
   assert.equal(restoredBihartorda.title, storedBihartorda.title);
   assert.equal(restoredBihartorda.publishedAt, '2026-10-20T00:00:00.000Z');
   assert.equal(restoredBihartorda.observedAt, '2026-10-12T00:00:00.000Z');
+  assert.equal(restoredBihartorda.firstSeenAt, '2026-10-23T08:00:00.000Z', 'firstSeenAt established by local store on first observation');
 
   // 3. Re-ingestion deduplication check
-  restarted.add(events);
-  assert.equal(restarted.query().total, 4, 'Repeated ingestion must deduplicate and NOT increase total event count');
+  restarted.add([bihartorda]);
+  assert.equal(restarted.query().total, 1, 'Repeated ingestion must deduplicate and NOT increase total event count');
 
-  // 4. Notification evaluation check on baseline vs change
+  // 4. Notification evaluation check on baseline vs change vs vanished
   const baselineEval = evaluateNebihAspNotification(bihartorda, { isFirstRun: true });
   assert.equal(baselineEval.eligible, false);
   assert.equal(baselineEval.action, 'baseline');
@@ -68,4 +72,11 @@ test('Nébih ASP end-to-end integration: ingestion, persistence, restart recover
   const unchangedEval = evaluateNebihAspNotification(bihartorda, { previousRecord: bihartorda });
   assert.equal(unchangedEval.eligible, false);
   assert.equal(unchangedEval.action, 'unchanged');
+
+  // Vanished record evaluation
+  const vanishedRecord = { ...bihartorda, isVanished: true, action: 'vanished_unverified' };
+  const vanishedEval = evaluateNebihAspNotification(vanishedRecord, { previousRecord: bihartorda });
+  assert.equal(vanishedEval.eligible, false, 'Vanished record must never trigger clearance alert');
+  assert.equal(vanishedEval.action, 'vanished_unverified');
+  assert.ok(vanishedEval.reason.includes('hatósági feloldás nem igazolt'));
 });
