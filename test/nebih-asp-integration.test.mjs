@@ -8,16 +8,19 @@ import { HistoryStore } from '../lib/intelligence/history.mjs';
 
 const readFixture = name => readFileSync(new URL(`./fixtures/nebih/${name}`, import.meta.url), 'utf8');
 
+// Rögzített teszt-időkonstansok (nem forrásbeli időpontok)
+const FIXED_TEST_CLOCK_0800_MS = Date.parse('2026-10-23T08:00:00.000Z');
+const FIXED_TEST_CLOCK_0801_MS = Date.parse('2026-10-23T08:01:00.000Z');
+
 test('Nébih ASP end-to-end integration: ingestion, persistence, restart recovery, deduplication, and facts verification', t => {
   const dir = mkdtempSync(join(tmpdir(), 'crucix-nebih-asp-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
 
-  const nowMs = Date.parse('2026-10-23T08:00:00Z');
-  const history = new HistoryStore(dir, { now: () => nowMs });
+  const history = new HistoryStore(dir, { now: () => FIXED_TEST_CLOCK_0800_MS });
 
   // 1. Parse fixture
   const html = readFixture('fixture_asp_minimal_baseline.html');
-  const parsed = parseNebihAsp(html, { now: nowMs });
+  const parsed = parseNebihAsp(html, { now: FIXED_TEST_CLOCK_0800_MS });
   assert.equal(parsed.status, 'ok');
 
   // Convert observations to history event format
@@ -46,25 +49,35 @@ test('Nébih ASP end-to-end integration: ingestion, persistence, restart recover
   const storedBihartorda = history.get(bihartorda.id);
   assert.ok(storedBihartorda, 'Stored Bihartorda event found');
   assert.equal(storedBihartorda.title, 'Nébih ASP besorolás: Bihartorda - Fertőzött terület (SZKT-n kívüli része)');
-  assert.ok(storedBihartorda.summary.includes('Hatósági területi besorolás, nem házisertés-kitörés'));
+  assert.ok(storedBihartorda.summary.includes('nem klinikai kitörés és nem humán kockázat'));
   assert.equal(storedBihartorda.source.url, 'https://portal.nebih.gov.hu/asp_telepulesek', 'Must be authentic portal page URL');
-  assert.equal(storedBihartorda.territory.point_in_polygon, false, 'Name-based match must not be verified polygon intersection');
+  assert.equal(storedBihartorda.territory.point_in_polygon, null, 'Name-based match has null point_in_polygon');
+  assert.equal(storedBihartorda.territory.geometryCheckStatus, 'not_evaluated', 'Geometry status is explicitly not_evaluated');
   assert.equal(storedBihartorda.territory.boundary_status, 'unverified', 'Boundary status must be unverified');
+  assert.equal(storedBihartorda.territory.matching_certainty, 'exact_name_and_county_match');
 
-  // 2. Restart Store from same directory (persistence verification)
-  const restarted = new HistoryStore(dir, { now: () => nowMs + 60000 });
+  // 2. Restart Store from same directory (persistence verification / Test F)
+  const restarted = new HistoryStore(dir, { now: () => FIXED_TEST_CLOCK_0801_MS });
   const restoredBihartorda = restarted.get(bihartorda.id);
   assert.ok(restoredBihartorda, 'Bihartorda record successfully restored from disk after restart');
   assert.equal(restoredBihartorda.title, storedBihartorda.title);
-  assert.equal(restoredBihartorda.publishedAt, '2026-10-20T00:00:00.000Z');
-  assert.equal(restoredBihartorda.observedAt, '2026-10-12T00:00:00.000Z');
+  assert.equal(restoredBihartorda.publishedAt, '2026-10-20', 'Preserves day precision string from source');
+  assert.equal(restoredBihartorda.observedAt, '2026-10-12', 'Preserves day precision string from source');
   assert.equal(restoredBihartorda.firstSeenAt, '2026-10-23T08:00:00.000Z', 'firstSeenAt established by local store on first observation');
 
   // 3. Re-ingestion deduplication check
   restarted.add([bihartorda]);
   assert.equal(restarted.query().total, 1, 'Repeated ingestion must deduplicate and NOT increase total event count');
 
-  // 4. Notification evaluation check on baseline vs change vs vanished
+  // 4. Test F: Baseline restart recovery - follow-up evaluation against restored baseline
+  const baselineFollowupEval = evaluateNebihAspNotification(bihartorda, {
+    previousRecord: restoredBihartorda,
+    isFirstRun: false
+  });
+  assert.equal(baselineFollowupEval.eligible, false, 'Restart must preserve baseline and not trigger false initial-run alert');
+  assert.equal(baselineFollowupEval.action, 'unchanged');
+
+  // 5. Notification evaluation check on baseline vs change vs vanished
   const baselineEval = evaluateNebihAspNotification(bihartorda, { isFirstRun: true });
   assert.equal(baselineEval.eligible, false);
   assert.equal(baselineEval.action, 'baseline');

@@ -20,9 +20,47 @@ const META = Object.freeze({
   rights: 'A Nébih által közzétett közigazgatási és járványügyi tájékoztató adatok újrahasznosítása a Nahtv. szerinti igénybejelentéshez kötött.'
 });
 
-const clean = (val, max = 200) => typeof val === 'string'
-  ? val.replace(/<[^>]*>/g, '').replace(/[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max)
-  : '';
+function decodeHtmlEntities(str) {
+  if (typeof str !== 'string') return '';
+  const NAMED_ENTITIES = {
+    '&aacute;': 'á', '&Aacute;': 'Á',
+    '&eacute;': 'é', '&Eacute;': 'É',
+    '&iacute;': 'í', '&Iacute;': 'Í',
+    '&oacute;': 'ó', '&Oacute;': 'Ó',
+    '&ouml;': 'ö', '&Ouml;': 'Ö',
+    '&otilde;': 'ő', '&Otilde;': 'Ő',
+    '&odblac;': 'ő', '&Odblac;': 'Ő',
+    '&uacute;': 'ú', '&Uacute;': 'Ú',
+    '&uuml;': 'ü', '&Uuml;': 'Ü',
+    '&udblac;': 'ű', '&Udblac;': 'Ű',
+    '&nbsp;': ' ',
+    '&amp;': '&',
+    '&quot;': '"',
+    '&apos;': "'",
+    '&#39;': "'",
+    '&lt;': '<',
+    '&gt;': '>'
+  };
+  return str
+    .replace(/&[a-zA-Z]+;/g, match => NAMED_ENTITIES[match.toLowerCase()] ?? match)
+    .replace(/&#(\d+);/g, (_, dec) => {
+      try { return String.fromCharCode(parseInt(dec, 10)); } catch { return _; }
+    })
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => {
+      try { return String.fromCharCode(parseInt(hex, 16)); } catch { return _; }
+    });
+}
+
+const clean = (val, max = 200) => {
+  if (typeof val !== 'string') return '';
+  const decoded = decodeHtmlEntities(val);
+  return decoded
+    .replace(/<[^>]*>/g, '')
+    .replace(/[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, max);
+};
 
 const normalizeKey = val => clean(val, 100)
   .normalize('NFKD')
@@ -31,6 +69,15 @@ const normalizeKey = val => clean(val, 100)
   .replace(/[^a-z0-9]/g, '_');
 
 const hashString = val => createHash('sha256').update(String(val)).digest('hex').slice(0, 32);
+
+export function makeNebihAspKey(settlement, county, vgeCode = '') {
+  const normCounty = normalizeKey(county || '');
+  const normSettlement = normalizeKey(settlement || '');
+  const normVge = vgeCode ? normalizeKey(vgeCode) : '';
+  return normVge
+    ? `ASP|afrikai_sertes_pestis|${normCounty}|${normSettlement}|${normVge}`
+    : `ASP|afrikai_sertes_pestis|${normCounty}|${normSettlement}`;
+}
 
 export function aspFreshResult(source, observedAt, observations = [], extras = {}, now = Date.now()) {
   return {
@@ -151,12 +198,15 @@ export function evaluateNebihAspNotification(currentRecord, { previousRecord = n
   // Crucial: notification triggers look strictly at official raw values,
   // NOT Crucix-calculated severity levels (forrás nélküli leképezés nem hathat értesítésre).
   if (previousRecord) {
-    const prevCat = previousRecord.raw?.riskCategory;
-    const currCat = currentRecord.raw?.riskCategory;
-    const prevCov = previousRecord.raw?.coveragePercent;
-    const currCov = currentRecord.raw?.coveragePercent;
+    const prevCat = previousRecord.raw?.riskCategory ?? previousRecord.territorialMatching?.official_settlement_assignment;
+    const currCat = currentRecord.raw?.riskCategory ?? currentRecord.territorialMatching?.official_settlement_assignment;
+    const prevCov = previousRecord.raw?.coveragePercent ?? previousRecord.territorialMatching?.official_assignment_percentage;
+    const currCov = currentRecord.raw?.coveragePercent ?? currentRecord.territorialMatching?.official_assignment_percentage;
 
-    if (prevCat !== currCat || prevCov !== currCov) {
+    const sameOfficialData = (prevCat !== undefined && currCat !== undefined && prevCat === currCat && (prevCov === undefined || currCov === undefined || prevCov === currCov)) ||
+      (Boolean(previousRecord.title && currentRecord.title && previousRecord.title === currentRecord.title));
+
+    if (!sameOfficialData && (prevCat !== currCat || prevCov !== currCov)) {
       return {
         eligible: isPrimary,
         action: 'category_changed',
@@ -164,7 +214,7 @@ export function evaluateNebihAspNotification(currentRecord, { previousRecord = n
         isConfirmedLocal,
         chainKey: currentRecord.stableKey,
         title: `NÉBIH ASP BESOROLÁS-VÁLTOZÁS: ${currentRecord.title}`,
-        reason: `Hatósági besorolás megváltozott: "${prevCat}" (${prevCov}%) -> "${currCat}" (${currCov}%)`
+        reason: `Hatósági besorolás megváltozott: "${prevCat || previousRecord.title}" (${prevCov || ''}%) -> "${currCat || currentRecord.title}" (${currCov || ''}%)`
       };
     }
 
@@ -252,7 +302,7 @@ export function parseNebihAsp(html, { now = Date.now(), territoryConfig = DEFAUL
 
     // Page update date from text (e.g. "Frissítve: 2026.10.20.")
     const updatedMatch = html.match(/Friss[ií]tve:\s*(202[4-9]\.\d{2}\.\d{2})/i);
-    const sourceUpdatedAt = updatedMatch ? `${updatedMatch[1].replace(/\./g, '-')}T00:00:00Z` : null;
+    const sourceUpdatedAt = updatedMatch ? updatedMatch[1].replace(/\./g, '-') : null;
 
     const harvestedAt = new Date(now).toISOString();
 
@@ -288,11 +338,14 @@ export function parseNebihAsp(html, { now = Date.now(), territoryConfig = DEFAUL
         continue;
       }
 
-      // Stable composite key (disease + county + settlement + reference date)
+      // Stable tracked unit key: identifies the tracked administrative entity (disease + county + settlement [+ VGE]).
+      // Crucial: referenceDate is NOT part of stableKey, so header date advances do not cause false vanishing or baseline resets.
       const normCounty = normalizeKey(rawCounty);
       const normSettlement = normalizeKey(rawSettlement);
-      const normStartDate = referenceDate ? referenceDate.replace(/-/g, '_') : 'unknown';
-      const baseKey = `ASP|afrikai_sertes_pestis|${normCounty}|${normSettlement}|${normStartDate}`;
+      const normVge = rawVgeCode ? normalizeKey(rawVgeCode) : '';
+      const baseKey = normVge
+        ? `ASP|afrikai_sertes_pestis|${normCounty}|${normSettlement}|${normVge}`
+        : `ASP|afrikai_sertes_pestis|${normCounty}|${normSettlement}`;
 
       const count = (occurrences.get(baseKey) || 0) + 1;
       occurrences.set(baseKey, count);
@@ -301,6 +354,7 @@ export function parseNebihAsp(html, { now = Date.now(), territoryConfig = DEFAUL
 
       const severity = mapAspSeverity(rawRiskCategory);
       const coverageNum = Number(rawCoveragePercent.replace('%', '').trim()) || 100;
+      const rawRowHash = hashString(`${rawRiskCategory}|${coverageNum}|${rawVgeCode}`);
 
       const record = {
         id: eventId,
@@ -318,11 +372,14 @@ export function parseNebihAsp(html, { now = Date.now(), territoryConfig = DEFAUL
         level: severity,
         levelCalculation: 'crucix_calculated',
         title: `Nébih ASP besorolás: ${rawSettlement} - ${rawRiskCategory}`,
-        summary: `A Nébih hivatalos afrikai sertéspestis (ASP) területi kockázati besorolása alapján ${rawSettlement} (${rawCounty} vármegye) besorolása: ${rawRiskCategory} (${rawCoveragePercent}%). Vadgazdálkodási egység: ${rawVgeCode}. Vonatkozási idő: ${referenceDate || 'nem jelölt'}. Hatósági területi besorolás, nem házisertés-kitörés.`,
-        observedAt: referenceDate ? `${referenceDate}T00:00:00Z` : null,
-        publishedAt: sourceUpdatedAt,
+        summary: `Nébih ASP besorolás (${rawSettlement}, ${rawCounty}): ${rawRiskCategory} (lefedettség: ${rawCoveragePercent}%, VGE: ${rawVgeCode}). Vonatkozás: ${referenceDate || 'n/a'}, frissítve: ${sourceUpdatedAt || 'n/a'}. Forrás: ${ENDPOINT}. Hatósági körzet, nem klinikai kitörés és nem humán kockázat.`,
+        observedAt: referenceDate || null,
+        publishedAt: sourceUpdatedAt || null,
         harvestedAt,
+        changeFingerprint: rawRowHash,
+        rawRowHash,
         countries: ['HUN'],
+        country: 'Hungary',
         sourceRegion: rawCounty,
         location: {
           country: 'Hungary',
@@ -336,7 +393,8 @@ export function parseNebihAsp(html, { now = Date.now(), territoryConfig = DEFAUL
           kshDistrictCode: resolved.kshDistrictCode,
           countyCode: resolved.countyCode,
           countyName: resolved.countyName || rawCounty,
-          point_in_polygon: false, // Név alapú illesztés: a térbeli határkapcsolat/metszet nem igazolt
+          point_in_polygon: null, // Név/vármegye illesztés: geometriai pont-poligon vizsgálat nem futott (null). False csak tényleges negatív geometriai eredmény lehet.
+          geometryCheckStatus: 'not_evaluated',
           settlement_overlap_ratio: null,
           official_settlement_assignment: rawRiskCategory,
           official_assignment_percentage: coverageNum,
@@ -360,12 +418,14 @@ export function parseNebihAsp(html, { now = Date.now(), territoryConfig = DEFAUL
         facts: [
           { label: 'telepules', value: rawSettlement },
           { label: 'megye', value: rawCounty },
-          { label: 'kockazatiBesorolas', value: rawRiskCategory },
-          { label: 'besorolasModja', value: 'Crucix-számított (forrásban szöveges kockázati zóna)' },
+          { label: 'hatosagiBesorolas', value: rawRiskCategory },
+          { label: 'crucixBelsoSzint', value: `${severity} (Crucix belső szint)` },
           { label: 'teruletiAranyPercent', value: String(coverageNum) },
           { label: 'vadgazdalkodasiEgysegVGE', value: rawVgeCode },
-          { label: 'vonatkozasIdo', value: referenceDate || 'nem jelölt' },
-          { label: 'illesztesiBizonyossag', value: resolved.certainty }
+          { label: 'vonatkozasDatum', value: referenceDate || 'nem jelölt' },
+          { label: 'oldalFrissitesDatum', value: sourceUpdatedAt || 'nem jelölt' },
+          { label: 'illesztesiBizonyossag', value: resolved.certainty },
+          { label: 'geometriaStatusz', value: 'not_evaluated' }
         ]
       };
 
@@ -388,7 +448,7 @@ export function parseNebihAsp(html, { now = Date.now(), territoryConfig = DEFAUL
 
     const cappedObservations = observations.slice(0, 100);
 
-    const out = aspFreshResult(SOURCE, sourceUpdatedAt || (referenceDate ? `${referenceDate}T00:00:00Z` : null), cappedObservations, {
+    const out = aspFreshResult(SOURCE, sourceUpdatedAt || referenceDate || null, cappedObservations, {
       ...meta,
       referenceDate,
       sourceUpdatedAt,
