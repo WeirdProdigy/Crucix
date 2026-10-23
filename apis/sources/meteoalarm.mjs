@@ -344,10 +344,24 @@ export function resolveWarningChains(warnings = [], { history = null, now = Date
     for (const ref of refs) {
       let target = null;
       if (ref.sender && ref.identifier && ref.sent) {
-        target = byTriple.get(`${ref.sender},${ref.identifier},${ref.sent}`);
-      }
-      if (!target && ref.identifier) {
-        target = byId.get(ref.identifier);
+        target = byTriple.get(`${ref.sender},${ref.identifier},${ref.sent}`) || null;
+      } else if (ref.identifier) {
+        const candidate = byId.get(ref.identifier);
+        if (candidate) {
+          const candSender = candidate.sender || candidate.source?.name || candidate.source;
+          const candSent = candidate.sent || candidate.publishedAt;
+          const senderConflict = Boolean(ref.sender && candSender && ref.sender.trim() !== String(candSender).trim());
+          const sentConflict = Boolean(
+            ref.sent && candSent &&
+            ref.sent.trim() !== String(candSent).trim() &&
+            Number.isFinite(Date.parse(ref.sent)) &&
+            Number.isFinite(Date.parse(candSent)) &&
+            Date.parse(ref.sent) !== Date.parse(candSent)
+          );
+          if (!senderConflict && !sentConflict) {
+            target = candidate;
+          }
+        }
       }
       if (target) {
         const nowIso = new Date(now).toISOString();
@@ -424,31 +438,62 @@ export function evaluateWarningNotification(currentWarning, { previousWarning = 
   // Formal cancellation (processed before initial territorial gating)
   const isCancel = currentWarning.msgType?.toLowerCase() === 'cancel' || currentWarning.lifecycle === 'cancelled';
   if (isCancel) {
-    const isSameChain = Boolean(
-      previousWarning && (
-        (currentWarning.chainKey && previousWarning.chainKey && currentWarning.chainKey === previousWarning.chainKey) ||
-        (Array.isArray(currentWarning.referencedIds) && (
-          (previousWarning.providerId && currentWarning.referencedIds.includes(previousWarning.providerId)) ||
-          (previousWarning.id && currentWarning.referencedIds.includes(previousWarning.id))
-        )) ||
-        (Array.isArray(currentWarning.parsedReferences) && currentWarning.parsedReferences.some(r =>
-          r.identifier && (r.identifier === previousWarning.providerId || r.identifier === previousWarning.id)
-        )) ||
-        (currentWarning.providerId && (
-          (previousWarning.providerId && currentWarning.providerId === previousWarning.providerId) ||
-          (previousWarning.id && currentWarning.providerId === previousWarning.id)
-        ))
-      )
-    );
-
-    if (!isSameChain) {
+    if (!previousWarning) {
       return {
         eligible: false,
         action: 'unlinked_cancellation',
         alertType: 'none',
         isConfirmedLocal: false,
         chainKey: currentWarning.chainKey,
-        reason: 'Cancellation rejected: missing or unlinked previous warning chain reference'
+        reason: 'Cancellation rejected: no previous warning provided for cancellation chain'
+      };
+    }
+
+    const refs = Array.isArray(currentWarning.parsedReferences) && currentWarning.parsedReferences.length > 0
+      ? currentWarning.parsedReferences
+      : parseCapReferences(currentWarning.references);
+
+    if (!refs || refs.length === 0) {
+      return {
+        eligible: false,
+        action: 'unlinked_cancellation',
+        alertType: 'none',
+        isConfirmedLocal: false,
+        chainKey: currentWarning.chainKey,
+        reason: 'Cancellation rejected: missing CAP references for cancellation chain'
+      };
+    }
+
+    // Verify full CAP reference triple: sender, identifier, sent
+    const prevSender = (previousWarning.sender || '').trim();
+    const prevId = (previousWarning.providerId || '').trim();
+    const prevSent = (previousWarning.sent || '').trim();
+    const prevSentTime = prevSent ? Date.parse(prevSent) : NaN;
+
+    const matchesPrevious = refs.some(ref => {
+      const refSender = (ref.sender || '').trim();
+      const refId = (ref.identifier || '').trim();
+      const refSent = (ref.sent || '').trim();
+      const refSentTime = refSent ? Date.parse(refSent) : NaN;
+
+      if (!refSender || !refId || !refSent) return false;
+      if (!prevSender || !prevId || !prevSent) return false;
+
+      const senderMatches = refSender === prevSender;
+      const idMatches = refId === prevId;
+      const sentMatches = refSent === prevSent || (Number.isFinite(refSentTime) && Number.isFinite(prevSentTime) && refSentTime === prevSentTime);
+
+      return senderMatches && idMatches && sentMatches;
+    });
+
+    if (!matchesPrevious) {
+      return {
+        eligible: false,
+        action: 'unlinked_cancellation',
+        alertType: 'none',
+        isConfirmedLocal: false,
+        chainKey: currentWarning.chainKey,
+        reason: 'Cancellation rejected: CAP references do not match previous warning triple (sender, identifier, sent)'
       };
     }
 
