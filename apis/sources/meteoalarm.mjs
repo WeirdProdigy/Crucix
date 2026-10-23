@@ -379,18 +379,25 @@ export function resolveWarningChains(warnings = [], { history = null, now = Date
  * Rules:
  * 1. Test/Exercise or non-public: eligible = false, action = 'drop'
  * 2. Feed error: eligible = false, action = 'feed_error' (never treated as cancellation)
- * 3. Territory unknown or outside:
- *    - if territory.matchState === 'unknown': eligible = false, action = 'review_only', alertEligibleLocal = false
- *    - if territory.matchState === 'no_match': eligible = false, action = 'outside_scope', alertEligibleLocal = false
- * 4. Cancel message: eligible = true, action = 'cancel', alertType = 'revocation'
- * 5. Naturally expired (now >= expires): eligible = false, action = 'expired', alertType = 'expiry'
- * 6. Update message / repeated sweep:
+ * 3. Formal cancellation (msgType === 'cancel' or lifecycle === 'cancelled'):
+ *    - must match previous warning chain (chainKey, referencedIds, or providerId)
+ *    - if already cancelled: eligible = false, action = 'suppress_duplicate'
+ *    - if never notified: eligible = false, action = 'suppress_unnotified_cancellation'
+ *    - if unlinked: eligible = false, action = 'unlinked_cancellation'
+ *    - if previously notified: eligible = true, action = 'cancel', alertType = 'revocation'
+ *      (settlement level retains isConfirmedLocal = true; county/region has isConfirmedLocal = false)
+ * 4. Territory unknown or outside (for new warnings and revisions):
+ *    - if territory.matchState === 'unknown': eligible = false, action = 'review_only'
+ *    - if territory.matchState === 'no_match' or isConfirmedLocal !== true: eligible = false, action = 'outside_scope'
+ * 5. Local freshness limit exceeded: eligible = false, action = 'freshness_exceeded'
+ * 6. Naturally expired (now >= expires): eligible = false, action = 'expired', alertType = 'expiry'
+ * 7. Update message / repeated sweep:
  *    - if previousWarning exists with same chainKey / providerId:
  *      * if material change (severity changed, awarenessLevel changed, area changed):
  *        eligible = true, action = 'update', alertType = 'revision'
  *      * if materially unchanged:
  *        eligible = false, action = 'suppress_duplicate', alertType = 'none' (no duplicate initial alert!)
- * 7. Initial new warning: eligible = true, action = 'initial_alert', alertType = 'new_danger'
+ * 8. Initial new warning: eligible = true, action = 'initial_alert', alertType = 'new_danger'
  */
 export function evaluateWarningNotification(currentWarning, { previousWarning = null, channel = 'telegram' } = {}) {
   // Feed error handling
@@ -414,7 +421,93 @@ export function evaluateWarningNotification(currentWarning, { previousWarning = 
     };
   }
 
-  // Unknown or outside territorial matching
+  // Formal cancellation (processed before initial territorial gating)
+  const isCancel = currentWarning.msgType?.toLowerCase() === 'cancel' || currentWarning.lifecycle === 'cancelled';
+  if (isCancel) {
+    const isSameChain = Boolean(
+      previousWarning && (
+        (currentWarning.chainKey && previousWarning.chainKey && currentWarning.chainKey === previousWarning.chainKey) ||
+        (Array.isArray(currentWarning.referencedIds) && (
+          (previousWarning.providerId && currentWarning.referencedIds.includes(previousWarning.providerId)) ||
+          (previousWarning.id && currentWarning.referencedIds.includes(previousWarning.id))
+        )) ||
+        (Array.isArray(currentWarning.parsedReferences) && currentWarning.parsedReferences.some(r =>
+          r.identifier && (r.identifier === previousWarning.providerId || r.identifier === previousWarning.id)
+        )) ||
+        (currentWarning.providerId && (
+          (previousWarning.providerId && currentWarning.providerId === previousWarning.providerId) ||
+          (previousWarning.id && currentWarning.providerId === previousWarning.id)
+        ))
+      )
+    );
+
+    if (!isSameChain) {
+      return {
+        eligible: false,
+        action: 'unlinked_cancellation',
+        alertType: 'none',
+        isConfirmedLocal: false,
+        chainKey: currentWarning.chainKey,
+        reason: 'Cancellation rejected: missing or unlinked previous warning chain reference'
+      };
+    }
+
+    const alreadyCancelled = Boolean(
+      previousWarning.cancelled ||
+      previousWarning.cancelNotified ||
+      (previousWarning.msgType?.toLowerCase() === 'cancel' && (previousWarning.notified || previousWarning.wasNotified))
+    );
+    if (alreadyCancelled) {
+      return {
+        eligible: false,
+        action: 'suppress_duplicate',
+        alertType: 'none',
+        isConfirmedLocal: false,
+        chainKey: currentWarning.chainKey,
+        reason: 'Repeated cancellation: cancellation already processed and notified, duplicate suppressed'
+      };
+    }
+
+    const wasNotified = Boolean(previousWarning.notified || previousWarning.wasNotified || currentWarning.wasNotified);
+    if (!wasNotified) {
+      return {
+        eligible: false,
+        action: 'suppress_unnotified_cancellation',
+        alertType: 'none',
+        isConfirmedLocal: false,
+        chainKey: currentWarning.chainKey,
+        reason: 'Cancellation suppressed: warning chain was never previously notified to user'
+      };
+    }
+
+    const prevTerr = previousWarning.territory;
+    const currTerr = currentWarning.territory;
+    const territoryLevel = prevTerr?.territoryLevel || currTerr?.territoryLevel || 'indeterminate';
+    const isConfirmedLocal = (territoryLevel === 'settlement' || !prevTerr?.territoryLevel) &&
+      (prevTerr?.isConfirmedLocal === true || currTerr?.isConfirmedLocal === true) &&
+      territoryLevel !== 'county' && territoryLevel !== 'region';
+
+    let reason = 'Official CAP cancellation message for previously notified local hazard';
+    if (territoryLevel === 'county') {
+      reason = 'Official CAP cancellation message for previously notified county hazard';
+    } else if (territoryLevel === 'region') {
+      reason = 'Official CAP cancellation message for previously notified regional hazard';
+    } else if (territoryLevel !== 'settlement' && prevTerr?.territoryLevel) {
+      reason = 'Official CAP cancellation message for previously notified warning';
+    }
+
+    return {
+      eligible: true,
+      action: 'cancel',
+      alertType: 'revocation',
+      isConfirmedLocal,
+      chainKey: currentWarning.chainKey,
+      title: `VISSZAVONÁS: ${currentWarning.title}`,
+      reason
+    };
+  }
+
+  // Unknown or outside territorial matching (for new alerts and revisions)
   const terr = currentWarning.territory;
   if (!terr || terr.matchState === 'unknown' || terr.isConfirmedLocal !== true) {
     return {
@@ -425,45 +518,6 @@ export function evaluateWarningNotification(currentWarning, { previousWarning = 
       reason: terr?.matchState === 'unknown'
         ? 'Indeterminate territorial geocode: retained for review, but cannot trigger confirmed local warning'
         : 'Warning territory outside watched local area'
-    };
-  }
-
-  // Formal cancellation
-  const isCancel = currentWarning.msgType?.toLowerCase() === 'cancel' || currentWarning.lifecycle === 'cancelled';
-  if (isCancel) {
-    const wasNotified = Boolean(previousWarning?.notified || previousWarning?.wasNotified || currentWarning?.wasNotified);
-    const wasLocal = previousWarning?.territory?.isConfirmedLocal === true || terr?.isConfirmedLocal === true;
-    const alreadyCancelled = Boolean(previousWarning?.cancelled || previousWarning?.cancelNotified || (previousWarning?.msgType?.toLowerCase() === 'cancel' && (previousWarning?.notified || previousWarning?.wasNotified)));
-    if (alreadyCancelled) {
-      return {
-        eligible: false,
-        action: 'suppress_duplicate',
-        alertType: 'none',
-        isConfirmedLocal: wasLocal,
-        chainKey: currentWarning.chainKey,
-        reason: 'Repeated cancellation: cancellation already processed and notified, duplicate suppressed'
-      };
-    }
-    if (!wasNotified || !wasLocal) {
-      return {
-        eligible: false,
-        action: 'suppress_unnotified_cancellation',
-        alertType: 'none',
-        isConfirmedLocal: wasLocal,
-        chainKey: currentWarning.chainKey,
-        reason: !wasNotified
-          ? 'Cancellation suppressed: warning chain was never previously notified to user'
-          : 'Cancellation suppressed: warning chain was not confirmed local'
-      };
-    }
-    return {
-      eligible: true,
-      action: 'cancel',
-      alertType: 'revocation',
-      isConfirmedLocal: true,
-      chainKey: currentWarning.chainKey,
-      title: `VISSZAVONÁS: ${currentWarning.title}`,
-      reason: 'Official CAP cancellation message for previously notified local hazard'
     };
   }
 

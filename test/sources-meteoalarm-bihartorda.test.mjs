@@ -899,3 +899,180 @@ test('Browser evidence: Record Inspector DOM rendering of territory, matchState,
   assert.ok(renderedStaleHtml.includes('<dd>Aktualitása nem igazolt: a helyi frissességi korlát letelt.</dd>'), 'DOM contains exact stale label: Aktualitása nem igazolt: a helyi frissességi korlát letelt.');
   assert.ok(renderedStaleHtml.includes('<dd>stale</dd>'), 'DOM contains freshnessStatus: stale');
 });
+
+// ─── 13. Visszavonási (Cancel) láncok és területi jogosultságok szigorú ellenőrzése ───
+
+test('Meteoalarm cancellation chain resolution, linkage verification, and territorial level gating', () => {
+  // Alap riasztási struktúra
+  const baseAlert = {
+    status: 'Actual',
+    scope: 'Public',
+    title: 'Hőségriasztás Észak-Alföld',
+    providerId: 'HU.OMSZ.2026.001',
+    chainKey: 'HU.OMSZ.2026.001',
+    msgType: 'Alert',
+    lifecycle: 'active'
+  };
+
+  // 1. Regionális, korábban értesített lánc Cancel
+  const prevRegional = {
+    ...baseAlert,
+    notified: true,
+    wasNotified: true,
+    territory: { territoryLevel: 'region', territoryName: 'Észak-Alföld', isConfirmedLocal: false, matchState: 'match' }
+  };
+  const cancelRegional = {
+    ...baseAlert,
+    providerId: 'HU.OMSZ.2026.002',
+    chainKey: 'HU.OMSZ.2026.001',
+    msgType: 'Cancel',
+    lifecycle: 'cancelled',
+    territory: { territoryLevel: 'region', territoryName: 'Észak-Alföld', isConfirmedLocal: false, matchState: 'match' }
+  };
+  const evalRegCancel = evaluateWarningNotification(cancelRegional, { previousWarning: prevRegional });
+  assert.equal(evalRegCancel.eligible, true, 'Previously notified regional warning CANCEL is eligible');
+  assert.equal(evalRegCancel.action, 'cancel');
+  assert.equal(evalRegCancel.alertType, 'revocation');
+  assert.equal(evalRegCancel.isConfirmedLocal, false, 'Regional cancellation preserves isConfirmedLocal: false');
+  assert.equal(evalRegCancel.reason, 'Official CAP cancellation message for previously notified regional hazard');
+  assert.ok(evalRegCancel.title.startsWith('VISSZAVONÁS:'));
+
+  // 2. Vármegyei, korábban értesített lánc Cancel
+  const prevCounty = {
+    ...baseAlert,
+    title: 'Viharriasztás Hajdú-Bihar',
+    providerId: 'HU.COUNTY.001',
+    chainKey: 'HU.COUNTY.001',
+    notified: true,
+    wasNotified: true,
+    territory: { territoryLevel: 'county', territoryName: 'Hajdú-Bihar', isConfirmedLocal: false, matchState: 'match' }
+  };
+  const cancelCounty = {
+    ...baseAlert,
+    title: 'Viharriasztás Hajdú-Bihar',
+    providerId: 'HU.COUNTY.002',
+    chainKey: 'HU.COUNTY.001',
+    msgType: 'Cancel',
+    lifecycle: 'cancelled',
+    territory: { territoryLevel: 'county', territoryName: 'Hajdú-Bihar', isConfirmedLocal: false, matchState: 'match' }
+  };
+  const evalCountyCancel = evaluateWarningNotification(cancelCounty, { previousWarning: prevCounty });
+  assert.equal(evalCountyCancel.eligible, true, 'Previously notified county warning CANCEL is eligible');
+  assert.equal(evalCountyCancel.action, 'cancel');
+  assert.equal(evalCountyCancel.alertType, 'revocation');
+  assert.equal(evalCountyCancel.isConfirmedLocal, false, 'County cancellation preserves isConfirmedLocal: false');
+  assert.equal(evalCountyCancel.reason, 'Official CAP cancellation message for previously notified county hazard');
+
+  // 3. Azonos lánc Cancel hiányzó vagy unknown jelenlegi territory mellett
+  const cancelMissingTerr = {
+    ...cancelCounty,
+    territory: null
+  };
+  const evalMissingTerr = evaluateWarningNotification(cancelMissingTerr, { previousWarning: prevCounty });
+  assert.equal(evalMissingTerr.eligible, true, 'Cancel with missing incoming territory still succeeds if chain was notified');
+  assert.equal(evalMissingTerr.action, 'cancel');
+  assert.equal(evalMissingTerr.isConfirmedLocal, false);
+
+  const cancelUnknownTerr = {
+    ...cancelCounty,
+    territory: { matchState: 'unknown', isConfirmedLocal: false }
+  };
+  const evalUnknownTerr = evaluateWarningNotification(cancelUnknownTerr, { previousWarning: prevCounty });
+  assert.equal(evalUnknownTerr.eligible, true, 'Cancel with unknown incoming territory still succeeds if chain was notified');
+  assert.equal(evalUnknownTerr.action, 'cancel');
+
+  // 4. Ismételt Cancel esetén duplikátum elnyomása (suppress_duplicate)
+  const evalRepeat = evaluateWarningNotification(cancelCounty, {
+    previousWarning: { ...prevCounty, cancelled: true, cancelNotified: true }
+  });
+  assert.equal(evalRepeat.eligible, false);
+  assert.equal(evalRepeat.action, 'suppress_duplicate');
+
+  // 5. Soha nem értesített lánc lemondása elnyomva (suppress_unnotified_cancellation)
+  const evalUnnotified = evaluateWarningNotification(cancelCounty, {
+    previousWarning: { ...prevCounty, notified: false, wasNotified: false }
+  });
+  assert.equal(evalUnnotified.eligible, false);
+  assert.equal(evalUnnotified.action, 'suppress_unnotified_cancellation');
+
+  // 6. Eltérő lánc és hibás/hiányzó hivatkozás esetén elutasítva (unlinked_cancellation)
+  const cancelUnlinked = {
+    ...cancelCounty,
+    chainKey: 'HU.DIFFERENT.999'
+  };
+  const evalUnlinked = evaluateWarningNotification(cancelUnlinked, { previousWarning: prevCounty });
+  assert.equal(evalUnlinked.eligible, false);
+  assert.equal(evalUnlinked.action, 'unlinked_cancellation');
+  assert.equal(evalUnlinked.reason, 'Cancellation rejected: missing or unlinked previous warning chain reference');
+
+  // 7. Test / Exercise és feedhiba továbbra sem küldhető visszavonásként sem
+  const exerciseCancel = {
+    ...cancelCounty,
+    status: 'Exercise'
+  };
+  const evalExercise = evaluateWarningNotification(exerciseCancel, { previousWarning: prevCounty });
+  assert.equal(evalExercise.eligible, false);
+  assert.equal(evalExercise.action, 'drop');
+
+  const errorCancel = {
+    status: 'error',
+    error: 'Gateway Timeout'
+  };
+  const evalError = evaluateWarningNotification(errorCancel, { previousWarning: prevCounty });
+  assert.equal(evalError.eligible, false);
+  assert.equal(evalError.action, 'feed_error');
+
+  // 8. Regionális és vármegyei KEZDETI push továbbra sem küldhető (outside_scope)
+  const newRegionalAlert = {
+    ...baseAlert,
+    territory: { territoryLevel: 'region', territoryName: 'Észak-Alföld', isConfirmedLocal: false, matchState: 'match' }
+  };
+  const evalNewReg = evaluateWarningNotification(newRegionalAlert);
+  assert.equal(evalNewReg.eligible, false, 'New regional alert cannot trigger live push notification');
+  assert.equal(evalNewReg.action, 'outside_scope');
+
+  const newCountyAlert = {
+    ...baseAlert,
+    territory: { territoryLevel: 'county', territoryName: 'Hajdú-Bihar', isConfirmedLocal: false, matchState: 'match' }
+  };
+  const evalNewCounty = evaluateWarningNotification(newCountyAlert);
+  assert.equal(evalNewCounty.eligible, false, 'New county alert cannot trigger live push notification');
+  assert.equal(evalNewCounty.action, 'outside_scope');
+
+  // 9. Meglévő települési kezdeti, frissítési és visszavonási működés megerősítése
+  const localSettlementAlert = {
+    ...baseAlert,
+    title: 'Helyi zivatar Bihartorda',
+    providerId: 'HU.LOCAL.001',
+    chainKey: 'HU.LOCAL.001',
+    territory: { territoryLevel: 'settlement', territoryName: 'Bihartorda', isConfirmedLocal: true, matchState: 'match' }
+  };
+  const evalLocalInit = evaluateWarningNotification(localSettlementAlert);
+  assert.equal(evalLocalInit.eligible, true);
+  assert.equal(evalLocalInit.action, 'initial_alert');
+  assert.equal(evalLocalInit.isConfirmedLocal, true);
+
+  const localSettlementUpdate = {
+    ...localSettlementAlert,
+    providerId: 'HU.LOCAL.002',
+    msgType: 'Update',
+    severity: 'Severe'
+  };
+  const evalLocalUpdate = evaluateWarningNotification(localSettlementUpdate, { previousWarning: localSettlementAlert });
+  assert.equal(evalLocalUpdate.eligible, true);
+  assert.equal(evalLocalUpdate.action, 'update');
+
+  const localSettlementCancel = {
+    ...localSettlementAlert,
+    providerId: 'HU.LOCAL.003',
+    msgType: 'Cancel',
+    lifecycle: 'cancelled'
+  };
+  const evalLocalCancel = evaluateWarningNotification(localSettlementCancel, {
+    previousWarning: { ...localSettlementAlert, notified: true }
+  });
+  assert.equal(evalLocalCancel.eligible, true);
+  assert.equal(evalLocalCancel.action, 'cancel');
+  assert.equal(evalLocalCancel.isConfirmedLocal, true, 'Settlement cancellation preserves isConfirmedLocal: true');
+  assert.equal(evalLocalCancel.reason, 'Official CAP cancellation message for previously notified local hazard');
+});
