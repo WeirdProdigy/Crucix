@@ -10,7 +10,7 @@
     domain('economy',['FRED','Treasury','BLS','ECB','YFinance','USAspending','Prediction-Markets','Patents']),
     domain('supply',['EIA','Energy-Charts-HU','ENTSOG-HU','IMF-PortWatch','GSCPI','Comtrade']),
     domain('sanctions',['OFAC','OpenSanctions','OpenSanctions-Index','Federal-Register']),
-    domain('health',['WHO','EPA','Safecast'])
+    domain('health',['WHO','EPA','Safecast','Nebih-ASP'])
   ]);
   const DOMAIN_IDS=Object.freeze(DOMAINS.map(item=>item.id));
   const BY_SOURCE=new Map(DOMAINS.flatMap(item=>item.sources.map(source=>[source,item.id])));

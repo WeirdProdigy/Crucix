@@ -70,6 +70,7 @@ import { briefing as entsog } from './sources/entsog.mjs';
 import { briefing as predictionMarkets } from './sources/prediction-markets.mjs';
 import { briefing as viewsForecast } from './sources/views.mjs';
 import { briefing as informRisk } from './sources/inform.mjs';
+import { briefing as nebihAsp } from './sources/nebih-asp.mjs';
 import config from '../crucix.config.mjs';
 
 const SOURCE_TIMEOUT_MS = 30_000; // 30s max per individual source
@@ -156,6 +157,7 @@ export async function fullBriefing() {
     runSource('USGS', usgs),
     // Current free public data. Each adapter checks provider timestamps.
     runSource('Meteoalarm', meteoalarm, { countries: config.publicSources.meteoalarmCountries }),
+    runSource('Nebih-ASP', nebihAsp, { territoryConfig: config.territory }),
     runSource('GDACS', gdacs),
     runSource('NOAA-SWPC', swpc),
     runSource('ECB', ecb),
