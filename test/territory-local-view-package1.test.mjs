@@ -141,11 +141,12 @@ test('Test 6: Bakonszeg is in watchScope but belongs to Berettyóújfalui járá
   assert.equal(resolved.boundaryStatus, BOUNDARY_STATUS.UNVERIFIED);
 });
 
-// ─── 7. Kiemelt városi kapcsolatok külön címkézése ───
+// ─── 7. Kiemelt városi kapcsolatok és felismerési katalógus szétválasztása ───
 
-test('Test 7: Key connection cities (Debrecen, Hajdúszoboszló, Berettyóújfalu) receive key_connection tag', () => {
-  const cities = ['Debrecen', 'Hajdúszoboszló', 'Berettyóújfalu'];
-  for (const cityName of cities) {
+test('Test 7: Key connection recognition catalog is decoupled from active watch profile', () => {
+  // A. Az alapértelmezett három kiemelt város (Debrecen, Hajdúszoboszló, Püspökladány) változatlanul figyelt:
+  const defaultKeyCities = ['Debrecen', 'Hajdúszoboszló', 'Püspökladány'];
+  for (const cityName of defaultKeyCities) {
     const resolved = resolveSettlement(cityName, 'Hajdú-Bihar');
     assert.equal(resolved.identityStatus, IDENTITY_STATUSES.RESOLVED);
     assert.equal(resolved.watchScope, WATCH_SCOPES.IN);
@@ -153,6 +154,45 @@ test('Test 7: Key connection cities (Debrecen, Hajdúszoboszló, Berettyóújfal
     assert.equal(resolved.relationshipType, RELATIONSHIP_TYPES.KEY_CONNECTION);
     assert.equal(resolved.relevanceLabel, 'kiemelt városi kapcsolat');
   }
+
+  // B. Berettyóújfalu feloldható, de alapértelmezésben NEM válik figyeltté pusztán a katalóguscímkéje miatt:
+  const berettyoDefault = resolveSettlement('Berettyóújfalu', 'Hajdú-Bihar');
+  assert.equal(berettyoDefault.identityStatus, IDENTITY_STATUSES.RESOLVED, 'Berettyóújfalu identity is resolved from catalog');
+  assert.equal(berettyoDefault.watchScope, WATCH_SCOPES.OUT, 'Default watchScope is OUT without explicit configuration');
+  assert.equal(berettyoDefault.matchState, 'no_match', 'matchState is strictly no_match');
+  assert.equal(berettyoDefault.inScope, false, 'inScope is strictly false');
+  assert.equal(berettyoDefault.relevanceLabel, 'nem figyelt kiemelt kapcsolat');
+
+  // C. Explicit keyCities/keyConnections konfigurációval figyeltté válik:
+  const configWithBerettyo = createTerritoryConfig({
+    keyCities: [...KEY_CONNECTIONS, BERETTYOUJFALU_PROFILE]
+  });
+  const berettyoExplicit = resolveSettlement('Berettyóújfalu', 'Hajdú-Bihar', { territoryConfig: configWithBerettyo });
+  assert.equal(berettyoExplicit.identityStatus, IDENTITY_STATUSES.RESOLVED);
+  assert.equal(berettyoExplicit.watchScope, WATCH_SCOPES.IN, 'watchScope is IN when explicitly configured in keyCities');
+  assert.equal(berettyoExplicit.matchState, 'match');
+  assert.equal(berettyoExplicit.inScope, true);
+  assert.equal(berettyoExplicit.relevanceLabel, 'kiemelt városi kapcsolat');
+
+  // D. A konfigurációból eltávolítva ismét elveszíti a figyelési hatókört:
+  const configWithoutBerettyo = createTerritoryConfig({
+    keyCities: KEY_CONNECTIONS
+  });
+  const berettyoRemoved = resolveSettlement('Berettyóújfalu', 'Hajdú-Bihar', { territoryConfig: configWithoutBerettyo });
+  assert.equal(berettyoRemoved.watchScope, WATCH_SCOPES.OUT);
+  assert.equal(berettyoRemoved.matchState, 'no_match');
+  assert.equal(berettyoRemoved.inScope, false);
+
+  // E. Bakonszeg egyedi figyelése megmarad, de a 094-es járás egésze nem válik figyeltté:
+  const bakonszeg = resolveSettlement('Bakonszeg', 'Hajdú-Bihar');
+  assert.equal(bakonszeg.watchScope, WATCH_SCOPES.IN, 'Bakonszeg remains watched via suggestedNearbySettlements');
+  assert.equal(bakonszeg.kshDistrictCode, '094');
+  assert.ok(!DEFAULT_TERRITORY_CONFIG.watchedDistricts.includes('094'), 'District 094 is NOT in watchedDistricts');
+
+  // F. Egy másik, nem konfigurált 094-es járási település (pl. Furta) nem válik automatikusan figyeltté:
+  const furta = resolveSettlement('Furta', 'Hajdú-Bihar');
+  assert.notEqual(furta.watchScope, WATCH_SCOPES.IN, 'Unconfigured 094 settlement does not become watched');
+  assert.equal(furta.inScope, false);
 });
 
 // ─── 8. Közigazgatási hierarchiaszintek (territoryLevel) szigorú megőrzése ───
@@ -199,9 +239,11 @@ test('Test 9: Stale warning with missing expires never claims provider expiratio
   assert.equal(policy.freshnessReason, 'Aktualitása nem igazolt: a helyi frissességi korlát letelt.');
 });
 
-// ─── 10. Esemény-azonosság megőrzése több figyelt település esetén ───
+// ─── 10. Rekordintegritás és több település említésének kezelése ───
+// Figyelem: A többnézetes aggregáció és nézetspecifikus számláló ellenőrzése
+// a 2. csomagban (UI és aggregációs réteg) ellenőrizendő nyitott követelmény.
 
-test('Test 10: Event record identity and deduplication across views', () => {
+test('Test 10: Rekordintegritás és több település említésének kezelése', () => {
   const textMulti = 'Viharos szél és fakidőlések Nagyrábé és Bihardancsháza térségében';
   const res = matchTerritory([], textMulti);
   
