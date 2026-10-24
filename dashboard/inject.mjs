@@ -17,6 +17,9 @@ import { createLLMProvider } from '../lib/llm/index.mjs';
 import { generateRuleBasedIdeas, resolveIdeas } from '../lib/llm/rule-ideas.mjs';
 import { buildEvents, stampLiveEventIds } from '../lib/intelligence/events.mjs';
 import { normalizeLiveSources } from '../lib/intelligence/live-sources.mjs';
+import { partitionEventsByView, evaluateSourceCoverage, evaluateEventTerritoryViews, COVERAGE_STATES } from '../lib/intelligence/views.mjs';
+import { DEFAULT_TERRITORY_CONFIG } from '../lib/intelligence/territory.mjs';
+import { domainOfSource } from '../lib/domains.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -931,6 +934,39 @@ export async function synthesize(data, options = {}) {
   V2.ideas = generateIdeas(V2);
   V2.liveSources = stampLiveEventIds(V2.liveSources);
   V2.events = buildEvents(V2, { now: options.now ?? Date.now() });
+
+  const territoryConfig = config.territory || DEFAULT_TERRITORY_CONFIG;
+  const isOffline = Boolean(options.isOfflineSnapshot || !config.enableSweeps || options.isSnapshot);
+  for (const event of V2.events) {
+    if (!event.views) {
+      event.views = evaluateEventTerritoryViews(event, territoryConfig);
+    }
+    event.lifecycle = event.lifecycle || (event.isCancelled || event.cancelled ? 'cancelled' : event.superseded ? 'superseded' : 'active');
+    event.isCancelled = Boolean(event.isCancelled || event.cancelled || event.lifecycle === 'cancelled');
+  }
+  V2.views = partitionEventsByView(V2.events, territoryConfig);
+  const liveQueried = options.liveQueriedSources instanceof Set
+    ? options.liveQueriedSources
+    : (Array.isArray(options.liveQueriedSources) ? new Set(options.liveQueriedSources) : null);
+  const liveSourcesList = Array.isArray(V2.liveSources) ? V2.liveSources : [];
+  const evaluatedSources = Object.entries(data.sources || {}).map(([name, src]) => {
+    const isLive = !isOffline && (liveQueried ? liveQueried.has(name) : Boolean(options.isLiveSweep));
+    return {
+      id: name,
+      name,
+      enabled: !src.disabled && src.status !== 'disabled',
+      status: src.status,
+      error: src.error,
+      unconfigured: Boolean(src.unconfigured || src.missing || src.status === COVERAGE_STATES.NINCS_FORRAS),
+      domain: domainOfSource(name) || 'general',
+      origin: isLive ? 'live' : 'snapshot'
+    };
+  });
+  V2.coverage = evaluateSourceCoverage(
+    evaluatedSources,
+    liveSourcesList,
+    { isOfflineSnapshot: isOffline, now: options.now ?? Date.now() }
+  );
   return V2;
 }
 

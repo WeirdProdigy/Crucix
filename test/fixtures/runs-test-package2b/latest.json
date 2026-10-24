@@ -1,0 +1,4281 @@
+{
+  "meta": {
+    "version": "2.13.6",
+    "timestamp": "2026-10-22T14:15:00.000Z",
+    "totalDurationMs": 120,
+    "sourcesQueried": 3,
+    "sourcesOk": 1,
+    "sourcesFailed": 0,
+    "sourcesDisabled": 1,
+    "isOfflineSnapshot": true,
+    "testEnvironment": true
+  },
+  "territoryConfig": {
+    "primary": {
+      "id": "bihartorda",
+      "name": "Bihartorda",
+      "kshSettlement": "29887",
+      "kshDistrict": "102",
+      "districtName": "Püspökladányi járás",
+      "countyCode": "09",
+      "countyName": "Hajdú-Bihar",
+      "county": {
+        "id": "09",
+        "name": "Hajdú-Bihar"
+      },
+      "nuts": {
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "nuts1": "HU3",
+        "nuts0": "HU"
+      },
+      "nuts3": "HU321",
+      "nuts2": "HU32",
+      "nuts1": "HU3",
+      "nuts0": "HU",
+      "iso3": "HUN",
+      "legalStatus": "Község",
+      "source": "KSH TSZJ 2025",
+      "sourceVersion": "2025 megnevezésekkel",
+      "verifiedDate": "2026-10-22",
+      "relationshipType": "administrative",
+      "boundaryStatus": "verified",
+      "coordinates": {
+        "lat": 47.1658,
+        "lon": 21.365,
+        "source": "OpenStreetMap/Nominatim",
+        "label": "Bihartorda (községháza referenciapont, nem eseményhely)",
+        "isEventLocation": false
+      }
+    },
+    "suggestedNearbySettlements": [
+      {
+        "id": "nagyrabe",
+        "name": "Nagyrábé",
+        "kshSettlement": "06309",
+        "kshDistrict": "102",
+        "districtName": "Püspökladányi járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Nagyközség",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "watched_settlement",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.1856,
+          "lon": 21.3283,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "bihardancshaza",
+        "name": "Bihardancsháza",
+        "kshSettlement": "25256",
+        "kshDistrict": "102",
+        "districtName": "Püspökladányi járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Község",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "watched_settlement",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.1667,
+          "lon": 21.3167,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "sap",
+        "name": "Sáp",
+        "kshSettlement": "26116",
+        "kshDistrict": "102",
+        "districtName": "Püspökladányi járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Község",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "watched_settlement",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.25,
+          "lon": 21.35,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "bakonszeg",
+        "name": "Bakonszeg",
+        "kshSettlement": "15167",
+        "kshDistrict": "094",
+        "districtName": "Berettyóújfalui járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Község",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "watched_settlement",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.1833,
+          "lon": 21.45,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "barand",
+        "name": "Báránd",
+        "kshSettlement": "26693",
+        "kshDistrict": "102",
+        "districtName": "Püspökladányi járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Község",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "watched_settlement",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.3,
+          "lon": 21.2333,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      }
+    ],
+    "watchedSettlements": [
+      {
+        "id": "nagyrabe",
+        "name": "Nagyrábé",
+        "kshSettlement": "06309",
+        "kshDistrict": "102",
+        "districtName": "Püspökladányi járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Nagyközség",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "watched_settlement",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.1856,
+          "lon": 21.3283,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "bihardancshaza",
+        "name": "Bihardancsháza",
+        "kshSettlement": "25256",
+        "kshDistrict": "102",
+        "districtName": "Püspökladányi járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Község",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "watched_settlement",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.1667,
+          "lon": 21.3167,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "sap",
+        "name": "Sáp",
+        "kshSettlement": "26116",
+        "kshDistrict": "102",
+        "districtName": "Püspökladányi járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Község",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "watched_settlement",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.25,
+          "lon": 21.35,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "bakonszeg",
+        "name": "Bakonszeg",
+        "kshSettlement": "15167",
+        "kshDistrict": "094",
+        "districtName": "Berettyóújfalui járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Község",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "watched_settlement",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.1833,
+          "lon": 21.45,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "barand",
+        "name": "Báránd",
+        "kshSettlement": "26693",
+        "kshDistrict": "102",
+        "districtName": "Püspökladányi járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Község",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "watched_settlement",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.3,
+          "lon": 21.2333,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      }
+    ],
+    "keyConnections": [
+      {
+        "id": "puspokladany",
+        "name": "Püspökladány",
+        "kshSettlement": "10162",
+        "kshDistrict": "102",
+        "districtName": "Püspökladányi járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Város",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "key_connection",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.3167,
+          "lon": 21.1167,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "hajduszoboszlo",
+        "name": "Hajdúszoboszló",
+        "kshSettlement": "05175",
+        "kshDistrict": "100",
+        "districtName": "Hajdúszoboszlói járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Város",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "key_connection",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.4447,
+          "lon": 21.3961,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "debrecen",
+        "name": "Debrecen",
+        "kshSettlement": "15130",
+        "kshDistrict": "095",
+        "districtName": "Debreceni járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Megyei jogú város",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "key_connection",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.5316,
+          "lon": 21.6273,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      }
+    ],
+    "keyCities": [
+      {
+        "id": "puspokladany",
+        "name": "Püspökladány",
+        "kshSettlement": "10162",
+        "kshDistrict": "102",
+        "districtName": "Püspökladányi járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Város",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "key_connection",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.3167,
+          "lon": 21.1167,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "hajduszoboszlo",
+        "name": "Hajdúszoboszló",
+        "kshSettlement": "05175",
+        "kshDistrict": "100",
+        "districtName": "Hajdúszoboszlói járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Város",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "key_connection",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.4447,
+          "lon": 21.3961,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "debrecen",
+        "name": "Debrecen",
+        "kshSettlement": "15130",
+        "kshDistrict": "095",
+        "districtName": "Debreceni járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Megyei jogú város",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "key_connection",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.5316,
+          "lon": 21.6273,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      }
+    ],
+    "districtSettlements": [
+      {
+        "id": "bihartorda",
+        "name": "Bihartorda",
+        "kshSettlement": "29887",
+        "kshDistrict": "102",
+        "districtName": "Püspökladányi járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Község",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "administrative",
+        "boundaryStatus": "verified",
+        "coordinates": {
+          "lat": 47.1658,
+          "lon": 21.365,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "puspokladany",
+        "name": "Püspökladány",
+        "kshSettlement": "10162",
+        "kshDistrict": "102",
+        "districtName": "Püspökladányi járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Város",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "key_connection",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.3167,
+          "lon": 21.1167,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "barand",
+        "name": "Báránd",
+        "kshSettlement": "26693",
+        "kshDistrict": "102",
+        "districtName": "Püspökladányi járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Község",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "watched_settlement",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.3,
+          "lon": 21.2333,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "bihardancshaza",
+        "name": "Bihardancsháza",
+        "kshSettlement": "25256",
+        "kshDistrict": "102",
+        "districtName": "Püspökladányi járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Község",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "watched_settlement",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.1667,
+          "lon": 21.3167,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "biharnagybajom",
+        "name": "Biharnagybajom",
+        "kshSettlement": "24828",
+        "kshDistrict": "102",
+        "districtName": "Püspökladányi járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Község",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "administrative",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.2333,
+          "lon": 21.2167,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "foldes",
+        "name": "Földes",
+        "kshSettlement": "03258",
+        "kshDistrict": "102",
+        "districtName": "Püspökladányi járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Nagyközség",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "administrative",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.3,
+          "lon": 21.3667,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "kaba",
+        "name": "Kaba",
+        "kshSettlement": "02307",
+        "kshDistrict": "102",
+        "districtName": "Püspökladányi járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Város",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "administrative",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.35,
+          "lon": 21.2833,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "nagyrabe",
+        "name": "Nagyrábé",
+        "kshSettlement": "06309",
+        "kshDistrict": "102",
+        "districtName": "Püspökladányi járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Nagyközség",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "watched_settlement",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.1856,
+          "lon": 21.3283,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "sap",
+        "name": "Sáp",
+        "kshSettlement": "26116",
+        "kshDistrict": "102",
+        "districtName": "Püspökladányi járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Község",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "watched_settlement",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.25,
+          "lon": 21.35,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "sarretudvari",
+        "name": "Sárrétudvari",
+        "kshSettlement": "23940",
+        "kshDistrict": "102",
+        "districtName": "Püspökladányi járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Nagyközség",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "administrative",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.2333,
+          "lon": 21.2,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "szerep",
+        "name": "Szerep",
+        "kshSettlement": "33437",
+        "kshDistrict": "102",
+        "districtName": "Püspökladányi járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Község",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "administrative",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.2333,
+          "lon": 21.15,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      },
+      {
+        "id": "tetetlen",
+        "name": "Tetétlen",
+        "kshSettlement": "19691",
+        "kshDistrict": "102",
+        "districtName": "Püspökladányi járás",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "county": {
+          "id": "09",
+          "name": "Hajdú-Bihar"
+        },
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32",
+          "nuts1": "HU3",
+          "nuts0": "HU"
+        },
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "legalStatus": "Község",
+        "source": "KSH TSZJ 2025",
+        "verifiedDate": "2026-10-22",
+        "relationshipType": "administrative",
+        "boundaryStatus": "unverified",
+        "coordinates": {
+          "lat": 47.3167,
+          "lon": 21.3,
+          "source": "OpenStreetMap/Nominatim",
+          "isEventLocation": false
+        }
+      }
+    ],
+    "includeFullDistrict": false,
+    "watchedDistricts": [
+      "102",
+      "100",
+      "095"
+    ],
+    "watchedCounties": [
+      "HU321",
+      "09"
+    ],
+    "watchedRegions": [
+      "HU32"
+    ]
+  },
+  "liveSources": [
+    {
+      "source": "Meteoalarm",
+      "timestamp": "2026-10-22T14:15:00.000Z",
+      "observedAt": "2026-10-22T14:15:00.000Z",
+      "status": "ok",
+      "stale": false,
+      "freshness": {
+        "observedAt": "2026-10-22T14:15:00.000Z",
+        "maxAgeMs": 10800000,
+        "ageMs": 0,
+        "fresh": true,
+        "reason": null
+      },
+      "observations": [
+        {
+          "source": "Meteoalarm",
+          "sourceStatus": "ok",
+          "kind": "weather",
+          "url": "https://meteoalarm.org/?geocode=HU321",
+          "title": "[TESZTADAT] Yellow thunderstorm warning for Hungary - Hajdú-Bihar",
+          "summary": "[TESZTADAT] yellow thunderstorm warning — Hajdú-Bihar — Warning valid from 2026-10-22T16:00:00.000Z",
+          "providerId": "HU.EDGE.FUTURE",
+          "country": "Hungary",
+          "severity": "Moderate",
+          "sourceRegion": "Hungary",
+          "area": "Hajdú-Bihar",
+          "chainKey": "HU.EDGE.FUTURE",
+          "lifecycle": "future",
+          "msgType": "Alert",
+          "sender": "meteoalarm.org",
+          "sent": "2026-10-22T11:30:00Z",
+          "territory": {
+            "matchState": "match",
+            "status": "in_watched_county",
+            "identityStatus": "resolved",
+            "watchScope": "in",
+            "inScope": true,
+            "recordRetained": true,
+            "isConfirmedLocal": false,
+            "localRelevanceReason": "source_region_only",
+            "needsLocalReview": false,
+            "alertEligibleLocal": true,
+            "alertEligibleNational": true,
+            "territoryLevel": "county",
+            "territoryName": "Hajdú-Bihar",
+            "countyCode": "09",
+            "nuts3": "HU321",
+            "nuts2": "HU32",
+            "nuts": {
+              "nuts3": "HU321",
+              "nuts2": "HU32"
+            },
+            "message": "A közölt területhez (Hajdú-Bihar vármegye) tartozik",
+            "matchedRule": "county_code"
+          },
+          "geocodes": [
+            {
+              "valueName": "NUTS3",
+              "value": "HU321"
+            }
+          ],
+          "observedAt": "2026-10-22T11:30:00.000Z",
+          "publishedAt": "2026-10-22T11:30:00.000Z",
+          "startsAt": "2026-10-22T16:00:00.000Z",
+          "validUntil": "2026-10-22T22:00:00.000Z",
+          "facts": [
+            {
+              "label": "territory",
+              "value": "Hajdú-Bihar"
+            },
+            {
+              "label": "matchState",
+              "value": "match"
+            },
+            {
+              "label": "lifecycle",
+              "value": "future"
+            },
+            {
+              "label": "freshnessStatus",
+              "value": "fresh"
+            },
+            {
+              "label": "validity",
+              "value": "2026-10-22T22:00:00.000Z"
+            },
+            {
+              "label": "isConfirmedLocal",
+              "value": false
+            }
+          ],
+          "collectedAt": "2026-10-22T14:15:00.000Z",
+          "eventId": "event-f2651f2e106c735208d5c2473f3e8243"
+        },
+        {
+          "source": "Meteoalarm",
+          "sourceStatus": "ok",
+          "kind": "weather",
+          "url": "https://meteoalarm.org/?district=102",
+          "title": "[TESZTADAT] Yellow flood warning for Hungary - Püspökladányi járás",
+          "summary": "[TESZTADAT] yellow flood warning — Püspökladányi járás",
+          "providerId": "HU.EDGE.NO_EXPIRES",
+          "country": "Hungary",
+          "severity": "Moderate",
+          "sourceRegion": "Hungary",
+          "area": "Püspökladányi járás",
+          "chainKey": "HU.EDGE.NO_EXPIRES",
+          "lifecycle": "active",
+          "msgType": "Alert",
+          "sender": "meteoalarm.org",
+          "sent": "2026-10-22T10:00:00Z",
+          "territory": {
+            "matchState": "match",
+            "status": "in_watched_district",
+            "identityStatus": "resolved",
+            "watchScope": "in",
+            "inScope": true,
+            "recordRetained": true,
+            "isConfirmedLocal": false,
+            "localRelevanceReason": "source_region_only",
+            "needsLocalReview": false,
+            "alertEligibleLocal": true,
+            "alertEligibleNational": true,
+            "territoryLevel": "district",
+            "territoryName": "Püspökladányi járás",
+            "message": "A közölt területhez (Püspökladányi járás) tartozik",
+            "matchedRule": "district_code"
+          },
+          "geocodes": [
+            {
+              "valueName": "ksh_district_id",
+              "value": "102"
+            }
+          ],
+          "observedAt": "2026-10-22T10:00:00.000Z",
+          "publishedAt": "2026-10-22T10:00:00.000Z",
+          "startsAt": "2026-10-22T10:00:00.000Z",
+          "facts": [
+            {
+              "label": "territory",
+              "value": "Püspökladányi járás"
+            },
+            {
+              "label": "matchState",
+              "value": "match"
+            },
+            {
+              "label": "lifecycle",
+              "value": "active"
+            },
+            {
+              "label": "freshnessStatus",
+              "value": "fresh"
+            },
+            {
+              "label": "validity",
+              "value": "A kibocsátó nem adott meg lejáratot."
+            },
+            {
+              "label": "isConfirmedLocal",
+              "value": false
+            }
+          ],
+          "collectedAt": "2026-10-22T14:15:00.000Z",
+          "eventId": "event-8965c204f48a5d113cb616929061edea"
+        },
+        {
+          "source": "Meteoalarm",
+          "sourceStatus": "ok",
+          "kind": "weather",
+          "url": "https://meteoalarm.org/?geocode=EMMA_ID:HU002",
+          "title": "[TESZTADAT] Yellow wind warning for Hungary - Western Transdanubia",
+          "summary": "[TESZTADAT] yellow wind warning — Western Transdanubia",
+          "providerId": "HU.EDGE.WESTERN",
+          "country": "Hungary",
+          "severity": "Moderate",
+          "sourceRegion": "Hungary",
+          "area": "Western Transdanubia",
+          "chainKey": "HU.EDGE.WESTERN",
+          "lifecycle": "active",
+          "msgType": "Alert",
+          "sender": "meteoalarm.org",
+          "sent": "2026-10-22T11:00:00Z",
+          "territory": {
+            "matchState": "no_match",
+            "status": "not_in_watched_area",
+            "identityStatus": "resolved",
+            "watchScope": "out",
+            "inScope": false,
+            "recordRetained": true,
+            "isConfirmedLocal": false,
+            "localRelevanceReason": "source_region_only",
+            "needsLocalReview": false,
+            "alertEligibleLocal": false,
+            "alertEligibleNational": true,
+            "territoryLevel": "region",
+            "territoryName": "Nyugat-Dunántúl",
+            "nuts2": "HU22",
+            "nuts": {
+              "nuts2": "HU22"
+            },
+            "message": "Nem erre a figyelt területre kiadva (Nyugat-Dunántúl)",
+            "matchedRule": "other_hungarian_nuts2"
+          },
+          "geocodes": [
+            {
+              "valueName": "NUTS2",
+              "value": "HU22"
+            }
+          ],
+          "observedAt": "2026-10-22T11:00:00.000Z",
+          "publishedAt": "2026-10-22T11:00:00.000Z",
+          "startsAt": "2026-10-22T11:00:00.000Z",
+          "validUntil": "2026-10-22T18:00:00.000Z",
+          "facts": [
+            {
+              "label": "territory",
+              "value": "Western Transdanubia"
+            },
+            {
+              "label": "matchState",
+              "value": "no_match"
+            },
+            {
+              "label": "lifecycle",
+              "value": "active"
+            },
+            {
+              "label": "freshnessStatus",
+              "value": "fresh"
+            },
+            {
+              "label": "validity",
+              "value": "2026-10-22T18:00:00.000Z"
+            },
+            {
+              "label": "isConfirmedLocal",
+              "value": false
+            }
+          ],
+          "collectedAt": "2026-10-22T14:15:00.000Z",
+          "eventId": "event-094c4e24ebcb44e3a14f3b5e6067687f"
+        },
+        {
+          "source": "Meteoalarm",
+          "sourceStatus": "ok",
+          "kind": "weather",
+          "url": "https://meteoalarm.org/",
+          "title": "[TESZTADAT] Special advisory for unmapped region",
+          "summary": "[TESZTADAT] special advisory — Sector X",
+          "providerId": "HU.EDGE.UNKNOWN",
+          "country": "Hungary",
+          "severity": "Moderate",
+          "sourceRegion": "Hungary",
+          "area": "Sector X",
+          "chainKey": "HU.EDGE.UNKNOWN",
+          "lifecycle": "active",
+          "msgType": "Alert",
+          "sender": "meteoalarm.org",
+          "sent": "2026-10-22T11:00:00Z",
+          "territory": {
+            "matchState": "unknown",
+            "status": "indeterminate",
+            "identityStatus": "unresolved",
+            "watchScope": "unknown",
+            "inScope": false,
+            "recordRetained": true,
+            "isConfirmedLocal": false,
+            "needsLocalReview": true,
+            "alertEligibleLocal": false,
+            "alertEligibleNational": true,
+            "territoryLevel": "indeterminate",
+            "localRelevanceReason": "source_region_only",
+            "territoryName": "Sector X",
+            "message": "Területi érintettség nem eldönthető (Sector X)",
+            "matchedRule": "unrecognized"
+          },
+          "geocodes": [
+            {
+              "valueName": "CUSTOM_UNMAPPED",
+              "value": "SEC_99"
+            }
+          ],
+          "observedAt": "2026-10-22T11:00:00.000Z",
+          "publishedAt": "2026-10-22T11:00:00.000Z",
+          "startsAt": "2026-10-22T11:00:00.000Z",
+          "validUntil": "2026-10-22T18:00:00.000Z",
+          "facts": [
+            {
+              "label": "territory",
+              "value": "Sector X"
+            },
+            {
+              "label": "matchState",
+              "value": "unknown"
+            },
+            {
+              "label": "lifecycle",
+              "value": "active"
+            },
+            {
+              "label": "freshnessStatus",
+              "value": "fresh"
+            },
+            {
+              "label": "validity",
+              "value": "2026-10-22T18:00:00.000Z"
+            },
+            {
+              "label": "isConfirmedLocal",
+              "value": false
+            }
+          ],
+          "collectedAt": "2026-10-22T14:15:00.000Z",
+          "eventId": "event-0e6c3ce1302f53eb8637e398979ea0ce"
+        }
+      ],
+      "rejectedObservations": 0,
+      "url": "https://meteoalarm.org/",
+      "attribution": "",
+      "rights": "",
+      "license": "",
+      "licenseUrl": null,
+      "summary": "",
+      "metrics": {}
+    }
+  ],
+  "events": [
+    {
+      "id": "event-c807b3a88c5979331d970341e39dd6d5",
+      "title": "[TESZTADAT] Nébih ASP besorolás: Bihartorda - Fertőzött terület (SZKT-n kívüli része)",
+      "summary": "[TESZTADAT] Nébih ASP besorolás (Bihartorda, Hajdú-Bihar): Fertőzött terület (SZKT-n kívüli része) (lefedettség: 100%, VGE: 904960). Vonatkozás: 2026-10-12, frissítve: 2026-10-20. Forrás: https://portal.nebih.gov.hu/asp_telepulesek. Hatósági körzet, nem klinikai kitörés és nem humán kockázat.",
+      "source": {
+        "name": "Nebih-ASP",
+        "url": "https://portal.nebih.gov.hu/asp_telepulesek",
+        "hostname": "portal.nebih.gov.hu",
+        "status": "disabled"
+      },
+      "kind": "health",
+      "severity": "moderate",
+      "territory": {
+        "settlementId": "bihartorda",
+        "settlementName": "Bihartorda",
+        "kshSettlementCode": "29887",
+        "kshDistrictCode": "102",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "identityStatus": "resolved",
+        "watchScope": "in",
+        "matchState": "match",
+        "inScope": true,
+        "localRelevanceReason": "official_area_assignment",
+        "territoryLevel": "settlement",
+        "point_in_polygon": null,
+        "geometryCheckStatus": "not_evaluated",
+        "settlement_overlap_ratio": null,
+        "official_settlement_assignment": "Fertőzött terület (SZKT-n kívüli része)",
+        "official_assignment_percentage": 100,
+        "matching_certainty": "exact_name_and_county_match",
+        "boundary_status": "unverified",
+        "dataQualityFlag": null,
+        "validUntil": null,
+        "isPrimarySettlement": true
+      },
+      "country": "Hungary",
+      "sourceRegion": "Hajdú-Bihar",
+      "location": {
+        "country": "Hungary",
+        "region": "Hajdú-Bihar",
+        "settlement": "Bihartorda"
+      },
+      "observedAt": "2026-10-12",
+      "publishedAt": "2026-10-20",
+      "collectedAt": "2026-10-22T14:15:00.000Z",
+      "lifecycle": "active",
+      "isCancelled": false,
+      "views": {
+        "local": {
+          "inView": true,
+          "category": "confirmedLocal",
+          "relationship": "primary",
+          "reason": "official_area_assignment"
+        },
+        "county": {
+          "inView": true,
+          "category": "countyEvent",
+          "relationship": "primary",
+          "reason": "county_settlement"
+        },
+        "national": {
+          "inView": true,
+          "category": "nationalEvent",
+          "relationship": "primary",
+          "reason": "national_settlement"
+        },
+        "global": {
+          "inView": true,
+          "category": "globalEvent",
+          "relationship": "primary",
+          "reason": "settlement"
+        }
+      }
+    },
+    {
+      "id": "event-24796b6923b88a135eb9cbfe4a4ab210",
+      "title": "[TESZTADAT] Nébih ASP besorolás: Báránd - Fertőzött terület (SZKT-n kívüli része)",
+      "summary": "[TESZTADAT] Nébih ASP besorolás (Báránd, Hajdú-Bihar): Fertőzött terület (SZKT-n kívüli része) (lefedettség: 100%, VGE: 904950). Vonatkozás: 2026-10-12, frissítve: 2026-10-20. Forrás: https://portal.nebih.gov.hu/asp_telepulesek. Hatósági körzet, nem klinikai kitörés és nem humán kockázat.",
+      "source": {
+        "name": "Nebih-ASP",
+        "url": "https://portal.nebih.gov.hu/asp_telepulesek",
+        "hostname": "portal.nebih.gov.hu",
+        "status": "disabled"
+      },
+      "kind": "health",
+      "severity": "moderate",
+      "territory": {
+        "settlementId": "barand",
+        "settlementName": "Báránd",
+        "kshSettlementCode": "26693",
+        "kshDistrictCode": "102",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "identityStatus": "resolved",
+        "watchScope": "in",
+        "matchState": "match",
+        "inScope": true,
+        "localRelevanceReason": "official_area_assignment",
+        "territoryLevel": "settlement",
+        "point_in_polygon": null,
+        "geometryCheckStatus": "not_evaluated",
+        "settlement_overlap_ratio": null,
+        "official_settlement_assignment": "Fertőzött terület (SZKT-n kívüli része)",
+        "official_assignment_percentage": 100,
+        "matching_certainty": "exact_name_and_county_match",
+        "boundary_status": "unverified",
+        "dataQualityFlag": null,
+        "validUntil": null,
+        "isPrimarySettlement": true
+      },
+      "country": "Hungary",
+      "sourceRegion": "Hajdú-Bihar",
+      "location": {
+        "country": "Hungary",
+        "region": "Hajdú-Bihar",
+        "settlement": "Báránd"
+      },
+      "observedAt": "2026-10-12",
+      "publishedAt": "2026-10-20",
+      "collectedAt": "2026-10-22T14:15:00.000Z",
+      "lifecycle": "active",
+      "isCancelled": false,
+      "views": {
+        "local": {
+          "inView": true,
+          "category": "confirmedLocal",
+          "relationship": "watched",
+          "reason": "official_area_assignment"
+        },
+        "county": {
+          "inView": true,
+          "category": "countyEvent",
+          "relationship": "watched",
+          "reason": "county_settlement"
+        },
+        "national": {
+          "inView": true,
+          "category": "nationalEvent",
+          "relationship": "watched",
+          "reason": "national_settlement"
+        },
+        "global": {
+          "inView": true,
+          "category": "globalEvent",
+          "relationship": "watched",
+          "reason": "settlement"
+        }
+      }
+    },
+    {
+      "id": "event-7bd7c97dd98a23c15610101ee211e3e7",
+      "title": "[TESZTADAT] Nébih ASP besorolás: Püspökladány - Fertőzött terület (SZKT-n kívüli része)",
+      "summary": "[TESZTADAT] Nébih ASP besorolás (Püspökladány, Hajdú-Bihar): Fertőzött terület (SZKT-n kívüli része) (lefedettség: 100%, VGE: 904050). Vonatkozás: 2026-10-12, frissítve: 2026-10-20. Forrás: https://portal.nebih.gov.hu/asp_telepulesek. Hatósági körzet, nem klinikai kitörés és nem humán kockázat.",
+      "source": {
+        "name": "Nebih-ASP",
+        "url": "https://portal.nebih.gov.hu/asp_telepulesek",
+        "hostname": "portal.nebih.gov.hu",
+        "status": "disabled"
+      },
+      "kind": "health",
+      "severity": "moderate",
+      "territory": {
+        "settlementId": "puspokladany",
+        "settlementName": "Püspökladány",
+        "kshSettlementCode": "10162",
+        "kshDistrictCode": "102",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "identityStatus": "resolved",
+        "watchScope": "in",
+        "matchState": "match",
+        "inScope": true,
+        "localRelevanceReason": "official_area_assignment",
+        "territoryLevel": "settlement",
+        "point_in_polygon": null,
+        "geometryCheckStatus": "not_evaluated",
+        "settlement_overlap_ratio": null,
+        "official_settlement_assignment": "Fertőzött terület (SZKT-n kívüli része)",
+        "official_assignment_percentage": 100,
+        "matching_certainty": "exact_name_and_county_match",
+        "boundary_status": "unverified",
+        "dataQualityFlag": null,
+        "validUntil": null,
+        "isPrimarySettlement": false
+      },
+      "country": "Hungary",
+      "sourceRegion": "Hajdú-Bihar",
+      "location": {
+        "country": "Hungary",
+        "region": "Hajdú-Bihar",
+        "settlement": "Püspökladány"
+      },
+      "observedAt": "2026-10-12",
+      "publishedAt": "2026-10-20",
+      "collectedAt": "2026-10-22T14:15:00.000Z",
+      "lifecycle": "active",
+      "isCancelled": false,
+      "views": {
+        "local": {
+          "inView": true,
+          "category": "keyConnection",
+          "relationship": "key_connection",
+          "reason": "key_connection_settlement"
+        },
+        "county": {
+          "inView": true,
+          "category": "countyEvent",
+          "relationship": "key_connection",
+          "reason": "county_settlement"
+        },
+        "national": {
+          "inView": true,
+          "category": "nationalEvent",
+          "relationship": "key_connection",
+          "reason": "national_settlement"
+        },
+        "global": {
+          "inView": true,
+          "category": "globalEvent",
+          "relationship": "key_connection",
+          "reason": "settlement"
+        }
+      }
+    },
+    {
+      "id": "event-3718461fb985e4baac3cf83d6cbad3ad",
+      "title": "[TESZTADAT] Nébih ASP besorolás: Aba - Magas kockázatú terület",
+      "summary": "[TESZTADAT] Nébih ASP besorolás (Aba, Fejér): Magas kockázatú terület (lefedettség: 100%, VGE: 403750). Vonatkozás: 2026-10-12, frissítve: 2026-10-20. Forrás: https://portal.nebih.gov.hu/asp_telepulesek. Hatósági körzet, nem klinikai kitörés és nem humán kockázat.",
+      "source": {
+        "name": "Nebih-ASP",
+        "url": "https://portal.nebih.gov.hu/asp_telepulesek",
+        "hostname": "portal.nebih.gov.hu",
+        "status": "disabled"
+      },
+      "kind": "health",
+      "severity": "moderate",
+      "territory": {
+        "settlementId": null,
+        "settlementName": "Aba",
+        "kshSettlementCode": null,
+        "countyName": "Fejér",
+        "identityStatus": "unresolved",
+        "watchScope": "unknown",
+        "matchState": "unknown",
+        "inScope": false,
+        "localRelevanceReason": "official_area_assignment",
+        "territoryLevel": "settlement",
+        "point_in_polygon": null,
+        "geometryCheckStatus": "not_evaluated",
+        "settlement_overlap_ratio": null,
+        "official_settlement_assignment": "Magas kockázatú terület",
+        "official_assignment_percentage": 100,
+        "matching_certainty": "unresolved_identity",
+        "boundary_status": "unverified",
+        "dataQualityFlag": null,
+        "validUntil": null,
+        "isPrimarySettlement": false
+      },
+      "country": "Hungary",
+      "sourceRegion": "Fejér",
+      "location": {
+        "country": "Hungary",
+        "region": "Fejér",
+        "settlement": "Aba"
+      },
+      "observedAt": "2026-10-12",
+      "publishedAt": "2026-10-20",
+      "collectedAt": "2026-10-22T14:15:00.000Z",
+      "lifecycle": "active",
+      "isCancelled": false,
+      "views": {
+        "local": {
+          "inView": false,
+          "category": null,
+          "relationship": "global",
+          "reason": "foreign_unresolved"
+        },
+        "county": {
+          "inView": false,
+          "category": null,
+          "relationship": "global",
+          "reason": "foreign_unresolved"
+        },
+        "national": {
+          "inView": false,
+          "category": null,
+          "relationship": "global",
+          "reason": "foreign_unresolved"
+        },
+        "global": {
+          "inView": true,
+          "category": "globalEvent",
+          "relationship": "global",
+          "reason": "foreign_unresolved"
+        }
+      }
+    },
+    {
+      "id": "event-33333333333333333333333333333303",
+      "title": "[TESZTADAT] Debrecen teszt infrastrukturális jelentés",
+      "summary": "[TESZTADAT] Debrecen belvárosában teszt célú közlekedési hálózatellenőrzés zajlik.",
+      "source": {
+        "name": "HAON-Fixture",
+        "url": "https://example.test/debrecen",
+        "hostname": "example.test",
+        "status": "ok"
+      },
+      "kind": "news",
+      "severity": "info",
+      "territory": {
+        "settlementId": "debrecen",
+        "settlementName": "Debrecen",
+        "countyCode": "09",
+        "countyName": "Hajdú-Bihar",
+        "territoryLevel": "settlement",
+        "inScope": true,
+        "identityStatus": "resolved",
+        "watchScope": "key_connection"
+      },
+      "country": "Hungary",
+      "sourceRegion": "Hajdú-Bihar",
+      "location": {
+        "country": "Hungary",
+        "settlement": "Debrecen"
+      },
+      "observedAt": "2026-10-22T14:15:00.000Z",
+      "publishedAt": "2026-10-22T14:15:00.000Z",
+      "collectedAt": "2026-10-22T14:15:00.000Z",
+      "lifecycle": "active",
+      "isCancelled": false,
+      "views": {
+        "local": {
+          "inView": false,
+          "category": null,
+          "relationship": "unknown",
+          "reason": null
+        },
+        "county": {
+          "inView": true,
+          "category": "countyEvent",
+          "relationship": "key_connection",
+          "reason": "county_settlement"
+        },
+        "national": {
+          "inView": true,
+          "category": "nationalEvent",
+          "relationship": "key_connection",
+          "reason": "national_settlement"
+        },
+        "global": {
+          "inView": true,
+          "category": "globalEvent",
+          "relationship": "key_connection",
+          "reason": "settlement"
+        }
+      }
+    },
+    {
+      "id": "event-f2651f2e106c735208d5c2473f3e8243",
+      "kind": "weather",
+      "title": "[TESZTADAT] Yellow thunderstorm warning for Hungary - Hajdú-Bihar",
+      "summary": "[TESZTADAT] yellow thunderstorm warning — Hajdú-Bihar — Warning valid from 2026-10-22T16:00:00.000Z",
+      "source": {
+        "name": "Meteoalarm",
+        "url": "https://meteoalarm.org/?geocode=HU321",
+        "hostname": "meteoalarm.org",
+        "status": "ok"
+      },
+      "observedAt": "2026-10-22T11:30:00.000Z",
+      "publishedAt": "2026-10-22T11:30:00.000Z",
+      "collectedAt": "2026-10-22T14:15:00.000Z",
+      "location": {
+        "lat": null,
+        "lon": null,
+        "method": "unknown",
+        "label": "Hungary",
+        "precision": "unknown"
+      },
+      "severity": "moderate",
+      "quality": {
+        "level": "partial",
+        "checks": {
+          "sourceUrl": true,
+          "providerTime": true,
+          "location": false,
+          "sourceStatus": true
+        },
+        "explanationCodes": [
+          "unknown-location"
+        ]
+      },
+      "relatedSources": [],
+      "startsAt": "2026-10-22T16:00:00.000Z",
+      "validUntil": "2026-10-22T22:00:00.000Z",
+      "providerId": "HU.EDGE.FUTURE",
+      "sourceRegion": "Hungary",
+      "country": "Hungary",
+      "area": "Hajdú-Bihar",
+      "chainKey": "HU.EDGE.FUTURE",
+      "lifecycle": "future",
+      "msgType": "Alert",
+      "territory": {
+        "matchState": "match",
+        "status": "in_watched_county",
+        "identityStatus": "resolved",
+        "watchScope": "in",
+        "inScope": true,
+        "recordRetained": true,
+        "isConfirmedLocal": false,
+        "localRelevanceReason": "source_region_only",
+        "needsLocalReview": false,
+        "alertEligibleLocal": true,
+        "alertEligibleNational": true,
+        "territoryLevel": "county",
+        "territoryName": "Hajdú-Bihar",
+        "countyCode": "09",
+        "nuts3": "HU321",
+        "nuts2": "HU32",
+        "nuts": {
+          "nuts3": "HU321",
+          "nuts2": "HU32"
+        },
+        "message": "A közölt területhez (Hajdú-Bihar vármegye) tartozik",
+        "matchedRule": "county_code"
+      },
+      "geocodes": [
+        {
+          "valueName": "NUTS3",
+          "value": "HU321"
+        }
+      ],
+      "sender": "meteoalarm.org",
+      "sent": "2026-10-22T11:30:00Z",
+      "views": {
+        "local": {
+          "inView": true,
+          "category": "regionalAdvisories",
+          "relationship": "county",
+          "reason": "enclosing_regional_warning"
+        },
+        "county": {
+          "inView": true,
+          "category": "countyEvent",
+          "relationship": "county",
+          "reason": "county_warning"
+        },
+        "national": {
+          "inView": true,
+          "category": "regionalAdvisories",
+          "relationship": "county",
+          "reason": "domestic_regional_warning"
+        },
+        "global": {
+          "inView": true,
+          "category": "globalEvent",
+          "relationship": "county",
+          "reason": "regional_warning"
+        }
+      },
+      "isCancelled": false
+    },
+    {
+      "id": "event-8965c204f48a5d113cb616929061edea",
+      "kind": "weather",
+      "title": "[TESZTADAT] Yellow flood warning for Hungary - Püspökladányi járás",
+      "summary": "[TESZTADAT] yellow flood warning — Püspökladányi járás",
+      "source": {
+        "name": "Meteoalarm",
+        "url": "https://meteoalarm.org/?district=102",
+        "hostname": "meteoalarm.org",
+        "status": "ok"
+      },
+      "observedAt": "2026-10-22T10:00:00.000Z",
+      "publishedAt": "2026-10-22T10:00:00.000Z",
+      "collectedAt": "2026-10-22T14:15:00.000Z",
+      "location": {
+        "lat": null,
+        "lon": null,
+        "method": "unknown",
+        "label": "Hungary",
+        "precision": "unknown"
+      },
+      "severity": "moderate",
+      "quality": {
+        "level": "partial",
+        "checks": {
+          "sourceUrl": true,
+          "providerTime": true,
+          "location": false,
+          "sourceStatus": true
+        },
+        "explanationCodes": [
+          "unknown-location"
+        ]
+      },
+      "relatedSources": [],
+      "startsAt": "2026-10-22T10:00:00.000Z",
+      "providerId": "HU.EDGE.NO_EXPIRES",
+      "sourceRegion": "Hungary",
+      "country": "Hungary",
+      "area": "Püspökladányi járás",
+      "chainKey": "HU.EDGE.NO_EXPIRES",
+      "lifecycle": "active",
+      "msgType": "Alert",
+      "territory": {
+        "matchState": "match",
+        "status": "in_watched_district",
+        "identityStatus": "resolved",
+        "watchScope": "in",
+        "inScope": true,
+        "recordRetained": true,
+        "isConfirmedLocal": false,
+        "localRelevanceReason": "source_region_only",
+        "needsLocalReview": false,
+        "alertEligibleLocal": true,
+        "alertEligibleNational": true,
+        "territoryLevel": "district",
+        "territoryName": "Püspökladányi járás",
+        "message": "A közölt területhez (Püspökladányi járás) tartozik",
+        "matchedRule": "district_code"
+      },
+      "geocodes": [
+        {
+          "valueName": "ksh_district_id",
+          "value": "102"
+        }
+      ],
+      "sender": "meteoalarm.org",
+      "sent": "2026-10-22T10:00:00Z",
+      "views": {
+        "local": {
+          "inView": false,
+          "category": null,
+          "relationship": "unknown",
+          "reason": null
+        },
+        "county": {
+          "inView": false,
+          "category": null,
+          "relationship": "unknown",
+          "reason": null
+        },
+        "national": {
+          "inView": false,
+          "category": null,
+          "relationship": "unknown",
+          "reason": null
+        },
+        "global": {
+          "inView": true,
+          "category": "globalEvent",
+          "relationship": "global",
+          "reason": "global_scope"
+        }
+      },
+      "isCancelled": false
+    },
+    {
+      "id": "event-094c4e24ebcb44e3a14f3b5e6067687f",
+      "kind": "weather",
+      "title": "[TESZTADAT] Yellow wind warning for Hungary - Western Transdanubia",
+      "summary": "[TESZTADAT] yellow wind warning — Western Transdanubia",
+      "source": {
+        "name": "Meteoalarm",
+        "url": "https://meteoalarm.org/?geocode=EMMA_ID:HU002",
+        "hostname": "meteoalarm.org",
+        "status": "ok"
+      },
+      "observedAt": "2026-10-22T11:00:00.000Z",
+      "publishedAt": "2026-10-22T11:00:00.000Z",
+      "collectedAt": "2026-10-22T14:15:00.000Z",
+      "location": {
+        "lat": null,
+        "lon": null,
+        "method": "unknown",
+        "label": "Hungary",
+        "precision": "unknown"
+      },
+      "severity": "moderate",
+      "quality": {
+        "level": "partial",
+        "checks": {
+          "sourceUrl": true,
+          "providerTime": true,
+          "location": false,
+          "sourceStatus": true
+        },
+        "explanationCodes": [
+          "unknown-location"
+        ]
+      },
+      "relatedSources": [],
+      "startsAt": "2026-10-22T11:00:00.000Z",
+      "validUntil": "2026-10-22T18:00:00.000Z",
+      "providerId": "HU.EDGE.WESTERN",
+      "sourceRegion": "Hungary",
+      "country": "Hungary",
+      "area": "Western Transdanubia",
+      "chainKey": "HU.EDGE.WESTERN",
+      "lifecycle": "active",
+      "msgType": "Alert",
+      "territory": {
+        "matchState": "no_match",
+        "status": "not_in_watched_area",
+        "identityStatus": "resolved",
+        "watchScope": "out",
+        "inScope": false,
+        "recordRetained": true,
+        "isConfirmedLocal": false,
+        "localRelevanceReason": "source_region_only",
+        "needsLocalReview": false,
+        "alertEligibleLocal": false,
+        "alertEligibleNational": true,
+        "territoryLevel": "region",
+        "territoryName": "Nyugat-Dunántúl",
+        "nuts2": "HU22",
+        "nuts": {
+          "nuts2": "HU22"
+        },
+        "message": "Nem erre a figyelt területre kiadva (Nyugat-Dunántúl)",
+        "matchedRule": "other_hungarian_nuts2"
+      },
+      "geocodes": [
+        {
+          "valueName": "NUTS2",
+          "value": "HU22"
+        }
+      ],
+      "sender": "meteoalarm.org",
+      "sent": "2026-10-22T11:00:00Z",
+      "views": {
+        "local": {
+          "inView": false,
+          "category": null,
+          "relationship": "unknown",
+          "reason": null
+        },
+        "county": {
+          "inView": false,
+          "category": null,
+          "relationship": "unknown",
+          "reason": null
+        },
+        "national": {
+          "inView": true,
+          "category": "regionalAdvisories",
+          "relationship": "national",
+          "reason": "domestic_regional_warning"
+        },
+        "global": {
+          "inView": true,
+          "category": "globalEvent",
+          "relationship": "national",
+          "reason": "regional_warning"
+        }
+      },
+      "isCancelled": false
+    },
+    {
+      "id": "event-0e6c3ce1302f53eb8637e398979ea0ce",
+      "kind": "weather",
+      "title": "[TESZTADAT] Special advisory for unmapped region",
+      "summary": "[TESZTADAT] special advisory — Sector X",
+      "source": {
+        "name": "Meteoalarm",
+        "url": "https://meteoalarm.org/",
+        "hostname": "meteoalarm.org",
+        "status": "ok"
+      },
+      "observedAt": "2026-10-22T11:00:00.000Z",
+      "publishedAt": "2026-10-22T11:00:00.000Z",
+      "collectedAt": "2026-10-22T14:15:00.000Z",
+      "location": {
+        "lat": null,
+        "lon": null,
+        "method": "unknown",
+        "label": "Hungary",
+        "precision": "unknown"
+      },
+      "severity": "moderate",
+      "quality": {
+        "level": "partial",
+        "checks": {
+          "sourceUrl": true,
+          "providerTime": true,
+          "location": false,
+          "sourceStatus": true
+        },
+        "explanationCodes": [
+          "unknown-location"
+        ]
+      },
+      "relatedSources": [],
+      "startsAt": "2026-10-22T11:00:00.000Z",
+      "validUntil": "2026-10-22T18:00:00.000Z",
+      "providerId": "HU.EDGE.UNKNOWN",
+      "sourceRegion": "Hungary",
+      "country": "Hungary",
+      "area": "Sector X",
+      "chainKey": "HU.EDGE.UNKNOWN",
+      "lifecycle": "active",
+      "msgType": "Alert",
+      "territory": {
+        "matchState": "unknown",
+        "status": "indeterminate",
+        "identityStatus": "unresolved",
+        "watchScope": "unknown",
+        "inScope": false,
+        "recordRetained": true,
+        "isConfirmedLocal": false,
+        "needsLocalReview": true,
+        "alertEligibleLocal": false,
+        "alertEligibleNational": true,
+        "territoryLevel": "indeterminate",
+        "localRelevanceReason": "source_region_only",
+        "territoryName": "Sector X",
+        "message": "Területi érintettség nem eldönthető (Sector X)",
+        "matchedRule": "unrecognized"
+      },
+      "geocodes": [
+        {
+          "valueName": "CUSTOM_UNMAPPED",
+          "value": "SEC_99"
+        }
+      ],
+      "sender": "meteoalarm.org",
+      "sent": "2026-10-22T11:00:00Z",
+      "views": {
+        "local": {
+          "inView": false,
+          "category": null,
+          "relationship": "global",
+          "reason": "foreign_unresolved"
+        },
+        "county": {
+          "inView": false,
+          "category": null,
+          "relationship": "global",
+          "reason": "foreign_unresolved"
+        },
+        "national": {
+          "inView": false,
+          "category": null,
+          "relationship": "global",
+          "reason": "foreign_unresolved"
+        },
+        "global": {
+          "inView": true,
+          "category": "globalEvent",
+          "relationship": "global",
+          "reason": "foreign_unresolved"
+        }
+      },
+      "isCancelled": false
+    }
+  ],
+  "views": {
+    "local": {
+      "view": "local",
+      "totalEvents": 4,
+      "uniqueEvents": 4,
+      "cancelledChains": 0,
+      "breakdown": {
+        "confirmedLocal": 2,
+        "keyConnection": 1,
+        "needsReview": 0,
+        "regionalAdvisories": 1,
+        "unknownTerritory": 0,
+        "countyEvent": 0,
+        "nationalEvent": 0,
+        "globalEvent": 0
+      },
+      "relationshipBreakdown": {
+        "primary": 1,
+        "watched": 1,
+        "key_connection": 1,
+        "county": 1,
+        "region": 0,
+        "national": 0,
+        "global": 0,
+        "unknown": 0
+      },
+      "items": {
+        "confirmedLocal": [
+          {
+            "id": "event-c807b3a88c5979331d970341e39dd6d5",
+            "title": "[TESZTADAT] Nébih ASP besorolás: Bihartorda - Fertőzött terület (SZKT-n kívüli része)",
+            "summary": "[TESZTADAT] Nébih ASP besorolás (Bihartorda, Hajdú-Bihar): Fertőzött terület (SZKT-n kívüli része) (lefedettség: 100%, VGE: 904960). Vonatkozás: 2026-10-12, frissítve: 2026-10-20. Forrás: https://portal.nebih.gov.hu/asp_telepulesek. Hatósági körzet, nem klinikai kitörés és nem humán kockázat.",
+            "source": {
+              "name": "Nebih-ASP",
+              "url": "https://portal.nebih.gov.hu/asp_telepulesek",
+              "hostname": "portal.nebih.gov.hu",
+              "status": "disabled"
+            },
+            "kind": "health",
+            "severity": "moderate",
+            "territory": {
+              "settlementId": "bihartorda",
+              "settlementName": "Bihartorda",
+              "kshSettlementCode": "29887",
+              "kshDistrictCode": "102",
+              "countyCode": "09",
+              "countyName": "Hajdú-Bihar",
+              "identityStatus": "resolved",
+              "watchScope": "in",
+              "matchState": "match",
+              "inScope": true,
+              "localRelevanceReason": "official_area_assignment",
+              "territoryLevel": "settlement",
+              "point_in_polygon": null,
+              "geometryCheckStatus": "not_evaluated",
+              "settlement_overlap_ratio": null,
+              "official_settlement_assignment": "Fertőzött terület (SZKT-n kívüli része)",
+              "official_assignment_percentage": 100,
+              "matching_certainty": "exact_name_and_county_match",
+              "boundary_status": "unverified",
+              "dataQualityFlag": null,
+              "validUntil": null,
+              "isPrimarySettlement": true
+            },
+            "country": "Hungary",
+            "sourceRegion": "Hajdú-Bihar",
+            "location": {
+              "country": "Hungary",
+              "region": "Hajdú-Bihar",
+              "settlement": "Bihartorda"
+            },
+            "observedAt": "2026-10-12",
+            "publishedAt": "2026-10-20",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "lifecycle": "active",
+            "isCancelled": false,
+            "views": {
+              "local": {
+                "inView": true,
+                "category": "confirmedLocal",
+                "relationship": "primary",
+                "reason": "official_area_assignment"
+              },
+              "county": {
+                "inView": true,
+                "category": "countyEvent",
+                "relationship": "primary",
+                "reason": "county_settlement"
+              },
+              "national": {
+                "inView": true,
+                "category": "nationalEvent",
+                "relationship": "primary",
+                "reason": "national_settlement"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "primary",
+                "reason": "settlement"
+              }
+            }
+          },
+          {
+            "id": "event-24796b6923b88a135eb9cbfe4a4ab210",
+            "title": "[TESZTADAT] Nébih ASP besorolás: Báránd - Fertőzött terület (SZKT-n kívüli része)",
+            "summary": "[TESZTADAT] Nébih ASP besorolás (Báránd, Hajdú-Bihar): Fertőzött terület (SZKT-n kívüli része) (lefedettség: 100%, VGE: 904950). Vonatkozás: 2026-10-12, frissítve: 2026-10-20. Forrás: https://portal.nebih.gov.hu/asp_telepulesek. Hatósági körzet, nem klinikai kitörés és nem humán kockázat.",
+            "source": {
+              "name": "Nebih-ASP",
+              "url": "https://portal.nebih.gov.hu/asp_telepulesek",
+              "hostname": "portal.nebih.gov.hu",
+              "status": "disabled"
+            },
+            "kind": "health",
+            "severity": "moderate",
+            "territory": {
+              "settlementId": "barand",
+              "settlementName": "Báránd",
+              "kshSettlementCode": "26693",
+              "kshDistrictCode": "102",
+              "countyCode": "09",
+              "countyName": "Hajdú-Bihar",
+              "identityStatus": "resolved",
+              "watchScope": "in",
+              "matchState": "match",
+              "inScope": true,
+              "localRelevanceReason": "official_area_assignment",
+              "territoryLevel": "settlement",
+              "point_in_polygon": null,
+              "geometryCheckStatus": "not_evaluated",
+              "settlement_overlap_ratio": null,
+              "official_settlement_assignment": "Fertőzött terület (SZKT-n kívüli része)",
+              "official_assignment_percentage": 100,
+              "matching_certainty": "exact_name_and_county_match",
+              "boundary_status": "unverified",
+              "dataQualityFlag": null,
+              "validUntil": null,
+              "isPrimarySettlement": true
+            },
+            "country": "Hungary",
+            "sourceRegion": "Hajdú-Bihar",
+            "location": {
+              "country": "Hungary",
+              "region": "Hajdú-Bihar",
+              "settlement": "Báránd"
+            },
+            "observedAt": "2026-10-12",
+            "publishedAt": "2026-10-20",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "lifecycle": "active",
+            "isCancelled": false,
+            "views": {
+              "local": {
+                "inView": true,
+                "category": "confirmedLocal",
+                "relationship": "watched",
+                "reason": "official_area_assignment"
+              },
+              "county": {
+                "inView": true,
+                "category": "countyEvent",
+                "relationship": "watched",
+                "reason": "county_settlement"
+              },
+              "national": {
+                "inView": true,
+                "category": "nationalEvent",
+                "relationship": "watched",
+                "reason": "national_settlement"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "watched",
+                "reason": "settlement"
+              }
+            }
+          }
+        ],
+        "keyConnection": [
+          {
+            "id": "event-7bd7c97dd98a23c15610101ee211e3e7",
+            "title": "[TESZTADAT] Nébih ASP besorolás: Püspökladány - Fertőzött terület (SZKT-n kívüli része)",
+            "summary": "[TESZTADAT] Nébih ASP besorolás (Püspökladány, Hajdú-Bihar): Fertőzött terület (SZKT-n kívüli része) (lefedettség: 100%, VGE: 904050). Vonatkozás: 2026-10-12, frissítve: 2026-10-20. Forrás: https://portal.nebih.gov.hu/asp_telepulesek. Hatósági körzet, nem klinikai kitörés és nem humán kockázat.",
+            "source": {
+              "name": "Nebih-ASP",
+              "url": "https://portal.nebih.gov.hu/asp_telepulesek",
+              "hostname": "portal.nebih.gov.hu",
+              "status": "disabled"
+            },
+            "kind": "health",
+            "severity": "moderate",
+            "territory": {
+              "settlementId": "puspokladany",
+              "settlementName": "Püspökladány",
+              "kshSettlementCode": "10162",
+              "kshDistrictCode": "102",
+              "countyCode": "09",
+              "countyName": "Hajdú-Bihar",
+              "identityStatus": "resolved",
+              "watchScope": "in",
+              "matchState": "match",
+              "inScope": true,
+              "localRelevanceReason": "official_area_assignment",
+              "territoryLevel": "settlement",
+              "point_in_polygon": null,
+              "geometryCheckStatus": "not_evaluated",
+              "settlement_overlap_ratio": null,
+              "official_settlement_assignment": "Fertőzött terület (SZKT-n kívüli része)",
+              "official_assignment_percentage": 100,
+              "matching_certainty": "exact_name_and_county_match",
+              "boundary_status": "unverified",
+              "dataQualityFlag": null,
+              "validUntil": null,
+              "isPrimarySettlement": false
+            },
+            "country": "Hungary",
+            "sourceRegion": "Hajdú-Bihar",
+            "location": {
+              "country": "Hungary",
+              "region": "Hajdú-Bihar",
+              "settlement": "Püspökladány"
+            },
+            "observedAt": "2026-10-12",
+            "publishedAt": "2026-10-20",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "lifecycle": "active",
+            "isCancelled": false,
+            "views": {
+              "local": {
+                "inView": true,
+                "category": "keyConnection",
+                "relationship": "key_connection",
+                "reason": "key_connection_settlement"
+              },
+              "county": {
+                "inView": true,
+                "category": "countyEvent",
+                "relationship": "key_connection",
+                "reason": "county_settlement"
+              },
+              "national": {
+                "inView": true,
+                "category": "nationalEvent",
+                "relationship": "key_connection",
+                "reason": "national_settlement"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "key_connection",
+                "reason": "settlement"
+              }
+            }
+          }
+        ],
+        "needsReview": [],
+        "regionalAdvisories": [
+          {
+            "id": "event-f2651f2e106c735208d5c2473f3e8243",
+            "kind": "weather",
+            "title": "[TESZTADAT] Yellow thunderstorm warning for Hungary - Hajdú-Bihar",
+            "summary": "[TESZTADAT] yellow thunderstorm warning — Hajdú-Bihar — Warning valid from 2026-10-22T16:00:00.000Z",
+            "source": {
+              "name": "Meteoalarm",
+              "url": "https://meteoalarm.org/?geocode=HU321",
+              "hostname": "meteoalarm.org",
+              "status": "ok"
+            },
+            "observedAt": "2026-10-22T11:30:00.000Z",
+            "publishedAt": "2026-10-22T11:30:00.000Z",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "location": {
+              "lat": null,
+              "lon": null,
+              "method": "unknown",
+              "label": "Hungary",
+              "precision": "unknown"
+            },
+            "severity": "moderate",
+            "quality": {
+              "level": "partial",
+              "checks": {
+                "sourceUrl": true,
+                "providerTime": true,
+                "location": false,
+                "sourceStatus": true
+              },
+              "explanationCodes": [
+                "unknown-location"
+              ]
+            },
+            "relatedSources": [],
+            "startsAt": "2026-10-22T16:00:00.000Z",
+            "validUntil": "2026-10-22T22:00:00.000Z",
+            "providerId": "HU.EDGE.FUTURE",
+            "sourceRegion": "Hungary",
+            "country": "Hungary",
+            "area": "Hajdú-Bihar",
+            "chainKey": "HU.EDGE.FUTURE",
+            "lifecycle": "future",
+            "msgType": "Alert",
+            "territory": {
+              "matchState": "match",
+              "status": "in_watched_county",
+              "identityStatus": "resolved",
+              "watchScope": "in",
+              "inScope": true,
+              "recordRetained": true,
+              "isConfirmedLocal": false,
+              "localRelevanceReason": "source_region_only",
+              "needsLocalReview": false,
+              "alertEligibleLocal": true,
+              "alertEligibleNational": true,
+              "territoryLevel": "county",
+              "territoryName": "Hajdú-Bihar",
+              "countyCode": "09",
+              "nuts3": "HU321",
+              "nuts2": "HU32",
+              "nuts": {
+                "nuts3": "HU321",
+                "nuts2": "HU32"
+              },
+              "message": "A közölt területhez (Hajdú-Bihar vármegye) tartozik",
+              "matchedRule": "county_code"
+            },
+            "geocodes": [
+              {
+                "valueName": "NUTS3",
+                "value": "HU321"
+              }
+            ],
+            "sender": "meteoalarm.org",
+            "sent": "2026-10-22T11:30:00Z",
+            "views": {
+              "local": {
+                "inView": true,
+                "category": "regionalAdvisories",
+                "relationship": "county",
+                "reason": "enclosing_regional_warning"
+              },
+              "county": {
+                "inView": true,
+                "category": "countyEvent",
+                "relationship": "county",
+                "reason": "county_warning"
+              },
+              "national": {
+                "inView": true,
+                "category": "regionalAdvisories",
+                "relationship": "county",
+                "reason": "domestic_regional_warning"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "county",
+                "reason": "regional_warning"
+              }
+            },
+            "isCancelled": false
+          }
+        ],
+        "unknownTerritory": [],
+        "countyEvent": [],
+        "nationalEvent": [],
+        "globalEvent": []
+      }
+    },
+    "county": {
+      "view": "county",
+      "totalEvents": 5,
+      "uniqueEvents": 5,
+      "cancelledChains": 0,
+      "breakdown": {
+        "confirmedLocal": 0,
+        "keyConnection": 0,
+        "needsReview": 0,
+        "regionalAdvisories": 0,
+        "unknownTerritory": 0,
+        "countyEvent": 5,
+        "nationalEvent": 0,
+        "globalEvent": 0
+      },
+      "relationshipBreakdown": {
+        "primary": 1,
+        "watched": 1,
+        "key_connection": 2,
+        "county": 1,
+        "region": 0,
+        "national": 0,
+        "global": 0,
+        "unknown": 0
+      },
+      "items": {
+        "confirmedLocal": [],
+        "keyConnection": [],
+        "needsReview": [],
+        "regionalAdvisories": [],
+        "unknownTerritory": [],
+        "countyEvent": [
+          {
+            "id": "event-c807b3a88c5979331d970341e39dd6d5",
+            "title": "[TESZTADAT] Nébih ASP besorolás: Bihartorda - Fertőzött terület (SZKT-n kívüli része)",
+            "summary": "[TESZTADAT] Nébih ASP besorolás (Bihartorda, Hajdú-Bihar): Fertőzött terület (SZKT-n kívüli része) (lefedettség: 100%, VGE: 904960). Vonatkozás: 2026-10-12, frissítve: 2026-10-20. Forrás: https://portal.nebih.gov.hu/asp_telepulesek. Hatósági körzet, nem klinikai kitörés és nem humán kockázat.",
+            "source": {
+              "name": "Nebih-ASP",
+              "url": "https://portal.nebih.gov.hu/asp_telepulesek",
+              "hostname": "portal.nebih.gov.hu",
+              "status": "disabled"
+            },
+            "kind": "health",
+            "severity": "moderate",
+            "territory": {
+              "settlementId": "bihartorda",
+              "settlementName": "Bihartorda",
+              "kshSettlementCode": "29887",
+              "kshDistrictCode": "102",
+              "countyCode": "09",
+              "countyName": "Hajdú-Bihar",
+              "identityStatus": "resolved",
+              "watchScope": "in",
+              "matchState": "match",
+              "inScope": true,
+              "localRelevanceReason": "official_area_assignment",
+              "territoryLevel": "settlement",
+              "point_in_polygon": null,
+              "geometryCheckStatus": "not_evaluated",
+              "settlement_overlap_ratio": null,
+              "official_settlement_assignment": "Fertőzött terület (SZKT-n kívüli része)",
+              "official_assignment_percentage": 100,
+              "matching_certainty": "exact_name_and_county_match",
+              "boundary_status": "unverified",
+              "dataQualityFlag": null,
+              "validUntil": null,
+              "isPrimarySettlement": true
+            },
+            "country": "Hungary",
+            "sourceRegion": "Hajdú-Bihar",
+            "location": {
+              "country": "Hungary",
+              "region": "Hajdú-Bihar",
+              "settlement": "Bihartorda"
+            },
+            "observedAt": "2026-10-12",
+            "publishedAt": "2026-10-20",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "lifecycle": "active",
+            "isCancelled": false,
+            "views": {
+              "local": {
+                "inView": true,
+                "category": "confirmedLocal",
+                "relationship": "primary",
+                "reason": "official_area_assignment"
+              },
+              "county": {
+                "inView": true,
+                "category": "countyEvent",
+                "relationship": "primary",
+                "reason": "county_settlement"
+              },
+              "national": {
+                "inView": true,
+                "category": "nationalEvent",
+                "relationship": "primary",
+                "reason": "national_settlement"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "primary",
+                "reason": "settlement"
+              }
+            }
+          },
+          {
+            "id": "event-24796b6923b88a135eb9cbfe4a4ab210",
+            "title": "[TESZTADAT] Nébih ASP besorolás: Báránd - Fertőzött terület (SZKT-n kívüli része)",
+            "summary": "[TESZTADAT] Nébih ASP besorolás (Báránd, Hajdú-Bihar): Fertőzött terület (SZKT-n kívüli része) (lefedettség: 100%, VGE: 904950). Vonatkozás: 2026-10-12, frissítve: 2026-10-20. Forrás: https://portal.nebih.gov.hu/asp_telepulesek. Hatósági körzet, nem klinikai kitörés és nem humán kockázat.",
+            "source": {
+              "name": "Nebih-ASP",
+              "url": "https://portal.nebih.gov.hu/asp_telepulesek",
+              "hostname": "portal.nebih.gov.hu",
+              "status": "disabled"
+            },
+            "kind": "health",
+            "severity": "moderate",
+            "territory": {
+              "settlementId": "barand",
+              "settlementName": "Báránd",
+              "kshSettlementCode": "26693",
+              "kshDistrictCode": "102",
+              "countyCode": "09",
+              "countyName": "Hajdú-Bihar",
+              "identityStatus": "resolved",
+              "watchScope": "in",
+              "matchState": "match",
+              "inScope": true,
+              "localRelevanceReason": "official_area_assignment",
+              "territoryLevel": "settlement",
+              "point_in_polygon": null,
+              "geometryCheckStatus": "not_evaluated",
+              "settlement_overlap_ratio": null,
+              "official_settlement_assignment": "Fertőzött terület (SZKT-n kívüli része)",
+              "official_assignment_percentage": 100,
+              "matching_certainty": "exact_name_and_county_match",
+              "boundary_status": "unverified",
+              "dataQualityFlag": null,
+              "validUntil": null,
+              "isPrimarySettlement": true
+            },
+            "country": "Hungary",
+            "sourceRegion": "Hajdú-Bihar",
+            "location": {
+              "country": "Hungary",
+              "region": "Hajdú-Bihar",
+              "settlement": "Báránd"
+            },
+            "observedAt": "2026-10-12",
+            "publishedAt": "2026-10-20",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "lifecycle": "active",
+            "isCancelled": false,
+            "views": {
+              "local": {
+                "inView": true,
+                "category": "confirmedLocal",
+                "relationship": "watched",
+                "reason": "official_area_assignment"
+              },
+              "county": {
+                "inView": true,
+                "category": "countyEvent",
+                "relationship": "watched",
+                "reason": "county_settlement"
+              },
+              "national": {
+                "inView": true,
+                "category": "nationalEvent",
+                "relationship": "watched",
+                "reason": "national_settlement"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "watched",
+                "reason": "settlement"
+              }
+            }
+          },
+          {
+            "id": "event-7bd7c97dd98a23c15610101ee211e3e7",
+            "title": "[TESZTADAT] Nébih ASP besorolás: Püspökladány - Fertőzött terület (SZKT-n kívüli része)",
+            "summary": "[TESZTADAT] Nébih ASP besorolás (Püspökladány, Hajdú-Bihar): Fertőzött terület (SZKT-n kívüli része) (lefedettség: 100%, VGE: 904050). Vonatkozás: 2026-10-12, frissítve: 2026-10-20. Forrás: https://portal.nebih.gov.hu/asp_telepulesek. Hatósági körzet, nem klinikai kitörés és nem humán kockázat.",
+            "source": {
+              "name": "Nebih-ASP",
+              "url": "https://portal.nebih.gov.hu/asp_telepulesek",
+              "hostname": "portal.nebih.gov.hu",
+              "status": "disabled"
+            },
+            "kind": "health",
+            "severity": "moderate",
+            "territory": {
+              "settlementId": "puspokladany",
+              "settlementName": "Püspökladány",
+              "kshSettlementCode": "10162",
+              "kshDistrictCode": "102",
+              "countyCode": "09",
+              "countyName": "Hajdú-Bihar",
+              "identityStatus": "resolved",
+              "watchScope": "in",
+              "matchState": "match",
+              "inScope": true,
+              "localRelevanceReason": "official_area_assignment",
+              "territoryLevel": "settlement",
+              "point_in_polygon": null,
+              "geometryCheckStatus": "not_evaluated",
+              "settlement_overlap_ratio": null,
+              "official_settlement_assignment": "Fertőzött terület (SZKT-n kívüli része)",
+              "official_assignment_percentage": 100,
+              "matching_certainty": "exact_name_and_county_match",
+              "boundary_status": "unverified",
+              "dataQualityFlag": null,
+              "validUntil": null,
+              "isPrimarySettlement": false
+            },
+            "country": "Hungary",
+            "sourceRegion": "Hajdú-Bihar",
+            "location": {
+              "country": "Hungary",
+              "region": "Hajdú-Bihar",
+              "settlement": "Püspökladány"
+            },
+            "observedAt": "2026-10-12",
+            "publishedAt": "2026-10-20",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "lifecycle": "active",
+            "isCancelled": false,
+            "views": {
+              "local": {
+                "inView": true,
+                "category": "keyConnection",
+                "relationship": "key_connection",
+                "reason": "key_connection_settlement"
+              },
+              "county": {
+                "inView": true,
+                "category": "countyEvent",
+                "relationship": "key_connection",
+                "reason": "county_settlement"
+              },
+              "national": {
+                "inView": true,
+                "category": "nationalEvent",
+                "relationship": "key_connection",
+                "reason": "national_settlement"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "key_connection",
+                "reason": "settlement"
+              }
+            }
+          },
+          {
+            "id": "event-33333333333333333333333333333303",
+            "title": "[TESZTADAT] Debrecen teszt infrastrukturális jelentés",
+            "summary": "[TESZTADAT] Debrecen belvárosában teszt célú közlekedési hálózatellenőrzés zajlik.",
+            "source": {
+              "name": "HAON-Fixture",
+              "url": "https://example.test/debrecen",
+              "hostname": "example.test",
+              "status": "ok"
+            },
+            "kind": "news",
+            "severity": "info",
+            "territory": {
+              "settlementId": "debrecen",
+              "settlementName": "Debrecen",
+              "countyCode": "09",
+              "countyName": "Hajdú-Bihar",
+              "territoryLevel": "settlement",
+              "inScope": true,
+              "identityStatus": "resolved",
+              "watchScope": "key_connection"
+            },
+            "country": "Hungary",
+            "sourceRegion": "Hajdú-Bihar",
+            "location": {
+              "country": "Hungary",
+              "settlement": "Debrecen"
+            },
+            "observedAt": "2026-10-22T14:15:00.000Z",
+            "publishedAt": "2026-10-22T14:15:00.000Z",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "lifecycle": "active",
+            "isCancelled": false,
+            "views": {
+              "local": {
+                "inView": false,
+                "category": null,
+                "relationship": "unknown",
+                "reason": null
+              },
+              "county": {
+                "inView": true,
+                "category": "countyEvent",
+                "relationship": "key_connection",
+                "reason": "county_settlement"
+              },
+              "national": {
+                "inView": true,
+                "category": "nationalEvent",
+                "relationship": "key_connection",
+                "reason": "national_settlement"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "key_connection",
+                "reason": "settlement"
+              }
+            }
+          },
+          {
+            "id": "event-f2651f2e106c735208d5c2473f3e8243",
+            "kind": "weather",
+            "title": "[TESZTADAT] Yellow thunderstorm warning for Hungary - Hajdú-Bihar",
+            "summary": "[TESZTADAT] yellow thunderstorm warning — Hajdú-Bihar — Warning valid from 2026-10-22T16:00:00.000Z",
+            "source": {
+              "name": "Meteoalarm",
+              "url": "https://meteoalarm.org/?geocode=HU321",
+              "hostname": "meteoalarm.org",
+              "status": "ok"
+            },
+            "observedAt": "2026-10-22T11:30:00.000Z",
+            "publishedAt": "2026-10-22T11:30:00.000Z",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "location": {
+              "lat": null,
+              "lon": null,
+              "method": "unknown",
+              "label": "Hungary",
+              "precision": "unknown"
+            },
+            "severity": "moderate",
+            "quality": {
+              "level": "partial",
+              "checks": {
+                "sourceUrl": true,
+                "providerTime": true,
+                "location": false,
+                "sourceStatus": true
+              },
+              "explanationCodes": [
+                "unknown-location"
+              ]
+            },
+            "relatedSources": [],
+            "startsAt": "2026-10-22T16:00:00.000Z",
+            "validUntil": "2026-10-22T22:00:00.000Z",
+            "providerId": "HU.EDGE.FUTURE",
+            "sourceRegion": "Hungary",
+            "country": "Hungary",
+            "area": "Hajdú-Bihar",
+            "chainKey": "HU.EDGE.FUTURE",
+            "lifecycle": "future",
+            "msgType": "Alert",
+            "territory": {
+              "matchState": "match",
+              "status": "in_watched_county",
+              "identityStatus": "resolved",
+              "watchScope": "in",
+              "inScope": true,
+              "recordRetained": true,
+              "isConfirmedLocal": false,
+              "localRelevanceReason": "source_region_only",
+              "needsLocalReview": false,
+              "alertEligibleLocal": true,
+              "alertEligibleNational": true,
+              "territoryLevel": "county",
+              "territoryName": "Hajdú-Bihar",
+              "countyCode": "09",
+              "nuts3": "HU321",
+              "nuts2": "HU32",
+              "nuts": {
+                "nuts3": "HU321",
+                "nuts2": "HU32"
+              },
+              "message": "A közölt területhez (Hajdú-Bihar vármegye) tartozik",
+              "matchedRule": "county_code"
+            },
+            "geocodes": [
+              {
+                "valueName": "NUTS3",
+                "value": "HU321"
+              }
+            ],
+            "sender": "meteoalarm.org",
+            "sent": "2026-10-22T11:30:00Z",
+            "views": {
+              "local": {
+                "inView": true,
+                "category": "regionalAdvisories",
+                "relationship": "county",
+                "reason": "enclosing_regional_warning"
+              },
+              "county": {
+                "inView": true,
+                "category": "countyEvent",
+                "relationship": "county",
+                "reason": "county_warning"
+              },
+              "national": {
+                "inView": true,
+                "category": "regionalAdvisories",
+                "relationship": "county",
+                "reason": "domestic_regional_warning"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "county",
+                "reason": "regional_warning"
+              }
+            },
+            "isCancelled": false
+          }
+        ],
+        "nationalEvent": [],
+        "globalEvent": []
+      }
+    },
+    "national": {
+      "view": "national",
+      "totalEvents": 6,
+      "uniqueEvents": 6,
+      "cancelledChains": 0,
+      "breakdown": {
+        "confirmedLocal": 0,
+        "keyConnection": 0,
+        "needsReview": 0,
+        "regionalAdvisories": 2,
+        "unknownTerritory": 0,
+        "countyEvent": 0,
+        "nationalEvent": 4,
+        "globalEvent": 0
+      },
+      "relationshipBreakdown": {
+        "primary": 1,
+        "watched": 1,
+        "key_connection": 2,
+        "county": 1,
+        "region": 0,
+        "national": 1,
+        "global": 0,
+        "unknown": 0
+      },
+      "items": {
+        "confirmedLocal": [],
+        "keyConnection": [],
+        "needsReview": [],
+        "regionalAdvisories": [
+          {
+            "id": "event-f2651f2e106c735208d5c2473f3e8243",
+            "kind": "weather",
+            "title": "[TESZTADAT] Yellow thunderstorm warning for Hungary - Hajdú-Bihar",
+            "summary": "[TESZTADAT] yellow thunderstorm warning — Hajdú-Bihar — Warning valid from 2026-10-22T16:00:00.000Z",
+            "source": {
+              "name": "Meteoalarm",
+              "url": "https://meteoalarm.org/?geocode=HU321",
+              "hostname": "meteoalarm.org",
+              "status": "ok"
+            },
+            "observedAt": "2026-10-22T11:30:00.000Z",
+            "publishedAt": "2026-10-22T11:30:00.000Z",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "location": {
+              "lat": null,
+              "lon": null,
+              "method": "unknown",
+              "label": "Hungary",
+              "precision": "unknown"
+            },
+            "severity": "moderate",
+            "quality": {
+              "level": "partial",
+              "checks": {
+                "sourceUrl": true,
+                "providerTime": true,
+                "location": false,
+                "sourceStatus": true
+              },
+              "explanationCodes": [
+                "unknown-location"
+              ]
+            },
+            "relatedSources": [],
+            "startsAt": "2026-10-22T16:00:00.000Z",
+            "validUntil": "2026-10-22T22:00:00.000Z",
+            "providerId": "HU.EDGE.FUTURE",
+            "sourceRegion": "Hungary",
+            "country": "Hungary",
+            "area": "Hajdú-Bihar",
+            "chainKey": "HU.EDGE.FUTURE",
+            "lifecycle": "future",
+            "msgType": "Alert",
+            "territory": {
+              "matchState": "match",
+              "status": "in_watched_county",
+              "identityStatus": "resolved",
+              "watchScope": "in",
+              "inScope": true,
+              "recordRetained": true,
+              "isConfirmedLocal": false,
+              "localRelevanceReason": "source_region_only",
+              "needsLocalReview": false,
+              "alertEligibleLocal": true,
+              "alertEligibleNational": true,
+              "territoryLevel": "county",
+              "territoryName": "Hajdú-Bihar",
+              "countyCode": "09",
+              "nuts3": "HU321",
+              "nuts2": "HU32",
+              "nuts": {
+                "nuts3": "HU321",
+                "nuts2": "HU32"
+              },
+              "message": "A közölt területhez (Hajdú-Bihar vármegye) tartozik",
+              "matchedRule": "county_code"
+            },
+            "geocodes": [
+              {
+                "valueName": "NUTS3",
+                "value": "HU321"
+              }
+            ],
+            "sender": "meteoalarm.org",
+            "sent": "2026-10-22T11:30:00Z",
+            "views": {
+              "local": {
+                "inView": true,
+                "category": "regionalAdvisories",
+                "relationship": "county",
+                "reason": "enclosing_regional_warning"
+              },
+              "county": {
+                "inView": true,
+                "category": "countyEvent",
+                "relationship": "county",
+                "reason": "county_warning"
+              },
+              "national": {
+                "inView": true,
+                "category": "regionalAdvisories",
+                "relationship": "county",
+                "reason": "domestic_regional_warning"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "county",
+                "reason": "regional_warning"
+              }
+            },
+            "isCancelled": false
+          },
+          {
+            "id": "event-094c4e24ebcb44e3a14f3b5e6067687f",
+            "kind": "weather",
+            "title": "[TESZTADAT] Yellow wind warning for Hungary - Western Transdanubia",
+            "summary": "[TESZTADAT] yellow wind warning — Western Transdanubia",
+            "source": {
+              "name": "Meteoalarm",
+              "url": "https://meteoalarm.org/?geocode=EMMA_ID:HU002",
+              "hostname": "meteoalarm.org",
+              "status": "ok"
+            },
+            "observedAt": "2026-10-22T11:00:00.000Z",
+            "publishedAt": "2026-10-22T11:00:00.000Z",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "location": {
+              "lat": null,
+              "lon": null,
+              "method": "unknown",
+              "label": "Hungary",
+              "precision": "unknown"
+            },
+            "severity": "moderate",
+            "quality": {
+              "level": "partial",
+              "checks": {
+                "sourceUrl": true,
+                "providerTime": true,
+                "location": false,
+                "sourceStatus": true
+              },
+              "explanationCodes": [
+                "unknown-location"
+              ]
+            },
+            "relatedSources": [],
+            "startsAt": "2026-10-22T11:00:00.000Z",
+            "validUntil": "2026-10-22T18:00:00.000Z",
+            "providerId": "HU.EDGE.WESTERN",
+            "sourceRegion": "Hungary",
+            "country": "Hungary",
+            "area": "Western Transdanubia",
+            "chainKey": "HU.EDGE.WESTERN",
+            "lifecycle": "active",
+            "msgType": "Alert",
+            "territory": {
+              "matchState": "no_match",
+              "status": "not_in_watched_area",
+              "identityStatus": "resolved",
+              "watchScope": "out",
+              "inScope": false,
+              "recordRetained": true,
+              "isConfirmedLocal": false,
+              "localRelevanceReason": "source_region_only",
+              "needsLocalReview": false,
+              "alertEligibleLocal": false,
+              "alertEligibleNational": true,
+              "territoryLevel": "region",
+              "territoryName": "Nyugat-Dunántúl",
+              "nuts2": "HU22",
+              "nuts": {
+                "nuts2": "HU22"
+              },
+              "message": "Nem erre a figyelt területre kiadva (Nyugat-Dunántúl)",
+              "matchedRule": "other_hungarian_nuts2"
+            },
+            "geocodes": [
+              {
+                "valueName": "NUTS2",
+                "value": "HU22"
+              }
+            ],
+            "sender": "meteoalarm.org",
+            "sent": "2026-10-22T11:00:00Z",
+            "views": {
+              "local": {
+                "inView": false,
+                "category": null,
+                "relationship": "unknown",
+                "reason": null
+              },
+              "county": {
+                "inView": false,
+                "category": null,
+                "relationship": "unknown",
+                "reason": null
+              },
+              "national": {
+                "inView": true,
+                "category": "regionalAdvisories",
+                "relationship": "national",
+                "reason": "domestic_regional_warning"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "national",
+                "reason": "regional_warning"
+              }
+            },
+            "isCancelled": false
+          }
+        ],
+        "unknownTerritory": [],
+        "countyEvent": [],
+        "nationalEvent": [
+          {
+            "id": "event-c807b3a88c5979331d970341e39dd6d5",
+            "title": "[TESZTADAT] Nébih ASP besorolás: Bihartorda - Fertőzött terület (SZKT-n kívüli része)",
+            "summary": "[TESZTADAT] Nébih ASP besorolás (Bihartorda, Hajdú-Bihar): Fertőzött terület (SZKT-n kívüli része) (lefedettség: 100%, VGE: 904960). Vonatkozás: 2026-10-12, frissítve: 2026-10-20. Forrás: https://portal.nebih.gov.hu/asp_telepulesek. Hatósági körzet, nem klinikai kitörés és nem humán kockázat.",
+            "source": {
+              "name": "Nebih-ASP",
+              "url": "https://portal.nebih.gov.hu/asp_telepulesek",
+              "hostname": "portal.nebih.gov.hu",
+              "status": "disabled"
+            },
+            "kind": "health",
+            "severity": "moderate",
+            "territory": {
+              "settlementId": "bihartorda",
+              "settlementName": "Bihartorda",
+              "kshSettlementCode": "29887",
+              "kshDistrictCode": "102",
+              "countyCode": "09",
+              "countyName": "Hajdú-Bihar",
+              "identityStatus": "resolved",
+              "watchScope": "in",
+              "matchState": "match",
+              "inScope": true,
+              "localRelevanceReason": "official_area_assignment",
+              "territoryLevel": "settlement",
+              "point_in_polygon": null,
+              "geometryCheckStatus": "not_evaluated",
+              "settlement_overlap_ratio": null,
+              "official_settlement_assignment": "Fertőzött terület (SZKT-n kívüli része)",
+              "official_assignment_percentage": 100,
+              "matching_certainty": "exact_name_and_county_match",
+              "boundary_status": "unverified",
+              "dataQualityFlag": null,
+              "validUntil": null,
+              "isPrimarySettlement": true
+            },
+            "country": "Hungary",
+            "sourceRegion": "Hajdú-Bihar",
+            "location": {
+              "country": "Hungary",
+              "region": "Hajdú-Bihar",
+              "settlement": "Bihartorda"
+            },
+            "observedAt": "2026-10-12",
+            "publishedAt": "2026-10-20",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "lifecycle": "active",
+            "isCancelled": false,
+            "views": {
+              "local": {
+                "inView": true,
+                "category": "confirmedLocal",
+                "relationship": "primary",
+                "reason": "official_area_assignment"
+              },
+              "county": {
+                "inView": true,
+                "category": "countyEvent",
+                "relationship": "primary",
+                "reason": "county_settlement"
+              },
+              "national": {
+                "inView": true,
+                "category": "nationalEvent",
+                "relationship": "primary",
+                "reason": "national_settlement"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "primary",
+                "reason": "settlement"
+              }
+            }
+          },
+          {
+            "id": "event-24796b6923b88a135eb9cbfe4a4ab210",
+            "title": "[TESZTADAT] Nébih ASP besorolás: Báránd - Fertőzött terület (SZKT-n kívüli része)",
+            "summary": "[TESZTADAT] Nébih ASP besorolás (Báránd, Hajdú-Bihar): Fertőzött terület (SZKT-n kívüli része) (lefedettség: 100%, VGE: 904950). Vonatkozás: 2026-10-12, frissítve: 2026-10-20. Forrás: https://portal.nebih.gov.hu/asp_telepulesek. Hatósági körzet, nem klinikai kitörés és nem humán kockázat.",
+            "source": {
+              "name": "Nebih-ASP",
+              "url": "https://portal.nebih.gov.hu/asp_telepulesek",
+              "hostname": "portal.nebih.gov.hu",
+              "status": "disabled"
+            },
+            "kind": "health",
+            "severity": "moderate",
+            "territory": {
+              "settlementId": "barand",
+              "settlementName": "Báránd",
+              "kshSettlementCode": "26693",
+              "kshDistrictCode": "102",
+              "countyCode": "09",
+              "countyName": "Hajdú-Bihar",
+              "identityStatus": "resolved",
+              "watchScope": "in",
+              "matchState": "match",
+              "inScope": true,
+              "localRelevanceReason": "official_area_assignment",
+              "territoryLevel": "settlement",
+              "point_in_polygon": null,
+              "geometryCheckStatus": "not_evaluated",
+              "settlement_overlap_ratio": null,
+              "official_settlement_assignment": "Fertőzött terület (SZKT-n kívüli része)",
+              "official_assignment_percentage": 100,
+              "matching_certainty": "exact_name_and_county_match",
+              "boundary_status": "unverified",
+              "dataQualityFlag": null,
+              "validUntil": null,
+              "isPrimarySettlement": true
+            },
+            "country": "Hungary",
+            "sourceRegion": "Hajdú-Bihar",
+            "location": {
+              "country": "Hungary",
+              "region": "Hajdú-Bihar",
+              "settlement": "Báránd"
+            },
+            "observedAt": "2026-10-12",
+            "publishedAt": "2026-10-20",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "lifecycle": "active",
+            "isCancelled": false,
+            "views": {
+              "local": {
+                "inView": true,
+                "category": "confirmedLocal",
+                "relationship": "watched",
+                "reason": "official_area_assignment"
+              },
+              "county": {
+                "inView": true,
+                "category": "countyEvent",
+                "relationship": "watched",
+                "reason": "county_settlement"
+              },
+              "national": {
+                "inView": true,
+                "category": "nationalEvent",
+                "relationship": "watched",
+                "reason": "national_settlement"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "watched",
+                "reason": "settlement"
+              }
+            }
+          },
+          {
+            "id": "event-7bd7c97dd98a23c15610101ee211e3e7",
+            "title": "[TESZTADAT] Nébih ASP besorolás: Püspökladány - Fertőzött terület (SZKT-n kívüli része)",
+            "summary": "[TESZTADAT] Nébih ASP besorolás (Püspökladány, Hajdú-Bihar): Fertőzött terület (SZKT-n kívüli része) (lefedettség: 100%, VGE: 904050). Vonatkozás: 2026-10-12, frissítve: 2026-10-20. Forrás: https://portal.nebih.gov.hu/asp_telepulesek. Hatósági körzet, nem klinikai kitörés és nem humán kockázat.",
+            "source": {
+              "name": "Nebih-ASP",
+              "url": "https://portal.nebih.gov.hu/asp_telepulesek",
+              "hostname": "portal.nebih.gov.hu",
+              "status": "disabled"
+            },
+            "kind": "health",
+            "severity": "moderate",
+            "territory": {
+              "settlementId": "puspokladany",
+              "settlementName": "Püspökladány",
+              "kshSettlementCode": "10162",
+              "kshDistrictCode": "102",
+              "countyCode": "09",
+              "countyName": "Hajdú-Bihar",
+              "identityStatus": "resolved",
+              "watchScope": "in",
+              "matchState": "match",
+              "inScope": true,
+              "localRelevanceReason": "official_area_assignment",
+              "territoryLevel": "settlement",
+              "point_in_polygon": null,
+              "geometryCheckStatus": "not_evaluated",
+              "settlement_overlap_ratio": null,
+              "official_settlement_assignment": "Fertőzött terület (SZKT-n kívüli része)",
+              "official_assignment_percentage": 100,
+              "matching_certainty": "exact_name_and_county_match",
+              "boundary_status": "unverified",
+              "dataQualityFlag": null,
+              "validUntil": null,
+              "isPrimarySettlement": false
+            },
+            "country": "Hungary",
+            "sourceRegion": "Hajdú-Bihar",
+            "location": {
+              "country": "Hungary",
+              "region": "Hajdú-Bihar",
+              "settlement": "Püspökladány"
+            },
+            "observedAt": "2026-10-12",
+            "publishedAt": "2026-10-20",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "lifecycle": "active",
+            "isCancelled": false,
+            "views": {
+              "local": {
+                "inView": true,
+                "category": "keyConnection",
+                "relationship": "key_connection",
+                "reason": "key_connection_settlement"
+              },
+              "county": {
+                "inView": true,
+                "category": "countyEvent",
+                "relationship": "key_connection",
+                "reason": "county_settlement"
+              },
+              "national": {
+                "inView": true,
+                "category": "nationalEvent",
+                "relationship": "key_connection",
+                "reason": "national_settlement"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "key_connection",
+                "reason": "settlement"
+              }
+            }
+          },
+          {
+            "id": "event-33333333333333333333333333333303",
+            "title": "[TESZTADAT] Debrecen teszt infrastrukturális jelentés",
+            "summary": "[TESZTADAT] Debrecen belvárosában teszt célú közlekedési hálózatellenőrzés zajlik.",
+            "source": {
+              "name": "HAON-Fixture",
+              "url": "https://example.test/debrecen",
+              "hostname": "example.test",
+              "status": "ok"
+            },
+            "kind": "news",
+            "severity": "info",
+            "territory": {
+              "settlementId": "debrecen",
+              "settlementName": "Debrecen",
+              "countyCode": "09",
+              "countyName": "Hajdú-Bihar",
+              "territoryLevel": "settlement",
+              "inScope": true,
+              "identityStatus": "resolved",
+              "watchScope": "key_connection"
+            },
+            "country": "Hungary",
+            "sourceRegion": "Hajdú-Bihar",
+            "location": {
+              "country": "Hungary",
+              "settlement": "Debrecen"
+            },
+            "observedAt": "2026-10-22T14:15:00.000Z",
+            "publishedAt": "2026-10-22T14:15:00.000Z",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "lifecycle": "active",
+            "isCancelled": false,
+            "views": {
+              "local": {
+                "inView": false,
+                "category": null,
+                "relationship": "unknown",
+                "reason": null
+              },
+              "county": {
+                "inView": true,
+                "category": "countyEvent",
+                "relationship": "key_connection",
+                "reason": "county_settlement"
+              },
+              "national": {
+                "inView": true,
+                "category": "nationalEvent",
+                "relationship": "key_connection",
+                "reason": "national_settlement"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "key_connection",
+                "reason": "settlement"
+              }
+            }
+          }
+        ],
+        "globalEvent": []
+      }
+    },
+    "global": {
+      "view": "global",
+      "totalEvents": 9,
+      "uniqueEvents": 9,
+      "cancelledChains": 0,
+      "breakdown": {
+        "confirmedLocal": 0,
+        "keyConnection": 0,
+        "needsReview": 0,
+        "regionalAdvisories": 0,
+        "unknownTerritory": 0,
+        "countyEvent": 0,
+        "nationalEvent": 0,
+        "globalEvent": 9
+      },
+      "relationshipBreakdown": {
+        "primary": 1,
+        "watched": 1,
+        "key_connection": 2,
+        "county": 1,
+        "region": 0,
+        "national": 1,
+        "global": 3,
+        "unknown": 0
+      },
+      "items": {
+        "confirmedLocal": [],
+        "keyConnection": [],
+        "needsReview": [],
+        "regionalAdvisories": [],
+        "unknownTerritory": [],
+        "countyEvent": [],
+        "nationalEvent": [],
+        "globalEvent": [
+          {
+            "id": "event-c807b3a88c5979331d970341e39dd6d5",
+            "title": "[TESZTADAT] Nébih ASP besorolás: Bihartorda - Fertőzött terület (SZKT-n kívüli része)",
+            "summary": "[TESZTADAT] Nébih ASP besorolás (Bihartorda, Hajdú-Bihar): Fertőzött terület (SZKT-n kívüli része) (lefedettség: 100%, VGE: 904960). Vonatkozás: 2026-10-12, frissítve: 2026-10-20. Forrás: https://portal.nebih.gov.hu/asp_telepulesek. Hatósági körzet, nem klinikai kitörés és nem humán kockázat.",
+            "source": {
+              "name": "Nebih-ASP",
+              "url": "https://portal.nebih.gov.hu/asp_telepulesek",
+              "hostname": "portal.nebih.gov.hu",
+              "status": "disabled"
+            },
+            "kind": "health",
+            "severity": "moderate",
+            "territory": {
+              "settlementId": "bihartorda",
+              "settlementName": "Bihartorda",
+              "kshSettlementCode": "29887",
+              "kshDistrictCode": "102",
+              "countyCode": "09",
+              "countyName": "Hajdú-Bihar",
+              "identityStatus": "resolved",
+              "watchScope": "in",
+              "matchState": "match",
+              "inScope": true,
+              "localRelevanceReason": "official_area_assignment",
+              "territoryLevel": "settlement",
+              "point_in_polygon": null,
+              "geometryCheckStatus": "not_evaluated",
+              "settlement_overlap_ratio": null,
+              "official_settlement_assignment": "Fertőzött terület (SZKT-n kívüli része)",
+              "official_assignment_percentage": 100,
+              "matching_certainty": "exact_name_and_county_match",
+              "boundary_status": "unverified",
+              "dataQualityFlag": null,
+              "validUntil": null,
+              "isPrimarySettlement": true
+            },
+            "country": "Hungary",
+            "sourceRegion": "Hajdú-Bihar",
+            "location": {
+              "country": "Hungary",
+              "region": "Hajdú-Bihar",
+              "settlement": "Bihartorda"
+            },
+            "observedAt": "2026-10-12",
+            "publishedAt": "2026-10-20",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "lifecycle": "active",
+            "isCancelled": false,
+            "views": {
+              "local": {
+                "inView": true,
+                "category": "confirmedLocal",
+                "relationship": "primary",
+                "reason": "official_area_assignment"
+              },
+              "county": {
+                "inView": true,
+                "category": "countyEvent",
+                "relationship": "primary",
+                "reason": "county_settlement"
+              },
+              "national": {
+                "inView": true,
+                "category": "nationalEvent",
+                "relationship": "primary",
+                "reason": "national_settlement"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "primary",
+                "reason": "settlement"
+              }
+            }
+          },
+          {
+            "id": "event-24796b6923b88a135eb9cbfe4a4ab210",
+            "title": "[TESZTADAT] Nébih ASP besorolás: Báránd - Fertőzött terület (SZKT-n kívüli része)",
+            "summary": "[TESZTADAT] Nébih ASP besorolás (Báránd, Hajdú-Bihar): Fertőzött terület (SZKT-n kívüli része) (lefedettség: 100%, VGE: 904950). Vonatkozás: 2026-10-12, frissítve: 2026-10-20. Forrás: https://portal.nebih.gov.hu/asp_telepulesek. Hatósági körzet, nem klinikai kitörés és nem humán kockázat.",
+            "source": {
+              "name": "Nebih-ASP",
+              "url": "https://portal.nebih.gov.hu/asp_telepulesek",
+              "hostname": "portal.nebih.gov.hu",
+              "status": "disabled"
+            },
+            "kind": "health",
+            "severity": "moderate",
+            "territory": {
+              "settlementId": "barand",
+              "settlementName": "Báránd",
+              "kshSettlementCode": "26693",
+              "kshDistrictCode": "102",
+              "countyCode": "09",
+              "countyName": "Hajdú-Bihar",
+              "identityStatus": "resolved",
+              "watchScope": "in",
+              "matchState": "match",
+              "inScope": true,
+              "localRelevanceReason": "official_area_assignment",
+              "territoryLevel": "settlement",
+              "point_in_polygon": null,
+              "geometryCheckStatus": "not_evaluated",
+              "settlement_overlap_ratio": null,
+              "official_settlement_assignment": "Fertőzött terület (SZKT-n kívüli része)",
+              "official_assignment_percentage": 100,
+              "matching_certainty": "exact_name_and_county_match",
+              "boundary_status": "unverified",
+              "dataQualityFlag": null,
+              "validUntil": null,
+              "isPrimarySettlement": true
+            },
+            "country": "Hungary",
+            "sourceRegion": "Hajdú-Bihar",
+            "location": {
+              "country": "Hungary",
+              "region": "Hajdú-Bihar",
+              "settlement": "Báránd"
+            },
+            "observedAt": "2026-10-12",
+            "publishedAt": "2026-10-20",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "lifecycle": "active",
+            "isCancelled": false,
+            "views": {
+              "local": {
+                "inView": true,
+                "category": "confirmedLocal",
+                "relationship": "watched",
+                "reason": "official_area_assignment"
+              },
+              "county": {
+                "inView": true,
+                "category": "countyEvent",
+                "relationship": "watched",
+                "reason": "county_settlement"
+              },
+              "national": {
+                "inView": true,
+                "category": "nationalEvent",
+                "relationship": "watched",
+                "reason": "national_settlement"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "watched",
+                "reason": "settlement"
+              }
+            }
+          },
+          {
+            "id": "event-7bd7c97dd98a23c15610101ee211e3e7",
+            "title": "[TESZTADAT] Nébih ASP besorolás: Püspökladány - Fertőzött terület (SZKT-n kívüli része)",
+            "summary": "[TESZTADAT] Nébih ASP besorolás (Püspökladány, Hajdú-Bihar): Fertőzött terület (SZKT-n kívüli része) (lefedettség: 100%, VGE: 904050). Vonatkozás: 2026-10-12, frissítve: 2026-10-20. Forrás: https://portal.nebih.gov.hu/asp_telepulesek. Hatósági körzet, nem klinikai kitörés és nem humán kockázat.",
+            "source": {
+              "name": "Nebih-ASP",
+              "url": "https://portal.nebih.gov.hu/asp_telepulesek",
+              "hostname": "portal.nebih.gov.hu",
+              "status": "disabled"
+            },
+            "kind": "health",
+            "severity": "moderate",
+            "territory": {
+              "settlementId": "puspokladany",
+              "settlementName": "Püspökladány",
+              "kshSettlementCode": "10162",
+              "kshDistrictCode": "102",
+              "countyCode": "09",
+              "countyName": "Hajdú-Bihar",
+              "identityStatus": "resolved",
+              "watchScope": "in",
+              "matchState": "match",
+              "inScope": true,
+              "localRelevanceReason": "official_area_assignment",
+              "territoryLevel": "settlement",
+              "point_in_polygon": null,
+              "geometryCheckStatus": "not_evaluated",
+              "settlement_overlap_ratio": null,
+              "official_settlement_assignment": "Fertőzött terület (SZKT-n kívüli része)",
+              "official_assignment_percentage": 100,
+              "matching_certainty": "exact_name_and_county_match",
+              "boundary_status": "unverified",
+              "dataQualityFlag": null,
+              "validUntil": null,
+              "isPrimarySettlement": false
+            },
+            "country": "Hungary",
+            "sourceRegion": "Hajdú-Bihar",
+            "location": {
+              "country": "Hungary",
+              "region": "Hajdú-Bihar",
+              "settlement": "Püspökladány"
+            },
+            "observedAt": "2026-10-12",
+            "publishedAt": "2026-10-20",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "lifecycle": "active",
+            "isCancelled": false,
+            "views": {
+              "local": {
+                "inView": true,
+                "category": "keyConnection",
+                "relationship": "key_connection",
+                "reason": "key_connection_settlement"
+              },
+              "county": {
+                "inView": true,
+                "category": "countyEvent",
+                "relationship": "key_connection",
+                "reason": "county_settlement"
+              },
+              "national": {
+                "inView": true,
+                "category": "nationalEvent",
+                "relationship": "key_connection",
+                "reason": "national_settlement"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "key_connection",
+                "reason": "settlement"
+              }
+            }
+          },
+          {
+            "id": "event-3718461fb985e4baac3cf83d6cbad3ad",
+            "title": "[TESZTADAT] Nébih ASP besorolás: Aba - Magas kockázatú terület",
+            "summary": "[TESZTADAT] Nébih ASP besorolás (Aba, Fejér): Magas kockázatú terület (lefedettség: 100%, VGE: 403750). Vonatkozás: 2026-10-12, frissítve: 2026-10-20. Forrás: https://portal.nebih.gov.hu/asp_telepulesek. Hatósági körzet, nem klinikai kitörés és nem humán kockázat.",
+            "source": {
+              "name": "Nebih-ASP",
+              "url": "https://portal.nebih.gov.hu/asp_telepulesek",
+              "hostname": "portal.nebih.gov.hu",
+              "status": "disabled"
+            },
+            "kind": "health",
+            "severity": "moderate",
+            "territory": {
+              "settlementId": null,
+              "settlementName": "Aba",
+              "kshSettlementCode": null,
+              "countyName": "Fejér",
+              "identityStatus": "unresolved",
+              "watchScope": "unknown",
+              "matchState": "unknown",
+              "inScope": false,
+              "localRelevanceReason": "official_area_assignment",
+              "territoryLevel": "settlement",
+              "point_in_polygon": null,
+              "geometryCheckStatus": "not_evaluated",
+              "settlement_overlap_ratio": null,
+              "official_settlement_assignment": "Magas kockázatú terület",
+              "official_assignment_percentage": 100,
+              "matching_certainty": "unresolved_identity",
+              "boundary_status": "unverified",
+              "dataQualityFlag": null,
+              "validUntil": null,
+              "isPrimarySettlement": false
+            },
+            "country": "Hungary",
+            "sourceRegion": "Fejér",
+            "location": {
+              "country": "Hungary",
+              "region": "Fejér",
+              "settlement": "Aba"
+            },
+            "observedAt": "2026-10-12",
+            "publishedAt": "2026-10-20",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "lifecycle": "active",
+            "isCancelled": false,
+            "views": {
+              "local": {
+                "inView": false,
+                "category": null,
+                "relationship": "global",
+                "reason": "foreign_unresolved"
+              },
+              "county": {
+                "inView": false,
+                "category": null,
+                "relationship": "global",
+                "reason": "foreign_unresolved"
+              },
+              "national": {
+                "inView": false,
+                "category": null,
+                "relationship": "global",
+                "reason": "foreign_unresolved"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "global",
+                "reason": "foreign_unresolved"
+              }
+            }
+          },
+          {
+            "id": "event-33333333333333333333333333333303",
+            "title": "[TESZTADAT] Debrecen teszt infrastrukturális jelentés",
+            "summary": "[TESZTADAT] Debrecen belvárosában teszt célú közlekedési hálózatellenőrzés zajlik.",
+            "source": {
+              "name": "HAON-Fixture",
+              "url": "https://example.test/debrecen",
+              "hostname": "example.test",
+              "status": "ok"
+            },
+            "kind": "news",
+            "severity": "info",
+            "territory": {
+              "settlementId": "debrecen",
+              "settlementName": "Debrecen",
+              "countyCode": "09",
+              "countyName": "Hajdú-Bihar",
+              "territoryLevel": "settlement",
+              "inScope": true,
+              "identityStatus": "resolved",
+              "watchScope": "key_connection"
+            },
+            "country": "Hungary",
+            "sourceRegion": "Hajdú-Bihar",
+            "location": {
+              "country": "Hungary",
+              "settlement": "Debrecen"
+            },
+            "observedAt": "2026-10-22T14:15:00.000Z",
+            "publishedAt": "2026-10-22T14:15:00.000Z",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "lifecycle": "active",
+            "isCancelled": false,
+            "views": {
+              "local": {
+                "inView": false,
+                "category": null,
+                "relationship": "unknown",
+                "reason": null
+              },
+              "county": {
+                "inView": true,
+                "category": "countyEvent",
+                "relationship": "key_connection",
+                "reason": "county_settlement"
+              },
+              "national": {
+                "inView": true,
+                "category": "nationalEvent",
+                "relationship": "key_connection",
+                "reason": "national_settlement"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "key_connection",
+                "reason": "settlement"
+              }
+            }
+          },
+          {
+            "id": "event-f2651f2e106c735208d5c2473f3e8243",
+            "kind": "weather",
+            "title": "[TESZTADAT] Yellow thunderstorm warning for Hungary - Hajdú-Bihar",
+            "summary": "[TESZTADAT] yellow thunderstorm warning — Hajdú-Bihar — Warning valid from 2026-10-22T16:00:00.000Z",
+            "source": {
+              "name": "Meteoalarm",
+              "url": "https://meteoalarm.org/?geocode=HU321",
+              "hostname": "meteoalarm.org",
+              "status": "ok"
+            },
+            "observedAt": "2026-10-22T11:30:00.000Z",
+            "publishedAt": "2026-10-22T11:30:00.000Z",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "location": {
+              "lat": null,
+              "lon": null,
+              "method": "unknown",
+              "label": "Hungary",
+              "precision": "unknown"
+            },
+            "severity": "moderate",
+            "quality": {
+              "level": "partial",
+              "checks": {
+                "sourceUrl": true,
+                "providerTime": true,
+                "location": false,
+                "sourceStatus": true
+              },
+              "explanationCodes": [
+                "unknown-location"
+              ]
+            },
+            "relatedSources": [],
+            "startsAt": "2026-10-22T16:00:00.000Z",
+            "validUntil": "2026-10-22T22:00:00.000Z",
+            "providerId": "HU.EDGE.FUTURE",
+            "sourceRegion": "Hungary",
+            "country": "Hungary",
+            "area": "Hajdú-Bihar",
+            "chainKey": "HU.EDGE.FUTURE",
+            "lifecycle": "future",
+            "msgType": "Alert",
+            "territory": {
+              "matchState": "match",
+              "status": "in_watched_county",
+              "identityStatus": "resolved",
+              "watchScope": "in",
+              "inScope": true,
+              "recordRetained": true,
+              "isConfirmedLocal": false,
+              "localRelevanceReason": "source_region_only",
+              "needsLocalReview": false,
+              "alertEligibleLocal": true,
+              "alertEligibleNational": true,
+              "territoryLevel": "county",
+              "territoryName": "Hajdú-Bihar",
+              "countyCode": "09",
+              "nuts3": "HU321",
+              "nuts2": "HU32",
+              "nuts": {
+                "nuts3": "HU321",
+                "nuts2": "HU32"
+              },
+              "message": "A közölt területhez (Hajdú-Bihar vármegye) tartozik",
+              "matchedRule": "county_code"
+            },
+            "geocodes": [
+              {
+                "valueName": "NUTS3",
+                "value": "HU321"
+              }
+            ],
+            "sender": "meteoalarm.org",
+            "sent": "2026-10-22T11:30:00Z",
+            "views": {
+              "local": {
+                "inView": true,
+                "category": "regionalAdvisories",
+                "relationship": "county",
+                "reason": "enclosing_regional_warning"
+              },
+              "county": {
+                "inView": true,
+                "category": "countyEvent",
+                "relationship": "county",
+                "reason": "county_warning"
+              },
+              "national": {
+                "inView": true,
+                "category": "regionalAdvisories",
+                "relationship": "county",
+                "reason": "domestic_regional_warning"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "county",
+                "reason": "regional_warning"
+              }
+            },
+            "isCancelled": false
+          },
+          {
+            "id": "event-8965c204f48a5d113cb616929061edea",
+            "kind": "weather",
+            "title": "[TESZTADAT] Yellow flood warning for Hungary - Püspökladányi járás",
+            "summary": "[TESZTADAT] yellow flood warning — Püspökladányi járás",
+            "source": {
+              "name": "Meteoalarm",
+              "url": "https://meteoalarm.org/?district=102",
+              "hostname": "meteoalarm.org",
+              "status": "ok"
+            },
+            "observedAt": "2026-10-22T10:00:00.000Z",
+            "publishedAt": "2026-10-22T10:00:00.000Z",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "location": {
+              "lat": null,
+              "lon": null,
+              "method": "unknown",
+              "label": "Hungary",
+              "precision": "unknown"
+            },
+            "severity": "moderate",
+            "quality": {
+              "level": "partial",
+              "checks": {
+                "sourceUrl": true,
+                "providerTime": true,
+                "location": false,
+                "sourceStatus": true
+              },
+              "explanationCodes": [
+                "unknown-location"
+              ]
+            },
+            "relatedSources": [],
+            "startsAt": "2026-10-22T10:00:00.000Z",
+            "providerId": "HU.EDGE.NO_EXPIRES",
+            "sourceRegion": "Hungary",
+            "country": "Hungary",
+            "area": "Püspökladányi járás",
+            "chainKey": "HU.EDGE.NO_EXPIRES",
+            "lifecycle": "active",
+            "msgType": "Alert",
+            "territory": {
+              "matchState": "match",
+              "status": "in_watched_district",
+              "identityStatus": "resolved",
+              "watchScope": "in",
+              "inScope": true,
+              "recordRetained": true,
+              "isConfirmedLocal": false,
+              "localRelevanceReason": "source_region_only",
+              "needsLocalReview": false,
+              "alertEligibleLocal": true,
+              "alertEligibleNational": true,
+              "territoryLevel": "district",
+              "territoryName": "Püspökladányi járás",
+              "message": "A közölt területhez (Püspökladányi járás) tartozik",
+              "matchedRule": "district_code"
+            },
+            "geocodes": [
+              {
+                "valueName": "ksh_district_id",
+                "value": "102"
+              }
+            ],
+            "sender": "meteoalarm.org",
+            "sent": "2026-10-22T10:00:00Z",
+            "views": {
+              "local": {
+                "inView": false,
+                "category": null,
+                "relationship": "unknown",
+                "reason": null
+              },
+              "county": {
+                "inView": false,
+                "category": null,
+                "relationship": "unknown",
+                "reason": null
+              },
+              "national": {
+                "inView": false,
+                "category": null,
+                "relationship": "unknown",
+                "reason": null
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "global",
+                "reason": "global_scope"
+              }
+            },
+            "isCancelled": false
+          },
+          {
+            "id": "event-094c4e24ebcb44e3a14f3b5e6067687f",
+            "kind": "weather",
+            "title": "[TESZTADAT] Yellow wind warning for Hungary - Western Transdanubia",
+            "summary": "[TESZTADAT] yellow wind warning — Western Transdanubia",
+            "source": {
+              "name": "Meteoalarm",
+              "url": "https://meteoalarm.org/?geocode=EMMA_ID:HU002",
+              "hostname": "meteoalarm.org",
+              "status": "ok"
+            },
+            "observedAt": "2026-10-22T11:00:00.000Z",
+            "publishedAt": "2026-10-22T11:00:00.000Z",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "location": {
+              "lat": null,
+              "lon": null,
+              "method": "unknown",
+              "label": "Hungary",
+              "precision": "unknown"
+            },
+            "severity": "moderate",
+            "quality": {
+              "level": "partial",
+              "checks": {
+                "sourceUrl": true,
+                "providerTime": true,
+                "location": false,
+                "sourceStatus": true
+              },
+              "explanationCodes": [
+                "unknown-location"
+              ]
+            },
+            "relatedSources": [],
+            "startsAt": "2026-10-22T11:00:00.000Z",
+            "validUntil": "2026-10-22T18:00:00.000Z",
+            "providerId": "HU.EDGE.WESTERN",
+            "sourceRegion": "Hungary",
+            "country": "Hungary",
+            "area": "Western Transdanubia",
+            "chainKey": "HU.EDGE.WESTERN",
+            "lifecycle": "active",
+            "msgType": "Alert",
+            "territory": {
+              "matchState": "no_match",
+              "status": "not_in_watched_area",
+              "identityStatus": "resolved",
+              "watchScope": "out",
+              "inScope": false,
+              "recordRetained": true,
+              "isConfirmedLocal": false,
+              "localRelevanceReason": "source_region_only",
+              "needsLocalReview": false,
+              "alertEligibleLocal": false,
+              "alertEligibleNational": true,
+              "territoryLevel": "region",
+              "territoryName": "Nyugat-Dunántúl",
+              "nuts2": "HU22",
+              "nuts": {
+                "nuts2": "HU22"
+              },
+              "message": "Nem erre a figyelt területre kiadva (Nyugat-Dunántúl)",
+              "matchedRule": "other_hungarian_nuts2"
+            },
+            "geocodes": [
+              {
+                "valueName": "NUTS2",
+                "value": "HU22"
+              }
+            ],
+            "sender": "meteoalarm.org",
+            "sent": "2026-10-22T11:00:00Z",
+            "views": {
+              "local": {
+                "inView": false,
+                "category": null,
+                "relationship": "unknown",
+                "reason": null
+              },
+              "county": {
+                "inView": false,
+                "category": null,
+                "relationship": "unknown",
+                "reason": null
+              },
+              "national": {
+                "inView": true,
+                "category": "regionalAdvisories",
+                "relationship": "national",
+                "reason": "domestic_regional_warning"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "national",
+                "reason": "regional_warning"
+              }
+            },
+            "isCancelled": false
+          },
+          {
+            "id": "event-0e6c3ce1302f53eb8637e398979ea0ce",
+            "kind": "weather",
+            "title": "[TESZTADAT] Special advisory for unmapped region",
+            "summary": "[TESZTADAT] special advisory — Sector X",
+            "source": {
+              "name": "Meteoalarm",
+              "url": "https://meteoalarm.org/",
+              "hostname": "meteoalarm.org",
+              "status": "ok"
+            },
+            "observedAt": "2026-10-22T11:00:00.000Z",
+            "publishedAt": "2026-10-22T11:00:00.000Z",
+            "collectedAt": "2026-10-22T14:15:00.000Z",
+            "location": {
+              "lat": null,
+              "lon": null,
+              "method": "unknown",
+              "label": "Hungary",
+              "precision": "unknown"
+            },
+            "severity": "moderate",
+            "quality": {
+              "level": "partial",
+              "checks": {
+                "sourceUrl": true,
+                "providerTime": true,
+                "location": false,
+                "sourceStatus": true
+              },
+              "explanationCodes": [
+                "unknown-location"
+              ]
+            },
+            "relatedSources": [],
+            "startsAt": "2026-10-22T11:00:00.000Z",
+            "validUntil": "2026-10-22T18:00:00.000Z",
+            "providerId": "HU.EDGE.UNKNOWN",
+            "sourceRegion": "Hungary",
+            "country": "Hungary",
+            "area": "Sector X",
+            "chainKey": "HU.EDGE.UNKNOWN",
+            "lifecycle": "active",
+            "msgType": "Alert",
+            "territory": {
+              "matchState": "unknown",
+              "status": "indeterminate",
+              "identityStatus": "unresolved",
+              "watchScope": "unknown",
+              "inScope": false,
+              "recordRetained": true,
+              "isConfirmedLocal": false,
+              "needsLocalReview": true,
+              "alertEligibleLocal": false,
+              "alertEligibleNational": true,
+              "territoryLevel": "indeterminate",
+              "localRelevanceReason": "source_region_only",
+              "territoryName": "Sector X",
+              "message": "Területi érintettség nem eldönthető (Sector X)",
+              "matchedRule": "unrecognized"
+            },
+            "geocodes": [
+              {
+                "valueName": "CUSTOM_UNMAPPED",
+                "value": "SEC_99"
+              }
+            ],
+            "sender": "meteoalarm.org",
+            "sent": "2026-10-22T11:00:00Z",
+            "views": {
+              "local": {
+                "inView": false,
+                "category": null,
+                "relationship": "global",
+                "reason": "foreign_unresolved"
+              },
+              "county": {
+                "inView": false,
+                "category": null,
+                "relationship": "global",
+                "reason": "foreign_unresolved"
+              },
+              "national": {
+                "inView": false,
+                "category": null,
+                "relationship": "global",
+                "reason": "foreign_unresolved"
+              },
+              "global": {
+                "inView": true,
+                "category": "globalEvent",
+                "relationship": "global",
+                "reason": "foreign_unresolved"
+              }
+            },
+            "isCancelled": false
+          }
+        ]
+      }
+    }
+  },
+  "coverage": [
+    {
+      "sourceId": "Meteoalarm",
+      "sourceName": "Meteoalarm",
+      "domain": "hazards",
+      "origin": "snapshot",
+      "isSnapshot": true,
+      "status": "offline_pillanatkép",
+      "statusLabel": "Offline pillanatkép",
+      "itemCount": 1,
+      "lastUpdated": null,
+      "timeWindow": {
+        "label": "snapshot",
+        "durationMs": null
+      },
+      "sourceType": "snapshot",
+      "error": null
+    },
+    {
+      "sourceId": "Nebih-ASP",
+      "sourceName": "Nebih-ASP",
+      "domain": "health",
+      "origin": "snapshot",
+      "isSnapshot": true,
+      "status": "letiltott",
+      "statusLabel": "Letiltott forrás",
+      "itemCount": 0,
+      "lastUpdated": null,
+      "timeWindow": {
+        "label": "disabled",
+        "durationMs": 0
+      },
+      "sourceType": "disabled",
+      "error": null
+    },
+    {
+      "sourceId": "HAON",
+      "sourceName": "HAON",
+      "domain": "general",
+      "origin": "snapshot",
+      "isSnapshot": true,
+      "status": "nincs_forrás",
+      "statusLabel": "Nincs telepített forrás",
+      "itemCount": 0,
+      "lastUpdated": null,
+      "timeWindow": {
+        "label": "unconfigured",
+        "durationMs": 0
+      },
+      "sourceType": "unconfigured",
+      "error": "Nincs konfigurált valós adatforrás"
+    }
+  ],
+  "briefing": {
+    "scope": "HU",
+    "language": "hu",
+    "source": "rules",
+    "generatedAt": "2026-10-22T14:15:00.000Z",
+    "bullets": [
+      {
+        "text": "[TESZTADAT] Szimulációs gyakorlat: Bihartorda területén teszt jellegű afrikai sertéspestis megfigyelési körzet van szimulálva.",
+        "refs": [
+          {
+            "n": 1,
+            "id": "event-c807b3a88c5979331d970341e39dd6d5",
+            "title": "[TESZTADAT] Nébih ASP besorolás: Bihartorda - Fertőzött terület (SZKT-n kívüli része)"
+          }
+        ]
+      },
+      {
+        "text": "[TESZTADAT] Szimulációs gyakorlat: Hajdú-Bihar vármegyében teszt célú zivatarriasztási szimuláció van rögzítve.",
+        "refs": [
+          {
+            "n": 2,
+            "id": "event-f2651f2e106c735208d5c2473f3e8243",
+            "title": "[TESZTADAT] Yellow thunderstorm warning for Hungary - Hajdú-Bihar"
+          }
+        ]
+      }
+    ]
+  },
+  "news": [],
+  "newsFeed": [
+    {
+      "id": "news-test-01",
+      "title": "[TESZTADAT] Szimulált helyi sajtóhír: Bihartordai infrastrukturális teszt",
+      "headline": "[TESZTADAT] Szimulált helyi sajtóhír: Bihartordai infrastrukturális teszt",
+      "source": "HAON-Fixture",
+      "timestamp": "2026-10-22T14:15:00.000Z",
+      "url": "https://example.test/tesztadat/bihartorda-01"
+    }
+  ],
+  "air": [],
+  "thermal": [],
+  "tSignals": [],
+  "chokepoints": [],
+  "nuke": [],
+  "nukeSignals": [],
+  "sdr": {
+    "total": 0,
+    "online": 0,
+    "zones": {}
+  },
+  "earthquakes": [],
+  "markets": {},
+  "ideas": [],
+  "ideasSource": "rules"
+}
