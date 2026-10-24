@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   VIEWS,
@@ -33,6 +34,10 @@ import {
   ADMINISTRATIVE_LEVELS,
   matchTerritory
 } from '../lib/intelligence/territory.mjs';
+
+import { normalizeLiveSources } from '../lib/intelligence/live-sources.mjs';
+import { buildEvents } from '../lib/intelligence/events.mjs';
+import { parseMeteoalarm, resolveWarningChains } from '../apis/sources/meteoalarm.mjs';
 
 test('1. VIEWS, VIEW_CATEGORIES, and RELATIONSHIPS enum contracts', () => {
   assert.equal(VIEWS.LOCAL, 'local');
@@ -330,15 +335,36 @@ test('8. Világ nézet: SOHA nem használhatja a regionalAdvisories kategóriát
   assert.notEqual(evalRes[VIEWS.GLOBAL].category, VIEW_CATEGORIES.REGIONAL_ADVISORIES);
 });
 
-test('9. CAP dedup: sender nélküli fallback kulcs (no-sender)', () => {
-  const alertNoSender = {
+test('9. CAP dedup: sender hiányában source name fallback, mindkettő hiányában determinisztikus lenyomat (nincs közös no-sender összevonás)', () => {
+  // Case A: Sender missing, but source name is present -> fallback to source name
+  const alertWithSource = {
+    identifier: 'MSG-SOURCE-FALLBACK',
+    source: { name: 'meteoalarm.org' },
+    title: 'Riasztás forrásnévvel küldő nélkül',
+    territory: { territoryLevel: 'county', countyCode: '09', nuts3: 'HU321' }
+  };
+  const keyWithSource = getEventCanonicalKey(alertWithSource);
+  assert.equal(keyWithSource, 'cap-msg:meteoalarm.org:MSG-SOURCE-FALLBACK', 'Missing sender must fallback to source name');
+
+  // Case B: Neither sender nor source name exists -> do NOT synthesize a shared 'no-sender' key!
+  const alertNoSender1 = {
     identifier: 'MSG-NO-SENDER',
-    title: 'Riasztás küldő nélkül',
+    title: 'Riasztás küldő nélkül 1',
+    territory: { territoryLevel: 'county', countyCode: '09', nuts3: 'HU321' }
+  };
+  const alertNoSender2 = {
+    identifier: 'MSG-NO-SENDER',
+    title: 'Riasztás küldő nélkül 2 (másik forrásból)',
     territory: { territoryLevel: 'county', countyCode: '09', nuts3: 'HU321' }
   };
 
-  const key = getEventCanonicalKey(alertNoSender);
-  assert.equal(key, 'cap-msg:no-sender:MSG-NO-SENDER', 'Missing sender must stably fallback to no-sender');
+  const key1 = getEventCanonicalKey(alertNoSender1);
+  const key2 = getEventCanonicalKey(alertNoSender2);
+
+  assert.notEqual(key1, 'cap-msg:no-sender:MSG-NO-SENDER', 'Must NOT synthesize shared no-sender key');
+  assert.notEqual(key1, key2, 'Two messages from different unknown sources with identical identifier must NOT collide');
+  assert.match(key1, /^cap-msg:anon:[0-9a-f]{16}:MSG-NO-SENDER$/);
+  assert.match(key2, /^cap-msg:anon:[0-9a-f]{16}:MSG-NO-SENDER$/);
 });
 
 test('10. CAP dedup: azonos identifier eltérő sender esetén NEM vonódik össze', () => {
@@ -604,4 +630,383 @@ test('20. Briefing citation reference validation contract', () => {
   assert.equal(isValidBriefingRef({ n: 0, id: 'event-0123456789abcdef0123456789abcdef', title: 'T' }), false, 'n must be >= 1');
   assert.equal(isValidBriefingRef({ n: 1, id: 'not-an-event-id', title: 'T' }), false, 'id must match event id regex');
   assert.equal(isValidBriefingRef({ n: 1, id: 'event-0123456789abcdef0123456789abcdef', title: '' }), false, 'title must not be empty');
+});
+
+// ─── Real Pipeline Integration Tests (Step 2A Gating) ───
+
+test('21. Real pipeline integration: Észak-Alföld (HU32) Meteoalarm fixture', () => {
+  const at = Date.parse('2026-10-22T08:30:00+02:00');
+  const xml = readFileSync('test/fixtures/synthetic-meteoalarm-step1-alert.atom.xml', 'utf8');
+  const parsed = parseMeteoalarm(xml, { country: 'hungary', now: at, includeAllLifecycles: true });
+  assert.equal(parsed.observations.length, 1);
+
+  const [live] = normalizeLiveSources({ Meteoalarm: parsed }, at);
+  assert.equal(live.observations.length, 1);
+
+  const [event] = buildEvents({ meta: { timestamp: new Date(at).toISOString() }, liveSources: [live] }, { now: at });
+  assert.ok(event, 'Event built from live pipeline');
+  assert.equal(event.territory?.nuts2, 'HU32');
+
+  const evalRes = evaluateEventTerritoryViews(event, DEFAULT_TERRITORY_CONFIG);
+
+  // 1. Local View: enclosing regional warning
+  assert.equal(evalRes[VIEWS.LOCAL].inView, true);
+  assert.equal(evalRes[VIEWS.LOCAL].category, VIEW_CATEGORIES.REGIONAL_ADVISORIES);
+  assert.equal(evalRes[VIEWS.LOCAL].relationship, RELATIONSHIPS.REGION);
+
+  // 2. County View: enclosing NUTS2 regional advisory (HU32)
+  assert.equal(evalRes[VIEWS.COUNTY].inView, true);
+  assert.equal(evalRes[VIEWS.COUNTY].category, VIEW_CATEGORIES.REGIONAL_ADVISORIES);
+  assert.equal(evalRes[VIEWS.COUNTY].relationship, RELATIONSHIPS.REGION);
+
+  // 3. National View: domestic regional warning
+  assert.equal(evalRes[VIEWS.NATIONAL].inView, true);
+  assert.equal(evalRes[VIEWS.NATIONAL].category, VIEW_CATEGORIES.REGIONAL_ADVISORIES);
+  assert.equal(evalRes[VIEWS.NATIONAL].relationship, RELATIONSHIPS.REGION);
+
+  // 4. Global View: regional warning in global view is globalEvent (NEVER regionalAdvisories)
+  assert.equal(evalRes[VIEWS.GLOBAL].inView, true);
+  assert.equal(evalRes[VIEWS.GLOBAL].category, VIEW_CATEGORIES.GLOBAL_EVENT);
+  assert.equal(evalRes[VIEWS.GLOBAL].relationship, RELATIONSHIPS.REGION);
+
+  const partitioned = partitionEventsByView([event], DEFAULT_TERRITORY_CONFIG);
+  assert.equal(partitioned[VIEWS.LOCAL].uniqueEvents, 1);
+  assert.equal(partitioned[VIEWS.LOCAL].breakdown.regionalAdvisories, 1);
+  assert.equal(partitioned[VIEWS.COUNTY].uniqueEvents, 1);
+  assert.equal(partitioned[VIEWS.COUNTY].breakdown.regionalAdvisories, 1);
+  assert.equal(partitioned[VIEWS.NATIONAL].uniqueEvents, 1);
+  assert.equal(partitioned[VIEWS.NATIONAL].breakdown.regionalAdvisories, 1);
+  assert.equal(partitioned[VIEWS.GLOBAL].uniqueEvents, 1);
+  assert.equal(partitioned[VIEWS.GLOBAL].breakdown.globalEvent, 1);
+});
+
+test('22. Real pipeline integration: Hajdú-Bihar (HU321) Meteoalarm fixture', () => {
+  const at = Date.parse('2026-10-22T12:00:00Z');
+  const xml = readFileSync('test/fixtures/synthetic-meteoalarm-edge-cases.atom.xml', 'utf8');
+  const parsed = parseMeteoalarm(xml, { country: 'hungary', now: at, includeAllLifecycles: true });
+  // Find Hajdú-Bihar observation (HU321)
+  const hbObs = parsed.observations.find(o => o.territory?.nuts3 === 'HU321' || o.territory?.countyCode === '09');
+  assert.ok(hbObs, 'Hajdú-Bihar observation parsed from fixture');
+
+  const live = normalizeLiveSources({ Meteoalarm: { ...parsed, observedAt: new Date(at).toISOString(), observations: [hbObs] } }, at);
+  const [event] = buildEvents({ meta: { timestamp: new Date(at).toISOString() }, liveSources: live }, { now: at });
+  assert.ok(event);
+
+  const evalRes = evaluateEventTerritoryViews(event, DEFAULT_TERRITORY_CONFIG);
+
+  // 1. Local View: enclosing county warning
+  assert.equal(evalRes[VIEWS.LOCAL].inView, true);
+  assert.equal(evalRes[VIEWS.LOCAL].category, VIEW_CATEGORIES.REGIONAL_ADVISORIES);
+  assert.equal(evalRes[VIEWS.LOCAL].relationship, RELATIONSHIPS.COUNTY);
+
+  // 2. County View: direct county warning (countyEvent, NOT regionalAdvisories)
+  assert.equal(evalRes[VIEWS.COUNTY].inView, true);
+  assert.equal(evalRes[VIEWS.COUNTY].category, VIEW_CATEGORIES.COUNTY_EVENT);
+  assert.equal(evalRes[VIEWS.COUNTY].relationship, RELATIONSHIPS.COUNTY);
+
+  // 3. National View: domestic regional/county warning
+  assert.equal(evalRes[VIEWS.NATIONAL].inView, true);
+  assert.equal(evalRes[VIEWS.NATIONAL].category, VIEW_CATEGORIES.REGIONAL_ADVISORIES);
+  assert.equal(evalRes[VIEWS.NATIONAL].relationship, RELATIONSHIPS.COUNTY);
+
+  // 4. Global View: globalEvent
+  assert.equal(evalRes[VIEWS.GLOBAL].inView, true);
+  assert.equal(evalRes[VIEWS.GLOBAL].category, VIEW_CATEGORIES.GLOBAL_EVENT);
+  assert.equal(evalRes[VIEWS.GLOBAL].relationship, RELATIONSHIPS.COUNTY);
+
+  const partitioned = partitionEventsByView([event], DEFAULT_TERRITORY_CONFIG);
+  assert.equal(partitioned[VIEWS.LOCAL].uniqueEvents, 1);
+  assert.equal(partitioned[VIEWS.LOCAL].breakdown.regionalAdvisories, 1);
+  assert.equal(partitioned[VIEWS.COUNTY].uniqueEvents, 1);
+  assert.equal(partitioned[VIEWS.COUNTY].breakdown.countyEvent, 1);
+  assert.equal(partitioned[VIEWS.NATIONAL].uniqueEvents, 1);
+  assert.equal(partitioned[VIEWS.NATIONAL].breakdown.regionalAdvisories, 1);
+  assert.equal(partitioned[VIEWS.GLOBAL].uniqueEvents, 1);
+  assert.equal(partitioned[VIEWS.GLOBAL].breakdown.globalEvent, 1);
+});
+
+test('23. Real pipeline integration: Domestic national record without local relevance', () => {
+  const at = Date.parse('2026-10-24T12:00:00Z');
+  const nationalObs = {
+    source: 'Meteoalarm',
+    kind: 'weather',
+    title: 'Országos hőségriadó Magyarországon',
+    summary: 'Harmadfokú hőségriasztás lép érvénybe az egész országban',
+    country: 'HUN',
+    observedAt: new Date(at).toISOString(),
+    territory: {
+      territoryLevel: 'country',
+      country: 'HUN',
+      territoryName: 'Magyarország',
+      isConfirmedLocal: false
+    }
+  };
+
+  const live = normalizeLiveSources({ Meteoalarm: { observedAt: new Date(at).toISOString(), observations: [nationalObs] } }, at);
+  const [event] = buildEvents({ meta: { timestamp: new Date(at).toISOString() }, liveSources: live }, { now: at });
+  assert.ok(event);
+
+  const evalRes = evaluateEventTerritoryViews(event, DEFAULT_TERRITORY_CONFIG);
+
+  // Local View: NOT in view
+  assert.equal(evalRes[VIEWS.LOCAL].inView, false);
+  assert.equal(evalRes[VIEWS.LOCAL].category, null);
+
+  // County View: NOT in view
+  assert.equal(evalRes[VIEWS.COUNTY].inView, false);
+  assert.equal(evalRes[VIEWS.COUNTY].category, null);
+
+  // National View: inView = true, nationalEvent
+  assert.equal(evalRes[VIEWS.NATIONAL].inView, true);
+  assert.equal(evalRes[VIEWS.NATIONAL].category, VIEW_CATEGORIES.NATIONAL_EVENT);
+  assert.equal(evalRes[VIEWS.NATIONAL].relationship, RELATIONSHIPS.NATIONAL);
+
+  // Global View: inView = true, globalEvent
+  assert.equal(evalRes[VIEWS.GLOBAL].inView, true);
+  assert.equal(evalRes[VIEWS.GLOBAL].category, VIEW_CATEGORIES.GLOBAL_EVENT);
+  assert.equal(evalRes[VIEWS.GLOBAL].relationship, RELATIONSHIPS.NATIONAL);
+
+  const partitioned = partitionEventsByView([event], DEFAULT_TERRITORY_CONFIG);
+  assert.equal(partitioned[VIEWS.LOCAL].uniqueEvents, 0);
+  assert.equal(partitioned[VIEWS.COUNTY].uniqueEvents, 0);
+  assert.equal(partitioned[VIEWS.NATIONAL].uniqueEvents, 1);
+  assert.equal(partitioned[VIEWS.NATIONAL].breakdown.nationalEvent, 1);
+  assert.equal(partitioned[VIEWS.GLOBAL].uniqueEvents, 1);
+  assert.equal(partitioned[VIEWS.GLOBAL].breakdown.globalEvent, 1);
+});
+
+test('24. Real pipeline integration: Foreign national news (Florida, USA)', () => {
+  const at = Date.parse('2026-10-24T12:00:00Z');
+  const foreignObs = {
+    source: 'GDACS',
+    kind: 'disaster',
+    title: 'Major hurricane approaching Florida coast',
+    summary: 'Emergency services in the United States prepare for evacuation',
+    country: 'USA',
+    observedAt: new Date(at).toISOString(),
+    territory: {
+      territoryLevel: 'country',
+      country: 'USA',
+      territoryName: 'United States',
+      isConfirmedLocal: false
+    }
+  };
+
+  const live = normalizeLiveSources({ GDACS: { observedAt: new Date(at).toISOString(), observations: [foreignObs] } }, at);
+  const [event] = buildEvents({ meta: { timestamp: new Date(at).toISOString() }, liveSources: live }, { now: at });
+  assert.ok(event);
+
+  const evalRes = evaluateEventTerritoryViews(event, DEFAULT_TERRITORY_CONFIG);
+
+  // Foreign news must NOT be in Local, County, or National views
+  assert.equal(evalRes[VIEWS.LOCAL].inView, false);
+  assert.equal(evalRes[VIEWS.COUNTY].inView, false);
+  assert.equal(evalRes[VIEWS.NATIONAL].inView, false, 'Foreign country event must strictly NOT enter National View');
+
+  // Global View: only in Global View
+  assert.equal(evalRes[VIEWS.GLOBAL].inView, true);
+  assert.equal(evalRes[VIEWS.GLOBAL].category, VIEW_CATEGORIES.GLOBAL_EVENT);
+  assert.equal(evalRes[VIEWS.GLOBAL].relationship, RELATIONSHIPS.GLOBAL);
+
+  const partitioned = partitionEventsByView([event], DEFAULT_TERRITORY_CONFIG);
+  assert.equal(partitioned[VIEWS.LOCAL].uniqueEvents, 0);
+  assert.equal(partitioned[VIEWS.COUNTY].uniqueEvents, 0);
+  assert.equal(partitioned[VIEWS.NATIONAL].uniqueEvents, 0);
+  assert.equal(partitioned[VIEWS.GLOBAL].uniqueEvents, 1);
+  assert.equal(partitioned[VIEWS.GLOBAL].breakdown.globalEvent, 1);
+});
+
+test('25. Real pipeline integration: Foreign news with non-relevant text mention', () => {
+  const at = Date.parse('2026-10-24T12:00:00Z');
+  const foreignMentionObs = {
+    source: 'GDACS',
+    kind: 'disaster',
+    title: 'Munich city council approves new urban transit initiative',
+    summary: 'The city of Munich in Germany expanded bus lines across Bavaria',
+    country: 'DEU',
+    observedAt: new Date(at).toISOString(),
+    territory: {
+      territoryLevel: 'settlement',
+      territoryName: 'Munich',
+      country: 'DEU',
+      isConfirmedLocal: false,
+      localRelevanceReason: LOCAL_RELEVANCE_REASONS.TEXT_MENTION,
+      needsLocalReview: false
+    }
+  };
+
+  const live = normalizeLiveSources({ GDACS: { observedAt: new Date(at).toISOString(), observations: [foreignMentionObs] } }, at);
+  const [event] = buildEvents({ meta: { timestamp: new Date(at).toISOString() }, liveSources: live }, { now: at });
+  assert.ok(event);
+
+  const evalRes = evaluateEventTerritoryViews(event, DEFAULT_TERRITORY_CONFIG);
+
+  // Foreign non-watched mention must NOT trigger needsReview or enter local/county/national views
+  assert.equal(evalRes[VIEWS.LOCAL].inView, false);
+  assert.equal(evalRes[VIEWS.COUNTY].inView, false);
+  assert.equal(evalRes[VIEWS.NATIONAL].inView, false);
+
+  assert.equal(evalRes[VIEWS.GLOBAL].inView, true);
+  assert.equal(evalRes[VIEWS.GLOBAL].category, VIEW_CATEGORIES.GLOBAL_EVENT, 'Foreign mention must be globalEvent, NOT needsReview');
+  assert.equal(evalRes[VIEWS.GLOBAL].relationship, RELATIONSHIPS.GLOBAL);
+
+  const partitioned = partitionEventsByView([event], DEFAULT_TERRITORY_CONFIG);
+  assert.equal(partitioned[VIEWS.LOCAL].uniqueEvents, 0);
+  assert.equal(partitioned[VIEWS.COUNTY].uniqueEvents, 0);
+  assert.equal(partitioned[VIEWS.NATIONAL].uniqueEvents, 0);
+  assert.equal(partitioned[VIEWS.GLOBAL].uniqueEvents, 1);
+  assert.equal(partitioned[VIEWS.GLOBAL].breakdown.globalEvent, 1);
+  assert.equal(partitioned[VIEWS.GLOBAL].breakdown.needsReview, 0);
+});
+
+test('26. Real pipeline integration: Territory-less global sensor event', () => {
+  const at = Date.parse('2026-10-24T12:00:00Z');
+  const sensorObs = {
+    kind: 'earthquake',
+    title: 'M 6.4 - Kermadec Islands Region',
+    observedAt: new Date(at).toISOString(),
+    lat: -29.5,
+    lon: -177.2
+    // No territory property
+  };
+
+  const live = normalizeLiveSources({ EMSC: { observedAt: new Date(at).toISOString(), observations: [sensorObs] } }, at);
+  const [event] = buildEvents({ meta: { timestamp: new Date(at).toISOString() }, liveSources: live }, { now: at });
+  assert.ok(event);
+
+  const evalRes = evaluateEventTerritoryViews(event, DEFAULT_TERRITORY_CONFIG);
+
+  // Territory-less global sensor must NOT be unknownTerritory or needsReview
+  assert.equal(evalRes[VIEWS.LOCAL].inView, false);
+  assert.equal(evalRes[VIEWS.COUNTY].inView, false);
+  assert.equal(evalRes[VIEWS.NATIONAL].inView, false);
+
+  assert.equal(evalRes[VIEWS.GLOBAL].inView, true);
+  assert.equal(evalRes[VIEWS.GLOBAL].category, VIEW_CATEGORIES.GLOBAL_EVENT, 'Territory-less sensor event must be globalEvent (NEVER unknownTerritory)');
+  assert.equal(evalRes[VIEWS.GLOBAL].relationship, RELATIONSHIPS.GLOBAL);
+
+  const partitioned = partitionEventsByView([event], DEFAULT_TERRITORY_CONFIG);
+  assert.equal(partitioned[VIEWS.LOCAL].uniqueEvents, 0);
+  assert.equal(partitioned[VIEWS.COUNTY].uniqueEvents, 0);
+  assert.equal(partitioned[VIEWS.NATIONAL].uniqueEvents, 0);
+  assert.equal(partitioned[VIEWS.GLOBAL].uniqueEvents, 1);
+  assert.equal(partitioned[VIEWS.GLOBAL].breakdown.globalEvent, 1);
+  assert.equal(partitioned[VIEWS.GLOBAL].breakdown.unknownTerritory, 0);
+});
+
+test('27. Real pipeline integration: Relevant Bihartorda text_mention', () => {
+  const at = Date.parse('2026-10-24T12:00:00Z');
+  const headline = 'Útfelújítási program indul Bihartorda belterületén';
+  const matched = matchTerritory([], headline, DEFAULT_TERRITORY_CONFIG, { isEventLocation: false, localRelevanceReason: LOCAL_RELEVANCE_REASONS.TEXT_MENTION });
+
+  const newsObs = {
+    kind: 'disaster',
+    title: headline,
+    summary: 'A község önkormányzata bejelentette az útfelújítás kezdetét.',
+    observedAt: new Date(at).toISOString(),
+    territory: matched
+  };
+
+  const live = normalizeLiveSources({ GDACS: { observedAt: new Date(at).toISOString(), observations: [newsObs] } }, at);
+  const [event] = buildEvents({ meta: { timestamp: new Date(at).toISOString() }, liveSources: live }, { now: at });
+  assert.ok(event);
+
+  const evalRes = evaluateEventTerritoryViews(event, DEFAULT_TERRITORY_CONFIG);
+
+  // Relevant primary settlement text mention must be needsReview across all views
+  assert.equal(evalRes[VIEWS.LOCAL].inView, true);
+  assert.equal(evalRes[VIEWS.LOCAL].category, VIEW_CATEGORIES.NEEDS_REVIEW);
+  assert.equal(evalRes[VIEWS.LOCAL].relationship, RELATIONSHIPS.PRIMARY);
+
+  assert.equal(evalRes[VIEWS.COUNTY].inView, true);
+  assert.equal(evalRes[VIEWS.COUNTY].category, VIEW_CATEGORIES.NEEDS_REVIEW);
+  assert.equal(evalRes[VIEWS.COUNTY].relationship, RELATIONSHIPS.PRIMARY);
+
+  assert.equal(evalRes[VIEWS.NATIONAL].inView, true);
+  assert.equal(evalRes[VIEWS.NATIONAL].category, VIEW_CATEGORIES.NEEDS_REVIEW);
+  assert.equal(evalRes[VIEWS.NATIONAL].relationship, RELATIONSHIPS.PRIMARY);
+
+  assert.equal(evalRes[VIEWS.GLOBAL].inView, true);
+  assert.equal(evalRes[VIEWS.GLOBAL].category, VIEW_CATEGORIES.NEEDS_REVIEW);
+  assert.equal(evalRes[VIEWS.GLOBAL].relationship, RELATIONSHIPS.PRIMARY);
+
+  const partitioned = partitionEventsByView([event], DEFAULT_TERRITORY_CONFIG);
+  assert.equal(partitioned[VIEWS.LOCAL].uniqueEvents, 1);
+  assert.equal(partitioned[VIEWS.LOCAL].breakdown.needsReview, 1);
+  assert.equal(partitioned[VIEWS.LOCAL].relationshipBreakdown.primary, 1);
+
+  assert.equal(partitioned[VIEWS.COUNTY].uniqueEvents, 1);
+  assert.equal(partitioned[VIEWS.COUNTY].breakdown.needsReview, 1);
+
+  assert.equal(partitioned[VIEWS.NATIONAL].uniqueEvents, 1);
+  assert.equal(partitioned[VIEWS.NATIONAL].breakdown.needsReview, 1);
+
+  assert.equal(partitioned[VIEWS.GLOBAL].uniqueEvents, 1);
+  assert.equal(partitioned[VIEWS.GLOBAL].breakdown.needsReview, 1);
+});
+
+test('28. Real pipeline integration: CAP chain update and cancel (lifecycle counters)', () => {
+  const atAlert = Date.parse('2026-10-22T08:30:00+02:00');
+  const alertXml = readFileSync('test/fixtures/synthetic-meteoalarm-step1-alert.atom.xml', 'utf8');
+  const parsedAlert = parseMeteoalarm(alertXml, { country: 'hungary', now: atAlert, includeAllLifecycles: true });
+
+  const atUpdate = Date.parse('2026-10-22T10:30:00+02:00');
+  const updateXml = readFileSync('test/fixtures/synthetic-meteoalarm-step2-update.atom.xml', 'utf8');
+  const parsedUpdate = parseMeteoalarm(updateXml, { country: 'hungary', now: atUpdate, includeAllLifecycles: true });
+
+  const atCancel = Date.parse('2026-10-22T14:15:00+02:00');
+  const cancelXml = readFileSync('test/fixtures/synthetic-meteoalarm-step3-cancel.atom.xml', 'utf8');
+  const parsedCancel = parseMeteoalarm(cancelXml, { country: 'hungary', now: atCancel, includeAllLifecycles: true });
+
+  // Phase 1: Alert + Update in stream (active chain)
+  const resolvedActive = resolveWarningChains([
+    structuredClone(parsedAlert.observations[0]),
+    structuredClone(parsedUpdate.observations[0])
+  ]);
+  const liveActive = normalizeLiveSources({
+    Meteoalarm: {
+      observedAt: new Date(atUpdate).toISOString(),
+      observations: resolvedActive
+    }
+  }, atUpdate);
+  const eventsActive = buildEvents({
+    meta: { timestamp: new Date(atUpdate).toISOString() },
+    liveSources: liveActive
+  }, { now: atUpdate });
+
+  const activePartition = partitionEventsByView(eventsActive, DEFAULT_TERRITORY_CONFIG);
+  assert.equal(activePartition[VIEWS.LOCAL].totalEvents, 2, 'Raw events: 2');
+  assert.equal(activePartition[VIEWS.LOCAL].uniqueEvents, 1, 'Unique active incidents: 1');
+  assert.equal(activePartition[VIEWS.LOCAL].cancelledChains, 0, 'No cancelled chains yet');
+  assert.equal(activePartition[VIEWS.LOCAL].breakdown.regionalAdvisories, 1);
+
+  // Phase 2: Alert + Update + Cancel in stream (cancelled chain)
+  const resolvedCancelled = resolveWarningChains([
+    structuredClone(parsedAlert.observations[0]),
+    structuredClone(parsedUpdate.observations[0]),
+    structuredClone(parsedCancel.observations[0])
+  ]);
+  const liveCancelled = normalizeLiveSources({
+    Meteoalarm: {
+      observedAt: new Date(atCancel).toISOString(),
+      observations: resolvedCancelled
+    }
+  }, atCancel);
+  const eventsCancelled = buildEvents({
+    meta: { timestamp: new Date(atCancel).toISOString() },
+    liveSources: liveCancelled
+  }, { now: atCancel });
+
+  const cancelledPartition = partitionEventsByView(eventsCancelled, DEFAULT_TERRITORY_CONFIG);
+  assert.equal(cancelledPartition[VIEWS.LOCAL].totalEvents, 3, 'Raw events: 3');
+  assert.equal(cancelledPartition[VIEWS.LOCAL].uniqueEvents, 0, 'Unique active incidents: 0 (chain is cancelled)');
+  assert.equal(cancelledPartition[VIEWS.LOCAL].cancelledChains, 1, 'Cancelled chains incremented: 1');
+  assert.equal(cancelledPartition[VIEWS.LOCAL].breakdown.regionalAdvisories, 0, 'Cancelled chain does not inflate active breakdown');
+
+  assert.equal(cancelledPartition[VIEWS.COUNTY].uniqueEvents, 0);
+  assert.equal(cancelledPartition[VIEWS.COUNTY].cancelledChains, 1);
+  assert.equal(cancelledPartition[VIEWS.NATIONAL].uniqueEvents, 0);
+  assert.equal(cancelledPartition[VIEWS.NATIONAL].cancelledChains, 1);
+  assert.equal(cancelledPartition[VIEWS.GLOBAL].uniqueEvents, 0);
+  assert.equal(cancelledPartition[VIEWS.GLOBAL].cancelledChains, 1);
 });
