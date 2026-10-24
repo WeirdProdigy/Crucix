@@ -34,7 +34,7 @@ import {
   matchTerritory
 } from '../lib/intelligence/territory.mjs';
 
-test('VIEWS, VIEW_CATEGORIES, and RELATIONSHIPS enum contracts', () => {
+test('1. VIEWS, VIEW_CATEGORIES, and RELATIONSHIPS enum contracts', () => {
   assert.equal(VIEWS.LOCAL, 'local');
   assert.equal(VIEWS.COUNTY, 'county');
   assert.equal(VIEWS.NATIONAL, 'national');
@@ -59,7 +59,7 @@ test('VIEWS, VIEW_CATEGORIES, and RELATIONSHIPS enum contracts', () => {
   assert.equal(RELATIONSHIPS.UNKNOWN, 'unknown');
 });
 
-test('1. Berettyóújfalu profile gating: excluded by default, included only when explicitly configured', () => {
+test('2. Berettyóújfalu profile gating: excluded by default, included only when explicitly configured', () => {
   const defaultCfg = DEFAULT_TERRITORY_CONFIG;
   const berettyoEvent = {
     id: 'event-b001',
@@ -98,7 +98,7 @@ test('1. Berettyóújfalu profile gating: excluded by default, included only whe
   assert.equal(evalReverted[VIEWS.LOCAL].inView, false, 'Berettyóújfalu must return to out-of-view when deconfigured');
 });
 
-test('2. Bakonszeg inclusion does NOT pull in the whole Berettyóújfalui district (094)', () => {
+test('3. Bakonszeg inclusion does NOT pull in the whole Berettyóújfalui district (094)', () => {
   const cfg = DEFAULT_TERRITORY_CONFIG; // Bakonszeg is in SUGGESTED_NEARBY_SETTLEMENTS (kshSettlement: 15167, district: 094)
 
   const bakonszegEvent = {
@@ -143,8 +143,8 @@ test('2. Bakonszeg inclusion does NOT pull in the whole Berettyóújfalui distri
   assert.equal(evalZsaka[VIEWS.COUNTY].relationship, RELATIONSHIPS.COUNTY);
 });
 
-test('3. Nem figyelt Berettyóújfalu és Zsáka NEM confirmedLocal a Helyi nézetben és a Hajdú-Bihar nézetben sem', () => {
-  const cfg = DEFAULT_TERRITORY_CONFIG; // Berettyóújfalu és Zsáka nincsenek a figyelt profilban
+test('4. Nem figyelt Berettyóújfalu és Zsáka NEM confirmedLocal a Helyi nézetben és a Hajdú-Bihar nézetben sem', () => {
+  const cfg = DEFAULT_TERRITORY_CONFIG;
 
   const berettyoEvent = {
     id: 'event-b002',
@@ -187,7 +187,7 @@ test('3. Nem figyelt Berettyóújfalu és Zsáka NEM confirmedLocal a Helyi néz
   assert.equal(partition[VIEWS.COUNTY].relationshipBreakdown.county, 2);
 });
 
-test('4. Debrecen key_connection külön számláló: nem bihartordai megerősített találat', () => {
+test('5. Debrecen key_connection külön számláló: nem bihartordai megerősített találat', () => {
   const debEvent = {
     id: 'event-deb01',
     title: 'Debrecen új ipari park átadás',
@@ -226,7 +226,7 @@ test('4. Debrecen key_connection külön számláló: nem bihartordai megerősí
   assert.equal(local.relationshipBreakdown.key_connection, 1);
 });
 
-test('5. text_mention és unknown a magas szintű nézetekben sem confirmedLocal', () => {
+test('6. text_mention és unknown a magas szintű nézetekben sem confirmedLocal', () => {
   const textMentionNational = {
     id: 'event-tm-nat',
     title: 'Cikk, amelyben Budapest és Debrecen neve előfordul',
@@ -274,29 +274,86 @@ test('5. text_mention és unknown a magas szintű nézetekben sem confirmedLocal
   assert.equal(partition[VIEWS.GLOBAL].breakdown.confirmedLocal, 0, 'No confirmedLocal in Global View');
 });
 
-test('6. CAP dedup: azonos identifier eltérő sender esetén NEM vonódik össze', () => {
-  const alertMeteo = {
-    identifier: 'MSG-001',
-    sender: 'meteoalarm.org',
-    title: 'Meteoalarm szélvihar',
+test('7. Hajdú-Bihar nézet: HU321 megyei riasztás countyEvent (nem régiós), HU32 regionalAdvisories', () => {
+  const hbCountyAlert = {
+    id: 'event-hb-cap',
+    title: 'Hajdú-Bihar vármegyei szélriasztás',
     territory: {
       territoryLevel: 'county',
+      territoryName: 'Hajdú-Bihar',
       countyCode: '09',
       nuts3: 'HU321',
       localRelevanceReason: LOCAL_RELEVANCE_REASONS.SOURCE_REGION_ONLY
     }
   };
 
+  const eszakAlfoldRegionalAlert = {
+    id: 'event-ea-cap',
+    title: 'Észak-Alföld hőségriasztás',
+    territory: {
+      territoryLevel: 'region',
+      territoryName: 'Észak-Alföld',
+      nuts2: 'HU32',
+      localRelevanceReason: LOCAL_RELEVANCE_REASONS.SOURCE_REGION_ONLY
+    }
+  };
+
+  const evalCounty = evaluateEventTerritoryViews(hbCountyAlert, DEFAULT_TERRITORY_CONFIG);
+  assert.equal(evalCounty[VIEWS.COUNTY].inView, true);
+  assert.equal(evalCounty[VIEWS.COUNTY].category, VIEW_CATEGORIES.COUNTY_EVENT, 'HU321 county alert must be countyEvent in Hajdú-Bihar view, NOT regionalAdvisories');
+  assert.equal(evalCounty[VIEWS.COUNTY].relationship, RELATIONSHIPS.COUNTY);
+
+  const evalRegion = evaluateEventTerritoryViews(eszakAlfoldRegionalAlert, DEFAULT_TERRITORY_CONFIG);
+  assert.equal(evalRegion[VIEWS.COUNTY].inView, true);
+  assert.equal(evalRegion[VIEWS.COUNTY].category, VIEW_CATEGORIES.REGIONAL_ADVISORIES, 'HU32 regional alert remains regionalAdvisories in Hajdú-Bihar view');
+  assert.equal(evalRegion[VIEWS.COUNTY].relationship, RELATIONSHIPS.REGION);
+
+  // In Local view, both remain regionalAdvisories
+  assert.equal(evalCounty[VIEWS.LOCAL].category, VIEW_CATEGORIES.REGIONAL_ADVISORIES);
+  assert.equal(evalRegion[VIEWS.LOCAL].category, VIEW_CATEGORIES.REGIONAL_ADVISORIES);
+});
+
+test('8. Világ nézet: SOHA nem használhatja a regionalAdvisories kategóriát', () => {
+  const regionalEvent = {
+    id: 'event-reg-global',
+    title: 'Regionális árvíz Észak-Alföldön',
+    territory: {
+      territoryLevel: 'region',
+      nuts2: 'HU32',
+      country: 'HUN'
+    }
+  };
+
+  const evalRes = evaluateEventTerritoryViews(regionalEvent, DEFAULT_TERRITORY_CONFIG);
+  assert.equal(evalRes[VIEWS.GLOBAL].inView, true);
+  assert.equal(evalRes[VIEWS.GLOBAL].category, VIEW_CATEGORIES.GLOBAL_EVENT, 'Global view must NEVER use regionalAdvisories');
+  assert.notEqual(evalRes[VIEWS.GLOBAL].category, VIEW_CATEGORIES.REGIONAL_ADVISORIES);
+});
+
+test('9. CAP dedup: sender nélküli fallback kulcs (no-sender)', () => {
+  const alertNoSender = {
+    identifier: 'MSG-NO-SENDER',
+    title: 'Riasztás küldő nélkül',
+    territory: { territoryLevel: 'county', countyCode: '09', nuts3: 'HU321' }
+  };
+
+  const key = getEventCanonicalKey(alertNoSender);
+  assert.equal(key, 'cap-msg:no-sender:MSG-NO-SENDER', 'Missing sender must stably fallback to no-sender');
+});
+
+test('10. CAP dedup: azonos identifier eltérő sender esetén NEM vonódik össze', () => {
+  const alertMeteo = {
+    identifier: 'MSG-001',
+    sender: 'meteoalarm.org',
+    title: 'Meteoalarm szélvihar',
+    territory: { territoryLevel: 'county', countyCode: '09', nuts3: 'HU321' }
+  };
+
   const alertKat = {
     identifier: 'MSG-001',
     sender: 'katasztrofavedelem.hu',
     title: 'Katasztrófavédelem közlemény',
-    territory: {
-      territoryLevel: 'county',
-      countyCode: '09',
-      nuts3: 'HU321',
-      localRelevanceReason: LOCAL_RELEVANCE_REASONS.SOURCE_REGION_ONLY
-    }
+    territory: { territoryLevel: 'county', countyCode: '09', nuts3: 'HU321' }
   };
 
   const key1 = getEventCanonicalKey(alertMeteo);
@@ -310,115 +367,241 @@ test('6. CAP dedup: azonos identifier eltérő sender esetén NEM vonódik össz
   assert.equal(partition[VIEWS.LOCAL].uniqueEvents, 2, 'Both messages must be retained as separate incidents');
 });
 
-test('7. CAP lánc és visszavont (cancelled) lánc kezelése', () => {
+test('11. CAP lánc: kategóriát és állapotot a CAP sent ideje határozza meg, fordított érkezési sorrendnél is', () => {
   const chainKey = 'meteoalarm:HU:wind:HU321';
   const sender = 'meteoalarm.org';
 
-  // Chain 1: Alert -> Update -> Cancel
-  const msg1 = {
+  // Order of messages in array is REVERSED: Cancel sent later, Alert sent earlier
+  const earlierAlert = {
     chainKey,
     sender,
     identifier: 'CHAIN.001',
+    sent: '2026-10-24T10:00:00Z',
     msgType: 'Alert',
     title: 'Szélvihar narancs (Alert)',
     territory: { territoryLevel: 'county', countyCode: '09', nuts3: 'HU321' }
   };
 
-  const msg2 = {
+  const laterCancel = {
     chainKey,
     sender,
     identifier: 'CHAIN.002',
-    msgType: 'Update',
-    title: 'Szélvihar narancs (Update)',
-    territory: { territoryLevel: 'county', countyCode: '09', nuts3: 'HU321' }
-  };
-
-  const msg3 = {
-    chainKey,
-    sender,
-    identifier: 'CHAIN.003',
+    sent: '2026-10-24T12:00:00Z',
     msgType: 'Cancel',
     cancelled: true,
     title: 'Szélvihar visszavonva (Cancel)',
     territory: { territoryLevel: 'county', countyCode: '09', nuts3: 'HU321' }
   };
 
-  const partition = partitionEventsByView([msg1, msg2, msg3], DEFAULT_TERRITORY_CONFIG);
+  // Arrival order: earlierAlert comes AFTER laterCancel in the array!
+  const reversedArray = [laterCancel, earlierAlert];
+  const partition = partitionEventsByView(reversedArray, DEFAULT_TERRITORY_CONFIG);
   const local = partition[VIEWS.LOCAL];
 
-  // The 3 raw messages are received
-  assert.equal(local.totalEvents, 3, 'All 3 chain messages are recorded in totalEvents');
-  // Because the chain was cancelled, active uniqueEvents must be 0!
-  assert.equal(local.uniqueEvents, 0, 'Cancelled chain does NOT count as an active unique incident');
-  assert.equal(local.breakdown.regionalAdvisories, 0, 'Cancelled advisory does NOT increment active regionalAdvisories');
-  assert.equal(local.cancelledChains, 1, 'Cancelled chain is tracked under cancelledChains');
+  assert.equal(local.totalEvents, 2, 'Both messages are recorded in raw totalEvents');
+  assert.equal(local.uniqueEvents, 0, 'Cancelled chain does NOT count as an active incident despite reversed arrival order');
+  assert.equal(local.breakdown.regionalAdvisories, 0);
+  assert.equal(local.cancelledChains, 1, 'Chain is recognized as cancelled due to sent timestamp order');
 });
 
-test('8. Fedettségi állapotok szigorú elsőbbsége (COVERAGE_PRECEDENCE)', () => {
+test('12. CAP küldőalapú dedup valós normalizált eseményeken is ellenőrizve', () => {
+  const normEvent1 = {
+    id: 'event-0123456789abcdef0123456789abcdef',
+    source: { name: 'Meteoalarm' },
+    sender: 'meteoalarm.org',
+    identifier: 'NORM-001',
+    chainKey: 'meteoalarm.org:HU:wind:HU321',
+    title: 'Meteoalarm warning',
+    territory: { territoryLevel: 'county', countyCode: '09', nuts3: 'HU321' }
+  };
+
+  const normEvent2 = {
+    id: 'event-fedcba9876543210fedcba9876543210',
+    source: { name: 'Katasztrofavedelem' },
+    sender: 'katasztrofavedelem.hu',
+    identifier: 'NORM-001',
+    chainKey: 'katasztrofavedelem.hu:HU:wind:HU321',
+    title: 'Katasztrófavédelem warning',
+    territory: { territoryLevel: 'county', countyCode: '09', nuts3: 'HU321' }
+  };
+
+  const key1 = getEventCanonicalKey(normEvent1);
+  const key2 = getEventCanonicalKey(normEvent2);
+
+  assert.notEqual(key1, key2, 'Normalized events with different senders must produce distinct canonical keys');
+  const partition = partitionEventsByView([normEvent1, normEvent2], DEFAULT_TERRITORY_CONFIG);
+  assert.equal(partition[VIEWS.LOCAL].uniqueEvents, 2);
+});
+
+test('13. Fedettségi állapotok szigorú elsőbbsége (COVERAGE_PRECEDENCE)', () => {
   assert.deepEqual(COVERAGE_PRECEDENCE, [
     COVERAGE_STATES.LETILTOTT,
-    COVERAGE_STATES.OFFLINE_PILLANATKEP,
     COVERAGE_STATES.NINCS_FORRAS,
     COVERAGE_STATES.ELAVULT_HIBAS,
+    COVERAGE_STATES.OFFLINE_PILLANATKEP,
     COVERAGE_STATES.SIKERES_ADAT,
     COVERAGE_STATES.SIKERES_URES
   ]);
+});
 
+test('14. Fedettségi modell: az origin (snapshot/live) külön mező, nem írja felül a hibát, hiányt vagy letiltást', () => {
   const now = Date.parse('2026-10-24T12:00:00Z');
 
-  // Precedence 1: Disabled beats everything (even error or stale or snapshot)
-  const disabledSrc = { id: 's1', name: 'Disabled', enabled: false, error: 'Fatal error', lastUpdated: '2020-01-01' };
-  const evalDisabled = evaluateSourceCoverage([disabledSrc], [], { now, isOfflineSnapshot: true });
-  assert.equal(evalDisabled[0].status, COVERAGE_STATES.LETILTOTT);
+  // Source in offline snapshot with error: must be ELAVULT_HIBAS, NOT OFFLINE_PILLANATKEP!
+  const errInSnapshot = { id: 's-err', name: 'Error Source', enabled: true, error: 'Database timeout' };
+  const evalErr = evaluateSourceCoverage([errInSnapshot], [], { now, isOfflineSnapshot: true });
+  assert.equal(evalErr[0].origin, 'snapshot');
+  assert.equal(evalErr[0].isSnapshot, true);
+  assert.equal(evalErr[0].status, COVERAGE_STATES.ELAVULT_HIBAS, 'Snapshot mode must NOT overwrite error state');
 
-  // Precedence 2: Offline snapshot beats unconfigured/error
-  const snapshotSrc = { id: 's2', name: 'Snapshot', enabled: true, error: 'Some error' };
-  const evalSnapshot = evaluateSourceCoverage([snapshotSrc], [], { now, isOfflineSnapshot: true });
-  assert.equal(evalSnapshot[0].status, COVERAGE_STATES.OFFLINE_PILLANATKEP);
+  // Source in offline snapshot that is unconfigured: must be NINCS_FORRAS!
+  const missingInSnapshot = { id: 's-missing', name: 'Missing Source', enabled: true, unconfigured: true };
+  const evalMissing = evaluateSourceCoverage([missingInSnapshot], [], { now, isOfflineSnapshot: true });
+  assert.equal(evalMissing[0].origin, 'snapshot');
+  assert.equal(evalMissing[0].status, COVERAGE_STATES.NINCS_FORRAS, 'Snapshot mode must NOT overwrite unconfigured state');
 
-  // Precedence 3: Unconfigured / Nincs forrás -> flags prerequisiteForStep2C: true
-  const missingSrc = { id: 's3', name: 'Nincs Forrás Feed', enabled: true, unconfigured: true };
-  const evalMissing = evaluateSourceCoverage([missingSrc], [], { now, isOfflineSnapshot: false });
-  assert.equal(evalMissing[0].status, COVERAGE_STATES.NINCS_FORRAS);
-  assert.equal(evalMissing[0].prerequisiteForStep2C, true, 'Unconfigured source must be flagged as 2C prerequisite');
-
-  // Precedence 4: Error beats stale
-  const errorSrc = { id: 's4', name: 'Err', enabled: true, error: '500 Server Error', lastUpdated: '2026-10-24T08:00:00Z' };
-  const evalError = evaluateSourceCoverage([errorSrc], [], { now, isOfflineSnapshot: false, staleThresholdMs: 3600000 });
-  assert.equal(evalError[0].status, COVERAGE_STATES.ELAVULT_HIBAS);
-  assert.match(evalError[0].error, /500/);
-
-  // Precedence 5: Active items
-  const activeSrc = { id: 's5', name: 'Active', enabled: true, lastUpdated: '2026-10-24T11:55:00Z' };
-  const evalActive = evaluateSourceCoverage([activeSrc], [{ source: 's5', title: 'Tétel' }], { now, isOfflineSnapshot: false });
-  assert.equal(evalActive[0].status, COVERAGE_STATES.SIKERES_ADAT);
-  assert.equal(evalActive[0].itemCount, 1);
-
-  // Precedence 6: Calm (0 items)
-  const calmSrc = { id: 's6', name: 'Calm', enabled: true, lastUpdated: '2026-10-24T11:55:00Z' };
-  const evalCalm = evaluateSourceCoverage([calmSrc], [], { now, isOfflineSnapshot: false });
-  assert.equal(evalCalm[0].status, COVERAGE_STATES.SIKERES_URES);
-  assert.equal(evalCalm[0].itemCount, 0);
+  // Healthy source in snapshot: receives OFFLINE_PILLANATKEP
+  const healthyInSnapshot = { id: 's-ok', name: 'Healthy Snapshot', enabled: true, lastUpdated: '2026-10-24T11:50:00Z' };
+  const evalOk = evaluateSourceCoverage([healthyInSnapshot], [{ source: 's-ok', title: 'Data' }], { now, isOfflineSnapshot: true });
+  assert.equal(evalOk[0].origin, 'snapshot');
+  assert.equal(evalOk[0].status, COVERAGE_STATES.OFFLINE_PILLANATKEP);
 });
 
-test('9. Date normalization and Coordinate guard', () => {
-  // Date only does not become midnight
+test('15. Fedettségi modell: sikeres_üres nem tartalmazhat nyugodt szóhasználatot', () => {
+  assert.equal(COVERAGE_LABELS[COVERAGE_STATES.SIKERES_URES], 'Sikeres lekérés, nincs aktív tétel');
+  assert.ok(!COVERAGE_LABELS[COVERAGE_STATES.SIKERES_URES].toLowerCase().includes('nyugodt'), 'sikeres_üres must NOT contain nyugodt');
+});
+
+test('16. Date normalization: date-only strings do NOT become midnight UTC', () => {
   const dOnly = normalizeEventDate('2026-10-24');
   assert.equal(dOnly.dateOnly, true);
-  assert.equal(dOnly.iso, null);
+  assert.equal(dOnly.raw, '2026-10-24');
+  assert.equal(dOnly.iso, null, 'date-only string must NOT fabricate midnight ISO UTC string');
   assert.equal(dOnly.timestamp, null);
 
-  // Sanitized coordinates
-  assert.equal(sanitizeCoordinates(null), null);
-  assert.equal(sanitizeCoordinates({ lat: 95, lon: 21 }), null);
-  const valid = sanitizeCoordinates({ lat: 47.1658, lon: 21.3650, isEventLocation: false });
-  assert.equal(valid.lat, 47.1658);
-  assert.equal(valid.lon, 21.3650);
+  const fullIso = normalizeEventDate('2026-10-24T14:30:00.000Z');
+  assert.equal(fullIso.dateOnly, false);
+  assert.equal(fullIso.iso, '2026-10-24T14:30:00.000Z');
+  assert.ok(Number.isFinite(fullIso.timestamp));
+
+  const invalid = normalizeEventDate('not-a-date');
+  assert.equal(invalid.iso, null);
+  assert.equal(invalid.timestamp, null);
 });
 
-test('10. Briefing citation reference validation contract', () => {
+test('17. Coordinate sanitization: unlocated news receives null, preventing fake centroid drift', () => {
+  assert.equal(sanitizeCoordinates(null), null);
+  assert.equal(sanitizeCoordinates({}), null);
+  assert.equal(sanitizeCoordinates({ lat: 'invalid', lon: 21.0 }), null);
+  assert.equal(sanitizeCoordinates({ lat: 100, lon: 21.0 }), null, 'Out of bounds lat');
+
+  const valid = sanitizeCoordinates({
+    lat: 47.1658,
+    lon: 21.3650,
+    source: 'OpenStreetMap/Nominatim',
+    isEventLocation: false
+  });
+  assert.deepEqual(valid, {
+    lat: 47.1658,
+    lon: 21.3650,
+    source: 'OpenStreetMap/Nominatim',
+    isEventLocation: false
+  });
+});
+
+test('18. Deterministic canonical key synthesis for ID-less records', () => {
+  const itemWithoutId1 = {
+    source: 'haon',
+    title: 'Felújítják a főteret',
+    publishedAt: '2026-10-24T08:00:00Z',
+    link: 'https://haon.hu/cikk/1'
+  };
+
+  const itemWithoutId2 = {
+    source: 'haon',
+    title: 'Felújítják a főteret',
+    publishedAt: '2026-10-24T08:00:00Z',
+    link: 'https://haon.hu/cikk/1'
+  };
+
+  const key1 = getEventCanonicalKey(itemWithoutId1);
+  const key2 = getEventCanonicalKey(itemWithoutId2);
+
+  assert.equal(key1, key2, 'Identical ID-less articles produce identical canonical keys');
+  assert.match(key1, /^raw:haon:Felújítják a főteret/);
+});
+
+test('19. Orthogonal Lens x View interaction (pure intersection matrix)', () => {
+  const bihWeather = {
+    id: 'event-bw01',
+    domain: 'weather',
+    territory: {
+      territoryLevel: 'settlement',
+      settlementName: 'Bihartorda',
+      kshSettlement: '29887',
+      isConfirmedLocal: true,
+      localRelevanceReason: LOCAL_RELEVANCE_REASONS.OFFICIAL_AREA_ASSIGNMENT
+    }
+  };
+
+  const bihHealth = {
+    id: 'event-bh01',
+    domain: 'health',
+    territory: {
+      territoryLevel: 'settlement',
+      settlementName: 'Bihartorda',
+      kshSettlement: '29887',
+      isConfirmedLocal: true,
+      localRelevanceReason: LOCAL_RELEVANCE_REASONS.OFFICIAL_AREA_ASSIGNMENT
+    }
+  };
+
+  const debWeather = {
+    id: 'event-dw01',
+    domain: 'weather',
+    territory: {
+      territoryLevel: 'settlement',
+      settlementName: 'Debrecen',
+      kshSettlement: '15130',
+      countyCode: '09',
+      isConfirmedLocal: true,
+      localRelevanceReason: LOCAL_RELEVANCE_REASONS.OFFICIAL_AREA_ASSIGNMENT
+    }
+  };
+
+  const events = [bihWeather, bihHealth, debWeather];
+
+  // Local view + weather lens: bihWeather + debWeather
+  const localWeather = filterEventsByViewAndLens(events, VIEWS.LOCAL, 'weather', DEFAULT_TERRITORY_CONFIG);
+  assert.equal(localWeather.length, 2);
+
+  // Local view + health lens: bihHealth only
+  const localHealth = filterEventsByViewAndLens(events, VIEWS.LOCAL, 'health', DEFAULT_TERRITORY_CONFIG);
+  assert.equal(localHealth.length, 1);
+  assert.equal(localHealth[0].id, 'event-bh01');
+
+  // Local view + conflict lens: 0
+  const localConflict = filterEventsByViewAndLens(events, VIEWS.LOCAL, 'conflict', DEFAULT_TERRITORY_CONFIG);
+  assert.equal(localConflict.length, 0);
+
+  // Compute full 2D matrix
+  const matrix = computeViewLensMatrix(events, ['all', 'weather', 'health'], DEFAULT_TERRITORY_CONFIG);
+  assert.equal(matrix[VIEWS.LOCAL].all.unique, 3);
+  assert.equal(matrix[VIEWS.LOCAL].weather.unique, 2);
+  assert.equal(matrix[VIEWS.LOCAL].health.unique, 1);
+});
+
+test('20. Briefing citation reference validation contract', () => {
   assert.deepEqual(BRIEFING_RECORD_FIELDS, ['id', 'n', 'title']);
-  assert.equal(isValidBriefingRef({ n: 1, id: 'event-0123456789abcdef0123456789abcdef', title: 'Riasztás' }), true);
-  assert.equal(isValidBriefingRef({ n: 0, id: 'event-0123456789abcdef0123456789abcdef', title: 'Riasztás' }), false);
-  assert.equal(isValidBriefingRef({ n: 1, id: 'bad-id', title: 'Riasztás' }), false);
+
+  assert.equal(isValidBriefingRef({
+    n: 1,
+    id: 'event-0123456789abcdef0123456789abcdef',
+    title: 'Szélvihar Hajdú-Bihar vármegyében'
+  }), true);
+
+  assert.equal(isValidBriefingRef(null), false);
+  assert.equal(isValidBriefingRef({ n: 0, id: 'event-0123456789abcdef0123456789abcdef', title: 'T' }), false, 'n must be >= 1');
+  assert.equal(isValidBriefingRef({ n: 1, id: 'not-an-event-id', title: 'T' }), false, 'id must match event id regex');
+  assert.equal(isValidBriefingRef({ n: 1, id: 'event-0123456789abcdef0123456789abcdef', title: '' }), false, 'title must not be empty');
 });
