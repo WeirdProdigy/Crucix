@@ -1286,7 +1286,7 @@
           "eventId": "event-0e6c3ce1302f53eb8637e398979ea0ce"
         }
       ],
-      "rejectedObservations": 0,
+      "rejectedObservations": 1,
       "url": "https://meteoalarm.org/",
       "attribution": "",
       "rights": "",

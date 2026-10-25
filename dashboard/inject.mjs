@@ -944,6 +944,16 @@ export async function synthesize(data, options = {}) {
     event.lifecycle = event.lifecycle || (event.isCancelled || event.cancelled ? 'cancelled' : event.superseded ? 'superseded' : 'active');
     event.isCancelled = Boolean(event.isCancelled || event.cancelled || event.lifecycle === 'cancelled');
   }
+  if (!Array.isArray(V2.staleEvents)) {
+    V2.staleEvents = [];
+  }
+  for (const event of V2.staleEvents) {
+    if (!event.views) {
+      event.views = evaluateEventTerritoryViews(event, territoryConfig);
+    }
+    event.lifecycle = event.lifecycle || (event.isCancelled || event.cancelled ? 'cancelled' : event.superseded ? 'superseded' : 'active');
+    event.isCancelled = Boolean(event.isCancelled || event.cancelled || event.lifecycle === 'cancelled');
+  }
   V2.views = partitionEventsByView(V2.events, territoryConfig);
   const liveQueried = options.liveQueriedSources instanceof Set
     ? options.liveQueriedSources

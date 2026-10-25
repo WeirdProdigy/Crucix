@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   VIEWS,
@@ -18,8 +19,11 @@ import { synthesize } from '../dashboard/inject.mjs';
 import { DEFAULT_TERRITORY_CONFIG } from '../lib/intelligence/territory.mjs';
 import { createBriefingService } from '../lib/llm/briefing.mjs';
 import { generatePackage2bSnapshot } from '../scripts/generate-package2b-snapshot.mjs';
+import { POLICIES } from '../apis/utils/freshness.mjs';
 
-const SNAPSHOT_PATH = join(process.cwd(), 'test/fixtures/runs-test-package2b/latest.json');
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(__dirname, '..');
+const SNAPSHOT_PATH = join(ROOT, 'test/fixtures/runs-test-package2b/latest.json');
 
 test('1. Package 2B test snapshot exists and is generated deterministically', () => {
   const result = generatePackage2bSnapshot({ outPath: SNAPSHOT_PATH });
@@ -203,4 +207,107 @@ test('8. Origin="live" is only assigned when live query actually executed in run
   const openSkyCov = liveV2.coverage.find(c => c.sourceId === 'OpenSky');
   assert.ok(openSkyCov);
   assert.equal(openSkyCov.origin, 'snapshot', 'Non-queried source must have origin="snapshot"');
+});
+
+test('9. Real-clock serving: freshLiveSnapshot with Date.now() retains Nébih events while filtering stale Meteoalarm', () => {
+  const raw = JSON.parse(readFileSync(SNAPSHOT_PATH, 'utf8'));
+  const served = freshLiveSnapshot(raw, Date.now());
+
+  // 1. Nébih events (unpolicied / offline administrative table) must be completely preserved
+  const nebihEvents = served.events.filter(e => e.source?.name === 'Nebih-ASP');
+  assert.equal(nebihEvents.length, 4, 'All 4 Nébih events must survive serving under real clock');
+
+  // 2. HAON fixture event must also be preserved
+  const haonEvents = served.events.filter(e => e.source?.name === 'HAON-Fixture');
+  assert.equal(haonEvents.length, 1, 'HAON fixture event must survive serving under real clock');
+
+  // 3. Stale Meteoalarm events must NOT be in served.events
+  const meteoEvents = served.events.filter(e => e.source?.name === 'Meteoalarm');
+  assert.equal(meteoEvents.length, 0, 'Stale Meteoalarm events must be filtered out of active events');
+
+  // 4. Stale Meteoalarm events must be moved to served.staleEvents
+  assert.ok(Array.isArray(served.staleEvents), 'served.staleEvents must be an array');
+  const staleMeteo = served.staleEvents.filter(e => e.source?.name === 'Meteoalarm');
+  assert.equal(staleMeteo.length, 4, 'All 4 stale Meteoalarm events must be in staleEvents');
+});
+
+test('10. Additive staleEvents: carries views and lifecycle fields but is excluded from active V2.views counters', () => {
+  const raw = JSON.parse(readFileSync(SNAPSHOT_PATH, 'utf8'));
+  const served = freshLiveSnapshot(raw, Date.now());
+
+  // 1. All staleEvents have enriched views, lifecycle, isCancelled
+  for (const event of served.staleEvents) {
+    assert.match(event.id, /^event-[0-9a-f]{32}$/);
+    assert.ok(event.views && typeof event.views === 'object');
+    for (const view of Object.values(VIEWS)) {
+      assert.ok(event.views[view]);
+      assert.equal(typeof event.views[view].inView, 'boolean');
+    }
+    assert.ok(['active', 'superseded', 'cancelled', 'expired', 'future'].includes(event.lifecycle));
+    assert.equal(typeof event.isCancelled, 'boolean');
+  }
+
+  // 2. Active view counters ONLY count active events (served.events), NOT staleEvents
+  // Active events: 4 Nébih + 1 Debrecen = 5 events.
+  // In local view: 2 Nébih (Bihartorda, Báránd) + 1 Debrecen (key connection) = 3 active items.
+  const localView = served.views[VIEWS.LOCAL];
+  assert.equal(localView.totalEvents, 3, 'Local view totalEvents must not include stale Meteoalarm events');
+  assert.equal(localView.breakdown.confirmedLocal, 2);
+  assert.equal(localView.breakdown.keyConnection, 1);
+  assert.equal(localView.breakdown.regionalAdvisories, 0, 'Stale regional Meteoalarm warning must not be counted');
+});
+
+test('11. Unified freshness threshold: coverage staleness adheres to POLICIES maxAgeMs', () => {
+  const now = Date.parse('2026-10-25T12:00:00.000Z');
+  const meteoPolicy = POLICIES.Meteoalarm;
+  assert.ok(meteoPolicy && meteoPolicy.maxAgeMs === 3 * 3600 * 1000, 'Meteoalarm policy must have 3h maxAgeMs');
+
+  // Case A: 2 hours old (older than 60m, but WITHIN 3h policy) -> NOT stale
+  const twoHoursOld = new Date(now - 2 * 3600 * 1000).toISOString();
+  const sourceA = { id: 'Meteoalarm', name: 'Meteoalarm', enabled: true, lastUpdated: twoHoursOld };
+  const coverageOfflineA = evaluateSourceCoverage([sourceA], [{ source: 'Meteoalarm', title: 'Advisory' }], { now, isOfflineSnapshot: true });
+  assert.equal(coverageOfflineA[0].status, COVERAGE_STATES.OFFLINE_PILLANATKEP, 'Source within 3h policy must not be marked stale');
+  assert.equal(coverageOfflineA[0].timeWindow.label, 'snapshot');
+
+  const coverageLiveA = evaluateSourceCoverage([sourceA], [{ source: 'Meteoalarm', title: 'Advisory' }], { now, isOfflineSnapshot: false });
+  assert.equal(coverageLiveA[0].status, COVERAGE_STATES.SIKERES_ADAT, 'Live source within 3h policy is successful');
+  assert.equal(coverageLiveA[0].timeWindow.label, 'active_window');
+  assert.equal(coverageLiveA[0].timeWindow.durationMs, 3 * 3600 * 1000, 'timeWindow must reflect policy duration (3h)');
+
+  // Case B: 4 hours old (exceeds 3h policy) -> Stale with exact 180 min error message
+  const fourHoursOld = new Date(now - 4 * 3600 * 1000).toISOString();
+  const sourceB = { id: 'Meteoalarm', name: 'Meteoalarm', enabled: true, lastUpdated: fourHoursOld };
+  const coverageB = evaluateSourceCoverage([sourceB], [{ source: 'Meteoalarm', title: 'Advisory' }], { now, isOfflineSnapshot: true });
+  assert.equal(coverageB[0].status, COVERAGE_STATES.ELAVULT_HIBAS, 'Source exceeding 3h policy must be marked stale');
+  assert.equal(coverageB[0].timeWindow.label, 'stale');
+  assert.equal(coverageB[0].timeWindow.durationMs, 4 * 3600 * 1000);
+  assert.equal(coverageB[0].error, 'Data is stale (older than 180 minutes)', 'Error message must reflect exact policy');
+});
+
+test('12. Briefing reference target lookup: citations resolve against events or staleEvents', () => {
+  const raw = JSON.parse(readFileSync(SNAPSHOT_PATH, 'utf8'));
+  const served = freshLiveSnapshot(raw, Date.now());
+
+  const allAvailableEvents = [...served.events, ...served.staleEvents];
+  for (const bullet of raw.briefing.bullets) {
+    for (const ref of bullet.refs) {
+      const found = allAvailableEvents.find(e => e.id === ref.id);
+      assert.ok(found, `Cited ID ${ref.id} must be resolvable in served events or staleEvents`);
+    }
+  }
+});
+
+test('13. Browser QA snapshot generation with relative times writes to non-committed location', () => {
+  const browserOutPath = join(ROOT, 'runs/test-package2b-browser/latest.json');
+  const result = generatePackage2bSnapshot({ now: Date.now(), outPath: browserOutPath, relativeTimes: true });
+
+  assert.ok(existsSync(browserOutPath), 'Browser test snapshot must exist on disk');
+  assert.equal(result.briefingBullets, 2);
+
+  const browserRaw = JSON.parse(readFileSync(browserOutPath, 'utf8'));
+  const served = freshLiveSnapshot(browserRaw, Date.now());
+
+  // With relative times, the fresh Meteoalarm events remain in served.events under Date.now()!
+  const freshMeteo = served.events.filter(e => e.source?.name === 'Meteoalarm');
+  assert.ok(freshMeteo.length > 0, 'Fresh Meteoalarm events generated relative to now must survive real-clock serving');
 });

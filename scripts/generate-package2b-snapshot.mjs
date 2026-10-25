@@ -34,7 +34,8 @@ const ROOT = resolve(__dirname, '..');
 export function generatePackage2bSnapshot({
   now = '2026-10-22T14:15:00.000Z',
   outPath = join(ROOT, 'test/fixtures/runs-test-package2b/latest.json'),
-  territoryConfig = DEFAULT_TERRITORY_CONFIG
+  territoryConfig = DEFAULT_TERRITORY_CONFIG,
+  relativeTimes = false
 } = {}) {
   const atMs = typeof now === 'number' ? now : Date.parse(now);
   const isoTime = new Date(atMs).toISOString();
@@ -44,21 +45,58 @@ export function generatePackage2bSnapshot({
   const nebihHtml = readFileSync(join(ROOT, 'test/fixtures/nebih/fixture_asp_minimal_baseline.html'), 'utf8');
 
   // 2. Parse fixtures through source parsers
-  const parsedMeteo = parseMeteoalarm(meteoEdgeXml, { country: 'hungary', now: atMs, includeAllLifecycles: true });
-  const parsedNebih = parseNebihAsp(nebihHtml, { now: atMs, territoryConfig });
+  const fixtureRefMs = Date.parse('2026-10-22T14:15:00.000Z');
+  const parsedMeteo = parseMeteoalarm(meteoEdgeXml, { country: 'hungary', now: relativeTimes ? fixtureRefMs : atMs, includeAllLifecycles: true });
+  const parsedNebih = parseNebihAsp(nebihHtml, { now: relativeTimes ? fixtureRefMs : atMs, territoryConfig });
 
-  // 3. Mark all test observations explicitly as [TESZTADAT]
-  const allMeteoObs = (parsedMeteo.observations || []).map(obs => ({
-    ...obs,
-    title: obs.title.startsWith('[TESZTADAT]') ? obs.title : `[TESZTADAT] ${obs.title}`,
-    summary: obs.summary?.startsWith('[TESZTADAT]') ? obs.summary : `[TESZTADAT] ${obs.summary || obs.title}`
-  }));
+  // 3. Mark all test observations explicitly as [TESZTADAT] and apply relative times if requested
+  const rawMeteoObs = parsedMeteo.allObservations || parsedMeteo.observations || [];
+  const allMeteoObs = rawMeteoObs.map(obs => {
+    let observedAt = obs.observedAt;
+    let publishedAt = obs.publishedAt;
+    let startsAt = obs.startsAt;
+    let validUntil = obs.validUntil;
 
-  const allNebihObs = (parsedNebih.observations || []).map(obs => ({
-    ...obs,
-    title: obs.title.startsWith('[TESZTADAT]') ? obs.title : `[TESZTADAT] ${obs.title}`,
-    summary: obs.summary?.startsWith('[TESZTADAT]') ? obs.summary : `[TESZTADAT] ${obs.summary || obs.title}`
-  }));
+    if (relativeTimes) {
+      if (obs.providerId === 'HU.EDGE.UNKNOWN') {
+        observedAt = new Date(atMs - 5 * 3600000).toISOString();
+        publishedAt = new Date(atMs - 5 * 3600000).toISOString();
+        startsAt = new Date(atMs - 5 * 3600000).toISOString();
+        validUntil = new Date(atMs - 3600000).toISOString();
+      } else {
+        observedAt = new Date(atMs - 3600000).toISOString();
+        publishedAt = new Date(atMs - 3600000).toISOString();
+        startsAt = new Date(atMs - 3600000).toISOString();
+        validUntil = new Date(atMs + 2 * 3600000).toISOString();
+      }
+    }
+
+    return {
+      ...obs,
+      observedAt,
+      publishedAt,
+      startsAt,
+      validUntil,
+      title: obs.title.startsWith('[TESZTADAT]') ? obs.title : `[TESZTADAT] ${obs.title}`,
+      summary: obs.summary?.startsWith('[TESZTADAT]') ? obs.summary : `[TESZTADAT] ${obs.summary || obs.title}`
+    };
+  });
+
+  const allNebihObs = (parsedNebih.observations || []).map(obs => {
+    let observedAt = obs.observedAt;
+    let publishedAt = obs.publishedAt;
+    if (relativeTimes) {
+      observedAt = new Date(atMs - 7 * 86400000).toISOString().slice(0, 10);
+      publishedAt = new Date(atMs - 2 * 86400000).toISOString().slice(0, 10);
+    }
+    return {
+      ...obs,
+      observedAt,
+      publishedAt,
+      title: obs.title.startsWith('[TESZTADAT]') ? obs.title : `[TESZTADAT] ${obs.title}`,
+      summary: obs.summary?.startsWith('[TESZTADAT]') ? obs.summary : `[TESZTADAT] ${obs.summary || obs.title}`
+    };
+  });
 
   // Resolve CAP warning chains for Meteoalarm
   const resolvedMeteoObs = resolveWarningChains(allMeteoObs, { now: atMs });
@@ -68,7 +106,7 @@ export function generatePackage2bSnapshot({
     Meteoalarm: {
       source: 'Meteoalarm',
       status: 'ok',
-      observedAt: isoTime,
+      observedAt: relativeTimes ? new Date(atMs - 3600000).toISOString() : isoTime,
       timestamp: isoTime,
       observations: resolvedMeteoObs
     }
@@ -123,8 +161,8 @@ export function generatePackage2bSnapshot({
     country: 'Hungary',
     sourceRegion: 'Hajdú-Bihar',
     location: { country: 'Hungary', settlement: 'Debrecen' },
-    observedAt: isoTime,
-    publishedAt: isoTime,
+    observedAt: relativeTimes ? new Date(atMs - 3600000).toISOString() : isoTime,
+    publishedAt: relativeTimes ? new Date(atMs - 3600000).toISOString() : isoTime,
     collectedAt: isoTime,
     lifecycle: 'active',
     isCancelled: false
@@ -233,8 +271,13 @@ export function generatePackage2bSnapshot({
 
 // Direct CLI invocation
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
-  const result = generatePackage2bSnapshot();
-  console.log('[generate-package2b-snapshot] Snapshot generated successfully:');
+  const isBrowser = process.argv.includes('--browser');
+  const now = isBrowser ? Date.now() : '2026-10-22T14:15:00.000Z';
+  const outPath = isBrowser
+    ? join(ROOT, 'runs/test-package2b-browser/latest.json')
+    : join(ROOT, 'test/fixtures/runs-test-package2b/latest.json');
+  const result = generatePackage2bSnapshot({ now, outPath, relativeTimes: isBrowser });
+  console.log(`[generate-package2b-snapshot] Snapshot generated successfully (${isBrowser ? 'browser relative' : 'static deterministic'}):`);
   console.log(`  Path: ${result.outPath}`);
   console.log(`  Events: ${result.eventCount}`);
   console.log(`  Views (unique): local=${result.viewsCount.local}, county=${result.viewsCount.county}, national=${result.viewsCount.national}, global=${result.viewsCount.global}`);
