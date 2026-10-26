@@ -35,10 +35,80 @@ export function generatePackage2bSnapshot({
   now = '2026-10-22T14:15:00.000Z',
   outPath = join(ROOT, 'test/fixtures/runs-test-package2b/latest.json'),
   territoryConfig = DEFAULT_TERRITORY_CONFIG,
-  relativeTimes = false
+  relativeTimes = false,
+  mode = 'baseline'
 } = {}) {
   const atMs = typeof now === 'number' ? now : Date.parse(now);
   const isoTime = new Date(atMs).toISOString();
+
+  // If empty mode requested: generate a valid snapshot with empty events
+  if (mode === 'empty') {
+    const emptyViews = partitionEventsByView([], territoryConfig);
+    const coverageSources = [
+      { id: 'Meteoalarm', name: 'Meteoalarm', domain: 'hazards', enabled: true, status: 'ok', isSnapshot: true, origin: 'snapshot' },
+      { id: 'Nebih-ASP', name: 'Nebih-ASP', domain: 'health', enabled: false, status: 'disabled', isSnapshot: true, origin: 'snapshot' },
+      { id: 'HAON', name: 'HAON', domain: 'general', enabled: true, status: COVERAGE_STATES.UNCONFIGURED, unconfigured: true, isSnapshot: true, origin: 'snapshot' }
+    ];
+    const coverage = evaluateSourceCoverage(coverageSources, [], { isOfflineSnapshot: true, now: atMs });
+
+    const snapshot = {
+      isPreSynthesizedFixture: true,
+      meta: {
+        version: '2.13.6',
+        timestamp: isoTime,
+        totalDurationMs: 50,
+        sourcesQueried: 3,
+        sourcesOk: 1,
+        sourcesFailed: 0,
+        sourcesDisabled: 1,
+        isOfflineSnapshot: true,
+        testEnvironment: true
+      },
+      territoryConfig,
+      liveSources: [],
+      events: [],
+      staleEvents: [],
+      views: emptyViews,
+      coverage,
+      briefing: {
+        scope: 'HU',
+        language: 'hu',
+        source: 'rules',
+        generatedAt: isoTime,
+        bullets: []
+      },
+      news: [],
+      newsFeed: [],
+      air: [],
+      thermal: [],
+      tSignals: [],
+      chokepoints: [],
+      nuke: [],
+      nukeSignals: [],
+      sdr: { total: 0, online: 0, zones: {} },
+      earthquakes: [],
+      markets: {},
+      ideas: [],
+      ideasSource: 'rules'
+    };
+
+    mkdirSync(dirname(outPath), { recursive: true });
+    writeFileSync(outPath, JSON.stringify(snapshot, null, 2), 'utf8');
+
+    return {
+      outPath,
+      eventCount: 0,
+      staleCount: 0,
+      viewsCount: {
+        local: emptyViews[VIEWS.LOCAL].uniqueEvents,
+        county: emptyViews[VIEWS.COUNTY].uniqueEvents,
+        national: emptyViews[VIEWS.NATIONAL].uniqueEvents,
+        global: emptyViews[VIEWS.GLOBAL].uniqueEvents
+      },
+      localBreakdown: emptyViews[VIEWS.LOCAL].breakdown,
+      briefingBullets: 0
+    };
+  }
 
   // 1. Load real static fixtures
   const meteoEdgeXml = readFileSync(join(ROOT, 'test/fixtures/synthetic-meteoalarm-edge-cases.atom.xml'), 'utf8');
@@ -176,6 +246,89 @@ export function generatePackage2bSnapshot({
   };
 
   const events = [...nebihEvents, debrecenEvent, ...meteoEvents];
+  let staleEvents = [];
+
+  if (mode === 'rich' || mode === 'browser') {
+    // 1. Add unknownTerritory event
+    const unknownTerritoryEvent = {
+      id: 'event-33333333333333333333333333333304',
+      title: '[TESZTADAT] Ismeretlen területi hatáskörű teszt-riasztás',
+      summary: '[TESZTADAT] Területhez még nem társított vagy nem azonosított kockázati jelentés.',
+      source: { name: 'HAON-Fixture', url: 'https://example.test/unknown-territory', hostname: 'example.test', status: 'ok' },
+      kind: 'news',
+      severity: 'moderate',
+      country: 'HU',
+      iso3: 'HUN',
+      matchState: 'unknown',
+      territory: {
+        nuts0: 'HU',
+        iso3: 'HUN',
+        territoryLevel: 'indeterminate',
+        matchState: 'unknown',
+        inScope: false,
+        identityStatus: 'unresolved'
+      },
+      observedAt: relativeTimes ? new Date(atMs - 3600000).toISOString() : isoTime,
+      publishedAt: relativeTimes ? new Date(atMs - 3600000).toISOString() : isoTime,
+      collectedAt: isoTime,
+      lifecycle: 'active',
+      isCancelled: false,
+      isFixture: true
+    };
+    events.push(unknownTerritoryEvent);
+
+    // 2. Add rich staleEvents covering all 4 stale reasons
+    staleEvents = [
+      {
+        id: 'event-stale-000000000000000000000001',
+        title: '[TESZTADAT] Lejárt kibocsátói érvényességű tesztesemény',
+        summary: '[TESZTADAT] Kibocsátó által adott érvényességi idő letelt.',
+        source: { name: 'Meteoalarm', status: 'ok' },
+        staleReason: 'provider_expired',
+        lifecycle: 'active',
+        isCancelled: false,
+        isFixture: true,
+        observedAt: new Date(atMs - 10 * 3600000).toISOString(),
+        views: { local: { inView: true, category: 'regionalAdvisories' } }
+      },
+      {
+        id: 'event-stale-000000000000000000000002',
+        title: '[TESZTADAT] Késő forrásfrissítésű tesztesemény (elavult lekérés)',
+        summary: '[TESZTADAT] A forrás nem frissült időben.',
+        source: { name: 'Meteoalarm', status: 'ok' },
+        staleReason: 'source_stale',
+        lifecycle: 'active',
+        isCancelled: false,
+        isFixture: true,
+        observedAt: new Date(atMs - 26 * 3600000).toISOString(),
+        views: { local: { inView: true, category: 'regionalAdvisories' } }
+      },
+      {
+        id: 'event-stale-000000000000000000000003',
+        title: '[TESZTADAT] Helyi frissességi korlátot túllépő tesztesemény',
+        summary: '[TESZTADAT] Kibocsátói lejárat nélküli elavult rekord.',
+        source: { name: 'Meteoalarm', status: 'ok' },
+        staleReason: 'local_freshness_exceeded',
+        lifecycle: 'active',
+        isCancelled: false,
+        isFixture: true,
+        observedAt: new Date(atMs - 50 * 3600000).toISOString(),
+        views: { local: { inView: true, category: 'regionalAdvisories' } }
+      },
+      {
+        id: 'event-stale-000000000000000000000004',
+        title: '[TESZTADAT] Forráshiba miatt nem igazolt tesztesemény',
+        summary: '[TESZTADAT] A forrás hibát jelzett.',
+        source: { name: 'Meteoalarm', status: 'error' },
+        staleReason: 'source_error',
+        lifecycle: 'active',
+        isCancelled: false,
+        isFixture: true,
+        observedAt: new Date(atMs - 12 * 3600000).toISOString(),
+        views: { local: { inView: true, category: 'regionalAdvisories' } }
+      }
+    ];
+  }
 
   // Enrich each event with computed views and lifecycle
   for (const event of events) {
@@ -233,6 +386,7 @@ export function generatePackage2bSnapshot({
     territoryConfig,
     liveSources,
     events,
+    staleEvents,
     views,
     coverage,
     briefing,
@@ -245,7 +399,17 @@ export function generatePackage2bSnapshot({
         source: 'HAON-Fixture',
         timestamp: isoTime,
         url: 'https://example.test/tesztadat/bihartorda-01'
-      }
+      },
+      ...((mode === 'rich' || mode === 'browser') ? [
+        {
+          id: 'news-test-debrecen-unlocated',
+          title: '[TESZTADAT] Debreceni közlekedési hír (koordináták nélkül, cím alapján illeszkedő)',
+          headline: '[TESZTADAT] Debreceni közlekedési hír (koordináták nélkül, cím alapján illeszkedő)',
+          source: 'HAON-Fixture',
+          timestamp: isoTime,
+          url: 'https://example.test/tesztadat/debrecen-unlocated'
+        }
+      ] : [])
     ],
     air: [],
     thermal: [],
@@ -280,12 +444,15 @@ export function generatePackage2bSnapshot({
 // Direct CLI invocation
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
   const isBrowser = process.argv.includes('--browser');
-  const now = isBrowser ? Date.now() : '2026-10-22T14:15:00.000Z';
-  const outPath = isBrowser
+  const isRich = process.argv.includes('--rich') || isBrowser;
+  const isEmpty = process.argv.includes('--empty');
+  const mode = isEmpty ? 'empty' : (isRich ? 'rich' : 'baseline');
+  const now = (isBrowser || isRich) ? Date.now() : '2026-10-22T14:15:00.000Z';
+  const outPath = (isBrowser || isRich || isEmpty)
     ? join(ROOT, 'runs/test-package2b-browser/latest.json')
     : join(ROOT, 'test/fixtures/runs-test-package2b/latest.json');
-  const result = generatePackage2bSnapshot({ now, outPath, relativeTimes: isBrowser });
-  console.log(`[generate-package2b-snapshot] Snapshot generated successfully (${isBrowser ? 'browser relative' : 'static deterministic'}):`);
+  const result = generatePackage2bSnapshot({ now, outPath, relativeTimes: (isBrowser || isRich), mode });
+  console.log(`[generate-package2b-snapshot] Snapshot generated successfully (mode=${mode}, ${isBrowser || isRich ? 'relative times' : 'static deterministic'}):`);
   console.log(`  Path: ${result.outPath}`);
   console.log(`  Events: ${result.eventCount}`);
   console.log(`  Views (unique): local=${result.viewsCount.local}, county=${result.viewsCount.county}, national=${result.viewsCount.national}, global=${result.viewsCount.global}`);

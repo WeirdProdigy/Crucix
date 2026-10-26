@@ -417,3 +417,31 @@ test('16. Live briefing under real clock never cites stale warnings as current s
     }
   }
 });
+
+test('17. ENABLE_SWEEPS=false and offline snapshot strictly enforce origin=snapshot, never live', () => {
+  const coverageSources = [
+    { id: 'Meteoalarm', name: 'Meteoalarm', domain: 'hazards', enabled: true, status: 'ok', isSnapshot: true },
+    { id: 'Nebih-ASP', name: 'Nebih-ASP', domain: 'health', enabled: false, status: 'disabled', isSnapshot: true }
+  ];
+  const liveSources = [{ source: 'Meteoalarm', status: 'ok', observedAt: new Date().toISOString() }];
+
+  // 1. With isOfflineSnapshot: true, origin is always 'snapshot'
+  const covOffline = evaluateSourceCoverage(coverageSources, liveSources, {
+    isOfflineSnapshot: true,
+    now: Date.now()
+  });
+  for (const row of covOffline) {
+    assert.equal(row.origin, 'snapshot', `Source ${row.sourceId} must have origin='snapshot' when isOfflineSnapshot=true`);
+    assert.notEqual(row.origin, 'live', `Source ${row.sourceId} must NEVER have origin='live' when isOfflineSnapshot=true`);
+  }
+
+  // 2. Even if liveQueriedSources contains the source, isOfflineSnapshot overrides
+  const covOverridden = evaluateSourceCoverage(coverageSources, liveSources, {
+    isOfflineSnapshot: true,
+    liveQueriedSources: new Set(['Meteoalarm']),
+    now: Date.now()
+  });
+  const meteo = covOverridden.find(s => s.sourceId === 'Meteoalarm');
+  assert.ok(meteo, 'Meteoalarm row must exist in coverage');
+  assert.equal(meteo.origin, 'snapshot', 'isOfflineSnapshot must strictly override liveQueriedSources');
+});

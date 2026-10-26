@@ -31,9 +31,9 @@
 
   const STALE_REASON_LABELS = Object.freeze({
     provider_expired: 'Lejárt kibocsátói érvényesség',
-    source_stale: 'Kibocsátói lejárat nélküli elavult rekord',
-    local_freshness_exceeded: 'Helyi lejárati határidő túllépve',
-    source_error: 'Forráshiba miatt elavult'
+    source_error: 'Forráshiba: az aktualitás nem igazolható',
+    source_stale: 'A forrás frissítése késik (elavult lekérés)',
+    local_freshness_exceeded: 'Aktualitása nem igazolt: a helyi frissességi korlát letelt.'
   });
 
   const COVERAGE_LABELS = Object.freeze({
@@ -296,7 +296,7 @@
     if (renderedCount === 0) {
       sectionsHtml = `
         <div class="vp-empty">
-          Nincs megerősített helyi esemény a vizsgált időszakban. Ellenőrizze a forrásfedettségi panelt az adatforrások állapotáért.
+          Nincs megerősített helyi esemény a vizsgált időszakban. Ellenőrizze a forrásfedettségi panelt az adatforrások állapotáért. Ez nem jelenti a kockázatok teljes hiányát.
         </div>
       `;
     }
@@ -390,12 +390,13 @@
             const row = coverage[src] || {};
             const statusKey = row.status || 'unconfigured';
             const statusLabel = COVERAGE_LABELS[statusKey] || statusKey;
-            const origin = row.origin === 'live' ? 'LIVE' : 'SNAPSHOT';
+            const originLabel = row.origin === 'live' ? 'Élő lekérés ebben a folyamatban' : 'Offline pillanatkép';
+            const originClass = row.origin === 'live' ? 'cov-origin-live' : 'cov-origin-snapshot';
             return `
               <div class="cov-item">
                 <div class="cov-left">
                   <span class="cov-name">${esc(src)}</span>
-                  <span class="cov-origin">[${origin}]</span>
+                  <span class="cov-origin ${originClass}">[${esc(originLabel)}]</span>
                 </div>
                 <div class="cov-right">
                   <span class="cov-status-badge cov-status-${esc(statusKey)}">${esc(statusLabel)}</span>

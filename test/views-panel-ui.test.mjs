@@ -164,6 +164,7 @@ test('4. Empty local state shows safe referral to coverage panel', () => {
 
   assert.ok(html.includes('Nincs megerősített helyi esemény a vizsgált időszakban'));
   assert.ok(html.includes('Ellenőrizze a forrásfedettségi panelt'));
+  assert.ok(html.includes('Ez nem jelenti a kockázatok teljes hiányát.'));
   assert.ok(!html.includes('nincs veszély'), 'Empty state must never make reassuring safety claims');
 });
 
@@ -190,8 +191,8 @@ test('5. Source coverage panel displays only payload states and non-reassuring o
   assert.ok(!html.includes('nincs veszély'), 'ok_empty must not claim safety');
 
   // Origin badges
-  assert.ok(html.includes('[LIVE]'));
-  assert.ok(html.includes('[SNAPSHOT]'));
+  assert.ok(html.includes('[Élő lekérés ebben a folyamatban]'));
+  assert.ok(html.includes('[Offline pillanatkép]'));
 
   // Server-side COVERAGE_LABELS alignment
   assert.equal(SERVER_COVERAGE_LABELS[COVERAGE_STATES.OK_EMPTY], 'Szűrés utáni állapot nem meghatározható');
@@ -338,7 +339,7 @@ test('9. Stale text and no-expiry badges render according to specifications', ()
 
   // Stale event gets:
   assert.ok(html.includes('Elavult / Lejárt események'), 'Stale section header');
-  assert.ok(html.includes('Kibocsátói lejárat nélküli elavult rekord'), 'Stale reason group');
+  assert.ok(html.includes('A forrás frissítése késik (elavult lekérés)'), 'Stale reason group');
 });
 
 test('10. Keyboard navigation and focus management in mountSelector', () => {

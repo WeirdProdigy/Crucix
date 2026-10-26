@@ -429,12 +429,24 @@
 .cov-origin {
   font-size: 9px;
   font-family: var(--font-mono, monospace);
-  font-weight: 700;
+  font-weight: 600;
   padding: 1px 5px;
   border-radius: 3px;
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.cov-origin-live {
   background: rgba(14, 165, 233, 0.15);
   color: #38bdf8;
-  border: 1px solid rgba(14, 165, 233, 0.3);
+  border-color: rgba(14, 165, 233, 0.3);
+}
+
+.cov-origin-snapshot {
+  background: rgba(100, 116, 139, 0.15);
+  color: #94a3b8;
+  border-color: rgba(100, 116, 139, 0.3);
 }
 
 .cov-right {
