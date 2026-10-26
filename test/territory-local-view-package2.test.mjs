@@ -502,7 +502,7 @@ test('14. Fedettségi modell: az origin (snapshot/live) külön mező, nem írja
 });
 
 test('15. Fedettségi modell: sikeres_üres nem tartalmazhat nyugodt szóhasználatot', () => {
-  assert.equal(COVERAGE_LABELS[COVERAGE_STATES.SIKERES_URES], 'Sikeres lekérés, nincs aktív tétel');
+  assert.equal(COVERAGE_LABELS[COVERAGE_STATES.SIKERES_URES], 'Szűrés utáni állapot nem meghatározható');
   assert.ok(!COVERAGE_LABELS[COVERAGE_STATES.SIKERES_URES].toLowerCase().includes('nyugodt'), 'sikeres_üres must NOT contain nyugodt');
 });
 

@@ -5,6 +5,8 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 
+import { COVERAGE_LABELS as SERVER_COVERAGE_LABELS, COVERAGE_STATES } from '../lib/intelligence/views.mjs';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 
@@ -190,6 +192,9 @@ test('5. Source coverage panel displays only payload states and non-reassuring o
   // Origin badges
   assert.ok(html.includes('[LIVE]'));
   assert.ok(html.includes('[SNAPSHOT]'));
+
+  // Server-side COVERAGE_LABELS alignment
+  assert.equal(SERVER_COVERAGE_LABELS[COVERAGE_STATES.OK_EMPTY], 'Szűrés utáni állapot nem meghatározható');
 });
 
 test('6. Debrecen keyConnection has separate section and counter from confirmedLocal', () => {
