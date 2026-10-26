@@ -321,7 +321,7 @@ test('13. Browser QA snapshot generation with relative times writes to non-commi
 test('14. staleReason precedence order when multiple reasons apply simultaneously', () => {
   const now = Date.parse('2026-10-26T12:00:00.000Z');
 
-  // Condition A: Fatal error on source -> Precedence 1: source_error (even if validUntil expired and feed stale)
+  // Condition A: Official validUntil expired -> Precedence 1: provider_expired (takes precedence even over source_error)
   const statesErr = new Map([
     ['Meteoalarm', { status: 'error', error: 'Connection refused', timestamp: '2026-10-26T06:00:00.000Z' }]
   ]);
@@ -330,20 +330,20 @@ test('14. staleReason precedence order when multiple reasons apply simultaneousl
     validUntil: '2026-10-26T10:00:00.000Z', // Expired 2h ago
     observedAt: '2026-10-26T06:00:00.000Z'  // Stale (6h old)
   };
-  assert.equal(determineStaleReason(eventMultiA, statesErr, now), 'source_error', 'source_error must take highest precedence');
+  assert.equal(determineStaleReason(eventMultiA, statesErr, now), 'provider_expired', 'provider_expired must take highest precedence as definitive factual expiry');
 
-  // Condition B: Source status ok, but validUntil expired -> Precedence 2: provider_expired
+  // Condition B: Source error when validUntil is unexpired -> Precedence 2: source_error
+  const eventMultiB = {
+    source: { name: 'Meteoalarm' },
+    validUntil: '2026-10-26T18:00:00.000Z', // Unexpired
+    observedAt: '2026-10-26T06:00:00.000Z'
+  };
+  assert.equal(determineStaleReason(eventMultiB, statesErr, now), 'source_error', 'source_error takes precedence over source_stale when unexpired');
+
+  // Condition C: Source is stale, but validUntil not expired (or null) -> Precedence 3: source_stale
   const statesStale = new Map([
     ['Meteoalarm', { status: 'stale', stale: true, timestamp: '2026-10-26T06:00:00.000Z' }]
   ]);
-  const eventMultiB = {
-    source: { name: 'Meteoalarm' },
-    validUntil: '2026-10-26T11:00:00.000Z', // Expired 1h ago
-    observedAt: '2026-10-26T06:00:00.000Z'  // Feed is also stale
-  };
-  assert.equal(determineStaleReason(eventMultiB, statesStale, now), 'provider_expired', 'provider_expired must take precedence over source_stale');
-
-  // Condition C: Source is stale, but validUntil not expired (or null) -> Precedence 3: source_stale
   const eventMultiC = {
     source: { name: 'Meteoalarm' },
     validUntil: '2026-10-26T18:00:00.000Z', // Still valid

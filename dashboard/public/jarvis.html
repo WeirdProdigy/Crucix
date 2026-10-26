@@ -26,6 +26,7 @@
 <script src="record-core.js"></script>
 <script src="live-sources.js"></script>
 <script src="record-inspector.js"></script>
+<script src="views-panel.js"></script>
 <script src="alerts-core.js"></script>
 <script src="alerts.js"></script>
 <script src="alert-rules.js"></script>
@@ -42,6 +43,7 @@
 <link rel="stylesheet" href="country.css">
 <link rel="stylesheet" href="briefing.css">
 <link rel="stylesheet" href="palette.css">
+<link rel="stylesheet" href="views-panel.css">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#020408">
 <script src="pwa.js"></script>
@@ -438,6 +440,7 @@ body.low-perf .ticker-wrap::-webkit-scrollbar-thumb{background:rgba(100,240,200,
 <div id="main">
   <div class="topbar" id="topbar"></div>
   <div class="lens-host" id="lensBar"></div>
+  <div class="views-host" id="viewsBar"></div>
   <div class="grid">
     <div class="col" id="leftRail"></div>
     <div class="col" id="centerCol">
@@ -531,7 +534,7 @@ let currentRegion = 'world';
 let flatSvg, flatProjection, flatPath, flatG, flatZoom, flatW, flatH;
 const dashboardZones = ['left','center1','center2','center3','right'];
 const dashboardDefaultZones = {
-  left:['sensorGrid','nuclearWatch','riskGauges','spaceWatch'],
+  left:['sensorGrid','nuclearWatch','riskGauges','spaceWatch','territoryViews','coveragePanel'],
   center1:['newsTicker'],
   center2:['macroMarkets'],
   center3:['tradeIdeas'],
@@ -587,7 +590,10 @@ function setMapLayer(id,visible){
 }
 function normalizeSnapshot(data){
   const out={...data,meta:{...(data?.meta||{})}};
-  for(const key of ['air','thermal','chokepoints','nuke','who','supplementalHealth','news','newsFeed','tSignals','fred','bls','ideas','health','earthquakes','events','eventClusters','liveSources'])out[key]=Array.isArray(data?.[key])?data[key]:[];
+  for(const key of ['air','thermal','chokepoints','nuke','who','supplementalHealth','news','newsFeed','tSignals','fred','bls','ideas','health','earthquakes','events','eventClusters','liveSources','staleEvents'])out[key]=Array.isArray(data?.[key])?data[key]:[];
+  out.views=data?.views&&typeof data.views==='object'?data.views:{};
+  out.coverage=data?.coverage&&typeof data.coverage==='object'?data.coverage:{};
+  out.territoryConfig=data?.territoryConfig&&typeof data.territoryConfig==='object'?data.territoryConfig:null;
   out.tg={posts:0,urgent:[],topPosts:[],...(data?.tg||{})};
   for(const key of ['urgent','topPosts'])if(!Array.isArray(out.tg[key]))out.tg[key]=[];
   out.sdr={total:0,online:0,zones:[],...(data?.sdr||{})};if(!Array.isArray(out.sdr.zones))out.sdr.zones=[];
@@ -683,6 +689,8 @@ function getPanelLabel(panelId){
     case 'nuclearWatch': return t('panels.nuclearWatch','Nuclear Watch');
     case 'riskGauges': return t('panels.riskGauges','Risk Gauges');
     case 'spaceWatch': return t('panels.spaceWatch','Space Watch');
+    case 'territoryViews': return t('panels.territoryViews','Területi nézet');
+    case 'coveragePanel': return t('panels.coveragePanel','Forrásfedettség');
     case 'liveSources': return t('liveSources.title','Current public data');
     case 'newsTicker': return t('panels.newsTicker','Live News Ticker');
     case 'macroMarkets': return t('panels.macroMarkets','Macro + Markets');
@@ -1286,6 +1294,8 @@ function buildPanelHtml(panelId, zone){
     case 'nuclearWatch': return buildNuclearWatchPanel();
     case 'riskGauges': return buildRiskGaugesPanel();
     case 'spaceWatch': return buildSpaceWatchPanel();
+    case 'territoryViews': return window.CrucixViewsPanel?.panelHtml(currentSnapshot())||'';
+    case 'coveragePanel': return window.CrucixViewsPanel?.coveragePanelHtml(currentSnapshot())||'';
     case 'newsTicker': return buildNewsTickerPanel();
     case 'macroMarkets': return buildMacroMarketsPanel();
     case 'tradeIdeas': return buildTradeIdeasPanel();
@@ -1749,6 +1759,7 @@ function lensMarkerRows(){return CrucixLiveSources.markerRows(D.liveSources,D.ea
 function applyLens(){
   closePopup();rerenderDashboard();
   window.CrucixRecordInspector?.refresh();
+  window.CrucixViewsPanel?.mountSelector(document.getElementById('viewsBar'),{getSnapshot:currentSnapshot});
   plotMarkers();if(flatG){flatG.selectAll('.markers,.corridors-layer').remove();plotFlatMarkers();}
 }
 // The live panel is redrawn with outerHTML (the 30 s tick) and with the rails (every live update): a focused group header or "Open
@@ -1776,6 +1787,7 @@ function refreshLiveFreshness(){
   liveExpirySignature=signature;
   window.CrucixIntelligence?.update(currentSnapshot());
   window.CrucixRecordInspector?.refresh();
+  window.CrucixViewsPanel?.mountSelector(document.getElementById('viewsBar'),{getSnapshot:currentSnapshot});
   const panel=document.querySelector('.live-sources-panel');
   if(panel)keepLiveFocus(()=>{panel.outerHTML=CrucixLiveSources.renderPanel(D.liveSources,t,currentSnapshot().events);});
   const healthPanel=document.querySelector('.source-health-panel');
@@ -2446,6 +2458,7 @@ function reinit(){
   window.CrucixAlerts?.update(D.alerts);
   window.CrucixIntelligence?.update(currentSnapshot());
   window.CrucixRecordInspector?.refresh();
+  window.CrucixViewsPanel?.mountSelector(document.getElementById('viewsBar'),{getSnapshot:currentSnapshot});
   rerenderDashboard(true);
   plotMarkers();
   if(document.getElementById('settingsOverlay')?.classList.contains('show')) renderSettingsBoard();
@@ -2497,6 +2510,7 @@ function redriveClock(){
   updateRuntimeStatus();
   liveExpirySignature='';refreshLiveFreshness();
   window.CrucixRecordInspector?.refresh();
+  window.CrucixViewsPanel?.mountSelector(document.getElementById('viewsBar'),{getSnapshot:currentSnapshot});
   window.CrucixAlerts?.update(D.alerts);
   window.CrucixChanges?.refresh();
 }
@@ -2573,6 +2587,8 @@ document.addEventListener('DOMContentLoaded',()=>{
   if(location.protocol!=='file:'&&!window.__CRUCIX_OFFLINE_SHELL__)window.CrucixHealthMatrix?.mount({fetchJson:fetchJsonNoStore,t,esc,locale:uiLocale(),onOpenSweep:id=>{window.CrucixHealthMatrix.close({focus:false});return window.CrucixReplay?.open(id);},onAvailability:redrawSourceHealth});
   // The lens bar under the top bar and the live panel's group headers; the first render below already reads the stored lens.
   window.CrucixLens?.mount(document.getElementById('lensBar'),{t});window.CrucixLens?.onChange(applyLens);
+  window.CrucixViewsPanel?.mountSelector(document.getElementById('viewsBar'),{getSnapshot:currentSnapshot});
+  window.CrucixViewsPanel?.onChange(()=>rerenderDashboard(true));
   // "What changed" (panel and header chip) reads the snapshot's own changes; the longer windows and the matrix rows need the archive, so
   // like the replay they are left out on file pages and in the offline shell. The window chosen lives in memory only.
   const archiveApi=location.protocol!=='file:'&&!window.__CRUCIX_OFFLINE_SHELL__;

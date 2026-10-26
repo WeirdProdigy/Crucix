@@ -541,11 +541,11 @@ async function start() {
     // Try to load existing data first for instant display (await so dashboard shows immediately)
     try {
       const existing = JSON.parse(readFileSync(join(RUNS_DIR, 'latest.json'), 'utf8'));
-      const data = await synthesize(existing, { news: [] });
-      recordSnapshotEvents(data);
+      const data = existing?.sources ? await synthesize(existing, { news: [] }) : existing;
+      if (!existing?.views) recordSnapshotEvents(data); else { try { history.add(data.events); } catch {} }
       // The stored references and VIEWS/INFORM inputs of runs/latest.json give the dashboard a risk summary at once; the
       // event ids are cached, so the next sweep does not count these events twice.
-      recordRisk(data, existing);
+      if (!existing?.views) recordRisk(data, existing);
       // Stale data without a delta: show the stored alerts, do not evaluate. Not archived: this copy is re-synthesized without its
       // news, and the sweep behind runs/latest.json was archived when it ran - except on the first start after the upgrade to a
       // version with an archive, when that sweep ran before there was one. The initial sweep below is then the first one stored.

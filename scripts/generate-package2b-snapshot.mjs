@@ -58,11 +58,16 @@ export function generatePackage2bSnapshot({
     let validUntil = obs.validUntil;
 
     if (relativeTimes) {
-      if (obs.providerId === 'HU.EDGE.UNKNOWN') {
+      if (obs.providerId === 'HU.EDGE.EXPIRED' || obs.providerId === 'HU.EDGE.UNKNOWN') {
         observedAt = new Date(atMs - 5 * 3600000).toISOString();
         publishedAt = new Date(atMs - 5 * 3600000).toISOString();
         startsAt = new Date(atMs - 5 * 3600000).toISOString();
         validUntil = new Date(atMs - 3600000).toISOString();
+      } else if (obs.providerId === 'HU.EDGE.NO_EXPIRES') {
+        observedAt = new Date(atMs - 30 * 3600000).toISOString();
+        publishedAt = new Date(atMs - 30 * 3600000).toISOString();
+        startsAt = new Date(atMs - 30 * 3600000).toISOString();
+        validUntil = undefined;
       } else {
         observedAt = new Date(atMs - 3600000).toISOString();
         publishedAt = new Date(atMs - 3600000).toISOString();

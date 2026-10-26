@@ -52,14 +52,14 @@
   }
   function validCoordinates(value) { return value && typeof value.lat === 'number' && typeof value.lon === 'number' && Number.isFinite(value.lat) && Number.isFinite(value.lon) && Math.abs(value.lat) <= 90 && Math.abs(value.lon) <= 180; }
   function validTime(value) { return typeof value === 'string' && value.length < 100 && Number.isFinite(Date.parse(value)); }
-  function time(value) { if (!validTime(value)) return tr('unknown'); return new Date(value).toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, ' UTC'); }
+  function time(value) { if (!validTime(value)) return tr('unknown'); if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value; return new Date(value).toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, ' UTC'); }
   function sourceLink(source) {
     const url = safeUrl(source?.url); if (!url) return null;
     const link = element('a', 'ci-source-link', tr('originalSource')); link.href = url; link.target = '_blank'; link.setAttribute('rel', 'noopener noreferrer'); return link;
   }
   function allEvents() {
     let current; try { current = pushedSnapshot ? snapshot : options.getSnapshot?.() || snapshot; } catch { current = snapshot; }
-    return Array.isArray(current?.events) ? current.events.slice(0, 10000) : [];
+    const active = Array.isArray(current?.events) ? current.events : []; const stale = Array.isArray(current?.staleEvents) ? current.staleEvents : []; return [...active, ...stale].slice(0, 10000);
   }
   function focusable() {
     if (!dialog) return [];
