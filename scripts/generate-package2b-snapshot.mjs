@@ -218,6 +218,7 @@ export function generatePackage2bSnapshot({
 
   // 8. Construct complete dashboard snapshot payload
   const snapshot = {
+    isPreSynthesizedFixture: true,
     meta: {
       version: '2.13.6',
       timestamp: isoTime,

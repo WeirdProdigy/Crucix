@@ -8,7 +8,7 @@ import vm from 'node:vm';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 
-function createHarness() {
+function createHarness(sharedStorage = null) {
   const listeners = {};
   const doc = {
     addEventListener(event, fn) {
@@ -20,7 +20,7 @@ function createHarness() {
     }
   };
 
-  const store = new Map();
+  const store = sharedStorage || new Map();
   const localStorage = {
     getItem(k) { return store.get(k) ?? null; },
     setItem(k, v) { store.set(k, String(v)); },
@@ -48,7 +48,7 @@ function createHarness() {
   const code = readFileSync(resolve(ROOT, 'dashboard/public/views-panel.js'), 'utf8');
   vm.runInContext(code, context);
 
-  return { win, api: win.CrucixViewsPanel };
+  return { win, api: win.CrucixViewsPanel, store };
 }
 
 test('1. ViewsPanel contract and enum definitions', () => {
@@ -185,8 +185,258 @@ test('5. Source coverage panel displays only payload states and non-reassuring o
   assert.ok(html.includes('Nincs forrás konfigurálva'));
   assert.ok(html.includes('Szűrés utáni állapot nem meghatározható'), 'ok_empty must be neutral, not calm');
   assert.ok(!html.includes('nyugodt'), 'ok_empty must not contain nyugodt text');
+  assert.ok(!html.includes('nincs veszély'), 'ok_empty must not claim safety');
 
   // Origin badges
   assert.ok(html.includes('[LIVE]'));
   assert.ok(html.includes('[SNAPSHOT]'));
+});
+
+test('6. Debrecen keyConnection has separate section and counter from confirmedLocal', () => {
+  const { api } = createHarness();
+  api.setView(api.VIEWS.LOCAL, false);
+
+  const mockSnapshot = {
+    events: [
+      {
+        id: 'ev-local-1',
+        title: 'Bihartordai helyi esemény',
+        source: { name: 'Nebih-ASP' },
+        views: { local: { inView: true, category: 'confirmedLocal' } }
+      },
+      {
+        id: 'ev-conn-1',
+        title: 'Debrecen-Nagyvárad tranzit kapocs',
+        source: { name: 'HAON' },
+        views: { local: { inView: true, category: 'keyConnection' } }
+      }
+    ],
+    staleEvents: [],
+    views: { local: { uniqueEvents: 2 } }
+  };
+
+  const html = api.panelHtml(mockSnapshot);
+
+  // Both categories have their own sections and 1 db counters
+  assert.ok(html.includes('data-cat="confirmedLocal"'), 'Must have confirmedLocal section');
+  assert.ok(html.includes('data-cat="keyConnection"'), 'Must have keyConnection section');
+  assert.ok(html.includes('Megerősített helyi esemény'), 'confirmedLocal title');
+  assert.ok(html.includes('Kiemelt kapcsolat'), 'keyConnection title');
+
+  // Debrecen event is strictly inside keyConnection section, not confirmedLocal
+  const confIdx = html.indexOf('data-cat="confirmedLocal"');
+  const connIdx = html.indexOf('data-cat="keyConnection"');
+  const debIdx = html.indexOf('Debrecen-Nagyvárad tranzit kapocs');
+  assert.ok(confIdx !== -1 && connIdx !== -1 && debIdx !== -1);
+  assert.ok(debIdx > connIdx, 'Debrecen item must appear inside keyConnection section');
+});
+
+test('7. unknownTerritory category section renders localized label', () => {
+  const { api } = createHarness();
+  api.setView(api.VIEWS.LOCAL, false);
+
+  const mockSnapshot = {
+    events: [
+      {
+        id: 'ev-unknown-1',
+        title: 'Bizonytalan területi bejelentés',
+        source: { name: 'Unknown-Source' },
+        views: { local: { inView: true, category: 'unknownTerritory' } }
+      }
+    ],
+    staleEvents: [],
+    views: { local: { uniqueEvents: 1 } }
+  };
+
+  const html = api.panelHtml(mockSnapshot);
+  assert.ok(html.includes('data-cat="unknownTerritory"'));
+  assert.ok(html.includes('Tisztázatlan területi érintettség'), 'Must display Tisztázatlan területi érintettség');
+  assert.ok(html.includes('Bizonytalan területi bejelentés'));
+});
+
+test('8. Coordinate-less matching news renders in text strip; unmatching news is excluded from Local view', () => {
+  const { api } = createHarness();
+  api.setView(api.VIEWS.LOCAL, false);
+
+  const mockSnapshot = {
+    events: [
+      {
+        id: 'news-matching',
+        kind: 'news',
+        title: 'Helyi hír Bihartordáról koordináták nélkül',
+        source: { name: 'HAON' },
+        views: {
+          local: { inView: true, category: 'confirmedLocal' }
+        }
+      },
+      {
+        id: 'news-unmatching',
+        kind: 'news',
+        title: 'Pécsi távoli hír koordináták nélkül',
+        source: { name: 'HAON' },
+        views: {
+          local: { inView: false },
+          national: { inView: true, category: 'nationalEvent' }
+        }
+      }
+    ],
+    staleEvents: [],
+    views: { local: { uniqueEvents: 1 } }
+  };
+
+  const html = api.panelHtml(mockSnapshot);
+
+  // Strip present
+  assert.ok(html.includes('vp-unlocated-strip'), 'Unlocated text strip must be rendered');
+  assert.ok(html.includes('Koordináta nélküli hírek (térképi jelölő nélkül)'));
+  assert.ok(html.includes('Helyi hír Bihartordáról koordináták nélkül'), 'Matching news must appear in strip');
+
+  // Unmatching news must NOT appear anywhere in local view
+  assert.ok(!html.includes('Pécsi távoli hír koordináták nélkül'), 'Unmatching news must never enter Local view');
+});
+
+test('9. Stale text and no-expiry badges render according to specifications', () => {
+  const { api } = createHarness();
+  api.setView(api.VIEWS.LOCAL, false);
+
+  const now = Date.now();
+  const past30h = new Date(now - 30 * 3600000).toISOString();
+
+  const mockSnapshot = {
+    events: [
+      {
+        id: 'ev-active-unexpired',
+        title: 'Meteoalarm riasztás 30 órája (nincs validUntil)',
+        source: { name: 'Meteoalarm' },
+        observedAt: past30h,
+        // no validUntil
+        views: { local: { inView: true, category: 'regionalAdvisories' } }
+      }
+    ],
+    staleEvents: [
+      {
+        id: 'ev-stale-no-expiry',
+        title: 'Elavult Meteoalarm riasztás 50 órája (nincs validUntil)',
+        source: { name: 'Meteoalarm' },
+        staleReason: 'source_stale',
+        views: { local: { inView: true, category: 'regionalAdvisories' } }
+      }
+    ],
+    views: { local: { uniqueEvents: 1 } }
+  };
+
+  const html = api.panelHtml(mockSnapshot);
+
+  // Active unexpired (24-48h old without validUntil) gets:
+  assert.ok(html.includes('Aktualitása nem igazolt: a helyi frissességi korlát letelt.'), 'Active unexpired must show specific freshness warning');
+  assert.ok(html.includes('A kibocsátó nem adott lejárati időt.'), 'Active unexpired must show no-expiry note');
+
+  // Stale event gets:
+  assert.ok(html.includes('Elavult / Lejárt események'), 'Stale section header');
+  assert.ok(html.includes('Kibocsátói lejárat nélküli elavult rekord'), 'Stale reason group');
+});
+
+test('10. Keyboard navigation and focus management in mountSelector', () => {
+  const { api, win } = createHarness();
+
+  // Create mock DOM structure for tab elements
+  const focusedTabs = [];
+  const tabs = [
+    {
+      dataset: { view: 'local' },
+      attributes: { 'aria-selected': 'true', tabindex: '0' },
+      setAttribute(k, v) { this.attributes[k] = String(v); },
+      getAttribute(k) { return this.attributes[k]; },
+      listeners: {},
+      addEventListener(type, fn) { this.listeners[type] = fn; },
+      focus() { focusedTabs.push('local'); }
+    },
+    {
+      dataset: { view: 'county' },
+      attributes: { 'aria-selected': 'false', tabindex: '-1' },
+      setAttribute(k, v) { this.attributes[k] = String(v); },
+      getAttribute(k) { return this.attributes[k]; },
+      listeners: {},
+      addEventListener(type, fn) { this.listeners[type] = fn; },
+      focus() { focusedTabs.push('county'); }
+    },
+    {
+      dataset: { view: 'national' },
+      attributes: { 'aria-selected': 'false', tabindex: '-1' },
+      setAttribute(k, v) { this.attributes[k] = String(v); },
+      getAttribute(k) { return this.attributes[k]; },
+      listeners: {},
+      addEventListener(type, fn) { this.listeners[type] = fn; },
+      focus() { focusedTabs.push('national'); }
+    },
+    {
+      dataset: { view: 'global' },
+      attributes: { 'aria-selected': 'false', tabindex: '-1' },
+      setAttribute(k, v) { this.attributes[k] = String(v); },
+      getAttribute(k) { return this.attributes[k]; },
+      listeners: {},
+      addEventListener(type, fn) { this.listeners[type] = fn; },
+      focus() { focusedTabs.push('global'); }
+    }
+  ];
+
+  win.document.querySelectorAll = (sel) => {
+    if (sel === '.vp-tab') return tabs;
+    return [];
+  };
+
+  const container = {
+    innerHTML: '',
+    querySelectorAll(sel) {
+      if (sel === '.vp-tab') return tabs;
+      return [];
+    }
+  };
+
+  api.mountSelector(container, { getSnapshot: () => ({ views: {} }) });
+
+  // Simulate ArrowRight on tab 0 (local)
+  assert.ok(tabs[0].listeners.keydown, 'keydown listener must be attached');
+  let defaultPrevented = false;
+  tabs[0].listeners.keydown({
+    key: 'ArrowRight',
+    preventDefault: () => { defaultPrevented = true; }
+  });
+
+  assert.equal(defaultPrevented, true, 'Default action must be prevented on arrow navigation');
+  assert.equal(focusedTabs[focusedTabs.length - 1], 'county', 'ArrowRight must focus county tab');
+  assert.equal(api.getActiveView(), 'county', 'Active view must update to county');
+  assert.equal(tabs[1].getAttribute('aria-selected'), 'true');
+  assert.equal(tabs[0].getAttribute('aria-selected'), 'false');
+
+  // Simulate End key on tab 1 -> jumps to global (index 3)
+  tabs[1].listeners.keydown({
+    key: 'End',
+    preventDefault: () => {}
+  });
+  assert.equal(focusedTabs[focusedTabs.length - 1], 'global');
+  assert.equal(api.getActiveView(), 'global');
+
+  // Simulate Home key on tab 3 -> jumps back to local (index 0)
+  tabs[3].listeners.keydown({
+    key: 'Home',
+    preventDefault: () => {}
+  });
+  assert.equal(focusedTabs[focusedTabs.length - 1], 'local');
+  assert.equal(api.getActiveView(), 'local');
+});
+
+test('11. View persistence across reloads via localStorage', () => {
+  const sharedStorage = new Map();
+
+  // 1st visit: set view to 'county'
+  const harness1 = createHarness(sharedStorage);
+  assert.equal(harness1.api.getActiveView(), 'local', 'Default view is local');
+  harness1.api.setView(harness1.api.VIEWS.COUNTY);
+  assert.equal(harness1.api.getActiveView(), 'county');
+  assert.equal(sharedStorage.get('crucix_territory_view_v1'), 'county');
+
+  // 2nd visit (reload with same shared storage): initializes to saved view
+  const harness2 = createHarness(sharedStorage);
+  assert.equal(harness2.api.getActiveView(), 'county', 'Reload must restore saved view mode from localStorage');
 });

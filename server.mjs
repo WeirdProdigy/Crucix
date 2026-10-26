@@ -502,6 +502,23 @@ async function runSweepCycle() {
 }
 
 // === Startup ===
+export async function resolveInitialSnapshot(existing, { synthesize, recordSnapshotEvents, recordRisk, history, logger = console } = {}) {
+  if (existing?.isPreSynthesizedFixture === true) {
+    const data = existing;
+    try {
+      history?.add?.(data.events);
+    } catch (err) {
+      logger.warn('[Crucix] Failed to add fixture events to history:', err?.message || err);
+    }
+    return { data, isFixture: true };
+  }
+
+  const data = await synthesize(existing, { news: [] });
+  recordSnapshotEvents?.(data);
+  recordRisk?.(data, existing);
+  return { data, isFixture: false };
+}
+
 async function start() {
   const port = config.port;
 
@@ -541,11 +558,13 @@ async function start() {
     // Try to load existing data first for instant display (await so dashboard shows immediately)
     try {
       const existing = JSON.parse(readFileSync(join(RUNS_DIR, 'latest.json'), 'utf8'));
-      const data = existing?.sources ? await synthesize(existing, { news: [] }) : existing;
-      if (!existing?.views) recordSnapshotEvents(data); else { try { history.add(data.events); } catch {} }
-      // The stored references and VIEWS/INFORM inputs of runs/latest.json give the dashboard a risk summary at once; the
-      // event ids are cached, so the next sweep does not count these events twice.
-      if (!existing?.views) recordRisk(data, existing);
+      const { data } = await resolveInitialSnapshot(existing, {
+        synthesize,
+        recordSnapshotEvents,
+        recordRisk,
+        history,
+        logger: console
+      });
       // Stale data without a delta: show the stored alerts, do not evaluate. Not archived: this copy is re-synthesized without its
       // news, and the sweep behind runs/latest.json was archived when it ran - except on the first start after the upgrade to a
       // version with an archive, when that sweep ran before there was one. The initial sweep below is then the first one stored.
@@ -585,7 +604,10 @@ process.on('uncaughtException', (err) => {
   console.error('[Crucix] Uncaught exception:', err?.stack || err?.message || err);
 });
 
-start().catch(err => {
-  console.error('[Crucix] FATAL — Server failed to start:', err?.stack || err?.message || err);
-  process.exit(1);
-});
+const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+if (isMain) {
+  start().catch(err => {
+    console.error('[Crucix] FATAL — Server failed to start:', err?.stack || err?.message || err);
+    process.exit(1);
+  });
+}

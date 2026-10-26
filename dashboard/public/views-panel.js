@@ -192,7 +192,12 @@
     const now = Date.now();
     const eventTime = Date.parse(event.observedAt || event.publishedAt || '');
     if (!isStale && !event.validUntil && Number.isFinite(eventTime) && (now - eventTime > 24 * 3600000)) {
-      adapterStaleBadge = `<span class="vp-badge-adapter-stale" title="A forrásfrissítés késik, de a kibocsátó nem adott lejárati időt">Adapter elavult</span>`;
+      adapterStaleBadge = `<span class="vp-badge-adapter-stale" title="Aktualitása nem igazolt: a helyi frissességi korlát letelt.">Aktualitása nem igazolt: a helyi frissességi korlát letelt.</span><span class="vp-badge-no-expiry" title="A kibocsátó nem adott lejárati időt.">A kibocsátó nem adott lejárati időt.</span>`;
+    }
+
+    let noExpiryBadge = '';
+    if (isStale && (!event.validUntil || event.staleReason === 'source_stale')) {
+      noExpiryBadge = `<span class="vp-badge-no-expiry" title="A kibocsátó nem adott lejárati időt.">A kibocsátó nem adott lejárati időt.</span>`;
     }
 
     // Regional advisory level badge (settlement / county / region)
@@ -203,7 +208,7 @@
       const levelText = origLevel === 'settlement' ? 'Települési szint' :
                         origLevel === 'county' ? 'Megyei szint' :
                         origLevel === 'region' ? 'Régiós szint' :
-                        origLevel === 'district' ? 'Járási szint' : 'Térségi';
+                        origLevel === 'district' ? 'Járási szint' : 'Ismeretlen szint';
       advisoryLevelBadge = `<span class="vp-badge-level">${esc(levelText)}</span>`;
     }
 
@@ -220,6 +225,7 @@
             ${isFixture ? `<span class="vp-badge-fixture">[TESZTADAT]</span>` : ''}
             ${advisoryLevelBadge}
             ${adapterStaleBadge}
+            ${noExpiryBadge}
             <span class="vp-badge-sev ${sevClass}">${esc(level)}</span>
           </div>
         </div>
@@ -408,6 +414,7 @@
     CATEGORY_LABELS,
     COVERAGE_LABELS,
     getView: getActiveView,
+    getActiveView,
     setView: setActiveView,
     onChange,
     mountSelector,
