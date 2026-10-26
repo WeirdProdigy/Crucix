@@ -461,12 +461,20 @@ test('12. CAP küldőalapú dedup valós normalizált eseményeken is ellenőriz
 
 test('13. Fedettségi állapotok szigorú elsőbbsége (COVERAGE_PRECEDENCE)', () => {
   assert.deepEqual(COVERAGE_PRECEDENCE, [
-    COVERAGE_STATES.LETILTOTT,
-    COVERAGE_STATES.NINCS_FORRAS,
-    COVERAGE_STATES.ELAVULT_HIBAS,
-    COVERAGE_STATES.OFFLINE_PILLANATKEP,
-    COVERAGE_STATES.SIKERES_ADAT,
-    COVERAGE_STATES.SIKERES_URES
+    COVERAGE_STATES.DISABLED,
+    COVERAGE_STATES.UNCONFIGURED,
+    COVERAGE_STATES.STALE_ERROR,
+    COVERAGE_STATES.OFFLINE_SNAPSHOT,
+    COVERAGE_STATES.OK_DATA,
+    COVERAGE_STATES.OK_EMPTY
+  ]);
+  assert.deepEqual(COVERAGE_PRECEDENCE, [
+    'disabled',
+    'unconfigured',
+    'stale_error',
+    'offline_snapshot',
+    'ok_data',
+    'ok_empty'
   ]);
 });
 

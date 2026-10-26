@@ -14,10 +14,10 @@ import {
   partitionEventsByView,
   evaluateSourceCoverage
 } from '../lib/intelligence/views.mjs';
-import { freshLiveSnapshot } from '../lib/intelligence/live-sources.mjs';
+import { freshLiveSnapshot, determineStaleReason, normalizeLiveSources } from '../lib/intelligence/live-sources.mjs';
 import { synthesize } from '../dashboard/inject.mjs';
 import { DEFAULT_TERRITORY_CONFIG } from '../lib/intelligence/territory.mjs';
-import { createBriefingService } from '../lib/llm/briefing.mjs';
+import { createBriefingService, generateBriefing } from '../lib/llm/briefing.mjs';
 import { generatePackage2bSnapshot } from '../scripts/generate-package2b-snapshot.mjs';
 import { POLICIES } from '../apis/utils/freshness.mjs';
 
@@ -100,18 +100,20 @@ test('4. Source coverage fields use COVERAGE_STATES constants with correct spell
   assert.ok(meteo, 'Meteoalarm must be in coverage');
   assert.equal(meteo.origin, 'snapshot');
   assert.equal(meteo.isSnapshot, true);
-  assert.equal(meteo.status, COVERAGE_STATES.OFFLINE_PILLANATKEP);
+  assert.equal(meteo.status, COVERAGE_STATES.OFFLINE_SNAPSHOT);
+  assert.equal(meteo.status, 'offline_snapshot');
 
   const nebih = coverage.find(s => s.sourceId === 'Nebih-ASP');
   assert.ok(nebih, 'Nebih-ASP must be in coverage');
   assert.equal(nebih.origin, 'snapshot');
-  assert.equal(nebih.status, COVERAGE_STATES.LETILTOTT);
+  assert.equal(nebih.status, COVERAGE_STATES.DISABLED);
+  assert.equal(nebih.status, 'disabled');
 
   const haon = coverage.find(s => s.sourceId === 'HAON');
   assert.ok(haon, 'HAON must be in coverage');
   assert.equal(haon.origin, 'snapshot');
-  assert.equal(haon.status, COVERAGE_STATES.NINCS_FORRAS, 'HAON must have nincs_forrás (with á)');
-  assert.equal(haon.status, 'nincs_forrás');
+  assert.equal(haon.status, COVERAGE_STATES.UNCONFIGURED);
+  assert.equal(haon.status, 'unconfigured');
 });
 
 test('5. freshLiveSnapshot idempotency: repeated calls return fresh objects without in-place mutation of input', () => {
@@ -245,6 +247,7 @@ test('10. Additive staleEvents: carries views and lifecycle fields but is exclud
     }
     assert.ok(['active', 'superseded', 'cancelled', 'expired', 'future'].includes(event.lifecycle));
     assert.equal(typeof event.isCancelled, 'boolean');
+    assert.ok(['source_stale', 'provider_expired', 'local_freshness_exceeded', 'source_error'].includes(event.staleReason), `Invalid staleReason: ${event.staleReason}`);
   }
 
   // 2. Active view counters ONLY count active events (served.events), NOT staleEvents
@@ -266,11 +269,13 @@ test('11. Unified freshness threshold: coverage staleness adheres to POLICIES ma
   const twoHoursOld = new Date(now - 2 * 3600 * 1000).toISOString();
   const sourceA = { id: 'Meteoalarm', name: 'Meteoalarm', enabled: true, lastUpdated: twoHoursOld };
   const coverageOfflineA = evaluateSourceCoverage([sourceA], [{ source: 'Meteoalarm', title: 'Advisory' }], { now, isOfflineSnapshot: true });
-  assert.equal(coverageOfflineA[0].status, COVERAGE_STATES.OFFLINE_PILLANATKEP, 'Source within 3h policy must not be marked stale');
+  assert.equal(coverageOfflineA[0].status, COVERAGE_STATES.OFFLINE_SNAPSHOT, 'Source within 3h policy must not be marked stale');
+  assert.equal(coverageOfflineA[0].status, 'offline_snapshot');
   assert.equal(coverageOfflineA[0].timeWindow.label, 'snapshot');
 
   const coverageLiveA = evaluateSourceCoverage([sourceA], [{ source: 'Meteoalarm', title: 'Advisory' }], { now, isOfflineSnapshot: false });
-  assert.equal(coverageLiveA[0].status, COVERAGE_STATES.SIKERES_ADAT, 'Live source within 3h policy is successful');
+  assert.equal(coverageLiveA[0].status, COVERAGE_STATES.OK_DATA, 'Live source within 3h policy is successful');
+  assert.equal(coverageLiveA[0].status, 'ok_data');
   assert.equal(coverageLiveA[0].timeWindow.label, 'active_window');
   assert.equal(coverageLiveA[0].timeWindow.durationMs, 3 * 3600 * 1000, 'timeWindow must reflect policy duration (3h)');
 
@@ -278,7 +283,8 @@ test('11. Unified freshness threshold: coverage staleness adheres to POLICIES ma
   const fourHoursOld = new Date(now - 4 * 3600 * 1000).toISOString();
   const sourceB = { id: 'Meteoalarm', name: 'Meteoalarm', enabled: true, lastUpdated: fourHoursOld };
   const coverageB = evaluateSourceCoverage([sourceB], [{ source: 'Meteoalarm', title: 'Advisory' }], { now, isOfflineSnapshot: true });
-  assert.equal(coverageB[0].status, COVERAGE_STATES.ELAVULT_HIBAS, 'Source exceeding 3h policy must be marked stale');
+  assert.equal(coverageB[0].status, COVERAGE_STATES.STALE_ERROR, 'Source exceeding 3h policy must be marked stale');
+  assert.equal(coverageB[0].status, 'stale_error');
   assert.equal(coverageB[0].timeWindow.label, 'stale');
   assert.equal(coverageB[0].timeWindow.durationMs, 4 * 3600 * 1000);
   assert.equal(coverageB[0].error, 'Data is stale (older than 180 minutes)', 'Error message must reflect exact policy');
@@ -310,4 +316,104 @@ test('13. Browser QA snapshot generation with relative times writes to non-commi
   // With relative times, the fresh Meteoalarm events remain in served.events under Date.now()!
   const freshMeteo = served.events.filter(e => e.source?.name === 'Meteoalarm');
   assert.ok(freshMeteo.length > 0, 'Fresh Meteoalarm events generated relative to now must survive real-clock serving');
+});
+
+test('14. staleReason precedence order when multiple reasons apply simultaneously', () => {
+  const now = Date.parse('2026-10-26T12:00:00.000Z');
+
+  // Condition A: Fatal error on source -> Precedence 1: source_error (even if validUntil expired and feed stale)
+  const statesErr = new Map([
+    ['Meteoalarm', { status: 'error', error: 'Connection refused', timestamp: '2026-10-26T06:00:00.000Z' }]
+  ]);
+  const eventMultiA = {
+    source: { name: 'Meteoalarm' },
+    validUntil: '2026-10-26T10:00:00.000Z', // Expired 2h ago
+    observedAt: '2026-10-26T06:00:00.000Z'  // Stale (6h old)
+  };
+  assert.equal(determineStaleReason(eventMultiA, statesErr, now), 'source_error', 'source_error must take highest precedence');
+
+  // Condition B: Source status ok, but validUntil expired -> Precedence 2: provider_expired
+  const statesStale = new Map([
+    ['Meteoalarm', { status: 'stale', stale: true, timestamp: '2026-10-26T06:00:00.000Z' }]
+  ]);
+  const eventMultiB = {
+    source: { name: 'Meteoalarm' },
+    validUntil: '2026-10-26T11:00:00.000Z', // Expired 1h ago
+    observedAt: '2026-10-26T06:00:00.000Z'  // Feed is also stale
+  };
+  assert.equal(determineStaleReason(eventMultiB, statesStale, now), 'provider_expired', 'provider_expired must take precedence over source_stale');
+
+  // Condition C: Source is stale, but validUntil not expired (or null) -> Precedence 3: source_stale
+  const eventMultiC = {
+    source: { name: 'Meteoalarm' },
+    validUntil: '2026-10-26T18:00:00.000Z', // Still valid
+    observedAt: '2026-10-26T06:00:00.000Z'  // Stale feed
+  };
+  assert.equal(determineStaleReason(eventMultiC, statesStale, now), 'source_stale', 'source_stale must be assigned when feed is stale and unexpired');
+
+  // Condition D: Feed is fresh (status ok), but individual item age exceeds observation policy -> Precedence 4: local_freshness_exceeded
+  const statesOk = new Map([
+    ['Meteoalarm', { status: 'ok', stale: false, timestamp: new Date(now).toISOString() }]
+  ]);
+  const eventMultiD = {
+    source: { name: 'Meteoalarm' },
+    validUntil: null, // No explicit expiration
+    observedAt: new Date(now - 50 * 3600 * 1000).toISOString() // 50h old, exceeds 48h observationMaxAgeMs
+  };
+  assert.equal(determineStaleReason(eventMultiD, statesOk, now), 'local_freshness_exceeded', 'local_freshness_exceeded when item exceeds observationMaxAgeMs');
+});
+
+test('15. Explicit isFixture protection: test fixtures preserved without relying on POLICIES absence', () => {
+  const raw = JSON.parse(readFileSync(SNAPSHOT_PATH, 'utf8'));
+
+  // 1. All Nébih and Debrecen fixture events carry isFixture: true
+  const nebihFixtures = raw.events.filter(e => e.source?.name === 'Nebih-ASP');
+  assert.equal(nebihFixtures.length, 4);
+  for (const n of nebihFixtures) {
+    assert.equal(n.isFixture, true, 'Nébih event must carry explicit isFixture: true');
+  }
+
+  const debrecenFixture = raw.events.find(e => e.source?.name === 'HAON-Fixture');
+  assert.ok(debrecenFixture);
+  assert.equal(debrecenFixture.isFixture, true, 'Debrecen-HAON event must carry explicit isFixture: true');
+
+  // 2. Production normalizer strips arbitrary isFixture from incoming observations
+  const testNow = Date.now();
+  const spoofedObservations = [{
+    source: 'Meteoalarm',
+    title: 'Spoofed Fixture Warning',
+    observedAt: new Date(testNow).toISOString(),
+    isFixture: true // Attempted spoof
+  }];
+  const normalized = normalizeLiveSources({
+    Meteoalarm: {
+      source: 'Meteoalarm',
+      status: 'ok',
+      observedAt: new Date(testNow).toISOString(),
+      observations: spoofedObservations
+    }
+  }, testNow);
+  const normalizedObs = normalized.find(s => s.source === 'Meteoalarm')?.observations?.[0];
+  assert.ok(normalizedObs, 'Normalized observation must exist');
+  assert.equal(normalizedObs.isFixture, undefined, 'normalizeLiveSources must NEVER copy isFixture from live observations');
+});
+
+test('16. Live briefing under real clock never cites stale warnings as current statements', async () => {
+  const raw = JSON.parse(readFileSync(SNAPSHOT_PATH, 'utf8'));
+  const served = freshLiveSnapshot(raw, Date.now());
+
+  // Under real clock, Meteoalarm is stale and thus in served.staleEvents, NOT served.events
+  const briefingHu = await generateBriefing({ scope: 'HUN', snapshot: served, provider: null, language: 'hu', now: Date.now() });
+
+  assert.ok(briefingHu, 'generateBriefing must return a briefing object');
+  assert.equal(briefingHu.source, 'rules');
+  assert.equal(briefingHu.scope, 'HUN');
+
+  // Verify that NO bullet in the live briefing cites an event from staleEvents
+  const staleIds = new Set(served.staleEvents.map(e => e.id));
+  for (const bullet of briefingHu.bullets) {
+    for (const ref of bullet.refs) {
+      assert.ok(!staleIds.has(ref.id), `Live briefing must never cite a stale event: ${ref.id}`);
+    }
+  }
 });

@@ -953,6 +953,9 @@ export async function synthesize(data, options = {}) {
     }
     event.lifecycle = event.lifecycle || (event.isCancelled || event.cancelled ? 'cancelled' : event.superseded ? 'superseded' : 'active');
     event.isCancelled = Boolean(event.isCancelled || event.cancelled || event.lifecycle === 'cancelled');
+    if (!event.staleReason) {
+      event.staleReason = 'source_stale';
+    }
   }
   V2.views = partitionEventsByView(V2.events, territoryConfig);
   const liveQueried = options.liveQueriedSources instanceof Set
@@ -967,7 +970,7 @@ export async function synthesize(data, options = {}) {
       enabled: !src.disabled && src.status !== 'disabled',
       status: src.status,
       error: src.error,
-      unconfigured: Boolean(src.unconfigured || src.missing || src.status === COVERAGE_STATES.NINCS_FORRAS),
+      unconfigured: Boolean(src.unconfigured || src.missing || src.status === COVERAGE_STATES.UNCONFIGURED || src.status === 'unconfigured' || src.status === 'nincs_forrás'),
       domain: domainOfSource(name) || 'general',
       origin: isLive ? 'live' : 'snapshot'
     };

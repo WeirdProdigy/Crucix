@@ -137,7 +137,8 @@ export function generatePackage2bSnapshot({
     publishedAt: obs.publishedAt,
     collectedAt: isoTime,
     lifecycle: 'active',
-    isCancelled: false
+    isCancelled: false,
+    isFixture: true
   }));
 
   // Key connection Debrecen test news item
@@ -165,7 +166,8 @@ export function generatePackage2bSnapshot({
     publishedAt: relativeTimes ? new Date(atMs - 3600000).toISOString() : isoTime,
     collectedAt: isoTime,
     lifecycle: 'active',
-    isCancelled: false
+    isCancelled: false,
+    isFixture: true
   };
 
   const events = [...nebihEvents, debrecenEvent, ...meteoEvents];
@@ -183,7 +185,7 @@ export function generatePackage2bSnapshot({
   const coverageSources = [
     { id: 'Meteoalarm', name: 'Meteoalarm', domain: 'hazards', enabled: true, status: 'ok', isSnapshot: true, origin: 'snapshot' },
     { id: 'Nebih-ASP', name: 'Nebih-ASP', domain: 'health', enabled: false, status: 'disabled', isSnapshot: true, origin: 'snapshot' },
-    { id: 'HAON', name: 'HAON', domain: 'general', enabled: true, status: COVERAGE_STATES.NINCS_FORRAS, unconfigured: true, isSnapshot: true, origin: 'snapshot' }
+    { id: 'HAON', name: 'HAON', domain: 'general', enabled: true, status: COVERAGE_STATES.UNCONFIGURED, unconfigured: true, isSnapshot: true, origin: 'snapshot' }
   ];
 
   const coverage = evaluateSourceCoverage(coverageSources, liveSources, { isOfflineSnapshot: true, now: atMs });
