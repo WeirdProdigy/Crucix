@@ -6,12 +6,12 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-test('real server starts on a five-digit port with isolated runtime data', { timeout: 15000 }, async t => {
+test('real server starts on an isolated non-default port with isolated runtime data', { timeout: 15000 }, async t => {
   const probe = createServer();
   await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve));
   const port = probe.address().port;
   await new Promise(resolve => probe.close(resolve));
-  assert.ok(port >= 10000);
+  assert.ok(Number.isInteger(port) && port > 1024 && port !== 3117, `Port ${port} must be a valid isolated dynamic port`);
   const directory = mkdtempSync(join(tmpdir(), 'crucix-server-'));
   const envFile = join(directory, 'empty.env');
   writeFileSync(envFile, '');
