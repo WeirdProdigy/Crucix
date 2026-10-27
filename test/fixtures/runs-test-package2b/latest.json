@@ -4203,7 +4203,7 @@
       "isSnapshot": true,
       "status": "offline_snapshot",
       "statusLabel": "Offline pillanatkép",
-      "itemCount": 1,
+      "itemCount": 4,
       "lastUpdated": null,
       "timeWindow": {
         "label": "snapshot",

@@ -9,6 +9,7 @@ import {
   VIEW_CATEGORIES,
   RELATIONSHIPS,
   COVERAGE_STATES,
+  COVERAGE_LABELS,
   isValidBriefingRef,
   evaluateEventTerritoryViews,
   partitionEventsByView,
@@ -487,4 +488,70 @@ test('18. Served route hardening: freshLiveSnapshot with isOfflineSnapshot forbi
     assert.notEqual(cov.origin, 'live', `Under isOfflineSnapshot, origin must NEVER be live: ${cov.sourceId}`);
   }
 });
+
+test('19. Coverage observation count semantics: empty and non-empty containers, state precedence, and non-reassuring ok_empty label', () => {
+  const now = Date.parse('2026-10-27T12:00:00.000Z');
+
+  // 1. Fresh healthy live source with empty container observations [] -> ok_empty, itemCount: 0
+  const emptyContainer = [{ source: 'Meteoalarm', status: 'ok', observedAt: new Date(now).toISOString(), observations: [] }];
+  const covEmpty = evaluateSourceCoverage(
+    [{ id: 'Meteoalarm', name: 'Meteoalarm', domain: 'hazards', origin: 'live', isSnapshot: false }],
+    emptyContainer,
+    { now, isOfflineSnapshot: false }
+  );
+  assert.equal(covEmpty[0].status, COVERAGE_STATES.OK_EMPTY);
+  assert.equal(covEmpty[0].itemCount, 0);
+  assert.equal(covEmpty[0].statusLabel, 'Szűrés utáni állapot nem meghatározható');
+  assert.ok(!covEmpty[0].statusLabel.includes('nyugodt'), 'Label must not contain calm/reassuring text');
+
+  // 2. Fresh healthy live source with active container observations [2 items] -> ok_data, itemCount: 2
+  const activeContainer = [{ source: 'Meteoalarm', status: 'ok', observedAt: new Date(now).toISOString(), observations: [{ id: 'w1' }, { id: 'w2' }] }];
+  const covActive = evaluateSourceCoverage(
+    [{ id: 'Meteoalarm', name: 'Meteoalarm', domain: 'hazards', origin: 'live', isSnapshot: false }],
+    activeContainer,
+    { now, isOfflineSnapshot: false }
+  );
+  assert.equal(covActive[0].status, COVERAGE_STATES.OK_DATA);
+  assert.equal(covActive[0].itemCount, 2);
+  assert.equal(covActive[0].statusLabel, COVERAGE_LABELS[COVERAGE_STATES.OK_DATA]);
+
+  // 3. Precedence 1: Disabled source overrides even if active container observations exist
+  const covDisabled = evaluateSourceCoverage(
+    [{ id: 'Meteoalarm', name: 'Meteoalarm', domain: 'hazards', enabled: false, origin: 'live', isSnapshot: false }],
+    activeContainer,
+    { now, isOfflineSnapshot: false }
+  );
+  assert.equal(covDisabled[0].status, COVERAGE_STATES.DISABLED);
+  assert.equal(covDisabled[0].itemCount, 0);
+
+  // 4. Precedence 2: Unconfigured source overrides even if active container observations exist
+  const covUnconfigured = evaluateSourceCoverage(
+    [{ id: 'Meteoalarm', name: 'Meteoalarm', domain: 'hazards', unconfigured: true, origin: 'live', isSnapshot: false }],
+    activeContainer,
+    { now, isOfflineSnapshot: false }
+  );
+  assert.equal(covUnconfigured[0].status, COVERAGE_STATES.UNCONFIGURED);
+  assert.equal(covUnconfigured[0].itemCount, 0);
+
+  // 5. Precedence 3: Stale/Error overrides even if active container observations exist
+  const staleContainer = [{ source: 'Meteoalarm', status: 'stale', stale: true, observedAt: new Date(now - 4 * 3600000).toISOString(), observations: [{ id: 'w1' }] }];
+  const covStale = evaluateSourceCoverage(
+    [{ id: 'Meteoalarm', name: 'Meteoalarm', domain: 'hazards', status: 'stale', origin: 'live', isSnapshot: false }],
+    staleContainer,
+    { now, isOfflineSnapshot: false }
+  );
+  assert.equal(covStale[0].status, COVERAGE_STATES.STALE_ERROR);
+  assert.equal(covStale[0].itemCount, 1);
+
+  // 6. Precedence 4: Offline snapshot mode overrides healthy ok_empty and ok_data
+  const covOfflineSnapshot = evaluateSourceCoverage(
+    [{ id: 'Meteoalarm', name: 'Meteoalarm', domain: 'hazards', origin: 'snapshot', isSnapshot: true }],
+    emptyContainer,
+    { now, isOfflineSnapshot: true }
+  );
+  assert.equal(covOfflineSnapshot[0].status, COVERAGE_STATES.OFFLINE_SNAPSHOT);
+  assert.equal(covOfflineSnapshot[0].itemCount, 0);
+  assert.equal(covOfflineSnapshot[0].statusLabel, 'Offline pillanatkép');
+});
+
 
