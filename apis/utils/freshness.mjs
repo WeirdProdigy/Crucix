@@ -1,5 +1,5 @@
 const HOUR = 3600000;
-export const POLICIES = Object.freeze({
+export const POLICIES = Object.freeze(Object.defineProperties({
   Meteoalarm: { maxAgeMs: 3*HOUR, observationMaxAgeMs: 48*HOUR },
   GDACS: { maxAgeMs: 6*HOUR, observationMaxAgeMs: 72*HOUR },
   'NOAA-SWPC': { maxAgeMs: HOUR }, ECB: { maxAgeMs: 120*HOUR },
@@ -16,7 +16,16 @@ export const POLICIES = Object.freeze({
   'Energy-Charts-HU': { maxAgeMs: 6*HOUR, observationMaxAgeMs: 6*HOUR },
   'ENTSOG-HU': { maxAgeMs: 72*HOUR, observationMaxAgeMs: 72*HOUR },
   'Prediction-Markets': { maxAgeMs: 12*HOUR, observationMaxAgeMs: 12*HOUR },
-});
+}, {
+  'Police-Hajdu': {
+    value: Object.freeze({ maxAgeMs: HOUR, observationMaxAgeMs: 24 * HOUR }),
+    enumerable: false,
+    writable: false,
+    configurable: false
+  }
+}));
+
+export const POLICE_HAJDU_POLICY = POLICIES['Police-Hajdu'];
 
 // Never use collection time as a replacement for a missing provider date.
 export function providerTime(raw, { assumeUTC = false } = {}) {

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Hajdú-Bihar Megyei Rendőr-főkapitányság - police.hu</title>
+    <link>https://www.police.hu/hu/rss/Hajd%C3%BA-Bihar%20Megyei%20Rend%C5%91r-f%C5%91kapit%C3%A1nys%C3%A1g</link>
+    <description>A Hajdú-Bihar Megyei Rendőr-főkapitányság hírei</description>
+    <language>hu</language>
+    <pubDate>Tue, 27 Oct 2026 11:30:00 GMT</pubDate>
+    <item>
+      <title>[TESZTADAT] Közrendvédelmi ellenőrzés Hajdú-Bihar vármegyében</title>
+      <link>https://www.police.hu/hu/hirek-es-informaciok/kozrendvedelem/fokozott-ellenorzes-hajdu-biharban</link>
+      <description>Ez a leírás szerzői jogi korlátozás alatt áll, nem tárolható a rendszerben.</description>
+      <pubDate>Tue, 27 Oct 2026 11:15:00 GMT</pubDate>
+      <guid isPermaLink="true">https://www.police.hu/hu/hirek-es-informaciok/kozrendvedelem/fokozott-ellenorzes-hajdu-biharban</guid>
+    </item>
+    <item>
+      <title>[TESZTADAT] Baleseti hírek a 47-es főúton Derecske térségében</title>
+      <link>https://www.police.hu/hu/hirek-es-informaciok/utinfo/baleseti-hirek/baleset-derecske-tersegeben</link>
+      <description>Részletes baleseti helyszíni leírás, amelyet ki kell hagyni a feldolgozásból.</description>
+      <pubDate>Tue, 27 Oct 2026 10:45:00 GMT</pubDate>
+      <guid isPermaLink="true">https://www.police.hu/hu/hirek-es-informaciok/utinfo/baleseti-hirek/baleset-derecske-tersegeben</guid>
+    </item>
+    <item>
+      <title>[TESZTADAT] Bűnügyi őrizet Debrecen belvárosában</title>
+      <link>https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/bunugyek/orizetbe-vetel-debrecenben</link>
+      <description>A nyomozás részleteit tartalmazó lead szöveg, nem kerülhet mentésre.</description>
+      <pubDate>Tue, 27 Oct 2026 09:30:00 GMT</pubDate>
+      <guid isPermaLink="true">https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/bunugyek/orizetbe-vetel-debrecenben</guid>
+    </item>
+    <item>
+      <title>[TESZTADAT] Felhívás eltűnt személy felkutatására Bihartorda környékén</title>
+      <link>https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/felhivasok/eltunt-szemely-bihartorda</link>
+      <description>Személyleírás és felhívás szövege, szerzői jog és adatvédelem miatt kihagyandó.</description>
+      <pubDate>Tue, 27 Oct 2026 08:20:00 GMT</pubDate>
+      <guid isPermaLink="true">https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/felhivasok/eltunt-szemely-bihartorda</guid>
+    </item>
+    <!-- Duplicate guid/link to test deduplication -->
+    <item>
+      <title>[TESZTADAT] Bűnügyi őrizet Debrecen belvárosában (duplikátum)</title>
+      <link>https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/bunugyek/orizetbe-vetel-debrecenben</link>
+      <description>Másodpéldány.</description>
+      <pubDate>Tue, 27 Oct 2026 09:30:00 GMT</pubDate>
+      <guid isPermaLink="true">https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/bunugyek/orizetbe-vetel-debrecenben</guid>
+    </item>
+  </channel>
+</rss>
