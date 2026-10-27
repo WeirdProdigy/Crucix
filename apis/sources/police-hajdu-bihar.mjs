@@ -1,8 +1,17 @@
 // Police.hu Hajdú-Bihar County Police Headquarters RSS adapter
 // Source: https://www.police.hu/hu/rss/Hajd%C3%BA-Bihar%20Megyei%20Rend%C5%91r-f%C5%91kapit%C3%A1nys%C3%A1g
-// Legal / Copyright notice:
-// The article body and description lead text are subject to copyright protection under police.hu terms (police.hu/hu/info/szerzoi-jogok).
-// Only public interest metadata (title, link, pubDate, guid, section) are stored. The <description> text is strictly discarded.
+//
+// Tárolási és működési szabályok:
+// 1. Tárolt mezők: cím, link, UTC időbélyeg (pubDate / publishedAt), guid, szekció (URL-útvonalból),
+//    forrásmegjelölés (Police-Hajdu), és saját kinyerésű tények (településnév, útszám, eseménytípus).
+// 2. A description szövege és a lead NEM kerül tárolásra (szerzői jogi és adatvédelmi védelem).
+// 3. Nincs engedélykérés, nincs levélváltás: ami technikailag vagy a nyilvános feltételek szerint
+//    nem használható, az kimarad.
+// 4. Technikai tiltás (robots.txt, 403, 429, WAF) esetén az adapter leáll, és disabled státuszt
+//    jelez; semmilyen megkerülés vagy kikerülési kísérlet nincs.
+// 5. Alapállapot: kikapcsolt, külön környezeti változóval (CRUCIX_ENABLE_POLICE_HAJDU=true) engedélyezhető.
+// 6. HAON és Hírstart adapter NEM készül.
+// 7. A felületen mindig látszik a forrás neve és a link.
 
 import { createHash } from 'node:crypto';
 import { safeFetch } from '../utils/fetch.mjs';
@@ -20,12 +29,12 @@ export const FEED_URL = 'https://www.police.hu/hu/rss/Hajd%C3%BA-Bihar%20Megyei%
 export const META = Object.freeze({
   feedUrl: FEED_URL,
   attribution: 'Országos Rendőr-főkapitányság / Hajdú-Bihar VMRFK (police.hu)',
-  license: 'Közérdekű tájékoztatás (szerzői jogi korlátozás: leírás/lead szöveg kizárva, csak cím és metaadatok)',
-  legalStatus: 'opt-in; törvényi/szerzői jogi korlátozás miatt leírás nem tárolható',
+  license: 'Közérdekű tájékoztatás (a leírás és a lead szövege kizárva; kizárólag cím, metaadatok és saját kinyerésű tények)',
+  legalStatus: 'opt-in; nyilvános feltételek szerint csak a metaadatok és kinyert tények kerülnek átvételre (nincs levélváltás vagy engedélykérés)',
   robotsTxtUrl: 'https://www.police.hu/robots.txt',
   robotsTxtPolicy: 'User-agent: * Allow: /',
   coverage: 'Hajdú-Bihar vármegyei rendőrségi hírek, közlemények, baleseti információk és felhívások',
-  rights: 'A police.hu weboldalon közzétett cikkek szövege és leírása szerzői jogvédelem alatt áll; kizárólag a hivatalos metaadatok és a szekcióbesorolás kerül rögzítésre.'
+  rights: 'A police.hu weboldalon közzétett cikkek szövege és leírása szerzői jogvédelem alatt áll; kizárólag a hivatalos metaadatok, a szekcióbesorolás és saját kinyerésű tények kerülnek rögzítésre.'
 });
 
 function clean(val, max = 300) {
@@ -64,6 +73,50 @@ export function extractSection(url) {
   } catch {
     return 'egyeb';
   }
+}
+
+/**
+ * Extracts road / highway route number from news title.
+ * Examples: "47-es főúton" -> "47", "M35 autópályán" -> "M35", "4-es főút" -> "4"
+ */
+export function extractRouteNumber(title) {
+  if (typeof title !== 'string' || !title.trim()) return null;
+  const match = title.match(/\b(M\d+|\d{1,4})(?:-[eaöoe]s|-s)?\s*(?:főút(?:on)?|autópály(?:a|án)|út(?:on)?)\b/i) ||
+                title.match(/\b(M\d+)\b/i) ||
+                title.match(/\b(\d{1,4})-[eaöoe]s\b/i);
+  return match ? match[1].toUpperCase() : null;
+}
+
+/**
+ * Extracts normalized event type from title and section.
+ * Types: baleset, bunugy, felhivas, kozrendvedelem, forgalomkorlatozas, egyeb
+ */
+export function extractEventType(title, section = '') {
+  const normTitle = (typeof title === 'string' ? title : '')
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase();
+  const normSec = (typeof section === 'string' ? section : '')
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase();
+
+  if (normSec.includes('baleset') || /baleset|utkozes|felborult|karambol|gazolas/.test(normTitle)) {
+    return 'baleset';
+  }
+  if (normSec.includes('bunugy') || /bunugy|orizet|lopas|rablas|betores|elfog|koroz|csalas/.test(normTitle)) {
+    return 'bunugy';
+  }
+  if (normSec.includes('felhivas') || /felhivas|eltunt|keresi|szemtanu/.test(normTitle)) {
+    return 'felhivas';
+  }
+  if (normSec.includes('kozrend') || /kozrend|ellenorzes|fokozott|razzia/.test(normTitle)) {
+    return 'kozrendvedelem';
+  }
+  if (/utlezaras|forgalomkorlatozas|tereles/.test(normTitle)) {
+    return 'forgalomkorlatozas';
+  }
+  return 'egyeb';
 }
 
 /**
@@ -138,7 +191,8 @@ export function detectSettlementMention(title, territoryConfig = DEFAULT_TERRITO
 
 /**
  * Parses police.hu RSS feed XML.
- * Strictly ignores <description> text to adhere to copyright boundaries.
+ * Strictly ignores <description> and lead text to adhere to copyright boundaries.
+ * Extracts explicit facts: settlement, routeNumber, eventType.
  */
 export function parsePoliceRss(xml, options = {}) {
   const now = options.now ?? Date.now();
@@ -182,9 +236,13 @@ export function parsePoliceRss(xml, options = {}) {
 
     const section = extractSection(link);
     const territory = detectSettlementMention(title, territoryConfig);
+    const routeNumber = extractRouteNumber(title);
+    const eventType = extractEventType(title, section);
+    const settlement = territory.settlementName || null;
+
     const id = `police-hajdu-${createHash('sha256').update(dedupeKey).digest('hex').slice(0, 16)}`;
 
-    // Strictly omit description / lead text
+    // Strictly omit description / lead text; store authentic source, metadata and extracted facts
     const observation = {
       id,
       source: SOURCE,
@@ -194,6 +252,14 @@ export function parsePoliceRss(xml, options = {}) {
       publishedAt: pubDate,
       guid: rawGuid,
       section,
+      settlement,
+      routeNumber,
+      eventType,
+      facts: {
+        settlement,
+        routeNumber,
+        eventType
+      },
       territory
     };
 
@@ -213,6 +279,10 @@ export function parsePoliceRss(xml, options = {}) {
  * Briefing harvester for police.hu Hajdú-Bihar feed.
  * OPT-IN: Disabled by default. Enabled only when CRUCIX_ENABLE_POLICE_HAJDU === 'true'
  * or options.enabled === true.
+ *
+ * TECHNICAL BLOCK HANDLING:
+ * On robots.txt block, HTTP 403, 429, WAF or rate limiting, the adapter halts immediately
+ * without retry or bypass, returning status: 'disabled'.
  */
 export async function briefing(options = {}) {
   const now = options.now ?? Date.now();
@@ -225,6 +295,18 @@ export async function briefing(options = {}) {
       disabled: true,
       legalStatus: META.legalStatus,
       reason: 'Élő hálózati lekérés letiltva: opt-in forrás. Engedélyezéshez állítsa be a CRUCIX_ENABLE_POLICE_HAJDU=true környezeti változót.',
+      observations: []
+    };
+  }
+
+  // Explicit robots.txt blockage check
+  if (options.robotsDisallowed) {
+    return {
+      source: SOURCE,
+      status: 'disabled',
+      disabled: true,
+      technicalBlock: true,
+      reason: 'Technikai tiltás (robots.txt elutasítás) észlelve. Az adapter azonnal leállt, megkerülés nélkül.',
       observations: []
     };
   }
@@ -246,8 +328,24 @@ export async function briefing(options = {}) {
     maxBytes: 2 * 1024 * 1024,
     timeout,
     headers,
-    retries: options.retries === 1 ? 1 : 0
+    retries: 0 // Do not retry blindly on potential technical blocks
   });
+
+  // Check for technical blocks (403, 429, WAF, rate limit, forbidden)
+  const isTechnicalBlock = res.status === 403 ||
+    res.status === 429 ||
+    /403|429|waf|forbidden|blocked|rate\s*limit|access\s*denied/i.test(String(res.error || ''));
+
+  if (isTechnicalBlock) {
+    return {
+      source: SOURCE,
+      status: 'disabled',
+      disabled: true,
+      technicalBlock: true,
+      reason: `Technikai tiltás vagy hozzáférési korlátozás észlelve (${res.status ? 'HTTP ' + res.status : res.error}). Az adapter automatikus megkerülés nélkül leállt.`,
+      observations: []
+    };
+  }
 
   if (res.status === 304 || res.error?.includes('304')) {
     return {

@@ -6,6 +6,8 @@ import {
   SOURCE,
   META,
   extractSection,
+  extractRouteNumber,
+  extractEventType,
   detectSettlementMention,
   parsePoliceRss,
   briefing
@@ -76,17 +78,57 @@ test('4. Legal/Copyright compliance: <description> and lead text are strictly di
     assert.equal(obs.lead, undefined, 'lead must not exist on observation');
     assert.equal(obs.content, undefined, 'content must not exist on observation');
 
-    // Confirm allowed metadata fields are populated
+    // Confirm allowed metadata fields and facts are populated
     assert.ok(obs.title.startsWith('[TESZTADAT]'));
     assert.ok(obs.link.startsWith('https://www.police.hu/'));
     assert.ok(obs.pubDate.includes('T'));
     assert.ok(obs.guid);
     assert.ok(obs.section);
     assert.equal(obs.source, SOURCE);
+    assert.ok(obs.facts && typeof obs.facts === 'object');
   }
 });
 
-test('5. Section extraction from URLs: recognizes kozrendvedelem, baleseti-hirek, bunugyek, felhivasok', () => {
+test('5. Extracted facts: settlement name, route number, and event type', () => {
+  const res = parsePoliceRss(FIXTURE_XML, { now: REF_NOW });
+  const [kozrend, baleset, bunugy, felhivas] = res.observations;
+
+  // 1. Kozrendvedelem (county level, no settlement, no road, eventType: kozrendvedelem)
+  assert.equal(kozrend.facts.settlement, null);
+  assert.equal(kozrend.facts.routeNumber, null);
+  assert.equal(kozrend.facts.eventType, 'kozrendvedelem');
+
+  // 2. Baleset (Derecske, 47-es út, eventType: baleset)
+  assert.equal(baleset.facts.settlement, 'Derecske');
+  assert.equal(baleset.facts.routeNumber, '47');
+  assert.equal(baleset.facts.eventType, 'baleset');
+
+  // 3. Bunugy (Debrecen, eventType: bunugy)
+  assert.equal(bunugy.facts.settlement, 'Debrecen');
+  assert.equal(bunugy.facts.routeNumber, null);
+  assert.equal(bunugy.facts.eventType, 'bunugy');
+
+  // 4. Felhivas (Bihartorda, eventType: felhivas)
+  assert.equal(felhivas.facts.settlement, 'Bihartorda');
+  assert.equal(felhivas.facts.routeNumber, null);
+  assert.equal(felhivas.facts.eventType, 'felhivas');
+
+  // Helper unit tests for extractRouteNumber
+  assert.equal(extractRouteNumber('Baleset a 47-es főúton'), '47');
+  assert.equal(extractRouteNumber('Torlódás az M35 autópályán'), 'M35');
+  assert.equal(extractRouteNumber('Forgalomkorlátozás a 4-es úton'), '4');
+  assert.equal(extractRouteNumber('Útkarbantartás a 471-es úton'), '471');
+  assert.equal(extractRouteNumber('Csendes éjszaka'), null);
+
+  // Helper unit tests for extractEventType
+  assert.equal(extractEventType('Karambol a belvárosban', 'utinfo'), 'baleset');
+  assert.equal(extractEventType('Elfogták a körözött férfit', 'hirek'), 'bunugy');
+  assert.equal(extractEventType('Eltűnt kamaszlányt keres a rendőrség', 'hirek'), 'felhivas');
+  assert.equal(extractEventType('Fokozott közúti ellenőrzés', 'hirek'), 'kozrendvedelem');
+  assert.equal(extractEventType('Teljes útlezárás a szakaszon', 'utinfo'), 'forgalomkorlatozas');
+});
+
+test('6. Section extraction from URLs: recognizes kozrendvedelem, baleseti-hirek, bunugyek, felhivasok', () => {
   assert.equal(extractSection('https://www.police.hu/hu/hirek-es-informaciok/kozrendvedelem/fokozott-ellenorzes'), 'kozrendvedelem');
   assert.equal(extractSection('https://www.police.hu/hu/hirek-es-informaciok/utinfo/baleseti-hirek/baleset-derecske'), 'baleseti-hirek');
   assert.equal(extractSection('https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/bunugyek/orizetbe-vetel'), 'bunugyek');
@@ -95,9 +137,8 @@ test('5. Section extraction from URLs: recognizes kozrendvedelem, baleseti-hirek
   assert.equal(extractSection(''), 'egyeb');
 });
 
-test('6. Deduplication: Duplicate item with identical guid/link is filtered out', () => {
+test('7. Deduplication: Duplicate item with identical guid/link is filtered out', () => {
   const res = parsePoliceRss(FIXTURE_XML, { now: REF_NOW });
-  // The fixture XML has 5 items total, 2 of which have the same guid/link
   assert.equal(res.examinedCount, 5, 'Examined count reflects all 5 items in XML');
   assert.equal(res.acceptedCount, 4, 'Accepted count reflects 4 unique items');
   assert.equal(res.observations.length, 4);
@@ -106,7 +147,7 @@ test('6. Deduplication: Duplicate item with identical guid/link is filtered out'
   assert.equal(new Set(guids).size, 4, 'All accepted observations have unique GUIDs');
 });
 
-test('7. Territorial classification: County level by default, settlements are strictly text_mention and NEVER confirmedLocal', () => {
+test('8. Territorial classification: County level by default, settlements are strictly text_mention and NEVER confirmedLocal', () => {
   const res = parsePoliceRss(FIXTURE_XML, { now: REF_NOW });
   const [kozrend, baleset, bunugy, felhivas] = res.observations;
 
@@ -149,7 +190,39 @@ test('7. Territorial classification: County level by default, settlements are st
   assert.notEqual(felhivasViews[VIEWS.LOCAL].category, VIEW_CATEGORIES.CONFIRMED_LOCAL);
 });
 
-test('8. Conditional headers and 304 Not Modified handling', async () => {
+test('9. Technical block enforcement: robots.txt, 403, 429, WAF halts adapter with status: disabled without retry', async () => {
+  // 1. Explicit robots.txt block
+  const robotsRes = await briefing({ enabled: true, robotsDisallowed: true, now: REF_NOW });
+  assert.equal(robotsRes.status, 'disabled');
+  assert.equal(robotsRes.disabled, true);
+  assert.equal(robotsRes.technicalBlock, true);
+  assert.ok(robotsRes.reason.includes('robots.txt'));
+  assert.deepEqual(robotsRes.observations, []);
+
+  // 2. HTTP 403 Forbidden / WAF block
+  const fetch403 = async () => ({ status: 403, error: 'HTTP 403' });
+  const res403 = await briefing({ enabled: true, fetchFn: fetch403, now: REF_NOW });
+  assert.equal(res403.status, 'disabled');
+  assert.equal(res403.disabled, true);
+  assert.equal(res403.technicalBlock, true);
+  assert.ok(res403.reason.includes('403') || res403.reason.includes('Technikai tiltás'));
+
+  // 3. HTTP 429 Rate Limit block
+  const fetch429 = async () => ({ status: 429, error: 'HTTP 429 Too Many Requests' });
+  const res429 = await briefing({ enabled: true, fetchFn: fetch429, now: REF_NOW });
+  assert.equal(res429.status, 'disabled');
+  assert.equal(res429.disabled, true);
+  assert.equal(res429.technicalBlock, true);
+
+  // 4. WAF Challenge text in error
+  const fetchWaf = async () => ({ error: 'Blocked by Cloudflare WAF challenge' });
+  const resWaf = await briefing({ enabled: true, fetchFn: fetchWaf, now: REF_NOW });
+  assert.equal(resWaf.status, 'disabled');
+  assert.equal(resWaf.disabled, true);
+  assert.equal(resWaf.technicalBlock, true);
+});
+
+test('10. Conditional headers and 304 Not Modified handling', async () => {
   const headersSent = {};
   const mockFetch = async (url, opts) => {
     Object.assign(headersSent, opts.headers);
@@ -171,7 +244,7 @@ test('8. Conditional headers and 304 Not Modified handling', async () => {
   assert.deepEqual(res.observations, []);
 });
 
-test('9. Robustness and error handling: Malformed XML and network error fallbacks', async () => {
+test('11. Robustness and error handling: Malformed XML and general network errors', async () => {
   // 1. Malformed XML
   const badXmlRes = parsePoliceRss('<<<invalid xml', { now: REF_NOW });
   assert.equal(badXmlRes.status, 'error');
@@ -182,20 +255,18 @@ test('9. Robustness and error handling: Malformed XML and network error fallback
   const emptyRes = parsePoliceRss('', { now: REF_NOW });
   assert.equal(emptyRes.status, 'error');
 
-  // 3. Network fetch error
-  const netErrorFetch = async () => ({ error: 'Connection refused' });
+  // 3. Transient network error (non-block)
+  const netErrorFetch = async () => ({ error: 'Connection reset by peer', status: 500 });
   const netErrorRes = await briefing({ enabled: true, fetchFn: netErrorFetch, now: REF_NOW });
   assert.equal(netErrorRes.status, 'error');
-  assert.ok(netErrorRes.error.includes('Connection refused'));
+  assert.ok(netErrorRes.error.includes('Connection reset'));
 });
 
-test('10. Freshness staleness calculation: evaluates 1-hour maxAgeMs correctly', () => {
-  // At REF_NOW (12:00 UTC), channel pubDate (11:30 UTC) is 30m old -> fresh ('ok')
+test('12. Freshness staleness calculation: evaluates 1-hour maxAgeMs correctly', () => {
   const freshRes = parsePoliceRss(FIXTURE_XML, { now: REF_NOW });
   assert.equal(freshRes.status, 'ok');
   assert.equal(freshRes.stale, false);
 
-  // At 2 hours later (13:30 UTC), channel pubDate is 2h old -> stale (stale threshold is 1 hour)
   const staleNow = Date.parse('2026-10-27T13:30:00.000Z');
   const staleRes = parsePoliceRss(FIXTURE_XML, { now: staleNow });
   assert.equal(staleRes.status, 'stale');
