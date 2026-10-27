@@ -29,9 +29,12 @@ export const FEED_URL = 'https://www.police.hu/hu/rss/Hajd%C3%BA-Bihar%20Megyei%
 export const ROBOTS_TXT_URL = 'https://www.police.hu/robots.txt';
 
 let cachedRobotsResult = null;
+let cachedRobotsTime = 0;
+export const ROBOTS_CACHE_TTL_MS = 24 * 3600 * 1000; // 24 hours
 
 export function resetRobotsCache() {
   cachedRobotsResult = null;
+  cachedRobotsTime = 0;
 }
 
 /**
@@ -82,16 +85,17 @@ export function parseRobotsTxtPolicy(content, targetPath = '/hu/rss/Hajd%C3%BA-B
 }
 
 /**
- * Checks robots.txt policy once and caches the result.
+ * Checks robots.txt policy with 24-hour TTL caching and immediate retry on 403.
  */
 export async function checkRobotsTxt(options = {}) {
+  const now = options.now ?? Date.now();
   if (options.robotsDisallowed === true) {
     return { allowed: false, rule: 'Manual options.robotsDisallowed' };
   }
   if (options.robotsTxtContent) {
     return parseRobotsTxtPolicy(options.robotsTxtContent);
   }
-  if (cachedRobotsResult) {
+  if (cachedRobotsResult && (now - cachedRobotsTime < ROBOTS_CACHE_TTL_MS)) {
     return cachedRobotsResult;
   }
 
@@ -104,11 +108,12 @@ export async function checkRobotsTxt(options = {}) {
       retries: 0
     });
     if (res.status === 403 || res.status === 429) {
-      cachedRobotsResult = { allowed: false, rule: `HTTP ${res.status} accessing robots.txt` };
-      return cachedRobotsResult;
+      // Do NOT permanently cache a 403 or 429 error, so subsequent calls can retry fetching
+      return { allowed: false, rule: `HTTP ${res.status} accessing robots.txt`, transient: true };
     }
     if (res.rawText) {
       cachedRobotsResult = parseRobotsTxtPolicy(res.rawText);
+      cachedRobotsTime = now;
       return cachedRobotsResult;
     }
   } catch {
@@ -116,6 +121,7 @@ export async function checkRobotsTxt(options = {}) {
   }
 
   cachedRobotsResult = { allowed: true };
+  cachedRobotsTime = now;
   return cachedRobotsResult;
 }
 
@@ -212,11 +218,101 @@ export function extractEventType(title, section = '') {
   return 'egyeb';
 }
 
+export const AMBIGUOUS_SETTLEMENT_NAMES = new Set([
+  'sap', 'told', 'bojt', 'darvas', 'ketertelmu', 'keterdelmu'
+]);
+
+/**
+ * Complete KSH gazetteer of Hajdú-Bihar vármegye settlements.
+ */
+export const HAJDU_BIHAR_KSH_SETTLEMENTS = Object.freeze([
+  { id: 'almosd', name: 'Álmosd' },
+  { id: 'bagamer', name: 'Bagamér' },
+  { id: 'bakonszeg', name: 'Bakonszeg' },
+  { id: 'balmazujvaros', name: 'Balmazújváros' },
+  { id: 'barand', name: 'Báránd' },
+  { id: 'bedo', name: 'Bedő' },
+  { id: 'berekboszormeny', name: 'Berekböszörmény' },
+  { id: 'berettyoujfalu', name: 'Berettyóújfalu' },
+  { id: 'bihardancshaza', name: 'Bihardancsháza' },
+  { id: 'biharkeresztes', name: 'Biharkeresztes' },
+  { id: 'biharnagybajom', name: 'Biharnagybajom' },
+  { id: 'bihartorda', name: 'Bihartorda' },
+  { id: 'bocskaikert', name: 'Bocskaikert' },
+  { id: 'bojt', name: 'Bojt', ambiguous: true },
+  { id: 'csokmo', name: 'Csökmő' },
+  { id: 'darvas', name: 'Darvas', ambiguous: true },
+  { id: 'debrecen', name: 'Debrecen' },
+  { id: 'derecske', name: 'Derecske' },
+  { id: 'ebes', name: 'Ebes' },
+  { id: 'egyek', name: 'Egyek' },
+  { id: 'esztar', name: 'Esztár' },
+  { id: 'folyas', name: 'Folyás' },
+  { id: 'foldes', name: 'Földes' },
+  { id: 'fulop', name: 'Fülöp' },
+  { id: 'gaborjan', name: 'Gáborján' },
+  { id: 'gorbehaza', name: 'Görbeháza' },
+  { id: 'hajdubagos', name: 'Hajdúbagos' },
+  { id: 'hajduboszormeny', name: 'Hajdúböszörmény' },
+  { id: 'hajdudorog', name: 'Hajdúdorog' },
+  { id: 'hajduhadhaz', name: 'Hajdúhadház' },
+  { id: 'hajdunanás', name: 'Hajdúnánás' },
+  { id: 'hajdusamson', name: 'Hajdúsámson' },
+  { id: 'hajduszoboszlo', name: 'Hajdúszoboszló' },
+  { id: 'hajduszovat', name: 'Hajdúszovát' },
+  { id: 'hencida', name: 'Hencida' },
+  { id: 'hortobagy', name: 'Hortobágy' },
+  { id: 'hosszupalyi', name: 'Hosszúpályi' },
+  { id: 'kaba', name: 'Kaba' },
+  { id: 'kismarja', name: 'Kismarja' },
+  { id: 'komadi', name: 'Komádi' },
+  { id: 'konyar', name: 'Konyár' },
+  { id: 'korosszakal', name: 'Körösszakál' },
+  { id: 'korosszegapati', name: 'Körösszegapáti' },
+  { id: 'letavertes', name: 'Létavértes' },
+  { id: 'magyarhomorog', name: 'Magyarhomorog' },
+  { id: 'mezopeterd', name: 'Mezőpeterd' },
+  { id: 'mezosas', name: 'Mezősas' },
+  { id: 'mikepercs', name: 'Mikepércs' },
+  { id: 'monostorpalyi', name: 'Monostorpályi' },
+  { id: 'nadudvar', name: 'Nádudvar' },
+  { id: 'nagyhegyes', name: 'Nagyhegyes' },
+  { id: 'nagykereki', name: 'Nagykereki' },
+  { id: 'nagyrabe', name: 'Nagyrábé' },
+  { id: 'nyiracsad', name: 'Nyíracsád' },
+  { id: 'nyiradony', name: 'Nyíradony' },
+  { id: 'nyirabrany', name: 'Nyírábrány' },
+  { id: 'nyirmartonfalva', name: 'Nyírmártonfalva' },
+  { id: 'pocsaj', name: 'Pocsaj' },
+  { id: 'polgar', name: 'Polgár' },
+  { id: 'puspokladany', name: 'Püspökladány' },
+  { id: 'sap', name: 'Sáp', ambiguous: true },
+  { id: 'sarand', name: 'Sáránd' },
+  { id: 'sarretudvari', name: 'Sárrétudvari' },
+  { id: 'szentpeterszeg', name: 'Szentpéterszeg' },
+  { id: 'szerep', name: 'Szerep' },
+  { id: 'teglas', name: 'Téglás' },
+  { id: 'tepe', name: 'Tépe' },
+  { id: 'tetetlen', name: 'Tetétlen' },
+  { id: 'tiszacsege', name: 'Tiszacsege' },
+  { id: 'tiszagyulahaza', name: 'Tiszagyulaháza' },
+  { id: 'told', name: 'Told', ambiguous: true },
+  { id: 'ujiraz', name: 'Újiráz' },
+  { id: 'ujleta', name: 'Újléta' },
+  { id: 'ujszentmargita', name: 'Újszentmargita' },
+  { id: 'ujtikos', name: 'Újtikos' },
+  { id: 'vamospercs', name: 'Vámospércs' },
+  { id: 'vancsad', name: 'Váncsod' },
+  { id: 'vekerd', name: 'Vekerd' },
+  { id: 'zsaka', name: 'Zsáka' }
+]);
+
 /**
  * Detects whether a known settlement in Hajdú-Bihar is mentioned in the news title.
  * CRITICAL RULE: A settlement match in police news text is ALWAYS classified as
  * text_mention (needsLocalReview: true, isConfirmedLocal: false).
  * It must NEVER be marked as confirmedLocal.
+ * Ambiguous names yield territoryLevel: 'unknown'.
  */
 export function detectSettlementMention(title, territoryConfig = DEFAULT_TERRITORY_CONFIG) {
   const normTitle = (typeof title === 'string' ? title : '')
@@ -232,26 +328,52 @@ export function detectSettlementMention(title, territoryConfig = DEFAULT_TERRITO
   const nuts0 = primary.nuts0 || primary.nuts?.nuts0 || 'HU';
   const iso3 = primary.iso3 || 'HUN';
 
-  const candidates = [];
-  if (primary) {
-    candidates.push({ ...primary, id: primary.id || 'bihartorda' });
-  }
-  for (const w of territoryConfig?.watchedSettlements || []) {
-    candidates.push(w);
-  }
-  for (const k of territoryConfig?.keyCities || territoryConfig?.keyConnections || []) {
-    candidates.push(k);
-  }
-  // Common Hajdú-Bihar towns often appearing in county police feeds
-  const extraTowns = [
-    { id: 'derecske', name: 'Derecske', kshSettlement: '03728' },
-    { id: 'berettyoujfalu', name: 'Berettyóújfalu', kshSettlement: '21056' }
-  ];
-  for (const t of extraTowns) {
-    if (!candidates.some(c => c.id === t.id)) candidates.push(t);
+  // Check for ambiguous settlement names or explicit ambiguity marker
+  for (const amb of AMBIGUOUS_SETTLEMENT_NAMES) {
+    const ambRegex = new RegExp(`\\b${amb}\\b`, 'i');
+    if (ambRegex.test(normTitle)) {
+      return {
+        territoryLevel: 'unknown',
+        settlementId: null,
+        settlementName: null,
+        countyCode,
+        countyName,
+        nuts3,
+        nuts2,
+        nuts0,
+        iso3,
+        matchState: 'ambiguous',
+        localRelevanceReason: 'ambiguous_text_mention',
+        needsLocalReview: true,
+        isConfirmedLocal: false
+      };
+    }
   }
 
-  for (const cand of candidates) {
+  const candidateMap = new Map();
+
+  // Add primary profile
+  if (primary) {
+    candidateMap.set(primary.id || 'bihartorda', { ...primary, id: primary.id || 'bihartorda' });
+  }
+  for (const w of territoryConfig?.watchedSettlements || []) {
+    if (w?.id) candidateMap.set(w.id, w);
+  }
+  for (const k of territoryConfig?.keyCities || territoryConfig?.keyConnections || []) {
+    if (k?.id) candidateMap.set(k.id, k);
+  }
+  // Add complete official KSH settlement register for Hajdú-Bihar
+  for (const s of HAJDU_BIHAR_KSH_SETTLEMENTS) {
+    if (!candidateMap.has(s.id)) {
+      candidateMap.set(s.id, s);
+    }
+  }
+
+  // Sort candidates by name length descending to match compound/longer names first
+  const sortedCandidates = Array.from(candidateMap.values())
+    .sort((a, b) => (b.name?.length || 0) - (a.name?.length || 0));
+
+  for (const cand of sortedCandidates) {
     const normName = (cand.name || '')
       .normalize('NFKD')
       .replace(/\p{M}/gu, '')
@@ -368,7 +490,10 @@ export function parsePoliceRss(xml, options = {}) {
     observations.push(observation);
   }
 
-  const observedAt = channelPubDate || observations[0]?.publishedAt || new Date(now).toISOString();
+  // Source health is derived from the feed's own build/modified/harvest time, NOT from the latest item's age
+  const observedAt = providerTime(options.lastModified) ||
+    providerTime(channel.lastBuildDate) ||
+    new Date(now).toISOString();
 
   return freshResult(SOURCE, observedAt, observations, {
     ...META,
