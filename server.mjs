@@ -312,7 +312,7 @@ app.get('/', (req, res) => {
   } else {
     const htmlPath = join(ROOT, 'dashboard/public/jarvis.html');
     let html = readFileSync(htmlPath, 'utf-8');
-    const dataScript = inlineJson(freshLiveSnapshot(currentData));
+    const dataScript = inlineJson(freshLiveSnapshot(currentData, Date.now(), { isOfflineSnapshot: !config.enableSweeps }));
     
     html = html.replace(/^(let|const) D = .*;\s*$/m, () => `let D = ${dataScript};`);
 
@@ -329,10 +329,10 @@ app.get('/', (req, res) => {
 // API: current data
 app.get('/api/data', (req, res) => {
   if (!currentData) return res.status(503).json({ error: 'No data yet — first sweep in progress' });
-  res.json(freshLiveSnapshot(currentData));
+  res.json(freshLiveSnapshot(currentData, Date.now(), { isOfflineSnapshot: !config.enableSweeps }));
 });
 
-installIntelligenceRoutes(app, { getSnapshot: () => freshLiveSnapshot(currentData), history, language: currentLanguage });
+installIntelligenceRoutes(app, { getSnapshot: () => freshLiveSnapshot(currentData, Date.now(), { isOfflineSnapshot: !config.enableSweeps }), history, language: currentLanguage });
 if (riskStore) {
   briefingService = createBriefingService({ provider: llmProvider, language: currentLanguage, store: riskStore, history,
     getSnapshot: () => currentData, getScores: () => riskLatest?.scores ?? null });
@@ -340,7 +340,7 @@ if (riskStore) {
     security: { publicUrl: config.alerts.publicUrl, allowedHosts: config.alerts.allowedHosts } });
 }
 // After an operator action the dashboards get the new summary; the next /api/data and page load carry it too.
-installAlertRoutes(app, { engine: alertEngine, getSnapshot: () => freshLiveSnapshot(currentData), onChange: (summary, newIds) => {
+installAlertRoutes(app, { engine: alertEngine, getSnapshot: () => freshLiveSnapshot(currentData, Date.now(), { isOfflineSnapshot: !config.enableSweeps }), onChange: (summary, newIds) => {
   if (currentData) currentData.alerts = summary;
   broadcast({ type: 'alerts', data: summary, newIds });
 }, security: { publicUrl: config.alerts.publicUrl, allowedHosts: config.alerts.allowedHosts } });

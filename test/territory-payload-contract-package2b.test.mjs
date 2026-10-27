@@ -445,3 +445,46 @@ test('17. ENABLE_SWEEPS=false and offline snapshot strictly enforce origin=snaps
   assert.ok(meteo, 'Meteoalarm row must exist in coverage');
   assert.equal(meteo.origin, 'snapshot', 'isOfflineSnapshot must strictly override liveQueriedSources');
 });
+
+test('18. Served route hardening: freshLiveSnapshot with isOfflineSnapshot forbids live origin across missing isSnapshot and array/object shapes', () => {
+  const now = Date.now();
+  const liveSources = [
+    { source: 'MET-Norway', status: 'ok', observedAt: new Date(now).toISOString(), observations: [] },
+    { source: 'Meteoalarm', status: 'ok', observedAt: new Date(now).toISOString(), observations: [] }
+  ];
+
+  // Case A: Array format, isSnapshot field completely missing, input claims origin='live'
+  const snapArray = {
+    liveSources,
+    coverage: [
+      { sourceId: 'MET-Norway', sourceName: 'MET-Norway', domain: 'hazards', origin: 'live' },
+      { sourceId: 'Meteoalarm', sourceName: 'Meteoalarm', domain: 'hazards', origin: 'live' }
+    ]
+  };
+  const servedArray = freshLiveSnapshot(snapArray, now, { isOfflineSnapshot: true });
+  assert.ok(Array.isArray(servedArray.coverage), 'Served coverage must be an array');
+  assert.equal(servedArray.coverage.length, 2);
+  for (const cov of servedArray.coverage) {
+    assert.equal(cov.origin, 'snapshot', `Under isOfflineSnapshot, origin must be snapshot: ${cov.sourceId}`);
+    assert.equal(cov.isSnapshot, true, `Under isOfflineSnapshot, isSnapshot must be true: ${cov.sourceId}`);
+    assert.notEqual(cov.origin, 'live', `Under isOfflineSnapshot, origin must NEVER be live: ${cov.sourceId}`);
+  }
+
+  // Case B: Object format dictionary, isSnapshot missing, input claims origin='live'
+  const snapObject = {
+    liveSources,
+    coverage: {
+      'MET-Norway': { status: 'ok_empty', origin: 'live' },
+      Meteoalarm: { status: 'ok_data', origin: 'live' }
+    }
+  };
+  const servedObject = freshLiveSnapshot(snapObject, now, { isOfflineSnapshot: true });
+  assert.ok(Array.isArray(servedObject.coverage), 'Served coverage must normalize object dictionary into array');
+  assert.equal(servedObject.coverage.length, 2);
+  for (const cov of servedObject.coverage) {
+    assert.equal(cov.origin, 'snapshot', `Under isOfflineSnapshot, origin must be snapshot: ${cov.sourceId}`);
+    assert.equal(cov.isSnapshot, true, `Under isOfflineSnapshot, isSnapshot must be true: ${cov.sourceId}`);
+    assert.notEqual(cov.origin, 'live', `Under isOfflineSnapshot, origin must NEVER be live: ${cov.sourceId}`);
+  }
+});
+
