@@ -1,5 +1,7 @@
 const HOUR = 3600000;
-export const POLICIES = Object.freeze(Object.defineProperties({
+
+// Core sensor/indicator live public data sources (19 global dashboard sources)
+export const POLICIES = Object.freeze({
   Meteoalarm: { maxAgeMs: 3*HOUR, observationMaxAgeMs: 48*HOUR },
   GDACS: { maxAgeMs: 6*HOUR, observationMaxAgeMs: 72*HOUR },
   'NOAA-SWPC': { maxAgeMs: HOUR }, ECB: { maxAgeMs: 120*HOUR },
@@ -16,16 +18,20 @@ export const POLICIES = Object.freeze(Object.defineProperties({
   'Energy-Charts-HU': { maxAgeMs: 6*HOUR, observationMaxAgeMs: 6*HOUR },
   'ENTSOG-HU': { maxAgeMs: 72*HOUR, observationMaxAgeMs: 72*HOUR },
   'Prediction-Markets': { maxAgeMs: 12*HOUR, observationMaxAgeMs: 12*HOUR },
-}, {
-  'Police-Hajdu': {
-    value: Object.freeze({ maxAgeMs: HOUR, observationMaxAgeMs: 24 * HOUR }),
-    enumerable: false,
-    writable: false,
-    configurable: false
-  }
-}));
+});
 
-export const POLICE_HAJDU_POLICY = POLICIES['Police-Hajdu'];
+// Regional and specialized news/official feed policies
+export const FEED_POLICIES = Object.freeze({
+  'Police-Hajdu': { maxAgeMs: HOUR, observationMaxAgeMs: 24 * HOUR }
+});
+
+export const POLICE_HAJDU_POLICY = FEED_POLICIES['Police-Hajdu'];
+
+// Unified map of all active source freshness policies
+export const ALL_POLICIES = Object.freeze({
+  ...POLICIES,
+  ...FEED_POLICIES
+});
 
 // Never use collection time as a replacement for a missing provider date.
 export function providerTime(raw, { assumeUTC = false } = {}) {
@@ -61,7 +67,7 @@ export function freshness(time, maxAgeMs, now = Date.now()) {
 }
 
 export function freshResult(source, observedAt, observations = [], extras = {}, now = Date.now()) {
-  const policy = POLICIES[source];
+  const policy = ALL_POLICIES[source] || POLICIES[source] || FEED_POLICIES[source];
   if (!policy) throw new Error('Unknown freshness policy');
   const state = freshness(observedAt, policy.maxAgeMs, now);
   const rows = state.fresh && Array.isArray(observations) ? observations.slice(0,100).filter(row => {

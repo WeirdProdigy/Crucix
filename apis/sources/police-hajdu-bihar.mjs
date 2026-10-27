@@ -19,12 +19,105 @@ import { parseXml } from '../utils/xml.mjs';
 import { providerTime, freshResult, unavailableResult } from '../utils/freshness.mjs';
 import {
   DEFAULT_TERRITORY_CONFIG,
+  BIHARTORDA_PROFILE,
   ADMINISTRATIVE_LEVELS,
   LOCAL_RELEVANCE_REASONS
 } from '../../lib/intelligence/territory.mjs';
 
 export const SOURCE = 'Police-Hajdu';
 export const FEED_URL = 'https://www.police.hu/hu/rss/Hajd%C3%BA-Bihar%20Megyei%20Rend%C5%91r-f%C5%91kapit%C3%A1nys%C3%A1g';
+export const ROBOTS_TXT_URL = 'https://www.police.hu/robots.txt';
+
+let cachedRobotsResult = null;
+
+export function resetRobotsCache() {
+  cachedRobotsResult = null;
+}
+
+/**
+ * Parses robots.txt text and checks if the target path is allowed for User-agent: * or Crucix.
+ */
+export function parseRobotsTxtPolicy(content, targetPath = '/hu/rss/Hajd%C3%BA-Bihar%20Megyei%20Rend%C5%91r-f%C5%91kapit%C3%A1nys%C3%A1g') {
+  if (typeof content !== 'string' || !content.trim()) return { allowed: true };
+  const lines = content.split(/\r?\n/);
+  let inRelevantBlock = false;
+  const disallows = [];
+  const allows = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/#.*$/, '').trim();
+    if (!line) continue;
+    const colonIdx = line.indexOf(':');
+    if (colonIdx === -1) continue;
+    const field = line.slice(0, colonIdx).trim().toLowerCase();
+    const value = line.slice(colonIdx + 1).trim();
+
+    if (field === 'user-agent') {
+      const agent = value.toLowerCase();
+      inRelevantBlock = (agent === '*' || agent === 'crucix' || agent.includes('crucix'));
+    } else if (inRelevantBlock) {
+      if (field === 'disallow') {
+        if (value) disallows.push(value);
+      } else if (field === 'allow') {
+        if (value) allows.push(value);
+      }
+    }
+  }
+
+  const decodedPath = decodeURI(targetPath);
+
+  for (const a of allows) {
+    if (a && (decodedPath.startsWith(a) || targetPath.startsWith(a))) {
+      return { allowed: true, rule: `Allow: ${a}` };
+    }
+  }
+
+  for (const d of disallows) {
+    if (d === '/' || (d && (decodedPath.startsWith(d) || targetPath.startsWith(d)))) {
+      return { allowed: false, rule: `Disallow: ${d}` };
+    }
+  }
+
+  return { allowed: true };
+}
+
+/**
+ * Checks robots.txt policy once and caches the result.
+ */
+export async function checkRobotsTxt(options = {}) {
+  if (options.robotsDisallowed === true) {
+    return { allowed: false, rule: 'Manual options.robotsDisallowed' };
+  }
+  if (options.robotsTxtContent) {
+    return parseRobotsTxtPolicy(options.robotsTxtContent);
+  }
+  if (cachedRobotsResult) {
+    return cachedRobotsResult;
+  }
+
+  const fetcher = options.fetchFn ?? safeFetch;
+  try {
+    const res = await fetcher(ROBOTS_TXT_URL, {
+      format: 'text',
+      timeout: 10000,
+      headers: { 'User-Agent': 'Crucix/2.2 (+https://github.com/WeirdProdigy/Crucix; local-hazard-monitor)' },
+      retries: 0
+    });
+    if (res.status === 403 || res.status === 429) {
+      cachedRobotsResult = { allowed: false, rule: `HTTP ${res.status} accessing robots.txt` };
+      return cachedRobotsResult;
+    }
+    if (res.rawText) {
+      cachedRobotsResult = parseRobotsTxtPolicy(res.rawText);
+      return cachedRobotsResult;
+    }
+  } catch {
+    // network fallback
+  }
+
+  cachedRobotsResult = { allowed: true };
+  return cachedRobotsResult;
+}
 
 export const META = Object.freeze({
   feedUrl: FEED_URL,
@@ -131,9 +224,17 @@ export function detectSettlementMention(title, territoryConfig = DEFAULT_TERRITO
     .replace(/\p{M}/gu, '')
     .toLowerCase();
 
+  const primary = territoryConfig?.primary || BIHARTORDA_PROFILE;
+  const countyCode = primary.countyCode || '09';
+  const countyName = primary.countyName || 'Hajdú-Bihar';
+  const nuts3 = primary.nuts3 || primary.nuts?.nuts3 || 'HU321';
+  const nuts2 = primary.nuts2 || primary.nuts?.nuts2 || 'HU32';
+  const nuts0 = primary.nuts0 || primary.nuts?.nuts0 || 'HU';
+  const iso3 = primary.iso3 || 'HUN';
+
   const candidates = [];
-  if (territoryConfig?.primary) {
-    candidates.push({ ...territoryConfig.primary, id: territoryConfig.primary.id || 'bihartorda' });
+  if (primary) {
+    candidates.push({ ...primary, id: primary.id || 'bihartorda' });
   }
   for (const w of territoryConfig?.watchedSettlements || []) {
     candidates.push(w);
@@ -161,12 +262,12 @@ export function detectSettlementMention(title, territoryConfig = DEFAULT_TERRITO
         settlementId: cand.id,
         settlementName: cand.name,
         kshSettlementCode: cand.kshSettlement || null,
-        countyCode: '09',
-        countyName: 'Hajdú-Bihar',
-        nuts3: 'HU321',
-        nuts2: 'HU32',
-        nuts0: 'HU',
-        iso3: 'HUN',
+        countyCode,
+        countyName,
+        nuts3,
+        nuts2,
+        nuts0,
+        iso3,
         matchState: 'match',
         localRelevanceReason: LOCAL_RELEVANCE_REASONS.TEXT_MENTION,
         needsLocalReview: true,
@@ -178,12 +279,12 @@ export function detectSettlementMention(title, territoryConfig = DEFAULT_TERRITO
   // Default to county level Hajdú-Bihar
   return {
     territoryLevel: ADMINISTRATIVE_LEVELS.COUNTY,
-    countyCode: '09',
-    countyName: 'Hajdú-Bihar',
-    nuts3: 'HU321',
-    nuts2: 'HU32',
-    nuts0: 'HU',
-    iso3: 'HUN',
+    countyCode,
+    countyName,
+    nuts3,
+    nuts2,
+    nuts0,
+    iso3,
     matchState: 'match',
     isConfirmedLocal: false
   };
@@ -250,6 +351,7 @@ export function parsePoliceRss(xml, options = {}) {
       link,
       pubDate,
       publishedAt: pubDate,
+      observedAt: pubDate,
       guid: rawGuid,
       section,
       settlement,
@@ -300,13 +402,14 @@ export async function briefing(options = {}) {
   }
 
   // Explicit robots.txt blockage check
-  if (options.robotsDisallowed) {
+  const robots = await checkRobotsTxt(options);
+  if (!robots.allowed) {
     return {
       source: SOURCE,
       status: 'disabled',
       disabled: true,
       technicalBlock: true,
-      reason: 'Technikai tiltás (robots.txt elutasítás) észlelve. Az adapter azonnal leállt, megkerülés nélkül.',
+      reason: `Technikai tiltás (robots.txt elutasítás: ${robots.rule || 'tiltott útvonal'}). Az adapter leállt.`,
       observations: []
     };
   }

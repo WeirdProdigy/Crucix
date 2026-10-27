@@ -1,19 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   SOURCE,
   META,
+  ROBOTS_TXT_URL,
   extractSection,
   extractRouteNumber,
   extractEventType,
   detectSettlementMention,
   parsePoliceRss,
+  parseRobotsTxtPolicy,
+  checkRobotsTxt,
+  resetRobotsCache,
   briefing
 } from '../apis/sources/police-hajdu-bihar.mjs';
-import { POLICIES, POLICE_HAJDU_POLICY } from '../apis/utils/freshness.mjs';
+import { POLICIES, FEED_POLICIES, ALL_POLICIES, POLICE_HAJDU_POLICY } from '../apis/utils/freshness.mjs';
 import { evaluateEventTerritoryViews, VIEWS, VIEW_CATEGORIES } from '../lib/intelligence/views.mjs';
+import { normalizeLiveSources, freshLiveSnapshot } from '../lib/intelligence/live-sources.mjs';
+import { AlertEngine } from '../lib/alerts/engine.mjs';
+import { DEFAULT_RULES } from '../lib/alerts/rules.mjs';
 
 const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1');
 const FIXTURE_PATH = join(ROOT, 'test/fixtures/police-hajdu-bihar-fixture.xml');
@@ -22,11 +30,13 @@ const FIXTURE_XML = readFileSync(FIXTURE_PATH, 'utf8');
 // Reference time: 2026-10-27T12:00:00Z (30 minutes after channel pubDate 11:30)
 const REF_NOW = Date.parse('2026-10-27T12:00:00.000Z');
 
-test('1. Freshness policy: Police-Hajdu is registered with a 1-hour maxAgeMs and 24-hour observationMaxAgeMs', () => {
+test('1. Freshness policy: Police-Hajdu is registered in FEED_POLICIES with a 1-hour maxAgeMs and 24-hour observationMaxAgeMs', () => {
   assert.ok(POLICE_HAJDU_POLICY, 'POLICE_HAJDU_POLICY is exported');
   assert.equal(POLICE_HAJDU_POLICY.maxAgeMs, 3600000, 'maxAgeMs is 1 hour (3600000 ms)');
   assert.equal(POLICE_HAJDU_POLICY.observationMaxAgeMs, 86400000, 'observationMaxAgeMs is 24 hours (86400000 ms)');
-  assert.equal(POLICIES[SOURCE].maxAgeMs, 3600000);
+  assert.equal(FEED_POLICIES[SOURCE].maxAgeMs, 3600000);
+  assert.equal(ALL_POLICIES[SOURCE].maxAgeMs, 3600000);
+  assert.equal(POLICIES[SOURCE], undefined, 'POLICIES preserves only the 19 core sensor sources');
 });
 
 test('2. Opt-in behavior: Disabled by default without environment variable, strictly zero network calls', async () => {
@@ -273,3 +283,158 @@ test('12. Freshness staleness calculation: evaluates 1-hour maxAgeMs correctly',
   assert.equal(staleRes.stale, true);
   assert.equal(staleRes.freshness.reason, 'expired-provider-time');
 });
+
+test('13. Pipeline lifecycle: Police-Hajdu events must survive normalizeLiveSources and freshLiveSnapshot without dropping into staleEvents', () => {
+  const parsed = parsePoliceRss(FIXTURE_XML, { now: REF_NOW });
+  assert.equal(parsed.status, 'ok');
+  assert.equal(parsed.observations.length, 4);
+
+  // 1. normalizeLiveSources
+  const normalized = normalizeLiveSources([parsed], REF_NOW);
+  const policeNorm = normalized.find(s => s.source === SOURCE);
+  assert.ok(policeNorm, 'Police-Hajdu must be normalized and retained in liveSources');
+  assert.equal(policeNorm.status, 'ok');
+
+  // 2. freshLiveSnapshot
+  const obs = parsed.observations[0];
+  const policeEvent = {
+    id: 'event-police-test-1',
+    title: obs.title,
+    observedAt: obs.publishedAt,
+    source: { name: SOURCE, url: obs.link, status: 'ok' },
+    territory: obs.territory
+  };
+
+  const snapshot = {
+    meta: { timestamp: new Date(REF_NOW).toISOString() },
+    liveSources: [parsed],
+    events: [policeEvent],
+    staleEvents: []
+  };
+
+  const fresh = freshLiveSnapshot(snapshot, REF_NOW);
+  assert.equal(fresh.events.length, 1, 'Police event must be preserved in active events');
+  assert.equal(fresh.events[0].id, 'event-police-test-1');
+  assert.equal(fresh.staleEvents.length, 0, 'Police event must NOT be dropped into staleEvents');
+});
+
+test('14. Robots.txt: parser checks, caching behavior, and technical block handling', async () => {
+  resetRobotsCache();
+  assert.equal(ROBOTS_TXT_URL, 'https://www.police.hu/robots.txt');
+
+  // 1. Parsing tests
+  const sampleDisallow = 'User-agent: *\nDisallow: /hu/rss\n';
+  assert.deepEqual(parseRobotsTxtPolicy(sampleDisallow), { allowed: false, rule: 'Disallow: /hu/rss' });
+
+  const sampleAllow = 'User-agent: *\nDisallow: /admin\nAllow: /\n';
+  assert.deepEqual(parseRobotsTxtPolicy(sampleAllow), { allowed: true, rule: 'Allow: /' });
+
+  const specificCrucixBlock = 'User-agent: Crucix\nDisallow: /\n';
+  assert.deepEqual(parseRobotsTxtPolicy(specificCrucixBlock), { allowed: false, rule: 'Disallow: /' });
+
+  // 2. Caching: fetchFn is invoked only once across repeated calls
+  let fetchCount = 0;
+  const mockFetch = async (url) => {
+    fetchCount += 1;
+    assert.equal(url, ROBOTS_TXT_URL);
+    return { rawText: 'User-agent: *\nAllow: /\n', status: 200 };
+  };
+
+  resetRobotsCache();
+  const res1 = await checkRobotsTxt({ fetchFn: mockFetch });
+  assert.equal(res1.allowed, true);
+  assert.equal(fetchCount, 1);
+
+  const res2 = await checkRobotsTxt({ fetchFn: mockFetch });
+  assert.equal(res2.allowed, true);
+  assert.equal(fetchCount, 1, 'Cache reused: fetch count must not increase');
+
+  // 3. resetRobotsCache clears cache
+  resetRobotsCache();
+  const res3 = await checkRobotsTxt({ fetchFn: mockFetch });
+  assert.equal(res3.allowed, true);
+  assert.equal(fetchCount, 2, 'Cache was cleared, second network fetch performed');
+
+  resetRobotsCache();
+});
+
+test('15. Alert notification suppression: police events are informational and trigger ZERO notifying alerts', (t) => {
+  const parsed = parsePoliceRss(FIXTURE_XML, { now: REF_NOW });
+  assert.equal(parsed.status, 'ok');
+
+  // Convert observations to standard Crucix event records
+  const policeEvents = parsed.observations.map((obs, idx) => ({
+    id: `event-police-${idx}`,
+    kind: 'news',
+    severity: 'low',
+    title: obs.title,
+    summary: '',
+    source: { name: SOURCE, url: obs.link, status: 'ok' },
+    observedAt: obs.publishedAt,
+    publishedAt: obs.publishedAt,
+    location: { lat: null, lon: null, method: 'unknown', label: obs.settlement, precision: 'settlement' },
+    facts: obs.facts,
+    territory: obs.territory
+  }));
+
+  // Verify notifying default rules
+  const notifyingRules = DEFAULT_RULES.filter(r => r.notify);
+  assert.ok(notifyingRules.length > 0, 'There are default notifying rules');
+  for (const rule of notifyingRules) {
+    if (rule.kind === 'event') {
+      assert.ok(['critical', 'high'].includes(rule.params.minLevel), 'Event notify rules require critical or high level');
+    }
+  }
+
+  // Run AlertEngine over isolated directory
+  const root = mkdtempSync(join(tmpdir(), 'crucix-police-alert-test-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+
+  const engine = new AlertEngine(root, {
+    now: () => REF_NOW,
+    logger: { warn: () => {}, error: () => {}, log: () => {}, info: () => {} }
+  });
+  engine.load();
+
+  // Bootstrap sweep
+  engine.evaluate({ events: [] });
+
+  // Sweep with police events
+  const result = engine.evaluate({ events: policeEvents });
+
+  // Verify that any created alerts have notify: false, and zero notifying alerts were generated
+  const notifyingAlerts = (result.created || []).filter(a => a.notify);
+  assert.equal(
+    notifyingAlerts.length,
+    0,
+    'Police events must NEVER trigger notifying alerts (strictly informational, no regional alarm/push)'
+  );
+});
+
+test('16. Dynamic territory derivation: derives NUTS and county metadata without hardcoded strings', () => {
+  const customConfig = {
+    primary: {
+      id: 'custom-settlement',
+      name: 'Tesztfalu',
+      countyCode: '15',
+      countyName: 'Szabolcs-Szatmár-Bereg',
+      nuts3: 'HU323',
+      nuts2: 'HU32',
+      nuts0: 'HU',
+      iso3: 'HUN'
+    },
+    watchedSettlements: [],
+    keyConnections: []
+  };
+
+  const mention = detectSettlementMention('Baleset történt a határban', customConfig);
+  assert.equal(mention.countyCode, '15');
+  assert.equal(mention.countyName, 'Szabolcs-Szatmár-Bereg');
+  assert.equal(mention.nuts3, 'HU323');
+  assert.equal(mention.nuts2, 'HU32');
+  assert.equal(mention.nuts0, 'HU');
+  assert.equal(mention.iso3, 'HUN');
+  assert.equal(mention.isConfirmedLocal, false);
+});
+
+

@@ -49,6 +49,7 @@ import { briefing as cisaKev } from './sources/cisa-kev.mjs';
 import { briefing as cloudflareRadar } from './sources/cloudflare-radar.mjs';
 import { briefing as ioda } from './sources/ioda.mjs';
 import { briefing as usgs } from './sources/usgs.mjs';
+// Current free public data. Each adapter checks provider timestamps.
 import { briefing as meteoalarm } from './sources/meteoalarm.mjs';
 import { briefing as gdacs } from './sources/gdacs.mjs';
 import { briefing as swpc } from './sources/swpc.mjs';
@@ -71,6 +72,7 @@ import { briefing as predictionMarkets } from './sources/prediction-markets.mjs'
 import { briefing as viewsForecast } from './sources/views.mjs';
 import { briefing as informRisk } from './sources/inform.mjs';
 import { briefing as nebihAsp } from './sources/nebih-asp.mjs';
+import { briefing as policeHajdu } from './sources/police-hajdu-bihar.mjs';
 import config from '../crucix.config.mjs';
 
 const SOURCE_TIMEOUT_MS = 30_000; // 30s max per individual source
@@ -158,6 +160,7 @@ export async function fullBriefing() {
     // Current free public data. Each adapter checks provider timestamps.
     runSource('Meteoalarm', meteoalarm, { countries: config.publicSources.meteoalarmCountries }),
     runSource('Nebih-ASP', nebihAsp, { territoryConfig: config.territory }),
+    runSource('Police-Hajdu', policeHajdu, { territoryConfig: config.territory }),
     runSource('GDACS', gdacs),
     runSource('NOAA-SWPC', swpc),
     runSource('ECB', ecb),
