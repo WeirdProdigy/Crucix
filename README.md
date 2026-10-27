@@ -572,6 +572,7 @@ Both are free and key-less, every request is bounded to 10 s and 2 MiB, and the 
 | `npm run diag` | `node diag.mjs` | Run diagnostics (Node version, imports, port check) |
 | `npm test` | `node --test test/*.test.mjs` | Local regressions using mocks/fixtures |
 | `npm run check` | `node scripts/check.mjs` | JavaScript syntax and locale checks |
+| QA server | `node scripts/qa-server.mjs` | Isolated test server launcher with sweeps and notifications strictly disabled |
 
 ---
 
