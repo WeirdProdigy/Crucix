@@ -35,7 +35,8 @@ import {
 
 import { FEED_POLICIES, ALL_POLICIES } from '../apis/utils/freshness.mjs';
 import { normalizeLiveSources, freshLiveSnapshot } from '../lib/intelligence/live-sources.mjs';
-import { partitionEventsByView, VIEWS, VIEW_CATEGORIES } from '../lib/intelligence/views.mjs';
+import { partitionEventsByView, getViewNews, VIEWS, VIEW_CATEGORIES, VIEW_NEWS_CAP, TOTAL_NEWS_CAP } from '../lib/intelligence/views.mjs';
+import { HistoryStore } from '../lib/intelligence/history.mjs';
 import { AlertEngine } from '../lib/alerts/engine.mjs';
 import { DEFAULT_RULES } from '../lib/alerts/rules.mjs';
 
@@ -697,15 +698,15 @@ test('18. Event counter isolation: News events (kind: news / news_*) DO NOT coun
   assert.equal(localView.breakdown.confirmedLocal, 1);
   assert.equal(localView.breakdown.needsReview, 0, 'News needsReview must not enter physical breakdown.needsReview');
   assert.equal(localView.newsCount, 1, 'Local view has exactly 1 local news item');
-  assert.equal(localView.news.length, 1);
-  assert.equal(localView.news[0].id, 'news-0001');
+  assert.equal(getViewNews(partitions, VIEWS.LOCAL).length, 1);
+  assert.equal(getViewNews(partitions, VIEWS.LOCAL)[0].id, 'news-0001');
 
   // Check Global view: 1 physical event, 2 news items
   const globalView = partitions[VIEWS.GLOBAL];
   assert.equal(globalView.totalEvents, 1, 'Global view physical totalEvents must be exactly 1');
   assert.equal(globalView.uniqueEvents, 1, 'Global view physical uniqueEvents must be exactly 1');
   assert.equal(globalView.newsCount, 2, 'Global view contains both news items');
-  assert.equal(globalView.news.length, 2);
+  assert.equal(getViewNews(partitions, VIEWS.GLOBAL).length, 2);
 });
 
 test('19. PR filtering and Telex Közlemény diagnostics accounting', () => {
@@ -840,19 +841,20 @@ test('22. News payload deduplication, VIEW_NEWS_CAP=50, and isPublisherPromo exc
   const global = partitioned[VIEWS.GLOBAL];
   assert.equal(global.newsCount, 70, 'Publisher promo must NOT be counted in newsCount (70 items)');
   assert.equal(global.newsIds.length, 50, 'newsIds capped at VIEW_NEWS_CAP = 50');
-  assert.equal(partitioned.news.length, 70, 'Shared news array holds 70 non-promo items once');
+  assert.equal(partitioned.news.length, 50, 'Shared news array holds ONLY referenced items (capped at 50 for global view)');
   assert.ok(!global.newsIds.includes('news-promo-001'), 'Promo item strictly excluded from newsIds');
 
-  // Non-enumerable getter view.news returns 50 objects for backwards compatibility
-  assert.equal(global.news.length, 50);
-  assert.equal(global.news[0].id, 'news-item-001');
+  // Explicit accessor getViewNews returns 50 objects
+  assert.equal(getViewNews(partitioned, VIEWS.GLOBAL).length, 50);
+  assert.equal(getViewNews(partitioned, VIEWS.GLOBAL)[0].id, 'news-item-001');
 
-  // JSON.stringify must NOT serialize view.news (no replication)
+  // JSON.stringify serializes cleanly and getViewNews recovers data completely
   const jsonStr = JSON.stringify(partitioned);
   const reParsed = JSON.parse(jsonStr);
-  assert.equal(reParsed[VIEWS.GLOBAL].news, undefined, 'view.news is non-enumerable and omitted from JSON');
   assert.equal(reParsed[VIEWS.GLOBAL].newsIds.length, 50);
-  assert.equal(reParsed.news.length, 70, 'Only shared news array is serialized');
+  assert.equal(reParsed.news.length, 50, 'Only shared referenced news array is serialized');
+  assert.equal(getViewNews(reParsed, VIEWS.GLOBAL).length, 50);
+  assert.equal(getViewNews(reParsed, VIEWS.GLOBAL)[0].id, 'news-item-001');
 });
 
 test('23. Diagnostics counters: droppedStale, droppedPr, droppedDuplicate', () => {
@@ -895,4 +897,112 @@ test('23. Diagnostics counters: droppedStale, droppedPr, droppedDuplicate', () =
   assert.equal(parsed.diagnostics.droppedDuplicate, 1, 'droppedDuplicate must be 1');
   assert.equal(parsed.diagnostics.droppedPr, 1, 'droppedPr must be 1');
   assert.equal(parsed.diagnostics.droppedStale, 1, 'droppedStale must be 1');
+});
+
+test('24. Kataszter contract: exactly 82 settlements, required settlements present, ambiguous set', () => {
+  assert.equal(HAJDU_BIHAR_KSH_SETTLEMENTS.length, 82, 'Gazetteer must contain exactly 82 unique settlements');
+  const names = new Set(HAJDU_BIHAR_KSH_SETTLEMENTS.map(s => s.name));
+  assert.equal(names.size, 82, 'All 82 settlement names must be unique');
+
+  // Verify critical settlements
+  assert.ok(names.has('Ártánd'), 'Ártánd must be present');
+  assert.ok(names.has('Bihartorda'), 'Bihartorda must be present');
+  assert.ok(names.has('Püspökladány'), 'Püspökladány must be present');
+  assert.ok(names.has('Hajdúszoboszló'), 'Hajdúszoboszló must be present');
+  assert.ok(names.has('Furta'), 'Furta must be present');
+  assert.ok(names.has('Kokad'), 'Kokad must be present');
+
+  // Verify all 10 ambiguous settlements
+  const expectedAmbiguous = ['folyas', 'furta', 'tepe', 'fulop', 'told', 'sap', 'bojt', 'darvas', 'ebes', 'szerep'];
+  for (const amb of expectedAmbiguous) {
+    assert.ok(AMBIGUOUS_SETTLEMENT_NAMES.has(amb), `Ambiguous settlement '${amb}' must be in AMBIGUOUS_SETTLEMENT_NAMES`);
+  }
+});
+
+test('25. Keyword refinements: Paksi FC vs atomerőmű, Energia KC vs hálózat, áramszünet Püspökladányban, sport guard', () => {
+  // Paks: ONLY nuclear context
+  assert.notEqual(classifyNewsCategory('Kikapott a Paksi FC idegenben', 'sport'), 'news_energy');
+  assert.notEqual(classifyNewsCategory('Paksi FC győzelem a bajnokságban', 'hirek'), 'news_energy');
+  assert.equal(classifyNewsCategory('Karbantartás a paksi atomerőmű 3. blokkjában', 'hirek'), 'news_energy');
+
+  // Energia: sports teams must NOT match energy
+  assert.notEqual(classifyNewsCategory('Bravúros győzelmet aratott az Energia KC', 'sport'), 'news_energy');
+  assert.notEqual(classifyNewsCategory('Energia KC mérkőzés a hétvégén', 'hirek'), 'news_energy');
+  assert.equal(classifyNewsCategory('Korszerűsítik a hazai villamosenergia hálózatot', 'hirek'), 'news_energy');
+
+  // Hazard overrides territory: áramszünet Püspökladányban
+  const puspokTerritory = detectSettlementMention('Váratlan áramszünet Püspökladányban');
+  assert.equal(puspokTerritory.settlementName, 'Püspökladány');
+  const cat = classifyNewsCategory('Váratlan áramszünet Püspökladányban', 'hirek', puspokTerritory);
+  assert.equal(cat, 'news_hazard', 'áramszünet must classify as news_hazard');
+
+  // Sport/culture section guard: accidents override, but mild words do not
+  assert.equal(classifyNewsCategory('Súlyos baleset történt a rali versenyen', 'sport'), 'news_hazard');
+  assert.equal(classifyNewsCategory('Katasztrofális vereséget szenvedett a csapat', 'sport'), 'news_other');
+});
+
+test('26. Payload: getViewNews accessor survives spread, structuredClone, and JSON without data loss', () => {
+  const events = [
+    { id: 'news-01', title: 'Hír 1', kind: 'news', newsCategory: 'news_global' },
+    { id: 'news-02', title: 'Hír 2', kind: 'news', newsCategory: 'news_global' },
+    { id: 'news-03', title: 'Hír 3 Debrecen', kind: 'news', newsCategory: 'news_local', territory: { settlementId: 'debrecen', settlementName: 'Debrecen' } }
+  ];
+
+  const partitioned = partitionEventsByView(events);
+
+  // 1. Spread object
+  const spreadViews = { ...partitioned };
+  assert.deepEqual(getViewNews(spreadViews, VIEWS.GLOBAL), getViewNews(partitioned, VIEWS.GLOBAL));
+
+  // 2. structuredClone
+  const cloned = structuredClone(partitioned);
+  assert.deepEqual(getViewNews(cloned, VIEWS.GLOBAL), getViewNews(partitioned, VIEWS.GLOBAL));
+
+  // 3. JSON roundtrip
+  const roundtripped = JSON.parse(JSON.stringify(partitioned));
+  assert.deepEqual(getViewNews(roundtripped, VIEWS.GLOBAL), getViewNews(partitioned, VIEWS.GLOBAL));
+  assert.equal(getViewNews(roundtripped, VIEWS.GLOBAL).length, 3);
+});
+
+test('27. HistoryStore exclusion: news events are strictly rejected from history.json', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'crucix-hist-test-'));
+  try {
+    const store = new HistoryStore(dir, { now: () => REF_NOW });
+    const result = store.add([
+      // News event with kind: news
+      {
+        id: 'event-00000000000000000000000000000001',
+        title: 'Helyi hír Debrecenből',
+        kind: 'news',
+        source: { name: 'RSS-Dehir', url: 'https://dehir.hu/test', status: 'ok' },
+        collectedAt: new Date(REF_NOW).toISOString()
+      },
+      // News event from RSS source
+      {
+        id: 'event-00000000000000000000000000000002',
+        title: 'Országos hír',
+        newsCategory: 'news_national',
+        source: { name: 'RSS-Telex', url: 'https://telex.hu/test', status: 'ok' },
+        collectedAt: new Date(REF_NOW).toISOString()
+      },
+      // Valid physical hazard event
+      {
+        id: 'event-00000000000000000000000000000003',
+        title: 'Zivatarriasztás',
+        kind: 'weather',
+        source: { name: 'Meteoalarm', url: 'https://meteoalarm.org/test', status: 'ok' },
+        collectedAt: new Date(REF_NOW).toISOString()
+      }
+    ]);
+
+    assert.equal(result.added, 1, 'Only physical hazard event added');
+    assert.equal(result.ignored, 2, 'Both news events were ignored');
+
+    const history = store.query();
+    assert.equal(history.total, 1);
+    assert.equal(history.items.length, 1);
+    assert.equal(history.items[0].id, 'event-00000000000000000000000000000003');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -11,13 +11,16 @@ import {
  * These require strict capitalized matching and locative/geographic disambiguation.
  */
 export const AMBIGUOUS_SETTLEMENT_NAMES = new Set([
-  'szerep', // common noun: role / part (szerep, szerepet játszik)
+  'folyas', // common noun: stream / flow (folyás)
+  'furta',  // verb: drilled / strange (fúrta)
+  'tepe',   // verb: tear / shred (tép, tépte)
   'fulop',  // given name / forename (Fülöp)
-  'ebes',   // adjective / slang
   'told',   // verb: lengthen / splice (told, toldoz-foldoz)
   'sap',    // noun: toll / cut (sáp, sápot húz)
   'bojt',   // noun: tassel / pompom (bojt)
-  'darvas'  // adjective: crane-related (darvas)
+  'darvas', // adjective: crane-related (darvas)
+  'ebes',   // adjective / slang
+  'szerep'  // common noun: role / part (szerep, szerepet játszik)
 ]);
 
 /**
@@ -46,9 +49,10 @@ export const HAJDU_BIHAR_KSH_SETTLEMENTS = Object.freeze([
   { id: 'ebes', name: 'Ebes', ambiguous: true },
   { id: 'egyek', name: 'Egyek' },
   { id: 'esztar', name: 'Esztár' },
-  { id: 'folyas', name: 'Folyás' },
+  { id: 'folyas', name: 'Folyás', ambiguous: true },
   { id: 'foldes', name: 'Földes' },
   { id: 'fulop', name: 'Fülöp', ambiguous: true },
+  { id: 'furta', name: 'Furta', ambiguous: true },
   { id: 'gaborjan', name: 'Gáborján' },
   { id: 'gorbehaza', name: 'Görbeháza' },
   { id: 'hajdubagos', name: 'Hajdúbagos' },
@@ -64,6 +68,7 @@ export const HAJDU_BIHAR_KSH_SETTLEMENTS = Object.freeze([
   { id: 'hosszupalyi', name: 'Hosszúpályi' },
   { id: 'kaba', name: 'Kaba' },
   { id: 'kismarja', name: 'Kismarja' },
+  { id: 'kokad', name: 'Kokad' },
   { id: 'komadi', name: 'Komádi' },
   { id: 'konyar', name: 'Konyár' },
   { id: 'korosszakal', name: 'Körösszakál' },
@@ -91,7 +96,7 @@ export const HAJDU_BIHAR_KSH_SETTLEMENTS = Object.freeze([
   { id: 'szentpeterszeg', name: 'Szentpéterszeg' },
   { id: 'szerep', name: 'Szerep', ambiguous: true },
   { id: 'teglas', name: 'Téglás' },
-  { id: 'tepe', name: 'Tépe' },
+  { id: 'tepe', name: 'Tépe', ambiguous: true },
   { id: 'tetetlen', name: 'Tetétlen' },
   { id: 'tiszacsege', name: 'Tiszacsege' },
   { id: 'tiszagyulahaza', name: 'Tiszagyulaháza' },

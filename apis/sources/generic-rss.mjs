@@ -312,17 +312,34 @@ export function classifyNewsCategory(title, section = '', territoryOrDef = null,
 
   const normTitle = (title || '').toLowerCase();
   const normSec = (section || '').toLowerCase();
+  const isSportOrCulture = /sport|foci|labdarugas|kultura|kultur|szorakozas|bulvar/.test(normSec);
 
   // 1. Keyword-based overrides (hazard, energy, agriculture) strictly on title
-  // These override territorial category (territory remains in its own fields)
-  if (/(?<![\p{L}\p{N}])(?:baleset|karambol|ütköz[eé]|gázol|tűz|lángok|égő|katasztrófa|vihar|felhőszakadás|villám|útlezárás|forgalomkorlátozás|riasztás|figyelmeztetés)(?![\p{L}\p{N}])/ui.test(normTitle)) {
+  // Severe incident guard: in sport/culture, ONLY acute incidents (baleset, tűz, robbanás, mentés) override.
+  const isSevereIncident = /(?<![\p{L}\p{N}])(?:baleset(?:[a-záéíóöőúüű]+)?|karambol(?:[a-záéíóöőúüű]+)?|ütköz[eé](?:[a-záéíóöőúüű]+)?|gázol(?:[a-záéíóöőúüű]+)?|tűz(?:[a-záéíóöőúüű]+)?|tűzeset(?:[a-záéíóöőúüű]+)?|lángok(?:[a-záéíóöőúüű]+)?|égő|robbanás(?:[a-záéíóöőúüű]+)?|mentés(?:[a-záéíóöőúüű]+)?|mentők(?:[a-záéíóöőúüű]+)?|tűzoltók(?:[a-záéíóöőúüű]+)?)(?![\p{L}\p{N}])/ui.test(normTitle);
+
+  if (isSevereIncident) {
     return 'news_hazard';
   }
-  if (/(?<![\p{L}\p{N}])(?:energia|villamosenergia|áramhálózat|földgáz|gázellátás|áramellátás|üzemanyag|benzin|gázolaj|erőmű|akkumulátorgyár|távhő|atomerőmű|paks)(?![\p{L}\p{N}])/ui.test(normTitle)) {
-    return 'news_energy';
-  }
-  if (/(?<![\p{L}\p{N}])(?:sertéspestis|madárinfluenza|agrár|mezőgazdaság|állategészség|kérődző|szarvasmarha|vetés|aratás|aszály|terméshozam|vaddisznó|afrikai sertéspestis)(?![\p{L}\p{N}])/ui.test(normTitle)) {
-    return 'news_agriculture';
+
+  if (!isSportOrCulture) {
+    // General hazard (expanded with operational query keywords)
+    if (/(?<![\p{L}\p{N}])(?:katasztrófa(?:[a-záéíóöőúüű]+)?|vihar(?:[a-záéíóöőúüű]+)?|viharkár(?:[a-záéíóöőúüű]+)?|felhőszakadás(?:[a-záéíóöőúüű]+)?|villám(?:[a-záéíóöőúüű]+)?|villámárvíz(?:[a-záéíóöőúüű]+)?|árvíz(?:[a-záéíóöőúüű]+)?|földrengés(?:[a-záéíóöőúüű]+)?|áramszünet(?:[a-záéíóöőúüű]+)?|vízhiány(?:[a-záéíóöőúüű]+)?|útlezárás(?:[a-záéíóöőúüű]+)?|forgalomkorlátozás(?:[a-záéíóöőúüű]+)?|riasztás(?:[a-záéíóöőúüű]+)?|figyelmeztetés(?:[a-záéíóöőúüű]+)?)(?![\p{L}\p{N}])/ui.test(normTitle)) {
+      return 'news_hazard';
+    }
+
+    // Energy: Paks in nuclear context only; energia does not match sports clubs (e.g. Energia KC)
+    const isPaksEnergy = /(?<![\p{L}\p{N}])(?:paksi\s+atomerőmű(?:[a-záéíóöőúüű]+)?|paksi\s+blokk(?:[a-záéíóöőúüű]+)?|paksi\s+bővítés(?:[a-záéíóöőúüű]+)?|paks\s*ii|atomerőmű(?:[a-záéíóöőúüű]+)?)(?![\p{L}\p{N}])/ui.test(normTitle);
+    const isGeneralEnergy = /(?<![\p{L}\p{N}])(?:energia(?!\s+(?:kc|fc|sc|se|te|bajnokság|kupa|liga))|villamosenergia(?:[a-záéíóöőúüű]+)?|áramhálózat(?:[a-záéíóöőúüű]+)?|földgáz(?:[a-záéíóöőúüű]+)?|gázellátás(?:[a-záéíóöőúüű]+)?|áramellátás(?:[a-záéíóöőúüű]+)?|üzemanyag(?:[a-záéíóöőúüű]+)?|benzin(?:[a-záéíóöőúüű]+)?|gázolaj(?:[a-záéíóöőúüű]+)?|erőmű(?:[a-záéíóöőúüű]+)?|akkumulátorgyár(?:[a-záéíóöőúüű]+)?|távhő(?:[a-záéíóöőúüű]+)?)(?![\p{L}\p{N}])/ui.test(normTitle);
+
+    if (isPaksEnergy || isGeneralEnergy) {
+      return 'news_energy';
+    }
+
+    // Epizootic / Agriculture
+    if (/(?<![\p{L}\p{N}])(?:sertéspestis(?:[a-záéíóöőúüű]+)?|madárinfluenza(?:[a-záéíóöőúüű]+)?|veszettség(?:[a-záéíóöőúüű]+)?|agrár(?:[a-záéíóöőúüű]+)?|mezőgazdaság(?:[a-záéíóöőúüű]+)?|állategészség(?:[a-záéíóöőúüű]+)?|kérődző(?:[a-záéíóöőúüű]+)?|szarvasmarha(?:[a-záéíóöőúüű]+)?|vetés(?:[a-záéíóöőúüű]+)?|aratás(?:[a-záéíóöőúüű]+)?|aszály(?:[a-záéíóöőúüű]+)?|terméshozam(?:[a-záéíóöőúüű]+)?|vaddisznó(?:[a-záéíóöőúüű]+)?|afrikai\s+sertéspestis)(?![\p{L}\p{N}])/ui.test(normTitle)) {
+      return 'news_agriculture';
+    }
   }
 
   // 2. Section-based thematic categories

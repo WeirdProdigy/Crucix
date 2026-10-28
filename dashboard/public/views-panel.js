@@ -237,6 +237,16 @@
     `;
   }
 
+  function getViewNews(snapshot, viewName) {
+    if (!snapshot || !viewName) return [];
+    const views = snapshot.views || snapshot;
+    const partition = views[viewName];
+    const newsList = views.news || snapshot.news || [];
+    if (!partition?.newsIds || !Array.isArray(newsList)) return [];
+    const idSet = new Set(partition.newsIds);
+    return newsList.filter(item => idSet.has(item.id));
+  }
+
   function panelHtml(snapshot) {
     const events = Array.isArray(snapshot?.events) ? snapshot.events : [];
     const staleEvents = Array.isArray(snapshot?.staleEvents) ? snapshot.staleEvents : [];
@@ -266,8 +276,15 @@
       categoryOrder = ['globalEvent', 'nationalEvent', 'countyEvent', 'confirmedLocal', 'unknownTerritory'];
     }
 
-    // Separate unlocated news events
-    const unlocatedNews = inViewEvents.filter(e => (e.kind === 'news' || e.source?.name?.includes('HAON')) && !hasCoordinates(e.lat, e.lon) && e.isPublisherPromo !== true);
+    // Separate unlocated news events using explicit getViewNews accessor
+    const viewNews = getViewNews(snapshot, activeView);
+    const allCandidateNews = [...viewNews, ...inViewEvents.filter(e => e.kind === 'news' || e.source?.name?.includes('HAON'))];
+    const seenNewsIds = new Set();
+    const unlocatedNews = allCandidateNews.filter(e => {
+      if (!e || seenNewsIds.has(e.id)) return false;
+      seenNewsIds.add(e.id);
+      return !hasCoordinates(e.lat, e.lon) && e.isPublisherPromo !== true;
+    });
 
     // Render active categories
     let sectionsHtml = '';

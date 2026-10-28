@@ -623,6 +623,7 @@ All settings are in `.env` with sensible defaults:
 | `CRUCIX_ENABLE_FEED_HVG` | `false` | Opt-in national RSS feed for HVG |
 | `CRUCIX_ENABLE_FEED_PORTFOLIO` | `false` | Opt-in economic/energy RSS feed for Portfolio |
 | `CRUCIX_ENABLE_FEED_QUBIT` | `false` | Opt-in science RSS feed for Qubit |
+| `CRUCIX_ENABLE_GNEWS` | `false` | Opt-in Google News RSS catalog aggregator (strictly 0 calls when false) |
 
 Delta engine thresholds (how sensitive the system is to changes between sweeps) can be customized in `crucix.config.mjs` under the `delta.thresholds` section. The defaults are tuned to filter out noise while catching meaningful moves.
 

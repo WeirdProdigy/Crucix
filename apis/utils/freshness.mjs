@@ -30,7 +30,14 @@ export const FEED_POLICIES = Object.freeze({
   'RSS-Index': { maxAgeMs: 6 * HOUR, observationMaxAgeMs: 48 * HOUR },
   'RSS-HVG': { maxAgeMs: 6 * HOUR, observationMaxAgeMs: 48 * HOUR },
   'RSS-Portfolio': { maxAgeMs: 6 * HOUR, observationMaxAgeMs: 48 * HOUR },
-  'RSS-Qubit': { maxAgeMs: 24 * HOUR, observationMaxAgeMs: 168 * HOUR }
+  'RSS-Qubit': { maxAgeMs: 24 * HOUR, observationMaxAgeMs: 168 * HOUR },
+  'Google-News': { maxAgeMs: 6 * HOUR, observationMaxAgeMs: 48 * HOUR },
+  'GNews-Debrecen': { maxAgeMs: 6 * HOUR, observationMaxAgeMs: 48 * HOUR },
+  'GNews-HajduBihar': { maxAgeMs: 6 * HOUR, observationMaxAgeMs: 48 * HOUR },
+  'GNews-DistrictTowns': { maxAgeMs: 6 * HOUR, observationMaxAgeMs: 48 * HOUR },
+  'GNews-Epizootic': { maxAgeMs: 6 * HOUR, observationMaxAgeMs: 48 * HOUR },
+  'GNews-Energy': { maxAgeMs: 6 * HOUR, observationMaxAgeMs: 48 * HOUR },
+  'GNews-HAON': { maxAgeMs: 6 * HOUR, observationMaxAgeMs: 48 * HOUR }
 });
 
 export const POLICE_HAJDU_POLICY = FEED_POLICIES['Police-Hajdu'];

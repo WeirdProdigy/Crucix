@@ -83,6 +83,7 @@ import {
   portfolioRss,
   qubitRss
 } from './sources/generic-rss.mjs';
+import { briefing as googleNews } from './sources/google-news.mjs';
 import config from '../crucix.config.mjs';
 
 const SOURCE_TIMEOUT_MS = 30_000; // 30s max per individual source
@@ -179,6 +180,7 @@ export async function fullBriefing() {
     runSource('RSS-HVG', hvgRss, { territoryConfig: config.territory }),
     runSource('RSS-Portfolio', portfolioRss, { territoryConfig: config.territory }),
     runSource('RSS-Qubit', qubitRss, { territoryConfig: config.territory }),
+    runSource('Google-News', googleNews, { territoryConfig: config.territory }),
     runSource('GDACS', gdacs),
     runSource('NOAA-SWPC', swpc),
     runSource('ECB', ecb),
