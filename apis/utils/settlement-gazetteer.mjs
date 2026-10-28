@@ -25,6 +25,7 @@ export const AMBIGUOUS_SETTLEMENT_NAMES = new Set([
  */
 export const HAJDU_BIHAR_KSH_SETTLEMENTS = Object.freeze([
   { id: 'almosd', name: 'Álmosd' },
+  { id: 'artand', name: 'Ártánd' },
   { id: 'bagamer', name: 'Bagamér' },
   { id: 'bakonszeg', name: 'Bakonszeg' },
   { id: 'balmazujvaros', name: 'Balmazújváros' },
@@ -105,23 +106,23 @@ export const HAJDU_BIHAR_KSH_SETTLEMENTS = Object.freeze([
   { id: 'zsaka', name: 'Zsáka' }
 ]);
 
-const LOCATIVE_SUFFIXES = '(?:on|en|ön|ban|ben|ra|re|ról|ről|rol|rel|hoz|hez|höz|ig|i|ból|ből|bol|bel|nál|nél|nal|nel)';
+const LOCATIVE_SUFFIXES = '(?:n|on|en|ön|ban|ben|ra|re|ról|ről|rol|rel|hoz|hez|höz|ig|i|ból|ből|bol|bel|nál|nél|nal|nel)';
 const NON_LOCATIVE_SUFFIXES = '(?:nek|val|vel|et|ot|öt|t)';
 
 /**
  * Builds Hungarian case inflection regex pattern for an unambiguous settlement name.
- * Uses strict word boundary matching to prevent matching inside compound words (e.g. állampolgár).
- * Accounts for Hungarian stem-final vowel lengthening (a -> á, e -> é).
+ * Uses strict Unicode-aware boundary matching to prevent matching inside compound words (e.g. állampolgár).
+ * Accounts for Hungarian stem-final vowel lengthening (a -> á, e -> é) and vowel-final locative suffix (-n).
  */
 function buildInflectionRegex(name) {
-  const allSuffixes = '(?:on|en|ön|ban|ben|ra|re|ról|ről|rol|rel|hoz|hez|höz|ig|i|ból|ből|bol|bel|nál|nél|nal|nel|nek|val|vel|et|ot|öt|t)?';
+  const allSuffixes = '(?:n|on|en|ön|ban|ben|ra|re|ról|ről|rol|rel|hoz|hez|höz|ig|i|ból|ből|bol|bel|nál|nél|nal|nel|nek|val|vel|et|ot|öt|t)?';
   if (name.endsWith('a') || name.endsWith('e')) {
     const stem = name.slice(0, -1);
     const lastChar = name.slice(-1);
     const lengthened = lastChar === 'a' ? '[aá]' : '[eé]';
-    return new RegExp(`\\b${stem}${lengthened}${allSuffixes}\\b`, 'ui');
+    return new RegExp(`(?<![\\p{L}\\p{N}])${stem}${lengthened}${allSuffixes}(?![\\p{L}\\p{N}])`, 'ui');
   }
-  return new RegExp(`\\b${name}${allSuffixes}\\b`, 'ui');
+  return new RegExp(`(?<![\\p{L}\\p{N}])${name}${allSuffixes}(?![\\p{L}\\p{N}])`, 'ui');
 }
 
 /**
@@ -129,7 +130,7 @@ function buildInflectionRegex(name) {
  */
 export function hasCountyContext(text) {
   if (typeof text !== 'string') return false;
-  return /\b(?:hajd[uú]-bihar|hajd[uú]|bihar|debrecen)\b/i.test(text);
+  return /(?<![\p{L}\p{N}])(?:hajd[uú]-bihar|hajd[uú]|bihar|debrecen)(?![\p{L}\p{N}])/ui.test(text);
 }
 
 /**
@@ -158,35 +159,35 @@ export function detectSettlementMention(title, territoryConfig = DEFAULT_TERRITO
 
   // 1. Process ambiguous settlement names with strict disambiguation rules
   for (const amb of AMBIGUOUS_SETTLEMENT_NAMES) {
-    const ambRegex = new RegExp(`\\b${amb}(?:[a-z]+)?\\b`, 'i');
+    const ambRegex = new RegExp(`(?<![\\p{L}\\p{N}])${amb}(?:[a-z]+)?(?![\\p{L}\\p{N}])`, 'ui');
     if (ambRegex.test(normTitle)) {
       const ambSettlement = HAJDU_BIHAR_KSH_SETTLEMENTS.find(s => s.id === amb);
       const ambName = ambSettlement?.name || amb;
 
       // Negative rules:
       // a) Hyphenated compounds (e.g. Fülöp-szigetek, Fülöp-szigeteki)
-      if (new RegExp(`\\b${ambName}-[a-záéíóöőúüű]+`, 'iu').test(rawTitle)) {
+      if (new RegExp(`(?<![\\p{L}\\p{N}])${ambName}-[a-záéíóöőúüű]+`, 'ui').test(rawTitle)) {
         continue;
       }
 
       // b) Forename / title pairing (e.g. Fülöp herceg, Fülöp Márk, Fülöp király)
-      if (new RegExp(`\\b${ambName}\\s+(?:herceg|márk|gróf|báró|király|vezér|elnök|igazgató|úr|asszony|doktor|dr\\.?|[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]+)\\b`, 'u').test(rawTitle)) {
+      if (new RegExp(`(?<![\\p{L}\\p{N}])${ambName}\\s+(?:herceg|márk|gróf|báró|király|vezér|elnök|igazgató|úr|asszony|doktor|dr\\.?|[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]+)(?![\\p{L}\\p{N}])`, 'u').test(rawTitle)) {
         continue;
       }
 
       // c) Bare lowercase occurrence (e.g. "szerepet játszik", "sápot húz")
-      const capitalizedRegex = new RegExp(`\\b${ambName[0].toUpperCase()}${ambName.slice(1)}`, 'u');
+      const capitalizedRegex = new RegExp(`(?<![\\p{L}\\p{N}])${ambName[0].toUpperCase()}${ambName.slice(1)}`, 'u');
       if (!capitalizedRegex.test(rawTitle)) {
         continue;
       }
 
       // Positive acceptance conditions:
       // 1) Locative / adverbial inflection (e.g. Fülöpön, Szerepen, Ebesen, Toldon, Sápon, Bojton, Darvason)
-      const locativeRegex = new RegExp(`\\b${ambName[0].toUpperCase()}${ambName.slice(1)}${LOCATIVE_SUFFIXES}\\b`, 'u');
+      const locativeRegex = new RegExp(`(?<![\\p{L}\\p{N}])${ambName[0].toUpperCase()}${ambName.slice(1)}${LOCATIVE_SUFFIXES}(?![\\p{L}\\p{N}])`, 'u');
       const hasLocative = locativeRegex.test(rawTitle);
 
       // 2) Geographic noun context ("<név> település/község/falu/város")
-      const geoContextRegex = new RegExp(`(?:\\b${ambName}\\s+(?:település|község|falu|város)\\b|\\b(?:település|község|falu|város)\\s+${ambName}\\b)`, 'iu');
+      const geoContextRegex = new RegExp(`(?:(?<![\\p{L}\\p{N}])${ambName}\\s+(?:település|község|falu|város)(?![\\p{L}\\p{N}])|(?<![\\p{L}\\p{N}])(?:település|község|falu|város)\\s+${ambName}(?![\\p{L}\\p{N}]))`, 'ui');
       const hasGeoContext = geoContextRegex.test(rawTitle);
 
       // 3) Explicit county context present alongside the capitalized name

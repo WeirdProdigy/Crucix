@@ -243,8 +243,8 @@
     const viewCounters = snapshot?.views?.[activeView] || {};
 
     // Filter events for the current active view (client only filters on server-provided views field)
-    const inViewEvents = events.filter(e => e.views?.[activeView]?.inView === true);
-    const inViewStale = staleEvents.filter(e => e.views?.[activeView]?.inView === true);
+    const inViewEvents = events.filter(e => e.views?.[activeView]?.inView === true && e.isPublisherPromo !== true);
+    const inViewStale = staleEvents.filter(e => e.views?.[activeView]?.inView === true && e.isPublisherPromo !== true);
 
     // Group active events by category
     const categories = {};
@@ -267,7 +267,7 @@
     }
 
     // Separate unlocated news events
-    const unlocatedNews = inViewEvents.filter(e => (e.kind === 'news' || e.source?.name?.includes('HAON')) && !hasCoordinates(e.lat, e.lon));
+    const unlocatedNews = inViewEvents.filter(e => (e.kind === 'news' || e.source?.name?.includes('HAON')) && !hasCoordinates(e.lat, e.lon) && e.isPublisherPromo !== true);
 
     // Render active categories
     let sectionsHtml = '';

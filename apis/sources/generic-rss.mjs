@@ -19,7 +19,7 @@
 import { createHash } from 'node:crypto';
 import { safeFetch } from '../utils/fetch.mjs';
 import { parseXml } from '../utils/xml.mjs';
-import { providerTime, freshResult, unavailableResult } from '../utils/freshness.mjs';
+import { providerTime, freshResult, unavailableResult, ALL_POLICIES, FEED_POLICIES } from '../utils/freshness.mjs';
 import { detectSettlementMention } from '../utils/settlement-gazetteer.mjs';
 import { DEFAULT_TERRITORY_CONFIG } from '../../lib/intelligence/territory.mjs';
 
@@ -29,11 +29,14 @@ export const ROBOTS_CACHE_TTL_MS = 24 * 3600 * 1000; // 24 hours
 export const NEWS_CATEGORIES = Object.freeze([
   'news_local',
   'news_regional',
+  'news_national',
+  'news_global',
   'news_hazard',
-  'news_agriculture',
   'news_energy',
+  'news_economy',
+  'news_agriculture',
   'news_science',
-  'news_global'
+  'news_other'
 ]);
 
 export const RSS_SOURCES = Object.freeze({
@@ -57,7 +60,7 @@ export const RSS_SOURCES = Object.freeze({
     robotsUrl: 'https://telex.hu/robots.txt',
     envOptIn: 'CRUCIX_ENABLE_FEED_TELEX',
     defaultDomain: 'security',
-    defaultCategory: 'news_regional',
+    defaultCategory: 'news_national',
     implicitCountyContext: false,
     supportsConditionalGet: true
   },
@@ -69,7 +72,7 @@ export const RSS_SOURCES = Object.freeze({
     robotsUrl: 'https://444.hu/robots.txt',
     envOptIn: 'CRUCIX_ENABLE_FEED_444',
     defaultDomain: 'security',
-    defaultCategory: 'news_regional',
+    defaultCategory: 'news_national',
     implicitCountyContext: false,
     supportsConditionalGet: true
   },
@@ -81,7 +84,7 @@ export const RSS_SOURCES = Object.freeze({
     robotsUrl: 'https://24.hu/robots.txt',
     envOptIn: 'CRUCIX_ENABLE_FEED_24HU',
     defaultDomain: 'security',
-    defaultCategory: 'news_regional',
+    defaultCategory: 'news_national',
     implicitCountyContext: false,
     supportsConditionalGet: true
   },
@@ -93,7 +96,7 @@ export const RSS_SOURCES = Object.freeze({
     robotsUrl: 'https://index.hu/robots.txt',
     envOptIn: 'CRUCIX_ENABLE_FEED_INDEX',
     defaultDomain: 'security',
-    defaultCategory: 'news_regional',
+    defaultCategory: 'news_national',
     implicitCountyContext: false,
     supportsConditionalGet: false // Cache-Control: no-store
   },
@@ -105,7 +108,7 @@ export const RSS_SOURCES = Object.freeze({
     robotsUrl: 'https://hvg.hu/robots.txt',
     envOptIn: 'CRUCIX_ENABLE_FEED_HVG',
     defaultDomain: 'security',
-    defaultCategory: 'news_regional',
+    defaultCategory: 'news_national',
     implicitCountyContext: false,
     supportsConditionalGet: true
   },
@@ -117,7 +120,7 @@ export const RSS_SOURCES = Object.freeze({
     robotsUrl: 'https://www.portfolio.hu/robots.txt',
     envOptIn: 'CRUCIX_ENABLE_FEED_PORTFOLIO',
     defaultDomain: 'security',
-    defaultCategory: 'news_energy',
+    defaultCategory: 'news_economy',
     implicitCountyContext: false,
     supportsConditionalGet: false
   },
@@ -287,46 +290,73 @@ export function isSponsoredOrPr(item) {
 
 /**
  * Classifies an item into Crucix dedicated news categories.
+ * 10 categories: news_local, news_regional, news_national, news_global,
+ * news_hazard, news_energy, news_economy, news_agriculture, news_science, news_other.
+ *
+ * Rules:
+ * - hazard / energy / agriculture: KEYWORDS strictly in title (override territory)
+ * - economy / science / other: section-based (or science keywords in title)
+ * - territorial (local / regional / global / national): gazetteer mentions and sections
  */
-export function classifyNewsCategory(title, section = '', defaultCategory = 'news_regional') {
-  const text = `${title || ''} ${section || ''}`.toLowerCase();
+export function classifyNewsCategory(title, section = '', territoryOrDef = null, maybeDefault = 'news_other') {
+  let territory = null;
+  let defaultCategory = 'news_other';
 
-  // 1. Hazard
-  if (/baleset|karambol|ütköz|gázol|tűz\b|égő\b|lángok|katasztrófa|vihar|felhőszakadás|villám|áramszünet|vízhiány|útlezárás|forgalomkorlátozás|riasztás|figyelmeztetés/.test(text)) {
-    return 'news_hazard';
+  if (typeof territoryOrDef === 'string') {
+    defaultCategory = territoryOrDef;
+    territory = null;
+  } else {
+    territory = territoryOrDef;
+    defaultCategory = maybeDefault || 'news_other';
   }
 
-  // 2. Epizootic / Agriculture
-  if (/sertéspestis|madárinfluenza|agrár|mezőgazdaság|állategészség|kérődző|szarvasmarha|vetés|aratás|aszály|terméshozam/.test(text)) {
+  const normTitle = (title || '').toLowerCase();
+  const normSec = (section || '').toLowerCase();
+
+  // 1. Keyword-based overrides (hazard, energy, agriculture) strictly on title
+  // These override territorial category (territory remains in its own fields)
+  if (/(?<![\p{L}\p{N}])(?:baleset|karambol|ütköz[eé]|gázol|tűz|lángok|égő|katasztrófa|vihar|felhőszakadás|villám|útlezárás|forgalomkorlátozás|riasztás|figyelmeztetés)(?![\p{L}\p{N}])/ui.test(normTitle)) {
+    return 'news_hazard';
+  }
+  if (/(?<![\p{L}\p{N}])(?:energia|villamosenergia|áramhálózat|földgáz|gázellátás|áramellátás|üzemanyag|benzin|gázolaj|erőmű|akkumulátorgyár|távhő|atomerőmű|paks)(?![\p{L}\p{N}])/ui.test(normTitle)) {
+    return 'news_energy';
+  }
+  if (/(?<![\p{L}\p{N}])(?:sertéspestis|madárinfluenza|agrár|mezőgazdaság|állategészség|kérődző|szarvasmarha|vetés|aratás|aszály|terméshozam|vaddisznó|afrikai sertéspestis)(?![\p{L}\p{N}])/ui.test(normTitle)) {
     return 'news_agriculture';
   }
 
-  // 3. Energy & Utilities
-  if (/energia|villamosenergia|áramhálózat|földgáz|gázellátás|üzemanyag|benzin|gázolaj|erőmű|akkumulátorgyár|távhő/.test(text)) {
-    return 'news_energy';
+  // 2. Section-based thematic categories
+  if (/gazdasag|uzlet|penzugy|finanszirozas|piac|befektetes|makrogazdasag/.test(normSec)) {
+    return 'news_economy';
   }
-
-  // 4. Science
-  if (/tudomány|kutatás|csillagászat|űrkutatás|nasa|egyetem\b|fizika\b|biológia|klímaváltozás|fekete lyuk|genom/.test(text)) {
+  if (/tudomany|kornyezet|tech|qubit|urkutatas/.test(normSec) ||
+      /(?<![\p{L}\p{N}])(?:tudomány|űrkutatás|nasa|csillagászat|fekete lyuk|genom|klímaváltozás)(?![\p{L}\p{N}])/ui.test(normTitle)) {
     return 'news_science';
   }
-
-  // 5. Local
-  if (/debrecen|bihartorda|püspökladány|hajdúszoboszló|berettyóújfalu|derecske|balmazújváros/.test(text)) {
-    return 'news_local';
+  if (/sport|foci|labdarugas|kultura|kultur|eletmod|elet-stilus|zacc|zene|film|szorakozas|bulvar/.test(normSec)) {
+    return 'news_other';
   }
 
-  // 6. Regional
-  if (/hajdú-bihar|hajdú\b|bihar\b|sárrét|hortobágy/.test(text)) {
-    return 'news_regional';
-  }
-
-  // 7. Global
-  if (/külföld|kulfold|világ|vilag|nemzetközi|nemzetkozi|genf|békecsúcs|bekecsucs|egyesült államok|kína|oroszország|ukrajna|közel-kelet|nato|brüsszel|eu\b/.test(text)) {
+  // 3. Global news (section or keywords)
+  if (/kulfold|nagyvilag|vilag|global/.test(normSec) ||
+      /(?<![\p{L}\p{N}])(?:külföld|világ|nemzetközi|genf|békecsúcs|egyesült államok|kína|oroszország|ukrajna|közel-kelet|nato|brüsszel|eu|európai unió|fehér ház|kreml|washington)(?![\p{L}\p{N}])/ui.test(normTitle)) {
     return 'news_global';
   }
 
-  return defaultCategory;
+  // 4. Territorial classification (local, regional, national)
+  if (territory && (territory.settlementName || territory.settlementId)) {
+    return 'news_local';
+  }
+  if (/(?<![\p{L}\p{N}])(?:hajd[uú]-bihar|hajd[uú]|bihar|sárrét|hortobágy|hajdú-bihari)(?![\p{L}\p{N}])/ui.test(normTitle) ||
+      normSec.includes('hajdu') || normSec.includes('bihar') || normSec.includes('debrecen')) {
+    return 'news_regional';
+  }
+  if (/belfold|itthon|magyarorszag|politika|kozelet/.test(normSec) ||
+      /(?<![\p{L}\p{N}])(?:magyarország|belföld|kormány|parlament|országgyűlés|miniszter|budapest)(?![\p{L}\p{N}])/ui.test(normTitle)) {
+    return 'news_national';
+  }
+
+  return defaultCategory || 'news_other';
 }
 
 /**
@@ -395,9 +425,14 @@ export function parseGenericRss(xml, sourceConfig, options = {}) {
     || providerTime(channel.pubDate)
     || new Date(now).toISOString();
 
+  const policy = ALL_POLICIES[sourceConfig.name] || FEED_POLICIES[sourceConfig.name];
+  const maxAgeMs = policy?.observationMaxAgeMs || (48 * 3600 * 1000);
+
   const observations = [];
   const seenUrls = new Set();
-  let filteredPrCount = 0;
+  let droppedDuplicate = 0;
+  let droppedPr = 0;
+  let droppedStale = 0;
   let publisherPromoCount = 0;
   let newestPubDate = null;
   let oldestPubDate = null;
@@ -408,7 +443,11 @@ export function parseGenericRss(xml, sourceConfig, options = {}) {
     if (!rawTitle || !rawLink) continue;
 
     const canonicalLink = cleanCanonicalUrl(rawLink);
-    if (!canonicalLink || seenUrls.has(canonicalLink)) continue;
+    if (!canonicalLink) continue;
+    if (seenUrls.has(canonicalLink)) {
+      droppedDuplicate++;
+      continue;
+    }
     seenUrls.add(canonicalLink);
 
     // Extract categories
@@ -423,7 +462,7 @@ export function parseGenericRss(xml, sourceConfig, options = {}) {
     // PR / Sponsored check
     const rawDesc = typeof item.description === 'string' ? item.description : (item.description?.['#text'] || '');
     if (isSponsoredOrPr({ title: rawTitle, categories, description: rawDesc })) {
-      filteredPrCount++;
+      droppedPr++;
       continue;
     }
 
@@ -431,13 +470,23 @@ export function parseGenericRss(xml, sourceConfig, options = {}) {
     const publishedAt = providerTime(pubDateStr, { assumeUTC: true }) || observedAt;
 
     if (publishedAt) {
-      if (!newestPubDate || Date.parse(publishedAt) > Date.parse(newestPubDate)) {
+      const pubMs = Date.parse(publishedAt);
+      if (Number.isFinite(pubMs) && (now - pubMs > maxAgeMs)) {
+        droppedStale++;
+        continue;
+      }
+      if (!newestPubDate || pubMs > Date.parse(newestPubDate)) {
         newestPubDate = publishedAt;
       }
-      if (!oldestPubDate || Date.parse(publishedAt) < Date.parse(oldestPubDate)) {
+      if (!oldestPubDate || pubMs < Date.parse(oldestPubDate)) {
         oldestPubDate = publishedAt;
       }
     }
+
+    // Territory detection
+    const territory = detectSettlementMention(rawTitle, territoryConfig, {
+      implicitCountyContext: sourceConfig.implicitCountyContext
+    });
 
     // Section & news category
     const section = extractSection(canonicalLink, categories);
@@ -445,12 +494,7 @@ export function parseGenericRss(xml, sourceConfig, options = {}) {
     if (isPublisherPromo) {
       publisherPromoCount++;
     }
-    const newsCategory = classifyNewsCategory(rawTitle, section, sourceConfig.defaultCategory);
-
-    // Territory detection
-    const territory = detectSettlementMention(rawTitle, territoryConfig, {
-      implicitCountyContext: sourceConfig.implicitCountyContext
-    });
+    const newsCategory = classifyNewsCategory(rawTitle, section, territory, sourceConfig.defaultCategory);
 
     // Deterministic GUID hash
     const guidSource = item.guid ? (typeof item.guid === 'string' ? item.guid : item.guid?.['#text'] || '') : canonicalLink;
@@ -498,7 +542,10 @@ export function parseGenericRss(xml, sourceConfig, options = {}) {
   }
 
   const diagnostics = {
-    filteredPrCount,
+    droppedStale,
+    droppedPr,
+    droppedDuplicate,
+    filteredPrCount: droppedPr,
     publisherPromoCount,
     possibleGap,
     newestPubDate,

@@ -745,3 +745,154 @@ test('19. PR filtering and Telex Közlemény diagnostics accounting', () => {
   assert.ok(promoObs, 'Publisher promo observation flagged with isPublisherPromo: true');
   assert.equal(promoObs.section, 'kozlemeny');
 });
+
+test('20. News categories classification rules: Portfolio economy != energy, sport -> other, national, keyword overrides', () => {
+  // 1. Portfolio economic section -> news_economy (NEVER news_energy)
+  const portfolioCat = classifyNewsCategory('Növekedési kilátások a hazai bankszektorban', 'gazdasag', null, 'news_economy');
+  assert.equal(portfolioCat, 'news_economy', 'Portfolio economic section must be news_economy');
+
+  // 2. Telex sport -> news_other
+  const sportCat = classifyNewsCategory('Kikapott a címvédő a bajnoki rangadón', 'sport', null, 'news_national');
+  assert.equal(sportCat, 'news_other', 'Sport news must be classified as news_other');
+
+  // 3. Domestic national -> news_national
+  const nationalCat = classifyNewsCategory('Döntött a kormány a jövő évi költségvetésről', 'belfold', null, 'news_national');
+  assert.equal(nationalCat, 'news_national', 'National news without county mention must be news_national');
+
+  // 4. Hazard keyword in title OVERRIDES territory (settlement remains in territory)
+  const hazardWithTerritory = detectSettlementMention('Súlyos baleset történt Debrecen belvárosában');
+  const hazardCat = classifyNewsCategory('Súlyos baleset történt Debrecen belvárosában', 'hirek', hazardWithTerritory, 'news_national');
+  assert.equal(hazardCat, 'news_hazard', 'Hazard keyword must override territorial category');
+  assert.equal(hazardWithTerritory.settlementName, 'Debrecen', 'Settlement context preserved in territory object');
+
+  // 5. Energy keyword in title
+  const energyCat = classifyNewsCategory('Korszerűsítik az országos villamosenergia hálózatot', 'belfold', null, 'news_national');
+  assert.equal(energyCat, 'news_energy', 'Electricity/energy keyword must classify as news_energy');
+
+  // 6. Agriculture / epizootic keyword in title
+  const agriCat = classifyNewsCategory('Afrikai sertéspestis megfigyelési körzet elrendelése', 'belfold', null, 'news_national');
+  assert.equal(agriCat, 'news_agriculture', 'Epizootic keyword must classify as news_agriculture');
+});
+
+test('21. Accented settlement gazetteer: Unicode boundaries, punctuation, Ártánd, and állampolgár exclusion', () => {
+  // 1. Ártánd newly added
+  const artandRes = detectSettlementMention('Forgalomkorlátozás Ártándnál a határátkelőn!');
+  assert.equal(artandRes.settlementName, 'Ártánd');
+  assert.equal(artandRes.matchState, 'match');
+
+  // 2. Álmosd with punctuation
+  const almosdRes = detectSettlementMention('Viharos szél: Álmosdon tetőket rongált meg a vihar.');
+  assert.equal(almosdRes.settlementName, 'Álmosd');
+
+  // 3. Újléta with vowel locative (-n)
+  const ujletaRes = detectSettlementMention('Új orvosi rendelőt avattak fel Újlétán, ünnepélyes keretek között.');
+  assert.equal(ujletaRes.settlementName, 'Újléta');
+
+  // 4. Hajdúszoboszló with vowel locative (-n) and quotation
+  const szoboszloRes = detectSettlementMention('„Megtelt a strand Hajdúszoboszlón” - közölték.');
+  assert.equal(szoboszloRes.settlementName, 'Hajdúszoboszló');
+
+  // 5. Bedő with vowel locative (-n)
+  const bedoRes = detectSettlementMention('Útfelújítás kezdődik Bedőn;');
+  assert.equal(bedoRes.settlementName, 'Bedő');
+
+  // 6. Nagyrábé with vowel locative (-n)
+  const nagyrabeRes = detectSettlementMention('Korszerűsítették az iskolát Nagyrábén.');
+  assert.equal(nagyrabeRes.settlementName, 'Nagyrábé');
+
+  // 7. Compound word exclusion: állampolgár must NEVER match Polgár
+  const polgarCompound = detectSettlementMention('Több magyar állampolgár rekedt a határon a szigorítások miatt.');
+  assert.ok(!polgarCompound.settlementName, 'állampolgár must NOT match Polgár');
+  assert.notEqual(polgarCompound.settlementId, 'polgar');
+});
+
+test('22. News payload deduplication, VIEW_NEWS_CAP=50, and isPublisherPromo exclusion', () => {
+  const events = [];
+  // Generate 70 synthetic news items for global view
+  for (let i = 1; i <= 70; i++) {
+    events.push({
+      id: `news-item-${String(i).padStart(3, '0')}`,
+      title: `[TESZTADAT] Hír tétel #${i}`,
+      kind: 'news',
+      newsCategory: 'news_global',
+      source: { name: 'RSS-Telex', status: 'ok' },
+      observedAt: '2026-10-28T10:00:00.000Z',
+      publishedAt: '2026-10-28T10:00:00.000Z'
+    });
+  }
+
+  // Add 1 publisher promo item
+  events.push({
+    id: 'news-promo-001',
+    title: '[TESZTADAT] Kiadói közlemény',
+    kind: 'news',
+    newsCategory: 'news_other',
+    section: 'kozlemeny',
+    isPublisherPromo: true,
+    source: { name: 'RSS-Telex', status: 'ok' },
+    observedAt: '2026-10-28T10:00:00.000Z',
+    publishedAt: '2026-10-28T10:00:00.000Z'
+  });
+
+  const partitioned = partitionEventsByView(events);
+
+  // Global view received news
+  const global = partitioned[VIEWS.GLOBAL];
+  assert.equal(global.newsCount, 70, 'Publisher promo must NOT be counted in newsCount (70 items)');
+  assert.equal(global.newsIds.length, 50, 'newsIds capped at VIEW_NEWS_CAP = 50');
+  assert.equal(partitioned.news.length, 70, 'Shared news array holds 70 non-promo items once');
+  assert.ok(!global.newsIds.includes('news-promo-001'), 'Promo item strictly excluded from newsIds');
+
+  // Non-enumerable getter view.news returns 50 objects for backwards compatibility
+  assert.equal(global.news.length, 50);
+  assert.equal(global.news[0].id, 'news-item-001');
+
+  // JSON.stringify must NOT serialize view.news (no replication)
+  const jsonStr = JSON.stringify(partitioned);
+  const reParsed = JSON.parse(jsonStr);
+  assert.equal(reParsed[VIEWS.GLOBAL].news, undefined, 'view.news is non-enumerable and omitted from JSON');
+  assert.equal(reParsed[VIEWS.GLOBAL].newsIds.length, 50);
+  assert.equal(reParsed.news.length, 70, 'Only shared news array is serialized');
+});
+
+test('23. Diagnostics counters: droppedStale, droppedPr, droppedDuplicate', () => {
+  const sourceConfig = RSS_SOURCES['RSS-Telex'];
+  const XML_WITH_DROPS = `<?xml version="1.0" encoding="utf-8"?>
+  <rss version="2.0">
+    <channel>
+      <title>[TESZTADAT] Dropped Items Test</title>
+      <link>https://example.com</link>
+      <lastBuildDate>Wed, 28 Oct 2026 12:00:00 +0000</lastBuildDate>
+      <!-- Fresh valid item 1 -->
+      <item>
+        <title>[TESZTADAT] Friss hír 1</title>
+        <link>https://example.com/fresh-1</link>
+        <pubDate>Wed, 28 Oct 2026 11:00:00 +0000</pubDate>
+      </item>
+      <!-- Duplicate item of fresh-1 -->
+      <item>
+        <title>[TESZTADAT] Friss hír 1 duplikátum</title>
+        <link>https://example.com/fresh-1</link>
+        <pubDate>Wed, 28 Oct 2026 11:05:00 +0000</pubDate>
+      </item>
+      <!-- PR sponsored item -->
+      <item>
+        <title>[TESZTADAT] Szponzorált PR ajánlat (x)</title>
+        <link>https://example.com/pr-item</link>
+        <pubDate>Wed, 28 Oct 2026 11:00:00 +0000</pubDate>
+      </item>
+      <!-- Stale item: older than 48h (REF_NOW is Oct 28 12:00, item is Oct 24) -->
+      <item>
+        <title>[TESZTADAT] Nagyon régi hír</title>
+        <link>https://example.com/stale-old</link>
+        <pubDate>Sat, 24 Oct 2026 08:00:00 +0000</pubDate>
+      </item>
+    </channel>
+  </rss>`;
+
+  const parsed = parseGenericRss(XML_WITH_DROPS, sourceConfig, { now: REF_NOW });
+  assert.equal(parsed.observations.length, 1, 'Only fresh-1 survives');
+  assert.equal(parsed.diagnostics.droppedDuplicate, 1, 'droppedDuplicate must be 1');
+  assert.equal(parsed.diagnostics.droppedPr, 1, 'droppedPr must be 1');
+  assert.equal(parsed.diagnostics.droppedStale, 1, 'droppedStale must be 1');
+});
