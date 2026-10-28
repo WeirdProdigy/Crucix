@@ -614,6 +614,15 @@ All settings are in `.env` with sensible defaults:
 | `RISK_RETENTION_DAYS` | `35` | Days of event references and score history kept in `RUNS_DIR/intelligence/countries.json` (14–90) |
 | `LLM_BRIEFING_MAX_TOKENS` | `1200` | Output budget of a cited briefing (128–8192) |
 | `LLM_BRIEFING_TIMEOUT_MS` | `60000` | Timeout of a cited briefing (1000–360000 ms); a failure gives the rule-based briefing |
+| `CRUCIX_ENABLE_FEED_POLICE_HAJDU` | `false` | Opt-in county feed for Hajdú-Bihar police notices (strictly 0 calls when false) |
+| `CRUCIX_ENABLE_FEED_DEHIR` | `false` | Opt-in local RSS feed for Dehir (Debrecen/regional) |
+| `CRUCIX_ENABLE_FEED_TELEX` | `false` | Opt-in national RSS feed for Telex |
+| `CRUCIX_ENABLE_FEED_444` | `false` | Opt-in national RSS feed for 444 |
+| `CRUCIX_ENABLE_FEED_24HU` | `false` | Opt-in national RSS feed for 24.hu |
+| `CRUCIX_ENABLE_FEED_INDEX` | `false` | Opt-in national RSS feed for Index |
+| `CRUCIX_ENABLE_FEED_HVG` | `false` | Opt-in national RSS feed for HVG |
+| `CRUCIX_ENABLE_FEED_PORTFOLIO` | `false` | Opt-in economic/energy RSS feed for Portfolio |
+| `CRUCIX_ENABLE_FEED_QUBIT` | `false` | Opt-in science RSS feed for Qubit |
 
 Delta engine thresholds (how sensitive the system is to changes between sweeps) can be customized in `crucix.config.mjs` under the `delta.thresholds` section. The defaults are tuned to filter out noise while catching meaningful moves.
 

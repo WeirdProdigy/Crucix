@@ -44,7 +44,6 @@ export const RSS_SOURCES = Object.freeze({
     url: 'https://www.dehir.hu/rss.php',
     robotsUrl: 'https://www.dehir.hu/robots.txt',
     envOptIn: 'CRUCIX_ENABLE_FEED_DEHIR',
-    altEnvOptIn: 'ENABLE_RSS_DEHIR',
     defaultDomain: 'security',
     defaultCategory: 'news_local',
     implicitCountyContext: true,
@@ -57,7 +56,6 @@ export const RSS_SOURCES = Object.freeze({
     url: 'https://telex.hu/rss',
     robotsUrl: 'https://telex.hu/robots.txt',
     envOptIn: 'CRUCIX_ENABLE_FEED_TELEX',
-    altEnvOptIn: 'ENABLE_RSS_TELEX',
     defaultDomain: 'security',
     defaultCategory: 'news_regional',
     implicitCountyContext: false,
@@ -70,7 +68,6 @@ export const RSS_SOURCES = Object.freeze({
     url: 'https://444.hu/feed',
     robotsUrl: 'https://444.hu/robots.txt',
     envOptIn: 'CRUCIX_ENABLE_FEED_444',
-    altEnvOptIn: 'ENABLE_RSS_444',
     defaultDomain: 'security',
     defaultCategory: 'news_regional',
     implicitCountyContext: false,
@@ -83,7 +80,6 @@ export const RSS_SOURCES = Object.freeze({
     url: 'https://24.hu/feed/',
     robotsUrl: 'https://24.hu/robots.txt',
     envOptIn: 'CRUCIX_ENABLE_FEED_24HU',
-    altEnvOptIn: 'ENABLE_RSS_24HU',
     defaultDomain: 'security',
     defaultCategory: 'news_regional',
     implicitCountyContext: false,
@@ -96,7 +92,6 @@ export const RSS_SOURCES = Object.freeze({
     url: 'https://index.hu/24ora/rss/',
     robotsUrl: 'https://index.hu/robots.txt',
     envOptIn: 'CRUCIX_ENABLE_FEED_INDEX',
-    altEnvOptIn: 'ENABLE_RSS_INDEX',
     defaultDomain: 'security',
     defaultCategory: 'news_regional',
     implicitCountyContext: false,
@@ -109,7 +104,6 @@ export const RSS_SOURCES = Object.freeze({
     url: 'https://hvg.hu/rss',
     robotsUrl: 'https://hvg.hu/robots.txt',
     envOptIn: 'CRUCIX_ENABLE_FEED_HVG',
-    altEnvOptIn: 'ENABLE_RSS_HVG',
     defaultDomain: 'security',
     defaultCategory: 'news_regional',
     implicitCountyContext: false,
@@ -122,7 +116,6 @@ export const RSS_SOURCES = Object.freeze({
     url: 'https://www.portfolio.hu/rss/all.xml',
     robotsUrl: 'https://www.portfolio.hu/robots.txt',
     envOptIn: 'CRUCIX_ENABLE_FEED_PORTFOLIO',
-    altEnvOptIn: 'ENABLE_RSS_PORTFOLIO',
     defaultDomain: 'security',
     defaultCategory: 'news_energy',
     implicitCountyContext: false,
@@ -135,7 +128,6 @@ export const RSS_SOURCES = Object.freeze({
     url: 'https://qubit.hu/feed',
     robotsUrl: 'https://qubit.hu/robots.txt',
     envOptIn: 'CRUCIX_ENABLE_FEED_QUBIT',
-    altEnvOptIn: 'ENABLE_RSS_QUBIT',
     defaultDomain: 'security',
     defaultCategory: 'news_science',
     implicitCountyContext: false,
@@ -369,9 +361,8 @@ export function isSourceEnabled(sourceConfig, options = {}) {
   if (Array.isArray(options.enabledFeeds) && (options.enabledFeeds.includes(sourceConfig.id) || options.enabledFeeds.includes(sourceConfig.name))) {
     return true;
   }
-  const envVal1 = process.env[sourceConfig.envOptIn];
-  const envVal2 = sourceConfig.altEnvOptIn ? process.env[sourceConfig.altEnvOptIn] : null;
-  return envVal1 === 'true' || envVal1 === '1' || envVal2 === 'true' || envVal2 === '1';
+  const envVal = process.env[sourceConfig.envOptIn];
+  return envVal === 'true' || envVal === '1';
 }
 
 /**
@@ -406,6 +397,10 @@ export function parseGenericRss(xml, sourceConfig, options = {}) {
 
   const observations = [];
   const seenUrls = new Set();
+  let filteredPrCount = 0;
+  let publisherPromoCount = 0;
+  let newestPubDate = null;
+  let oldestPubDate = null;
 
   for (const item of rawItems) {
     const rawTitle = typeof item.title === 'string' ? item.title.trim() : (item.title?.['#text'] || '').trim();
@@ -428,14 +423,28 @@ export function parseGenericRss(xml, sourceConfig, options = {}) {
     // PR / Sponsored check
     const rawDesc = typeof item.description === 'string' ? item.description : (item.description?.['#text'] || '');
     if (isSponsoredOrPr({ title: rawTitle, categories, description: rawDesc })) {
+      filteredPrCount++;
       continue;
     }
 
     const pubDateStr = item.pubDate || item['dc:date'] || item.date;
     const publishedAt = providerTime(pubDateStr, { assumeUTC: true }) || observedAt;
 
+    if (publishedAt) {
+      if (!newestPubDate || Date.parse(publishedAt) > Date.parse(newestPubDate)) {
+        newestPubDate = publishedAt;
+      }
+      if (!oldestPubDate || Date.parse(publishedAt) < Date.parse(oldestPubDate)) {
+        oldestPubDate = publishedAt;
+      }
+    }
+
     // Section & news category
     const section = extractSection(canonicalLink, categories);
+    const isPublisherPromo = section === 'kozlemeny' || categories.some(c => /közlemény/i.test(c));
+    if (isPublisherPromo) {
+      publisherPromoCount++;
+    }
     const newsCategory = classifyNewsCategory(rawTitle, section, sourceConfig.defaultCategory);
 
     // Territory detection
@@ -472,16 +481,38 @@ export function parseGenericRss(xml, sourceConfig, options = {}) {
       territory,
       facts,
       needsLocalReview: territory.needsLocalReview,
-      isConfirmedLocal: false // STRICT RULE: news mentions are NEVER confirmedLocal
+      isConfirmedLocal: false, // STRICT RULE: news mentions are NEVER confirmedLocal
+      isPublisherPromo
     });
   }
 
+  // Detect possible temporal gap if feed rolled forward completely past the previous newest item
+  let possibleGap = false;
+  if (options.cached?.lastNewestPubDate && newestPubDate && oldestPubDate) {
+    const prevNewestMs = Date.parse(options.cached.lastNewestPubDate);
+    const curOldestMs = Date.parse(oldestPubDate);
+    const curNewestMs = Date.parse(newestPubDate);
+    if (curNewestMs > prevNewestMs && curOldestMs > prevNewestMs) {
+      possibleGap = true;
+    }
+  }
+
+  const diagnostics = {
+    filteredPrCount,
+    publisherPromoCount,
+    possibleGap,
+    newestPubDate,
+    oldestPubDate
+  };
+
   const res = freshResult(sourceConfig.name, observedAt, observations, {
     url: sourceConfig.url,
-    itemCount: observations.length
+    itemCount: observations.length,
+    diagnostics
   }, now);
 
   res.domain = sourceConfig.defaultDomain || 'news';
+  res.diagnostics = diagnostics;
   return res;
 }
 
@@ -556,12 +587,17 @@ export function createRssBriefing(sourceKey) {
 
     // 6. Handle HTTP 304 Not Modified
     if (fetchRes.status === 304 && cached) {
-      const res = freshResult(sourceConfig.name, new Date(now).toISOString(), cached.observations, {
+      const nowIso = new Date(now).toISOString();
+      cached.observedAt = nowIso;
+      feedCache.set(sourceConfig.id, cached);
+      const res = freshResult(sourceConfig.name, nowIso, cached.observations, {
         url: sourceConfig.url,
         cached: true,
-        itemCount: cached.observations.length
+        itemCount: cached.observations.length,
+        diagnostics: cached.diagnostics || {}
       }, now);
       res.domain = sourceConfig.defaultDomain || 'news';
+      res.diagnostics = cached.diagnostics || {};
       return res;
     }
 
@@ -613,7 +649,8 @@ export function createRssBriefing(sourceKey) {
     const parsedResult = parseGenericRss(fetchRes.rawText, sourceConfig, {
       now,
       territoryConfig: options.territoryConfig,
-      lastModified: fetchRes.headers?.['last-modified']
+      lastModified: fetchRes.headers?.['last-modified'],
+      cached
     });
 
     if (parsedResult.status === 'ok') {
@@ -621,7 +658,9 @@ export function createRssBriefing(sourceKey) {
         etag: fetchRes.headers?.etag || null,
         lastModified: fetchRes.headers?.['last-modified'] || null,
         observations: parsedResult.observations,
-        observedAt: parsedResult.observedAt
+        observedAt: parsedResult.observedAt,
+        lastNewestPubDate: parsedResult.diagnostics?.newestPubDate || null,
+        diagnostics: parsedResult.diagnostics || {}
       });
     }
 

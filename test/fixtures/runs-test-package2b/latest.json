@@ -2067,6 +2067,8 @@
       "totalEvents": 4,
       "uniqueEvents": 4,
       "cancelledChains": 0,
+      "newsCount": 0,
+      "news": [],
       "breakdown": {
         "confirmedLocal": 2,
         "keyConnection": 1,
@@ -2435,23 +2437,87 @@
     },
     "county": {
       "view": "county",
-      "totalEvents": 5,
-      "uniqueEvents": 5,
+      "totalEvents": 4,
+      "uniqueEvents": 4,
       "cancelledChains": 0,
+      "newsCount": 1,
+      "news": [
+        {
+          "id": "event-33333333333333333333333333333303",
+          "title": "[TESZTADAT] Debrecen teszt infrastrukturális jelentés",
+          "summary": "[TESZTADAT] Debrecen belvárosában teszt célú közlekedési hálózatellenőrzés zajlik.",
+          "source": {
+            "name": "HAON-Fixture",
+            "url": "https://example.test/debrecen",
+            "hostname": "example.test",
+            "status": "ok"
+          },
+          "kind": "news",
+          "severity": "info",
+          "territory": {
+            "settlementId": "debrecen",
+            "settlementName": "Debrecen",
+            "countyCode": "09",
+            "countyName": "Hajdú-Bihar",
+            "territoryLevel": "settlement",
+            "inScope": true,
+            "identityStatus": "resolved",
+            "watchScope": "key_connection"
+          },
+          "country": "Hungary",
+          "sourceRegion": "Hajdú-Bihar",
+          "location": {
+            "country": "Hungary",
+            "settlement": "Debrecen"
+          },
+          "observedAt": "2026-10-22T14:15:00.000Z",
+          "publishedAt": "2026-10-22T14:15:00.000Z",
+          "collectedAt": "2026-10-22T14:15:00.000Z",
+          "lifecycle": "active",
+          "isCancelled": false,
+          "isFixture": true,
+          "views": {
+            "local": {
+              "inView": false,
+              "category": null,
+              "relationship": "unknown",
+              "reason": null
+            },
+            "county": {
+              "inView": true,
+              "category": "countyEvent",
+              "relationship": "key_connection",
+              "reason": "county_settlement"
+            },
+            "national": {
+              "inView": true,
+              "category": "nationalEvent",
+              "relationship": "key_connection",
+              "reason": "national_settlement"
+            },
+            "global": {
+              "inView": true,
+              "category": "globalEvent",
+              "relationship": "key_connection",
+              "reason": "settlement"
+            }
+          }
+        }
+      ],
       "breakdown": {
         "confirmedLocal": 0,
         "keyConnection": 0,
         "needsReview": 0,
         "regionalAdvisories": 0,
         "unknownTerritory": 0,
-        "countyEvent": 5,
+        "countyEvent": 4,
         "nationalEvent": 0,
         "globalEvent": 0
       },
       "relationshipBreakdown": {
         "primary": 1,
         "watched": 1,
-        "key_connection": 2,
+        "key_connection": 1,
         "county": 1,
         "region": 0,
         "national": 0,
@@ -2694,67 +2760,6 @@
             }
           },
           {
-            "id": "event-33333333333333333333333333333303",
-            "title": "[TESZTADAT] Debrecen teszt infrastrukturális jelentés",
-            "summary": "[TESZTADAT] Debrecen belvárosában teszt célú közlekedési hálózatellenőrzés zajlik.",
-            "source": {
-              "name": "HAON-Fixture",
-              "url": "https://example.test/debrecen",
-              "hostname": "example.test",
-              "status": "ok"
-            },
-            "kind": "news",
-            "severity": "info",
-            "territory": {
-              "settlementId": "debrecen",
-              "settlementName": "Debrecen",
-              "countyCode": "09",
-              "countyName": "Hajdú-Bihar",
-              "territoryLevel": "settlement",
-              "inScope": true,
-              "identityStatus": "resolved",
-              "watchScope": "key_connection"
-            },
-            "country": "Hungary",
-            "sourceRegion": "Hajdú-Bihar",
-            "location": {
-              "country": "Hungary",
-              "settlement": "Debrecen"
-            },
-            "observedAt": "2026-10-22T14:15:00.000Z",
-            "publishedAt": "2026-10-22T14:15:00.000Z",
-            "collectedAt": "2026-10-22T14:15:00.000Z",
-            "lifecycle": "active",
-            "isCancelled": false,
-            "isFixture": true,
-            "views": {
-              "local": {
-                "inView": false,
-                "category": null,
-                "relationship": "unknown",
-                "reason": null
-              },
-              "county": {
-                "inView": true,
-                "category": "countyEvent",
-                "relationship": "key_connection",
-                "reason": "county_settlement"
-              },
-              "national": {
-                "inView": true,
-                "category": "nationalEvent",
-                "relationship": "key_connection",
-                "reason": "national_settlement"
-              },
-              "global": {
-                "inView": true,
-                "category": "globalEvent",
-                "relationship": "key_connection",
-                "reason": "settlement"
-              }
-            }
-          },
-          {
             "id": "event-f2651f2e106c735208d5c2473f3e8243",
             "kind": "weather",
             "title": "[TESZTADAT] Yellow thunderstorm warning for Hungary - Hajdú-Bihar",
@@ -2865,9 +2870,73 @@
     },
     "national": {
       "view": "national",
-      "totalEvents": 6,
-      "uniqueEvents": 6,
+      "totalEvents": 5,
+      "uniqueEvents": 5,
       "cancelledChains": 0,
+      "newsCount": 1,
+      "news": [
+        {
+          "id": "event-33333333333333333333333333333303",
+          "title": "[TESZTADAT] Debrecen teszt infrastrukturális jelentés",
+          "summary": "[TESZTADAT] Debrecen belvárosában teszt célú közlekedési hálózatellenőrzés zajlik.",
+          "source": {
+            "name": "HAON-Fixture",
+            "url": "https://example.test/debrecen",
+            "hostname": "example.test",
+            "status": "ok"
+          },
+          "kind": "news",
+          "severity": "info",
+          "territory": {
+            "settlementId": "debrecen",
+            "settlementName": "Debrecen",
+            "countyCode": "09",
+            "countyName": "Hajdú-Bihar",
+            "territoryLevel": "settlement",
+            "inScope": true,
+            "identityStatus": "resolved",
+            "watchScope": "key_connection"
+          },
+          "country": "Hungary",
+          "sourceRegion": "Hajdú-Bihar",
+          "location": {
+            "country": "Hungary",
+            "settlement": "Debrecen"
+          },
+          "observedAt": "2026-10-22T14:15:00.000Z",
+          "publishedAt": "2026-10-22T14:15:00.000Z",
+          "collectedAt": "2026-10-22T14:15:00.000Z",
+          "lifecycle": "active",
+          "isCancelled": false,
+          "isFixture": true,
+          "views": {
+            "local": {
+              "inView": false,
+              "category": null,
+              "relationship": "unknown",
+              "reason": null
+            },
+            "county": {
+              "inView": true,
+              "category": "countyEvent",
+              "relationship": "key_connection",
+              "reason": "county_settlement"
+            },
+            "national": {
+              "inView": true,
+              "category": "nationalEvent",
+              "relationship": "key_connection",
+              "reason": "national_settlement"
+            },
+            "global": {
+              "inView": true,
+              "category": "globalEvent",
+              "relationship": "key_connection",
+              "reason": "settlement"
+            }
+          }
+        }
+      ],
       "breakdown": {
         "confirmedLocal": 0,
         "keyConnection": 0,
@@ -2875,13 +2944,13 @@
         "regionalAdvisories": 2,
         "unknownTerritory": 0,
         "countyEvent": 0,
-        "nationalEvent": 4,
+        "nationalEvent": 3,
         "globalEvent": 0
       },
       "relationshipBreakdown": {
         "primary": 1,
         "watched": 1,
-        "key_connection": 2,
+        "key_connection": 1,
         "county": 1,
         "region": 0,
         "national": 1,
@@ -3329,67 +3398,6 @@
                 "reason": "settlement"
               }
             }
-          },
-          {
-            "id": "event-33333333333333333333333333333303",
-            "title": "[TESZTADAT] Debrecen teszt infrastrukturális jelentés",
-            "summary": "[TESZTADAT] Debrecen belvárosában teszt célú közlekedési hálózatellenőrzés zajlik.",
-            "source": {
-              "name": "HAON-Fixture",
-              "url": "https://example.test/debrecen",
-              "hostname": "example.test",
-              "status": "ok"
-            },
-            "kind": "news",
-            "severity": "info",
-            "territory": {
-              "settlementId": "debrecen",
-              "settlementName": "Debrecen",
-              "countyCode": "09",
-              "countyName": "Hajdú-Bihar",
-              "territoryLevel": "settlement",
-              "inScope": true,
-              "identityStatus": "resolved",
-              "watchScope": "key_connection"
-            },
-            "country": "Hungary",
-            "sourceRegion": "Hajdú-Bihar",
-            "location": {
-              "country": "Hungary",
-              "settlement": "Debrecen"
-            },
-            "observedAt": "2026-10-22T14:15:00.000Z",
-            "publishedAt": "2026-10-22T14:15:00.000Z",
-            "collectedAt": "2026-10-22T14:15:00.000Z",
-            "lifecycle": "active",
-            "isCancelled": false,
-            "isFixture": true,
-            "views": {
-              "local": {
-                "inView": false,
-                "category": null,
-                "relationship": "unknown",
-                "reason": null
-              },
-              "county": {
-                "inView": true,
-                "category": "countyEvent",
-                "relationship": "key_connection",
-                "reason": "county_settlement"
-              },
-              "national": {
-                "inView": true,
-                "category": "nationalEvent",
-                "relationship": "key_connection",
-                "reason": "national_settlement"
-              },
-              "global": {
-                "inView": true,
-                "category": "globalEvent",
-                "relationship": "key_connection",
-                "reason": "settlement"
-              }
-            }
           }
         ],
         "globalEvent": []
@@ -3397,9 +3405,73 @@
     },
     "global": {
       "view": "global",
-      "totalEvents": 9,
-      "uniqueEvents": 9,
+      "totalEvents": 8,
+      "uniqueEvents": 8,
       "cancelledChains": 0,
+      "newsCount": 1,
+      "news": [
+        {
+          "id": "event-33333333333333333333333333333303",
+          "title": "[TESZTADAT] Debrecen teszt infrastrukturális jelentés",
+          "summary": "[TESZTADAT] Debrecen belvárosában teszt célú közlekedési hálózatellenőrzés zajlik.",
+          "source": {
+            "name": "HAON-Fixture",
+            "url": "https://example.test/debrecen",
+            "hostname": "example.test",
+            "status": "ok"
+          },
+          "kind": "news",
+          "severity": "info",
+          "territory": {
+            "settlementId": "debrecen",
+            "settlementName": "Debrecen",
+            "countyCode": "09",
+            "countyName": "Hajdú-Bihar",
+            "territoryLevel": "settlement",
+            "inScope": true,
+            "identityStatus": "resolved",
+            "watchScope": "key_connection"
+          },
+          "country": "Hungary",
+          "sourceRegion": "Hajdú-Bihar",
+          "location": {
+            "country": "Hungary",
+            "settlement": "Debrecen"
+          },
+          "observedAt": "2026-10-22T14:15:00.000Z",
+          "publishedAt": "2026-10-22T14:15:00.000Z",
+          "collectedAt": "2026-10-22T14:15:00.000Z",
+          "lifecycle": "active",
+          "isCancelled": false,
+          "isFixture": true,
+          "views": {
+            "local": {
+              "inView": false,
+              "category": null,
+              "relationship": "unknown",
+              "reason": null
+            },
+            "county": {
+              "inView": true,
+              "category": "countyEvent",
+              "relationship": "key_connection",
+              "reason": "county_settlement"
+            },
+            "national": {
+              "inView": true,
+              "category": "nationalEvent",
+              "relationship": "key_connection",
+              "reason": "national_settlement"
+            },
+            "global": {
+              "inView": true,
+              "category": "globalEvent",
+              "relationship": "key_connection",
+              "reason": "settlement"
+            }
+          }
+        }
+      ],
       "breakdown": {
         "confirmedLocal": 0,
         "keyConnection": 0,
@@ -3408,12 +3480,12 @@
         "unknownTerritory": 0,
         "countyEvent": 0,
         "nationalEvent": 0,
-        "globalEvent": 9
+        "globalEvent": 8
       },
       "relationshipBreakdown": {
         "primary": 1,
         "watched": 1,
-        "key_connection": 2,
+        "key_connection": 1,
         "county": 1,
         "region": 0,
         "national": 1,
@@ -3728,67 +3800,6 @@
                 "category": "globalEvent",
                 "relationship": "global",
                 "reason": "foreign_unresolved"
-              }
-            }
-          },
-          {
-            "id": "event-33333333333333333333333333333303",
-            "title": "[TESZTADAT] Debrecen teszt infrastrukturális jelentés",
-            "summary": "[TESZTADAT] Debrecen belvárosában teszt célú közlekedési hálózatellenőrzés zajlik.",
-            "source": {
-              "name": "HAON-Fixture",
-              "url": "https://example.test/debrecen",
-              "hostname": "example.test",
-              "status": "ok"
-            },
-            "kind": "news",
-            "severity": "info",
-            "territory": {
-              "settlementId": "debrecen",
-              "settlementName": "Debrecen",
-              "countyCode": "09",
-              "countyName": "Hajdú-Bihar",
-              "territoryLevel": "settlement",
-              "inScope": true,
-              "identityStatus": "resolved",
-              "watchScope": "key_connection"
-            },
-            "country": "Hungary",
-            "sourceRegion": "Hajdú-Bihar",
-            "location": {
-              "country": "Hungary",
-              "settlement": "Debrecen"
-            },
-            "observedAt": "2026-10-22T14:15:00.000Z",
-            "publishedAt": "2026-10-22T14:15:00.000Z",
-            "collectedAt": "2026-10-22T14:15:00.000Z",
-            "lifecycle": "active",
-            "isCancelled": false,
-            "isFixture": true,
-            "views": {
-              "local": {
-                "inView": false,
-                "category": null,
-                "relationship": "unknown",
-                "reason": null
-              },
-              "county": {
-                "inView": true,
-                "category": "countyEvent",
-                "relationship": "key_connection",
-                "reason": "county_settlement"
-              },
-              "national": {
-                "inView": true,
-                "category": "nationalEvent",
-                "relationship": "key_connection",
-                "reason": "national_settlement"
-              },
-              "global": {
-                "inView": true,
-                "category": "globalEvent",
-                "relationship": "key_connection",
-                "reason": "settlement"
               }
             }
           },

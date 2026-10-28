@@ -35,6 +35,7 @@ import {
 
 import { FEED_POLICIES, ALL_POLICIES } from '../apis/utils/freshness.mjs';
 import { normalizeLiveSources, freshLiveSnapshot } from '../lib/intelligence/live-sources.mjs';
+import { partitionEventsByView, VIEWS, VIEW_CATEGORIES } from '../lib/intelligence/views.mjs';
 import { AlertEngine } from '../lib/alerts/engine.mjs';
 import { DEFAULT_RULES } from '../lib/alerts/rules.mjs';
 
@@ -484,4 +485,263 @@ test('14. Pipeline lifecycle: News items survive normalizeLiveSources and freshL
   const cov = fresh.coverage.find(c => c.sourceId === 'RSS-Telex' || c.sourceName === 'RSS-Telex');
   assert.ok(cov, 'Coverage entry exists for RSS-Telex');
   assert.equal(cov.status, 'ok_data', 'Coverage must be ok_data');
+});
+
+test('15. Ambiguous settlement gazetteer hardening: Reject personal names, compound words, accept locatives', () => {
+  // Negative test: Fülöp-szigetek
+  const resFilippines = detectSettlementMention('[TESZTADAT] Vihar pusztított a Fülöp-szigetek térségében');
+  assert.notEqual(resFilippines.settlementName, 'Fülöp', 'Fülöp-szigetek must NOT match Fülöp settlement');
+  assert.notEqual(resFilippines.territoryLevel, 'settlement');
+
+  // Negative test: Fülöp herceg / forename
+  const resPrince = detectSettlementMention('[TESZTADAT] Fülöp herceg megnyitotta a kiállítást');
+  assert.notEqual(resPrince.settlementName, 'Fülöp', 'Fülöp herceg must NOT match Fülöp settlement');
+  assert.notEqual(resPrince.territoryLevel, 'settlement');
+
+  // Negative test: Fülöp Márk / forename + surname
+  const resMark = detectSettlementMention('[TESZTADAT] Fülöp Márk nyerte a versenyt');
+  assert.notEqual(resMark.settlementName, 'Fülöp', 'Fülöp Márk must NOT match Fülöp settlement');
+  assert.notEqual(resMark.territoryLevel, 'settlement');
+
+  // Negative test: Compound word inside noun (állampolgár -> Polgár)
+  const resCitizen = detectSettlementMention('[TESZTADAT] Magyar állampolgár vesztette életét az incidensben');
+  assert.notEqual(resCitizen.settlementName, 'Polgár', 'állampolgár must NOT match Polgár settlement');
+  assert.notEqual(resCitizen.territoryLevel, 'settlement');
+
+  // Positive test: Locative inflected form Fülöpön
+  const resFulopon = detectSettlementMention('[TESZTADAT] Halálos baleset történt Fülöpön a főúton');
+  assert.equal(resFulopon.settlementName, 'Fülöp', 'Fülöpön must match Fülöp settlement');
+  assert.equal(resFulopon.territoryLevel, 'settlement');
+  assert.equal(resFulopon.needsLocalReview, true);
+  assert.equal(resFulopon.isConfirmedLocal, false);
+
+  // Positive test: Locative inflected forms for other ambiguous settlements
+  const resEbes = detectSettlementMention('[TESZTADAT] Útlezárás Ebesen a vasútállomásnál');
+  assert.equal(resEbes.settlementName, 'Ebes');
+
+  const resSzerep = detectSettlementMention('[TESZTADAT] Ég egy lakóház Szerepen');
+  assert.equal(resSzerep.settlementName, 'Szerep');
+});
+
+test('16. 304 Not Modified health: Consecutive 304s over 7 hours maintain status "ok" and retain items', async () => {
+  resetRssState();
+  const ONE_HOUR = 3600 * 1000;
+  const START_TIME = Date.parse('2026-10-28T08:00:00.000Z');
+  let fetchCount = 0;
+
+  const mockFetch = async (url, opts) => {
+    fetchCount++;
+    if (fetchCount === 1) {
+      return {
+        status: 200,
+        rawText: SYNTHETIC_NEWS_XML,
+        headers: {
+          etag: '"initial-etag-304"',
+          'last-modified': new Date(START_TIME).toUTCString()
+        }
+      };
+    }
+    return { status: 304, headers: {} };
+  };
+
+  const briefing = createRssBriefing('RSS-Telex');
+  const robotsOpt = { robotsTxtContent: 'User-agent: *\nAllow: /\n' };
+
+  // Fetch at T=0
+  const initial = await briefing({ fetchFn: mockFetch, enabled: true, now: START_TIME, ...robotsOpt });
+  assert.equal(initial.status, 'ok');
+  assert.equal(initial.observations.length > 0, true);
+
+  // Simulate hourly 304 fetches for 7 hours (T=1h to T=7h)
+  for (let hour = 1; hour <= 7; hour++) {
+    const curTime = START_TIME + hour * ONE_HOUR;
+    const res = await briefing({ fetchFn: mockFetch, enabled: true, now: curTime, ...robotsOpt });
+    assert.equal(res.status, 'ok', `Source status must remain 'ok' at hour ${hour} of 304s`);
+    assert.equal(res.stale, false, `Source must NOT become stale at hour ${hour} of 304s`);
+    assert.equal(res.cached, true);
+    assert.equal(res.observations.length, initial.observations.length, `Observations must be retained at hour ${hour}`);
+  }
+
+  assert.equal(fetchCount, 8);
+  resetRssState();
+});
+
+test('17. Gap detection (possibleGap): Detects feed roll-forward gap when oldest item is newer than previous newest item', () => {
+  const sourceConfig = RSS_SOURCES['RSS-Telex'];
+
+  const XML_CYCLE_1 = `<?xml version="1.0" encoding="utf-8"?>
+  <rss version="2.0">
+    <channel>
+      <title>Feed</title>
+      <item>
+        <title>[TESZTADAT] Hír 1</title>
+        <link>https://example.com/h1</link>
+        <pubDate>Wed, 28 Oct 2026 08:00:00 +0000</pubDate>
+      </item>
+      <item>
+        <title>[TESZTADAT] Hír 2</title>
+        <link>https://example.com/h2</link>
+        <pubDate>Wed, 28 Oct 2026 08:30:00 +0000</pubDate>
+      </item>
+    </channel>
+  </rss>`;
+
+  const parsed1 = parseGenericRss(XML_CYCLE_1, sourceConfig, { now: REF_NOW });
+  assert.equal(parsed1.diagnostics.possibleGap, false);
+  assert.equal(parsed1.diagnostics.newestPubDate, '2026-10-28T08:30:00.000Z');
+
+  // Cycle 2: Oldest item (09:00:00) is strictly newer than cycle 1 newest (08:30:00) -> GAP!
+  const XML_CYCLE_2_GAP = `<?xml version="1.0" encoding="utf-8"?>
+  <rss version="2.0">
+    <channel>
+      <title>Feed</title>
+      <item>
+        <title>[TESZTADAT] Hír 3</title>
+        <link>https://example.com/h3</link>
+        <pubDate>Wed, 28 Oct 2026 09:00:00 +0000</pubDate>
+      </item>
+      <item>
+        <title>[TESZTADAT] Hír 4</title>
+        <link>https://example.com/h4</link>
+        <pubDate>Wed, 28 Oct 2026 09:30:00 +0000</pubDate>
+      </item>
+    </channel>
+  </rss>`;
+
+  const parsed2 = parseGenericRss(XML_CYCLE_2_GAP, sourceConfig, {
+    now: REF_NOW,
+    cached: { lastNewestPubDate: parsed1.diagnostics.newestPubDate }
+  });
+  assert.equal(parsed2.diagnostics.possibleGap, true, 'possibleGap must be true when all items are newer than previous newest');
+
+  // Cycle 3: Overlapping feed (oldest item 09:15 <= previous newest 09:30) -> NO GAP
+  const XML_CYCLE_3_OVERLAP = `<?xml version="1.0" encoding="utf-8"?>
+  <rss version="2.0">
+    <channel>
+      <title>Feed</title>
+      <item>
+        <title>[TESZTADAT] Hír 4b</title>
+        <link>https://example.com/h4b</link>
+        <pubDate>Wed, 28 Oct 2026 09:15:00 +0000</pubDate>
+      </item>
+      <item>
+        <title>[TESZTADAT] Hír 5</title>
+        <link>https://example.com/h5</link>
+        <pubDate>Wed, 28 Oct 2026 10:00:00 +0000</pubDate>
+      </item>
+    </channel>
+  </rss>`;
+
+  const parsed3 = parseGenericRss(XML_CYCLE_3_OVERLAP, sourceConfig, {
+    now: REF_NOW,
+    cached: { lastNewestPubDate: parsed2.diagnostics.newestPubDate }
+  });
+  assert.equal(parsed3.diagnostics.possibleGap, false, 'possibleGap must be false when feed overlaps');
+});
+
+test('18. Event counter isolation: News events (kind: news / news_*) DO NOT count into physical event counters', () => {
+  // 1 real CAP hazard alert
+  const capAlert = {
+    id: 'event-cap-0001',
+    identifier: 'cap-alert-001',
+    sender: 'meteoalarm',
+    kind: 'weather',
+    severity: 'high',
+    title: '[TESZTADAT] Viharjelzés',
+    publishedAt: new Date(REF_NOW).toISOString(),
+    territory: {
+      territoryLevel: 'settlement',
+      settlementId: 'bihartorda',
+      settlementName: 'Bihartorda',
+      kshSettlement: '09012',
+      isConfirmedLocal: true
+    }
+  };
+
+  // 2 news items
+  const news1 = {
+    id: 'news-0001',
+    kind: 'news',
+    newsCategory: 'news_local',
+    title: '[TESZTADAT] Debreceni közlekedési hír',
+    publishedAt: new Date(REF_NOW).toISOString(),
+    territory: {
+      territoryLevel: 'settlement',
+      settlementId: 'debrecen',
+      settlementName: 'Debrecen',
+      needsLocalReview: true,
+      isConfirmedLocal: false
+    }
+  };
+
+  const news2 = {
+    id: 'news-0002',
+    kind: 'news',
+    newsCategory: 'news_hazard',
+    title: '[TESZTADAT] Országos baleseti összefoglaló',
+    publishedAt: new Date(REF_NOW).toISOString(),
+    territory: {
+      territoryLevel: 'national',
+      needsLocalReview: false,
+      isConfirmedLocal: false
+    }
+  };
+
+  const partitions = partitionEventsByView([capAlert, news1, news2]);
+
+  // Check Local view: exactly 1 physical event (capAlert), exactly 1 news item (news1 in local view)
+  const localView = partitions[VIEWS.LOCAL];
+  assert.equal(localView.totalEvents, 1, 'News must not increment totalEvents');
+  assert.equal(localView.uniqueEvents, 1, 'News must not increment uniqueEvents');
+  assert.equal(localView.cancelledChains, 0);
+  assert.equal(localView.breakdown.confirmedLocal, 1);
+  assert.equal(localView.breakdown.needsReview, 0, 'News needsReview must not enter physical breakdown.needsReview');
+  assert.equal(localView.newsCount, 1, 'Local view has exactly 1 local news item');
+  assert.equal(localView.news.length, 1);
+  assert.equal(localView.news[0].id, 'news-0001');
+
+  // Check Global view: 1 physical event, 2 news items
+  const globalView = partitions[VIEWS.GLOBAL];
+  assert.equal(globalView.totalEvents, 1, 'Global view physical totalEvents must be exactly 1');
+  assert.equal(globalView.uniqueEvents, 1, 'Global view physical uniqueEvents must be exactly 1');
+  assert.equal(globalView.newsCount, 2, 'Global view contains both news items');
+  assert.equal(globalView.news.length, 2);
+});
+
+test('19. PR filtering and Telex Közlemény diagnostics accounting', () => {
+  const sourceConfig = RSS_SOURCES['RSS-Telex'];
+  const XML_WITH_PR_AND_PROMO = `<?xml version="1.0" encoding="utf-8"?>
+  <rss version="2.0">
+    <channel>
+      <title>Telex</title>
+      <item>
+        <title>[TESZTADAT] Rendes hír a világból</title>
+        <link>https://telex.hu/kulfold/2026/10/28/hir-1</link>
+        <pubDate>Wed, 28 Oct 2026 10:00:00 +0000</pubDate>
+        <category>Külföld</category>
+      </item>
+      <item>
+        <title>[TESZTADAT] Szponzorált cikk a piacról (pr)</title>
+        <link>https://telex.hu/gazdasag/2026/10/28/pr-1</link>
+        <pubDate>Wed, 28 Oct 2026 09:30:00 +0000</pubDate>
+        <category>PR</category>
+      </item>
+      <item>
+        <title>[TESZTADAT] Telex rendezvény és beszélgetés</title>
+        <link>https://telex.hu/kozlemeny/2026/10/28/telex-rendezveny</link>
+        <pubDate>Wed, 28 Oct 2026 09:00:00 +0000</pubDate>
+        <category>Közlemény</category>
+      </item>
+    </channel>
+  </rss>`;
+
+  const parsed = parseGenericRss(XML_WITH_PR_AND_PROMO, sourceConfig, { now: REF_NOW });
+  assert.equal(parsed.status, 'ok');
+  assert.equal(parsed.observations.length, 2, 'PR item was discarded, regular and promo items retained');
+  assert.equal(parsed.diagnostics.filteredPrCount, 1, 'filteredPrCount must be 1');
+  assert.equal(parsed.diagnostics.publisherPromoCount, 1, 'publisherPromoCount must be 1');
+
+  const promoObs = parsed.observations.find(o => o.isPublisherPromo);
+  assert.ok(promoObs, 'Publisher promo observation flagged with isPublisherPromo: true');
+  assert.equal(promoObs.section, 'kozlemeny');
 });

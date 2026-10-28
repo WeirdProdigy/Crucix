@@ -7,9 +7,8 @@ import {
 } from '../../lib/intelligence/territory.mjs';
 
 /**
- * Common Hungarian words or forenames that coincide with Hajdú-Bihar settlement names.
- * These require strict capitalized matching and county context disambiguation.
- * Removed artificial / non-settlement tokens (e.g. 'ketertelmu', 'keterdelmu').
+ * Common Hungarian words, adjectives or personal names that coincide with Hajdú-Bihar settlement names.
+ * These require strict capitalized matching and locative/geographic disambiguation.
  */
 export const AMBIGUOUS_SETTLEMENT_NAMES = new Set([
   'szerep', // common noun: role / part (szerep, szerepet játszik)
@@ -106,20 +105,23 @@ export const HAJDU_BIHAR_KSH_SETTLEMENTS = Object.freeze([
   { id: 'zsaka', name: 'Zsáka' }
 ]);
 
+const LOCATIVE_SUFFIXES = '(?:on|en|ön|ban|ben|ra|re|ról|ről|rol|rel|hoz|hez|höz|ig|i|ból|ből|bol|bel|nál|nél|nal|nel)';
+const NON_LOCATIVE_SUFFIXES = '(?:nek|val|vel|et|ot|öt|t)';
+
 /**
- * Builds Hungarian case inflection regex pattern for a settlement name.
+ * Builds Hungarian case inflection regex pattern for an unambiguous settlement name.
+ * Uses strict word boundary matching to prevent matching inside compound words (e.g. állampolgár).
+ * Accounts for Hungarian stem-final vowel lengthening (a -> á, e -> é).
  */
-function buildInflectionRegex(name, isAmbiguous = false) {
-  // Inflection suffixes for Hungarian settlement names
-  // e.g., -on/-en/-ön/-ban/-ben/-ra/-re/-ról/-ről/-hoz/-hez/-höz/-ig/-i/-ból/-ből/-nál/-nél/-nek/-val/-vel
-  const suffixes = '(?:on|en|ön|ban|ben|ra|re|ról|ről|rol|rel|hoz|hez|höz|ig|i|ból|ből|bol|bel|nál|nél|nal|nel|nek|val|vel)?';
-  if (isAmbiguous) {
-    // Strict uppercase first letter required for ambiguous words
-    const firstLetter = name[0].toUpperCase();
-    const rest = name.slice(1);
-    return new RegExp(`\\b${firstLetter}${rest}${suffixes}\\b`, 'u');
+function buildInflectionRegex(name) {
+  const allSuffixes = '(?:on|en|ön|ban|ben|ra|re|ról|ről|rol|rel|hoz|hez|höz|ig|i|ból|ből|bol|bel|nál|nél|nal|nel|nek|val|vel|et|ot|öt|t)?';
+  if (name.endsWith('a') || name.endsWith('e')) {
+    const stem = name.slice(0, -1);
+    const lastChar = name.slice(-1);
+    const lengthened = lastChar === 'a' ? '[aá]' : '[eé]';
+    return new RegExp(`\\b${stem}${lengthened}${allSuffixes}\\b`, 'ui');
   }
-  return new RegExp(`\\b${name}${suffixes}\\b`, 'ui');
+  return new RegExp(`\\b${name}${allSuffixes}\\b`, 'ui');
 }
 
 /**
@@ -152,25 +154,45 @@ export function detectSettlementMention(title, territoryConfig = DEFAULT_TERRITO
   const nuts0 = primary.nuts0 || primary.nuts?.nuts0 || 'HU';
   const iso3 = primary.iso3 || 'HUN';
 
-  const implicitCounty = options.implicitCountyContext === true;
   const explicitCountyPresent = hasCountyContext(rawTitle);
 
-  // Check for ambiguous settlement names
+  // 1. Process ambiguous settlement names with strict disambiguation rules
   for (const amb of AMBIGUOUS_SETTLEMENT_NAMES) {
-    const ambRegex = new RegExp(`\\b${amb}\\b`, 'i');
+    const ambRegex = new RegExp(`\\b${amb}(?:[a-z]+)?\\b`, 'i');
     if (ambRegex.test(normTitle)) {
-      // Check if it was capitalized in rawTitle
       const ambSettlement = HAJDU_BIHAR_KSH_SETTLEMENTS.find(s => s.id === amb);
-      const isCapitalized = ambSettlement ? buildInflectionRegex(ambSettlement.name, true).test(rawTitle) : false;
-      
-      // If it wasn't even capitalized, it's just a lowercase common word (e.g. "szerepet játszik") -> ignore, continue checking other settlements
-      if (!isCapitalized) {
+      const ambName = ambSettlement?.name || amb;
+
+      // Negative rules:
+      // a) Hyphenated compounds (e.g. Fülöp-szigetek, Fülöp-szigeteki)
+      if (new RegExp(`\\b${ambName}-[a-záéíóöőúüű]+`, 'iu').test(rawTitle)) {
         continue;
       }
 
-      // If capitalized, check if explicit county context is provided
-      if (explicitCountyPresent && implicitCounty) {
-        // Confirmed settlement match with county context
+      // b) Forename / title pairing (e.g. Fülöp herceg, Fülöp Márk, Fülöp király)
+      if (new RegExp(`\\b${ambName}\\s+(?:herceg|márk|gróf|báró|király|vezér|elnök|igazgató|úr|asszony|doktor|dr\\.?|[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]+)\\b`, 'u').test(rawTitle)) {
+        continue;
+      }
+
+      // c) Bare lowercase occurrence (e.g. "szerepet játszik", "sápot húz")
+      const capitalizedRegex = new RegExp(`\\b${ambName[0].toUpperCase()}${ambName.slice(1)}`, 'u');
+      if (!capitalizedRegex.test(rawTitle)) {
+        continue;
+      }
+
+      // Positive acceptance conditions:
+      // 1) Locative / adverbial inflection (e.g. Fülöpön, Szerepen, Ebesen, Toldon, Sápon, Bojton, Darvason)
+      const locativeRegex = new RegExp(`\\b${ambName[0].toUpperCase()}${ambName.slice(1)}${LOCATIVE_SUFFIXES}\\b`, 'u');
+      const hasLocative = locativeRegex.test(rawTitle);
+
+      // 2) Geographic noun context ("<név> település/község/falu/város")
+      const geoContextRegex = new RegExp(`(?:\\b${ambName}\\s+(?:település|község|falu|város)\\b|\\b(?:település|község|falu|város)\\s+${ambName}\\b)`, 'iu');
+      const hasGeoContext = geoContextRegex.test(rawTitle);
+
+      // 3) Explicit county context present alongside the capitalized name
+      const hasExplicitCounty = explicitCountyPresent;
+
+      if (hasLocative || hasGeoContext || hasExplicitCounty) {
         return {
           territoryLevel: ADMINISTRATIVE_LEVELS.SETTLEMENT,
           settlementId: ambSettlement.id,
@@ -185,11 +207,11 @@ export function detectSettlementMention(title, territoryConfig = DEFAULT_TERRITO
           matchState: 'match',
           localRelevanceReason: LOCAL_RELEVANCE_REASONS.TEXT_MENTION,
           needsLocalReview: true,
-          isConfirmedLocal: false
+          isConfirmedLocal: false // STRICT RULE: never confirmed local!
         };
       }
 
-      // Without explicit disambiguation, return ambiguous
+      // If capitalized but lacks locative suffix, geographic noun, or county context (e.g. "Baleset történt Sáp közelében")
       return {
         territoryLevel: 'unknown',
         settlementId: null,
@@ -208,6 +230,7 @@ export function detectSettlementMention(title, territoryConfig = DEFAULT_TERRITO
     }
   }
 
+  // 2. Process unambiguous settlements
   const candidateMap = new Map();
 
   if (primary) {
@@ -233,14 +256,10 @@ export function detectSettlementMention(title, territoryConfig = DEFAULT_TERRITO
     if (AMBIGUOUS_SETTLEMENT_NAMES.has(cand.id)) continue; // Handled above
 
     const candName = cand.name || '';
-    const normName = candName
-      .normalize('NFKD')
-      .replace(/\p{M}/gu, '')
-      .toLowerCase();
+    const infRegex = buildInflectionRegex(candName);
 
-    // Check with inflected word boundary regex
-    const infRegex = buildInflectionRegex(candName, false);
-    if (normName.length >= 3 && (infRegex.test(rawTitle) || (normName.length >= 5 && normTitle.includes(normName)))) {
+    // Strictly test word boundaries - never match inside compound words (e.g. állampolgár)
+    if (infRegex.test(rawTitle)) {
       return {
         territoryLevel: ADMINISTRATIVE_LEVELS.SETTLEMENT,
         settlementId: cand.id,
@@ -255,7 +274,7 @@ export function detectSettlementMention(title, territoryConfig = DEFAULT_TERRITO
         matchState: 'match',
         localRelevanceReason: LOCAL_RELEVANCE_REASONS.TEXT_MENTION,
         needsLocalReview: true,
-        isConfirmedLocal: false
+        isConfirmedLocal: false // STRICT REQUIREMENT: never confirmed local!
       };
     }
   }
