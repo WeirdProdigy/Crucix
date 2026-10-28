@@ -22,7 +22,15 @@ export const POLICIES = Object.freeze({
 
 // Regional and specialized news/official feed policies
 export const FEED_POLICIES = Object.freeze({
-  'Police-Hajdu': { maxAgeMs: 12 * HOUR, observationMaxAgeMs: 72 * HOUR }
+  'Police-Hajdu': { maxAgeMs: 12 * HOUR, observationMaxAgeMs: 72 * HOUR },
+  'RSS-Dehir': { maxAgeMs: 6 * HOUR, observationMaxAgeMs: 48 * HOUR },
+  'RSS-Telex': { maxAgeMs: 6 * HOUR, observationMaxAgeMs: 48 * HOUR },
+  'RSS-444': { maxAgeMs: 6 * HOUR, observationMaxAgeMs: 48 * HOUR },
+  'RSS-24hu': { maxAgeMs: 6 * HOUR, observationMaxAgeMs: 48 * HOUR },
+  'RSS-Index': { maxAgeMs: 6 * HOUR, observationMaxAgeMs: 48 * HOUR },
+  'RSS-HVG': { maxAgeMs: 6 * HOUR, observationMaxAgeMs: 48 * HOUR },
+  'RSS-Portfolio': { maxAgeMs: 6 * HOUR, observationMaxAgeMs: 48 * HOUR },
+  'RSS-Qubit': { maxAgeMs: 24 * HOUR, observationMaxAgeMs: 168 * HOUR }
 });
 
 export const POLICE_HAJDU_POLICY = FEED_POLICIES['Police-Hajdu'];

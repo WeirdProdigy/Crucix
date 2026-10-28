@@ -1,0 +1,487 @@
+// Tests for Generic RSS Adapter and Gazetteer
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import {
+  RSS_SOURCES,
+  cleanCanonicalUrl,
+  isSponsoredOrPr,
+  classifyNewsCategory,
+  extractSection,
+  isSourceEnabled,
+  parseGenericRss,
+  createRssBriefing,
+  checkRobotsTxt,
+  resetRssState,
+  dehirRss,
+  telexRss,
+  rss444,
+  rss24hu,
+  indexRss,
+  hvgRss,
+  portfolioRss,
+  qubitRss
+} from '../apis/sources/generic-rss.mjs';
+
+import {
+  HAJDU_BIHAR_KSH_SETTLEMENTS,
+  AMBIGUOUS_SETTLEMENT_NAMES,
+  detectSettlementMention,
+  hasCountyContext
+} from '../apis/utils/settlement-gazetteer.mjs';
+
+import { FEED_POLICIES, ALL_POLICIES } from '../apis/utils/freshness.mjs';
+import { normalizeLiveSources, freshLiveSnapshot } from '../lib/intelligence/live-sources.mjs';
+import { AlertEngine } from '../lib/alerts/engine.mjs';
+import { DEFAULT_RULES } from '../lib/alerts/rules.mjs';
+
+const REF_NOW = Date.parse('2026-10-28T12:00:00.000Z');
+
+// SYNTHETIC FIXTURE [TESZTADAT] - Strictly synthetic, no real article headlines
+const SYNTHETIC_NEWS_XML = `<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>[TESZTADAT] Teszt Hírforrás</title>
+    <link>https://example.com/rss</link>
+    <lastBuildDate>Wed, 28 Oct 2026 11:30:00 +0000</lastBuildDate>
+    <item>
+      <title>[TESZTADAT] Útfelújítás kezdődik Debrecen és Derecske között</title>
+      <link>https://example.com/hirek/ut-felujitas?utm_source=rss&amp;utm_medium=feed&amp;fbclid=xyz123</link>
+      <guid isPermaLink="false">synthetic-item-1</guid>
+      <pubDate>Wed, 28 Oct 2026 11:00:00 +0000</pubDate>
+      <category>Közlekedés</category>
+      <description>Ez a leírás szövege, amely szigorúan eldobásra kerül és soha nem tárolódik a tárolóban.</description>
+      <dc:creator>Teszt Újságíró</dc:creator>
+    </item>
+    <item>
+      <title>[TESZTADAT] Baleset miatt forgalomkorlátozás Hajdúszoboszló térségében</title>
+      <link>https://example.com/hirek/baleset-hajduszoboszlo</link>
+      <guid isPermaLink="true">https://example.com/hirek/baleset-hajduszoboszlo</guid>
+      <pubDate>Wed, 28 Oct 2026 10:15:00 +0000</pubDate>
+      <category>Balesetek</category>
+      <description>Részletes baleseti tudósítás leírása, nem tárolandó.</description>
+    </item>
+    <item>
+      <title>[TESZTADAT] Új kutatási központ nyílik (x)</title>
+      <link>https://example.com/hirek/pr-cikk-1</link>
+      <pubDate>Wed, 28 Oct 2026 09:30:00 +0000</pubDate>
+      <category>Gazdaság</category>
+      <description>Szponzorált termékbemutató szöveg.</description>
+    </item>
+    <item>
+      <title>[TESZTADAT] Szponzorált termékteszt a boltokban</title>
+      <link>https://example.com/hirek/pr-cikk-2</link>
+      <pubDate>Wed, 28 Oct 2026 09:00:00 +0000</pubDate>
+      <category>PR</category>
+      <description>Fizetett hirdetés.</description>
+    </item>
+    <item>
+      <title>[TESZTADAT] Állategészségügyi intézkedések: madárinfluenza gyanú egy telepen</title>
+      <link>https://example.com/agrar/madarinfluenza-intezkedes</link>
+      <pubDate>Wed, 28 Oct 2026 08:30:00 +0000</pubDate>
+      <category>Agrár</category>
+      <description>Szakmai jelentés leírása.</description>
+    </item>
+    <item>
+      <title>[TESZTADAT] Új napelempark és villamosenergia hálózatbővítés a megyében</title>
+      <link>https://example.com/gazdasag/energia-halozat</link>
+      <pubDate>Wed, 28 Oct 2026 08:00:00 +0000</pubDate>
+      <category>Energia</category>
+      <description>Infrastruktúra fejlesztés.</description>
+    </item>
+    <item>
+      <title>[TESZTADAT] Csillagászati felfedezés: új exobolygót azonosítottak</title>
+      <link>https://example.com/tudomany/uj-exobolygo</link>
+      <pubDate>Wed, 28 Oct 2026 07:30:00 +0000</pubDate>
+      <category>Tudomány</category>
+      <description>Tudományos hír.</description>
+    </item>
+    <item>
+      <title>[TESZTADAT] Nemzetközi békecsúcs kezdődött Genfben</title>
+      <link>https://example.com/kulfold/bekecsucs-genf</link>
+      <pubDate>Wed, 28 Oct 2026 07:00:00 +0000</pubDate>
+      <category>Külföld</category>
+      <description>Világpolitikai esemény.</description>
+    </item>
+  </channel>
+</rss>`;
+
+test('1. Freshness policies: All 8 RSS sources registered with tailored thresholds', () => {
+  const sources = [
+    'RSS-Dehir', 'RSS-Telex', 'RSS-444', 'RSS-24hu',
+    'RSS-Index', 'RSS-HVG', 'RSS-Portfolio', 'RSS-Qubit'
+  ];
+
+  for (const s of sources) {
+    assert.ok(FEED_POLICIES[s], `${s} must be registered in FEED_POLICIES`);
+    assert.ok(ALL_POLICIES[s], `${s} must be present in ALL_POLICIES`);
+    assert.ok(RSS_SOURCES[s], `${s} must be present in RSS_SOURCES`);
+
+    if (s === 'RSS-Qubit') {
+      // Qubit publishes rarely (~4-5 articles/week)
+      assert.equal(FEED_POLICIES[s].maxAgeMs, 24 * 3600 * 1000, 'Qubit maxAgeMs should be 24h');
+      assert.equal(FEED_POLICIES[s].observationMaxAgeMs, 168 * 3600 * 1000, 'Qubit observationMaxAgeMs should be 7 days');
+    } else {
+      assert.equal(FEED_POLICIES[s].maxAgeMs, 6 * 3600 * 1000, 'Standard feed maxAgeMs should be 6h');
+      assert.equal(FEED_POLICIES[s].observationMaxAgeMs, 48 * 3600 * 1000, 'Standard feed observationMaxAgeMs should be 48h');
+    }
+  }
+});
+
+test('2. Opt-in behavior: Disabled by default without env var, strictly zero network calls', async () => {
+  resetRssState();
+  let networkCalls = 0;
+  const mockFetch = async () => {
+    networkCalls++;
+    return { status: 200, rawText: SYNTHETIC_NEWS_XML };
+  };
+
+  // Run all 8 briefings without opt-in env vars
+  const briefingFns = [dehirRss, telexRss, rss444, rss24hu, indexRss, hvgRss, portfolioRss, qubitRss];
+  for (const fn of briefingFns) {
+    const res = await fn({ fetchFn: mockFetch, now: REF_NOW });
+    assert.equal(res.status, 'disabled');
+    assert.equal(res.observations.length, 0);
+  }
+
+  assert.equal(networkCalls, 0, 'Zero network calls made when disabled');
+});
+
+test('3. Opt-in behavior: Enabled via env var or options flag', async () => {
+  resetRssState();
+  let networkCalls = 0;
+  const mockFetch = async () => {
+    networkCalls++;
+    return {
+      status: 200,
+      rawText: SYNTHETIC_NEWS_XML,
+      headers: { 'content-type': 'application/rss+xml' }
+    };
+  };
+
+  // Enabled via options.enabled = true (fetches robots.txt + feed = 2 network calls)
+  const res = await telexRss({ fetchFn: mockFetch, enabled: true, now: REF_NOW });
+  assert.equal(res.status, 'ok');
+  assert.ok(res.observations.length > 0);
+  assert.equal(networkCalls, 2, '2 network calls made (robots.txt and feed)');
+});
+
+test('4. Legal/Copyright compliance: <description>, lead, creator, full text are strictly DISCARDED', () => {
+  const sourceConfig = RSS_SOURCES['RSS-Telex'];
+  const res = parseGenericRss(SYNTHETIC_NEWS_XML, sourceConfig, { now: REF_NOW });
+  assert.equal(res.status, 'ok');
+
+  for (const obs of res.observations) {
+    assert.equal(obs.description, undefined, 'description field must NEVER exist');
+    assert.equal(obs.lead, undefined, 'lead field must NEVER exist');
+    assert.equal(obs.creator, undefined, 'creator field must NEVER exist');
+    assert.equal(obs.author, undefined, 'author field must NEVER exist');
+    assert.equal(obs.fullText, undefined, 'fullText field must NEVER exist');
+    assert.equal(obs.content, undefined, 'content field must NEVER exist');
+
+    // Stored fields check
+    assert.ok(obs.title);
+    assert.ok(obs.link);
+    assert.ok(obs.guid);
+    assert.ok(obs.publishedAt);
+    assert.ok(obs.observedAt);
+    assert.ok(obs.source);
+    assert.ok(obs.newsCategory);
+    assert.ok(obs.facts);
+  }
+});
+
+test('5. Canonical link cleaning: Strips tracking params and hashes', () => {
+  const dirtyUrl = 'https://telex.hu/belfold/2026/10/28/cikk?utm_source=rss&utm_medium=feed&utm_campaign=daily&fbclid=IwAR123&gclid=abc#section-comments';
+  const clean = cleanCanonicalUrl(dirtyUrl);
+  assert.equal(clean, 'https://telex.hu/belfold/2026/10/28/cikk');
+
+  const cleanUrl = 'https://dehir.hu/debrecen/hir-cime/2026/10/28/';
+  assert.equal(cleanCanonicalUrl(cleanUrl), cleanUrl);
+});
+
+test('6. PR / Sponsored filtering: Filters items with (x), [x], [pr], or PR category', () => {
+  assert.equal(isSponsoredOrPr({ title: '[TESZTADAT] Új termék (x)', categories: [] }), true);
+  assert.equal(isSponsoredOrPr({ title: '[TESZTADAT] Cégbemutató [PR]', categories: [] }), true);
+  assert.equal(isSponsoredOrPr({ title: 'Hirdetés: Akciós ajánlatok', categories: [] }), true);
+  assert.equal(isSponsoredOrPr({ title: '[TESZTADAT] Normál hír', categories: ['PR'] }), true);
+  assert.equal(isSponsoredOrPr({ title: '[TESZTADAT] Normál hír', categories: ['Szponzorált tartalom'] }), true);
+
+  // Normal articles should NOT be flagged
+  assert.equal(isSponsoredOrPr({ title: '[TESZTADAT] Kormányzati program indul', categories: ['Gazdaság'] }), false);
+  assert.equal(isSponsoredOrPr({ title: '[TESZTADAT] Mbappé bocsánatkérése a szponzora miatt', categories: ['Sport'] }), false);
+
+  // Check synthetic XML parse result: the 2 PR items must be filtered out
+  const sourceConfig = RSS_SOURCES['RSS-Telex'];
+  const res = parseGenericRss(SYNTHETIC_NEWS_XML, sourceConfig, { now: REF_NOW });
+  const titles = res.observations.map(o => o.title);
+  assert.ok(!titles.some(t => t.includes('(x)')), 'Item with (x) must be filtered out');
+  assert.ok(!titles.some(t => t.includes('Szponzorált termékteszt')), 'Item with category PR must be filtered out');
+});
+
+test('7. Dedicated News Categorization: Classifies into news_* categories and NEVER CAP event categories', () => {
+  const sourceConfig = RSS_SOURCES['RSS-Telex'];
+  const res = parseGenericRss(SYNTHETIC_NEWS_XML, sourceConfig, { now: REF_NOW });
+
+  const categories = res.observations.map(o => o.newsCategory);
+  assert.ok(categories.includes('news_hazard'), 'Accident headline categorized as news_hazard');
+  assert.ok(categories.includes('news_agriculture'), 'Bird flu headline categorized as news_agriculture');
+  assert.ok(categories.includes('news_energy'), 'Solar/energy headline categorized as news_energy');
+  assert.ok(categories.includes('news_science'), 'Astronomy headline categorized as news_science');
+  assert.ok(categories.includes('news_global'), 'Geneva peace summit categorized as news_global');
+  assert.ok(categories.includes('news_local'), 'Debrecen headline categorized as news_local');
+
+  for (const obs of res.observations) {
+    assert.equal(obs.kind, 'news');
+    assert.equal(obs.domain, 'security');
+    // Ensure no CAP hazard category was assigned
+    assert.ok(!['meteoalarm', 'earthquake', 'severeWeather', 'cbrn'].includes(obs.newsCategory));
+  }
+});
+
+test('8. Settlement extraction: Shared gazetteer, ambiguous names handling and county context', () => {
+  // 1. Regular unambiguous settlement detection
+  const debrecenRes = detectSettlementMention('[TESZTADAT] Útlezárás Debrecen belvárosában');
+  assert.equal(debrecenRes.territoryLevel, 'settlement');
+  assert.equal(debrecenRes.settlementName, 'Debrecen');
+  assert.equal(debrecenRes.isConfirmedLocal, false, 'News mentions are NEVER confirmedLocal');
+  assert.equal(debrecenRes.needsLocalReview, true);
+
+  // 2. Ambiguous names without county context -> unknown / ambiguous
+  const sapRes = detectSettlementMention('[TESZTADAT] Baleset Sáp közelében');
+  assert.equal(sapRes.territoryLevel, 'unknown');
+  assert.equal(sapRes.matchState, 'ambiguous');
+
+  const toldRes = detectSettlementMention('[TESZTADAT] Útépítés Told határában');
+  assert.equal(toldRes.territoryLevel, 'unknown');
+  assert.equal(toldRes.matchState, 'ambiguous');
+
+  const szerepRes = detectSettlementMention('[TESZTADAT] Viharos szél Szerep térségében');
+  assert.equal(szerepRes.territoryLevel, 'unknown');
+  assert.equal(szerepRes.matchState, 'ambiguous');
+
+  // 3. Lowercase common nouns do NOT trigger ambiguous settlement
+  const commonNounRes = detectSettlementMention('[TESZTADAT] Fontos szerepet játszott az új technológia');
+  assert.equal(commonNounRes.territoryLevel, 'county');
+  assert.equal(commonNounRes.settlementName, undefined);
+
+  // 4. Ambiguous name with explicit county context and implicit county source
+  const sapWithCounty = detectSettlementMention('[TESZTADAT] Baleset Sáp közelében (Hajdú-Bihar vármegye)', undefined, { implicitCountyContext: true });
+  assert.equal(sapWithCounty.territoryLevel, 'settlement');
+  assert.equal(sapWithCounty.settlementName, 'Sáp');
+  assert.equal(sapWithCounty.isConfirmedLocal, false);
+});
+
+test('9. Deduplication: Duplicate items with identical canonical URL are discarded', () => {
+  const duplicateXml = `<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Dedup Test</title>
+    <item>
+      <title>[TESZTADAT] Esemény 1</title>
+      <link>https://example.com/cikk-1?utm_source=rss</link>
+      <pubDate>Wed, 28 Oct 2026 11:00:00 +0000</pubDate>
+    </item>
+    <item>
+      <title>[TESZTADAT] Esemény 1 Ismétlés</title>
+      <link>https://example.com/cikk-1?utm_source=facebook</link>
+      <pubDate>Wed, 28 Oct 2026 11:00:00 +0000</pubDate>
+    </item>
+  </channel>
+</rss>`;
+
+  const sourceConfig = RSS_SOURCES['RSS-Telex'];
+  const res = parseGenericRss(duplicateXml, sourceConfig, { now: REF_NOW });
+  assert.equal(res.observations.length, 1, 'Duplicate canonical URL must be processed only once');
+});
+
+test('10. Technical block enforcement: HTTP 403 and 429 return status disabled without workarounds', async () => {
+  resetRssState();
+  const sourceConfig = RSS_SOURCES['RSS-Telex'];
+  const robotsOpt = { robotsTxtContent: 'User-agent: *\nAllow: /\n' };
+
+  // Test 403 Forbidden
+  const mock403Fetch = async () => ({ status: 403, error: 'HTTP 403 Forbidden' });
+  const briefing403 = createRssBriefing('RSS-Telex');
+  const res403 = await briefing403({ fetchFn: mock403Fetch, enabled: true, now: REF_NOW, ...robotsOpt });
+  assert.equal(res403.status, 'disabled');
+  assert.equal(res403.observations.length, 0);
+
+  // Test 429 Rate Limit
+  const mock429Fetch = async () => ({
+    status: 429,
+    headers: { 'retry-after': '60' },
+    error: 'HTTP 429 Too Many Requests'
+  });
+  const res429 = await briefing403({ fetchFn: mock429Fetch, enabled: true, now: REF_NOW, ...robotsOpt });
+  assert.equal(res429.status, 'disabled');
+
+  // Verify backoff: consecutive call within backoff window makes ZERO network calls
+  let consecutiveCalls = 0;
+  const mockTrackFetch = async () => {
+    consecutiveCalls++;
+    return { status: 200, rawText: SYNTHETIC_NEWS_XML };
+  };
+  const resBackoff = await briefing403({ fetchFn: mockTrackFetch, enabled: true, now: REF_NOW + 10_000, ...robotsOpt });
+  assert.equal(resBackoff.status, 'disabled');
+  assert.equal(consecutiveCalls, 0, 'No network call made during active backoff window');
+
+  resetRssState();
+});
+
+test('11. Conditional GET: Supports 304 Not Modified and reuses cached observations', async () => {
+  resetRssState();
+  let fetchAttempts = 0;
+  let sentHeaders = null;
+  const robotsOpt = { robotsTxtContent: 'User-agent: *\nAllow: /\n' };
+
+  const mockFetch = async (url, opts) => {
+    fetchAttempts++;
+    sentHeaders = opts.headers || {};
+    if (fetchAttempts === 1) {
+      return {
+        status: 200,
+        rawText: SYNTHETIC_NEWS_XML,
+        headers: {
+          etag: '"test-etag-123"',
+          'last-modified': 'Wed, 28 Oct 2026 11:30:00 GMT'
+        }
+      };
+    }
+    // Second fetch returns 304
+    return { status: 304, headers: {} };
+  };
+
+  const briefing = createRssBriefing('RSS-Telex');
+
+  // 1. Initial 200 fetch
+  const res1 = await briefing({ fetchFn: mockFetch, enabled: true, now: REF_NOW, ...robotsOpt });
+  assert.equal(res1.status, 'ok');
+  assert.ok(res1.observations.length > 0);
+  assert.equal(fetchAttempts, 1);
+
+  // 2. Second fetch sending conditional headers
+  const res2 = await briefing({ fetchFn: mockFetch, enabled: true, now: REF_NOW + 1000, ...robotsOpt });
+  assert.equal(res2.status, 'ok');
+  assert.equal(res2.cached, true);
+  assert.equal(res2.observations.length, res1.observations.length);
+  assert.equal(fetchAttempts, 2);
+  assert.equal(sentHeaders['If-None-Match'], '"test-etag-123"');
+  assert.equal(sentHeaders['If-Modified-Since'], 'Wed, 28 Oct 2026 11:30:00 GMT');
+
+  resetRssState();
+});
+
+test('12. Payload ceiling enforcement: Rejects payloads exceeding 1 MB', async () => {
+  resetRssState();
+  const oversizedXml = '<rss>' + 'x'.repeat(1024 * 1024 + 10) + '</rss>';
+  const mockFetch = async () => ({
+    status: 200,
+    rawText: oversizedXml
+  });
+
+  const briefing = createRssBriefing('RSS-Telex');
+  const res = await briefing({ fetchFn: mockFetch, enabled: true, now: REF_NOW, robotsTxtContent: 'User-agent: *\nAllow: /\n' });
+  assert.equal(res.status, 'error');
+  assert.ok(res.error.includes('1 MB'));
+
+  resetRssState();
+});
+
+test('13. Alert notification suppression: Generic news items trigger ZERO notifying alerts', (t) => {
+  const sourceConfig = RSS_SOURCES['RSS-Telex'];
+  const parsed = parseGenericRss(SYNTHETIC_NEWS_XML, sourceConfig, { now: REF_NOW });
+  assert.equal(parsed.status, 'ok');
+
+  // Convert observations to standard Crucix event records
+  const newsEvents = parsed.observations.map((obs, idx) => ({
+    id: `event-rss-${idx}`,
+    kind: 'news',
+    severity: 'low',
+    title: obs.title,
+    summary: '',
+    source: { name: obs.source.name, url: obs.link, status: 'ok' },
+    observedAt: obs.publishedAt,
+    publishedAt: obs.publishedAt,
+    location: { lat: null, lon: null, method: 'unknown', label: obs.facts.settlement, precision: 'settlement' },
+    facts: obs.facts,
+    territory: obs.territory
+  }));
+
+  const root = mkdtempSync(join(tmpdir(), 'crucix-rss-alert-test-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+
+  const engine = new AlertEngine(root, {
+    now: () => REF_NOW,
+    logger: { warn: () => {}, error: () => {}, log: () => {}, info: () => {} }
+  });
+  engine.load();
+
+  // Bootstrap sweep
+  engine.evaluate({ events: [] });
+
+  // Sweep with news events
+  const result = engine.evaluate({ events: newsEvents });
+
+  // Verify that any created alerts have notify: false, and zero notifying alerts were generated
+  const notifyingAlerts = (result.created || []).filter(a => a.notify);
+  assert.equal(
+    notifyingAlerts.length,
+    0,
+    'News events must NEVER trigger notifying alerts (strictly informational, no alarm/push)'
+  );
+});
+
+test('14. Pipeline lifecycle: News items survive normalizeLiveSources and freshLiveSnapshot into active events', () => {
+  const sourceConfig = RSS_SOURCES['RSS-Telex'];
+  const parsed = parseGenericRss(SYNTHETIC_NEWS_XML, sourceConfig, { now: REF_NOW });
+  assert.equal(parsed.status, 'ok');
+
+  const normalized = normalizeLiveSources({
+    'RSS-Telex': parsed
+  }, REF_NOW);
+
+  const telexFeed = normalized.find(f => f.source === 'RSS-Telex');
+  assert.ok(telexFeed, 'RSS-Telex present in normalized liveSources');
+  assert.ok(telexFeed.observations.length > 0);
+
+  const firstObs = telexFeed.observations[0];
+  const newsEvent = {
+    id: 'event-0123456789abcdef0123456789abcdef',
+    title: firstObs.title,
+    kind: 'news',
+    severity: 'low',
+    domain: 'security',
+    observedAt: firstObs.observedAt,
+    publishedAt: firstObs.publishedAt,
+    source: { name: 'RSS-Telex', url: firstObs.url, status: 'ok' },
+    territory: firstObs.territory,
+    facts: firstObs.facts
+  };
+
+  const snapshot = {
+    meta: { timestamp: new Date(REF_NOW).toISOString() },
+    liveSources: normalized,
+    events: [newsEvent],
+    staleEvents: [],
+    coverage: [{
+      id: 'RSS-Telex',
+      name: 'RSS-Telex',
+      domain: 'security',
+      status: 'ok',
+      origin: 'live',
+      isSnapshot: false
+    }]
+  };
+
+  const fresh = freshLiveSnapshot(snapshot, REF_NOW);
+  assert.equal(fresh.events.length, 1, 'News event must remain in active events');
+  assert.equal(fresh.staleEvents.length, 0, 'News event must NOT be moved to staleEvents');
+
+  const cov = fresh.coverage.find(c => c.sourceId === 'RSS-Telex' || c.sourceName === 'RSS-Telex');
+  assert.ok(cov, 'Coverage entry exists for RSS-Telex');
+  assert.equal(cov.status, 'ok_data', 'Coverage must be ok_data');
+});

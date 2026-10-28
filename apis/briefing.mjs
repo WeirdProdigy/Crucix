@@ -73,6 +73,16 @@ import { briefing as viewsForecast } from './sources/views.mjs';
 import { briefing as informRisk } from './sources/inform.mjs';
 import { briefing as nebihAsp } from './sources/nebih-asp.mjs';
 import { briefing as policeHajdu } from './sources/police-hajdu-bihar.mjs';
+import {
+  dehirRss,
+  telexRss,
+  rss444,
+  rss24hu,
+  indexRss,
+  hvgRss,
+  portfolioRss,
+  qubitRss
+} from './sources/generic-rss.mjs';
 import config from '../crucix.config.mjs';
 
 const SOURCE_TIMEOUT_MS = 30_000; // 30s max per individual source
@@ -161,6 +171,14 @@ export async function fullBriefing() {
     runSource('Meteoalarm', meteoalarm, { countries: config.publicSources.meteoalarmCountries }),
     runSource('Nebih-ASP', nebihAsp, { territoryConfig: config.territory }),
     runSource('Police-Hajdu', policeHajdu, { territoryConfig: config.territory }),
+    runSource('RSS-Dehir', dehirRss, { territoryConfig: config.territory }),
+    runSource('RSS-Telex', telexRss, { territoryConfig: config.territory }),
+    runSource('RSS-444', rss444, { territoryConfig: config.territory }),
+    runSource('RSS-24hu', rss24hu, { territoryConfig: config.territory }),
+    runSource('RSS-Index', indexRss, { territoryConfig: config.territory }),
+    runSource('RSS-HVG', hvgRss, { territoryConfig: config.territory }),
+    runSource('RSS-Portfolio', portfolioRss, { territoryConfig: config.territory }),
+    runSource('RSS-Qubit', qubitRss, { territoryConfig: config.territory }),
     runSource('GDACS', gdacs),
     runSource('NOAA-SWPC', swpc),
     runSource('ECB', ecb),

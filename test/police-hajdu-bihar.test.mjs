@@ -474,9 +474,18 @@ test('17. Settlement extraction: Hajdúböszörmény, Derecske, Debrecen detecti
   assert.equal(told.settlementName, null);
   assert.equal(told.matchState, 'ambiguous');
 
-  const genericAmbiguous = detectSettlementMention('Kétértelmű településesemény');
-  assert.equal(genericAmbiguous.territoryLevel, 'unknown');
-  assert.equal(genericAmbiguous.matchState, 'ambiguous');
+  const szerep = detectSettlementMention('Baleset Szerep térségében');
+  assert.equal(szerep.territoryLevel, 'unknown');
+  assert.equal(szerep.matchState, 'ambiguous');
+
+  const bojt = detectSettlementMention('Útlezárás Bojt közelében');
+  assert.equal(bojt.territoryLevel, 'unknown');
+  assert.equal(bojt.matchState, 'ambiguous');
+
+  // Lowercase common noun "szerep" should NOT match ambiguous settlement
+  const commonNoun = detectSettlementMention('Fontos szerepet játszott az intézkedés');
+  assert.equal(commonNoun.territoryLevel, 'county');
+  assert.equal(commonNoun.settlementName, undefined);
 });
 
 test('18. Separation of source health and item age: 8-hour-old latest item in fresh feed stays active, not stale_error', () => {
