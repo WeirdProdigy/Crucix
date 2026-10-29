@@ -430,10 +430,6 @@ export async function briefing(options = {}) {
       const encodedQ = encodeURIComponent(queryConfig.query);
       const url = `https://news.google.com/rss/search?q=${encodedQ}&hl=hu&gl=HU&ceid=HU:hu`;
 
-      requestsInCurrentHour++;
-      queriesActuallyRun++;
-      queryLastRunTimes.set(queryConfig.id, now);
-
       try {
         const response = await fetchFn(url, {
           timeout: 15_000,
@@ -443,6 +439,15 @@ export async function briefing(options = {}) {
           },
           format: 'text'
         });
+
+        if (options.signal?.aborted) {
+          queryDiagnostics.push({
+            query: queryConfig.id,
+            status: 'aborted',
+            message: 'Lekérdezés megszakítva timeout/abort jelzés miatt'
+          });
+          break;
+        }
 
         if (response.status === 403 || response.status === 429) {
           const retryAfterHeader = response.headers?.get?.('retry-after') || response.headers?.['retry-after'];
@@ -468,6 +473,11 @@ export async function briefing(options = {}) {
           });
           continue;
         }
+
+        // Successfully completed query: record execution and cadence timestamp
+        requestsInCurrentHour++;
+        queriesActuallyRun++;
+        queryLastRunTimes.set(queryConfig.id, now);
 
         const parsedRes = parseGoogleNewsRss(response.rawText, queryConfig, {
           now,

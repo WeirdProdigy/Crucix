@@ -15,7 +15,8 @@ import {
   briefing as googleNewsBriefing,
   resetGNewsState,
   isGNewsEnabled,
-  isGNewsBriefingActive
+  isGNewsBriefingActive,
+  getQueryLastRunTimes
 } from '../apis/sources/google-news.mjs';
 
 import { FEED_POLICIES } from '../apis/utils/freshness.mjs';
@@ -466,7 +467,7 @@ test('AbortSignal immediately stops execution without running subsequent queries
   const mockFetch = async () => {
     calls++;
     if (calls === 2) {
-      // Abort when query 2 finishes
+      // Abort during query 2
       controller.abort();
     }
     return { status: 200, rawText: SYNTHETIC_GNEWS_XML };
@@ -482,6 +483,59 @@ test('AbortSignal immediately stops execution without running subsequent queries
   assert.equal(calls, 2, 'Should abort after 2 queries, not completing the remaining 4 queries');
   assert.ok(res.diagnostics.queryDetails.some(d => d.status === 'aborted'), 'Must record aborted status in queryDetails');
   assert.equal(isGNewsBriefingActive(), false, 'isBriefingActive must reset after abort');
+
+  const runTimes = getQueryLastRunTimes();
+  // Query 1 completed before abort, so it has timestamp
+  assert.equal(runTimes.get('gnews-debrecen'), REF_NOW);
+  // Query 2 was aborted, so its last run time must NOT be updated!
+  assert.equal(runTimes.has('gnews-hajdubihar'), false, 'Aborted query must NOT update queryLastRunTimes');
+  // Queries 3..6 were never reached, so they must NOT have run times
+  assert.equal(runTimes.has('gnews-district-towns'), false);
+  assert.equal(runTimes.has('gnews-epizootic'), false);
+  assert.equal(runTimes.has('gnews-energy'), false);
+  assert.equal(runTimes.has('gnews-haon'), false);
+
+  resetGNewsState();
+});
+
+test('isBriefingActive flag releases after exception, timeout, and abort', async () => {
+  resetGNewsState();
+
+  // 1. Release after unhandled exception in fetchFn
+  const mockThrowingFetch = async () => {
+    throw new Error('Fatal network exception');
+  };
+  try {
+    await googleNewsBriefing({
+      enabled: true,
+      now: REF_NOW,
+      fetchFn: mockThrowingFetch
+    });
+  } catch {}
+  assert.equal(isGNewsBriefingActive(), false, 'isBriefingActive must release after exception');
+
+  // 2. Release after abort signal
+  const controller = new AbortController();
+  controller.abort();
+  await googleNewsBriefing({
+    enabled: true,
+    now: REF_NOW,
+    signal: controller.signal,
+    fetchFn: async () => ({ status: 200, rawText: SYNTHETIC_GNEWS_XML })
+  });
+  assert.equal(isGNewsBriefingActive(), false, 'isBriefingActive must release after abort');
+
+  // 3. Release after timeout in runSource
+  const mockTimingOutAdapter = async (opts) => {
+    assert.ok(opts.signal instanceof AbortSignal);
+    return new Promise(resolve => {
+      opts.signal.addEventListener('abort', () => {
+        resolve({ status: 'aborted' });
+      });
+    });
+  };
+  await runSource('Google-News', mockTimingOutAdapter, { timeoutMs: 20 });
+  assert.equal(isGNewsBriefingActive(), false, 'isBriefingActive must release after runSource timeout');
 
   resetGNewsState();
 });
