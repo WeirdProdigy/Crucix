@@ -394,7 +394,7 @@ export async function briefing(options = {}) {
       const response = await fetchFn(url, {
         timeout: 15_000,
         headers: {
-          'User-Agent': options.userAgent || 'Crucix/2.13.6 (https://crucix.test)'
+          'User-Agent': options.userAgent || 'Crucix/2.13.6 (https://github.com/mp3pintyo/Crucix)'
         },
         format: 'text'
       });

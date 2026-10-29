@@ -1099,3 +1099,28 @@ test('29. Ambiguous settlement gazetteer: Kaba and Polgár disambiguation and lo
   assert.equal(posKaba.settlementName, 'Kaba');
   assert.equal(posKaba.matchState, 'match');
 });
+
+test('30. Categorization regression: ceasefire (tűzszünet) exclusion and specific headline keyword matching', () => {
+  // 1. "tűzszünet" must NOT match acute fire incident; with "kulfold" section it classifies as news_global
+  const catCeasefireForeign = classifyNewsCategory('Korlátozott tűzszünet lépett életbe a térségben', 'kulfold');
+  assert.equal(catCeasefireForeign, 'news_global', '"tűzszünet" in foreign section must classify as news_global, not news_hazard');
+
+  const catCeasefireGeneral = classifyNewsCategory('Éjféltől tűzszünet lép életbe', 'hirek');
+  assert.notEqual(catCeasefireGeneral, 'news_hazard', '"tűzszünet" alone must NOT trigger news_hazard');
+
+  // 2. Acute fire incidents MUST remain news_hazard
+  const catFireOutbreak = classifyNewsCategory('Tűz ütött ki egy debreceni raktárépületben', 'belfold');
+  assert.equal(catFireOutbreak, 'news_hazard', '"tűz ütött ki" must classify as news_hazard');
+
+  const catFireExtinguish = classifyNewsCategory('Tüzet oltottak a tűzoltók a belvárosban', 'hirek');
+  assert.equal(catFireExtinguish, 'news_hazard', '"tüzet oltottak" must classify as news_hazard');
+
+  // 3. Documented actual keyword matching reasons for specific audit headlines:
+  // NATO headline matches "figyelmeztetés" keyword -> news_hazard
+  const catNato = classifyNewsCategory('Magyarországról küldött figyelmeztetést a NATO magas rangú parancsnoka', 'gazdasag');
+  assert.equal(catNato, 'news_hazard', 'NATO headline classified as news_hazard specifically due to "figyelmeztetés" keyword match');
+
+  // Battery factory headline matches "akkumulátorgyár" keyword -> news_energy
+  const catBattery = classifyNewsCategory('Gajdos László: Feketelistára került az iváncsai akkumulátorgyár', 'zhvg');
+  assert.equal(catBattery, 'news_energy', 'Battery factory headline classified as news_energy specifically due to "akkumulátorgyár" keyword match');
+});

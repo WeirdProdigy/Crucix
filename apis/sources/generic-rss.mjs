@@ -317,7 +317,8 @@ export function classifyNewsCategory(title, section = '', territoryOrDef = null,
 
   // 1. Keyword-based overrides (hazard, energy, agriculture) strictly on title
   // Severe incident guard: in sport/culture, ONLY acute incidents (baleset, tűz, robbanás, mentés) override.
-  const isSevereIncident = /(?<![\p{L}\p{N}])(?:baleset(?:[a-záéíóöőúüű]+)?|karambol(?:[a-záéíóöőúüű]+)?|ütköz[eé](?:[a-záéíóöőúüű]+)?|gázol(?:[a-záéíóöőúüű]+)?|tűz(?:[a-záéíóöőúüű]+)?|tűzeset(?:[a-záéíóöőúüű]+)?|lángok(?:[a-záéíóöőúüű]+)?|égő|robbanás(?:[a-záéíóöőúüű]+)?|mentés(?:[a-záéíóöőúüű]+)?|mentők(?:[a-záéíóöőúüű]+)?|tűzoltók(?:[a-záéíóöőúüű]+)?)(?![\p{L}\p{N}])/ui.test(normTitle);
+  // Note: "tűzszünet" (ceasefire) is explicitly excluded from acute fire incidents via negative lookahead.
+  const isSevereIncident = /(?<![\p{L}\p{N}])(?:baleset(?:[a-záéíóöőúüű]+)?|karambol(?:[a-záéíóöőúüű]+)?|ütköz[eé](?:[a-záéíóöőúüű]+)?|gázol(?:[a-záéíóöőúüű]+)?|tűz(?!szünet)(?:[a-záéíóöőúüű]+)?|tüz(?:et|ek|ekben|eknél|ben|höz|zel)|tűzeset(?:[a-záéíóöőúüű]+)?|lángok(?:[a-záéíóöőúüű]+)?|égő|robbanás(?:[a-záéíóöőúüű]+)?|mentés(?:[a-záéíóöőúüű]+)?|mentők(?:[a-záéíóöőúüű]+)?|tűzoltók(?:[a-záéíóöőúüű]+)?)(?![\p{L}\p{N}])/ui.test(normTitle);
 
   if (isSevereIncident) {
     return 'news_hazard';
