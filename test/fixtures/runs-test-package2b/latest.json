@@ -1636,28 +1636,28 @@
       "isFixture": true,
       "views": {
         "local": {
+          "inView": true,
+          "category": "keyConnection",
+          "relationship": "key_connection",
+          "reason": "news_local_mention"
+        },
+        "county": {
+          "inView": true,
+          "category": "countyEvent",
+          "relationship": "county",
+          "reason": "news_county_enclosing"
+        },
+        "national": {
           "inView": false,
           "category": null,
           "relationship": "unknown",
           "reason": null
         },
-        "county": {
-          "inView": true,
-          "category": "countyEvent",
-          "relationship": "key_connection",
-          "reason": "county_settlement"
-        },
-        "national": {
-          "inView": true,
-          "category": "nationalEvent",
-          "relationship": "key_connection",
-          "reason": "national_settlement"
-        },
         "global": {
-          "inView": true,
-          "category": "globalEvent",
-          "relationship": "key_connection",
-          "reason": "settlement"
+          "inView": false,
+          "category": null,
+          "relationship": "unknown",
+          "reason": null
         }
       }
     },
@@ -2067,9 +2067,11 @@
       "totalEvents": 4,
       "uniqueEvents": 4,
       "cancelledChains": 0,
-      "newsCount": 0,
-      "retainedNewsCount": 0,
-      "newsIds": [],
+      "newsCount": 1,
+      "retainedNewsCount": 1,
+      "newsIds": [
+        "event-33333333333333333333333333333303"
+      ],
       "breakdown": {
         "confirmedLocal": 2,
         "keyConnection": 1,
@@ -2815,11 +2817,9 @@
       "totalEvents": 5,
       "uniqueEvents": 5,
       "cancelledChains": 0,
-      "newsCount": 1,
-      "retainedNewsCount": 1,
-      "newsIds": [
-        "event-33333333333333333333333333333303"
-      ],
+      "newsCount": 0,
+      "retainedNewsCount": 0,
+      "newsIds": [],
       "breakdown": {
         "confirmedLocal": 0,
         "keyConnection": 0,
@@ -3291,11 +3291,9 @@
       "totalEvents": 8,
       "uniqueEvents": 8,
       "cancelledChains": 0,
-      "newsCount": 1,
-      "retainedNewsCount": 1,
-      "newsIds": [
-        "event-33333333333333333333333333333303"
-      ],
+      "newsCount": 0,
+      "retainedNewsCount": 0,
+      "newsIds": [],
       "breakdown": {
         "confirmedLocal": 0,
         "keyConnection": 0,
@@ -4028,6 +4026,14 @@
         ]
       }
     },
+    "all": {
+      "view": "all",
+      "newsCount": 1,
+      "retainedNewsCount": 1,
+      "newsIds": [
+        "event-33333333333333333333333333333303"
+      ]
+    },
     "news": [
       {
         "id": "event-33333333333333333333333333333303",
@@ -4065,28 +4071,28 @@
         "isFixture": true,
         "views": {
           "local": {
+            "inView": true,
+            "category": "keyConnection",
+            "relationship": "key_connection",
+            "reason": "news_local_mention"
+          },
+          "county": {
+            "inView": true,
+            "category": "countyEvent",
+            "relationship": "county",
+            "reason": "news_county_enclosing"
+          },
+          "national": {
             "inView": false,
             "category": null,
             "relationship": "unknown",
             "reason": null
           },
-          "county": {
-            "inView": true,
-            "category": "countyEvent",
-            "relationship": "key_connection",
-            "reason": "county_settlement"
-          },
-          "national": {
-            "inView": true,
-            "category": "nationalEvent",
-            "relationship": "key_connection",
-            "reason": "national_settlement"
-          },
           "global": {
-            "inView": true,
-            "category": "globalEvent",
-            "relationship": "key_connection",
-            "reason": "settlement"
+            "inView": false,
+            "category": null,
+            "relationship": "unknown",
+            "reason": null
           }
         }
       }

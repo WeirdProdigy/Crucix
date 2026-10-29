@@ -15,7 +15,8 @@
     [VIEWS.LOCAL]: 'Helyi',
     [VIEWS.COUNTY]: 'Hajdú-Bihar',
     [VIEWS.NATIONAL]: 'Magyarország',
-    [VIEWS.GLOBAL]: 'Világ'
+    [VIEWS.GLOBAL]: 'Világ',
+    all: 'Összes hír'
   });
 
   const CATEGORY_LABELS = Object.freeze({
@@ -76,6 +77,25 @@
     category: 'all',
     sort: 'priority' // 'priority' | 'latest'
   };
+
+  let newsScope = 'view'; // 'view' | 'all'
+
+  function setNewsScope(scope) {
+    if (scope === 'view' || scope === 'all') {
+      newsScope = scope;
+      for (const fn of changeListeners) {
+        try { fn(activeView); } catch {}
+      }
+    }
+  }
+
+  function getNewsScope() {
+    return newsScope;
+  }
+
+  function resetNewsScope() {
+    newsScope = 'view';
+  }
 
   let activeView = readSavedView();
   let changeListeners = [];
@@ -360,8 +380,9 @@
   }
 
   function newsFeedHtml(snapshot) {
-    const rawNews = getViewNews(snapshot, activeView);
-    const viewCounters = snapshot?.views?.[activeView] || {};
+    const effectiveView = newsScope === 'all' || activeView === 'all' ? 'all' : activeView;
+    const rawNews = getViewNews(snapshot, effectiveView);
+    const viewCounters = snapshot?.views?.[effectiveView] || {};
     const coverage = snapshot?.coverage || {};
 
     // 1. Filter out publisher promo items
@@ -500,8 +521,12 @@
     return `
       <div class="vp-newsfeed-section" id="vp-newsfeed">
         <div class="vp-newsfeed-head">
-          <span class="vp-newsfeed-title">Hírfolyam – ${esc(VIEW_LABELS[activeView])}</span>
+          <span class="vp-newsfeed-title">Hírfolyam – ${esc(VIEW_LABELS[effectiveView] || 'Hírfolyam')}</span>
           <span class="vp-sec-badge">${esc(headBadgeText)}</span>
+        </div>
+        <div class="vp-newsfeed-tabs" role="tablist" aria-label="Hírfolyam hatókör">
+          <button type="button" class="vp-news-tab${effectiveView !== 'all' ? ' active' : ''}" role="tab" aria-selected="${effectiveView !== 'all'}" onclick="window.CrucixViewsPanel?.setNewsScope('view')">Nézeti (${esc(VIEW_LABELS[activeView] || 'Aktuális')})</button>
+          <button type="button" class="vp-news-tab${effectiveView === 'all' ? ' active' : ''}" role="tab" aria-selected="${effectiveView === 'all'}" onclick="window.CrucixViewsPanel?.setNewsScope('all')">Összes hír</button>
         </div>
         <div class="vp-newsfeed-disclaimer" role="note">
           <strong>Figyelem:</strong> Sajtó- és hatósági hírek; nem igazolt veszélyesemények.
@@ -517,8 +542,11 @@
   function getViewNews(snapshot, viewName) {
     if (!snapshot || !viewName) return [];
     const views = snapshot.views || snapshot;
-    const partition = views[viewName];
     const newsList = views.news || snapshot.news || [];
+    if (viewName === 'all' || viewName === 'allNews') {
+      return Array.isArray(newsList) ? newsList : [];
+    }
+    const partition = views[viewName];
     if (!partition?.newsIds || !Array.isArray(newsList)) return [];
     const idSet = new Set(partition.newsIds);
     return newsList.filter(item => idSet.has(item.id));
@@ -722,7 +750,10 @@
     getViewNews,
     setNewsFilter,
     getNewsFilter,
-    resetNewsFilter
+    resetNewsFilter,
+    setNewsScope,
+    getNewsScope,
+    resetNewsScope
   });
 
 })(window, document);

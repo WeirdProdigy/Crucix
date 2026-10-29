@@ -701,12 +701,15 @@ test('18. Event counter isolation: News events (kind: news / news_*) DO NOT coun
   assert.equal(getViewNews(partitions, VIEWS.LOCAL).length, 1);
   assert.equal(getViewNews(partitions, VIEWS.LOCAL)[0].id, 'news-0001');
 
-  // Check Global view: 1 physical event, 2 news items
-  const globalView = partitions[VIEWS.GLOBAL];
-  assert.equal(globalView.totalEvents, 1, 'Global view physical totalEvents must be exactly 1');
-  assert.equal(globalView.uniqueEvents, 1, 'Global view physical uniqueEvents must be exactly 1');
-  assert.equal(globalView.newsCount, 2, 'Global view contains both news items');
-  assert.equal(getViewNews(partitions, VIEWS.GLOBAL).length, 2);
+  // Check National view: 1 national news item (news2)
+  const nationalView = partitions[VIEWS.NATIONAL];
+  assert.equal(nationalView.newsCount, 1, 'National view contains national news item');
+  assert.equal(getViewNews(partitions, VIEWS.NATIONAL).length, 1);
+  assert.equal(getViewNews(partitions, VIEWS.NATIONAL)[0].id, 'news-0002');
+
+  // Check All news view: contains both news items
+  assert.equal(partitions.all.newsCount, 2, 'All news partition contains both news items');
+  assert.equal(getViewNews(partitions, 'all').length, 2);
 });
 
 test('19. PR filtering and Telex Közlemény diagnostics accounting', () => {
@@ -961,7 +964,8 @@ test('26. Payload: getViewNews accessor survives spread, structuredClone, and JS
   // 3. JSON roundtrip
   const roundtripped = JSON.parse(JSON.stringify(partitioned));
   assert.deepEqual(getViewNews(roundtripped, VIEWS.GLOBAL), getViewNews(partitioned, VIEWS.GLOBAL));
-  assert.equal(getViewNews(roundtripped, VIEWS.GLOBAL).length, 3);
+  assert.equal(getViewNews(roundtripped, VIEWS.GLOBAL).length, 2);
+  assert.equal(getViewNews(roundtripped, 'all').length, 3);
 });
 
 test('27. HistoryStore exclusion: news events are strictly rejected from history.json', () => {
@@ -1059,8 +1063,9 @@ test('28. News ceiling prioritization: 100 national items do not squeeze out loc
   const allEvents = [...nationalItems, hazardItem, localItem];
   const partitioned = partitionEventsByView(allEvents);
 
-  // Total news collection contains capped items (up to VIEW_NEWS_CAP=50 for national view)
-  assert.equal(partitioned.news.length, 50);
+  // Total news collection contains capped items (50 in national view + 1 local item)
+  assert.equal(partitioned.news.length, 51);
+  assert.equal(partitioned[VIEWS.NATIONAL].newsIds.length, 50);
 
   // Prioritization check: hazard (rank 0) and local (rank 1) MUST be retained
   const hasHazard = partitioned.news.some(n => n.id === hazardItem.id);
@@ -1164,7 +1169,8 @@ test('31. Territorial view ceilings, global saturation resilience, and newsCount
 
   // 3. Semantics check: newsCount vs retainedNewsCount / newsIds.length
   const globalView = partitioned[VIEWS.GLOBAL];
-  assert.equal(globalView.newsCount, 71, 'newsCount represents all eligible items (70 global + 1 local = 71)');
+  assert.equal(partitioned.all.newsCount, 71, 'all.newsCount represents all eligible items (70 global + 1 local = 71)');
+  assert.equal(globalView.newsCount, 70, 'newsCount represents all eligible items (70 global items)');
   assert.equal(globalView.retainedNewsCount, 50, 'retainedNewsCount is capped at VIEW_NEWS_CAP = 50');
   assert.equal(globalView.newsIds.length, 50, 'newsIds.length is capped at 50');
 
@@ -1179,7 +1185,7 @@ test('31. Territorial view ceilings, global saturation resilience, and newsCount
   // 5. Shared collection contains the union of referenced items
   assert.ok(partitioned.news.some(n => n.id === localItem.id), 'Local item must be present in partitions.news');
   assert.equal(partitioned.news[0].id, localItem.id, 'Local item took slot 0 in partitions.news due to priority');
-  assert.equal(partitioned.news.length, 50, 'partitions.news holds union of referenced items (1 local + 49 global = 50, as local item also occupies global view slot)');
+  assert.equal(partitioned.news.length, 51, 'partitions.news holds union of referenced items (1 local + 50 global = 51)');
 
   // 6. Accessor getViewNews returns the local item cleanly
   const resolvedLocal = getViewNews(partitioned, VIEWS.LOCAL);
@@ -1259,5 +1265,6 @@ test('32. Shared 100 ceiling exceeded: all newsIds resolvable, partitions.news <
 
   // 5. Eligible newsCount tracks all matching items prior to capping
   assert.equal(partitioned[VIEWS.NATIONAL].newsCount, 50, 'National view matched 50 national items');
-  assert.equal(partitioned[VIEWS.GLOBAL].newsCount, 150, 'Global view matched all 150 items');
+  assert.equal(partitioned[VIEWS.GLOBAL].newsCount, 100, 'Global view matched 100 global items');
+  assert.equal(partitioned.all.newsCount, 150, 'All view matched all 150 items');
 });
