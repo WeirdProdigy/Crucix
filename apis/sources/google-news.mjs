@@ -57,7 +57,7 @@ export const GNEWS_CATALOG = Object.freeze([
   {
     id: 'gnews-district-towns',
     name: 'GNews-DistrictTowns',
-    displayName: 'Járási székhelyek kékfény és közmű',
+    displayName: 'Járási székhelyek rendőrségi és közmű események',
     query: '("Püspökladány" OR "Berettyóújfalu" OR "Hajdúszoboszló" OR "Biharkeresztes") (baleset OR tűz OR rendőrség OR mentők OR áramszünet) when:2d',
     intervalMs: 120 * 60 * 1000, // 120 min
     filterHaon: false,
@@ -96,15 +96,23 @@ export const GNEWS_CATALOG = Object.freeze([
   }
 ]);
 
-// Internal state for backoff and deduplication across queries
+// Internal state for backoff, cadence, and deduplication across queries
 let globalBackoffUntil = 0;
 let requestCountWindowStart = Date.now();
 let requestsInCurrentHour = 0;
+const queryLastRunTimes = new Map();
+const queryObservationCache = new Map();
 
 export function resetGNewsState() {
   globalBackoffUntil = 0;
   requestCountWindowStart = Date.now();
   requestsInCurrentHour = 0;
+  queryLastRunTimes.clear();
+  queryObservationCache.clear();
+}
+
+export function getQueryLastRunTimes() {
+  return queryLastRunTimes;
 }
 
 /**
@@ -340,11 +348,36 @@ export async function briefing(options = {}) {
   let totalDroppedHaon = 0;
   let anyTruncation = false;
 
+  let queriesActuallyRun = 0;
+  let queriesSkippedNotDue = 0;
+
   for (let idx = 0; idx < catalog.length; idx++) {
     const queryConfig = catalog[idx];
+    const lastRun = queryLastRunTimes.get(queryConfig.id) || 0;
+    const interval = typeof queryConfig.intervalMs === 'number' ? queryConfig.intervalMs : 0;
+
+    // Check cadence: only run if never run before (lastRun === 0),
+    // intervalMs elapsed, or options.forceRun === true
+    if (!options.forceRun && lastRun > 0 && (now - lastRun) < interval) {
+      queriesSkippedNotDue++;
+      const cached = queryObservationCache.get(queryConfig.id) || [];
+      for (const obs of cached) {
+        if (!seenUrls.has(obs.link)) {
+          seenUrls.add(obs.link);
+          allObservations.push(obs);
+        }
+      }
+      queryDiagnostics.push({
+        query: queryConfig.id,
+        status: 'cached_not_due',
+        itemCount: cached.length,
+        nextDueMs: interval - (now - lastRun)
+      });
+      continue;
+    }
 
     // Enforce >= 5s pacing and jitter between consecutive live requests
-    if (idx > 0 && typeof options.fetchFn !== 'function') {
+    if (queriesActuallyRun > 0 && typeof options.fetchFn !== 'function') {
       const jitterMs = Math.floor(Math.random() * 1500);
       const delayMs = 5000 + jitterMs;
       await new Promise(r => setTimeout(r, delayMs));
@@ -354,6 +387,8 @@ export async function briefing(options = {}) {
     const url = `https://news.google.com/rss/search?q=${encodedQ}&hl=hu&gl=HU&ceid=HU:hu`;
 
     requestsInCurrentHour++;
+    queriesActuallyRun++;
+    queryLastRunTimes.set(queryConfig.id, now);
 
     try {
       const response = await fetchFn(url, {
@@ -379,10 +414,11 @@ export async function briefing(options = {}) {
         return res;
       }
 
-      if (response.status !== 200 || !response.rawText) {
+      const statusCode = response.status ?? (response.rawText ? 200 : undefined);
+      if (statusCode !== 200 || !response.rawText) {
         queryDiagnostics.push({
           query: queryConfig.id,
-          status: response.status || 'network_error',
+          status: statusCode || 'network_error',
           itemCount: 0
         });
         continue;
@@ -395,6 +431,7 @@ export async function briefing(options = {}) {
       });
 
       if (parsedRes.observations) {
+        queryObservationCache.set(queryConfig.id, parsedRes.observations);
         allObservations.push(...parsedRes.observations);
       }
       if (parsedRes.diagnostics) {
@@ -419,7 +456,8 @@ export async function briefing(options = {}) {
   const latestObservedAt = allObservations[0]?.observedAt || new Date(now).toISOString();
 
   const compositeDiagnostics = {
-    queriesRun: catalog.length,
+    queriesRun: queriesActuallyRun,
+    queriesSkipped: queriesSkippedNotDue,
     requestsThisHour: requestsInCurrentHour,
     totalDroppedBlocklist,
     totalDroppedDuplicate,

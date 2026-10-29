@@ -328,7 +328,7 @@ export function parsePoliceRss(xml, options = {}) {
  */
 export async function briefing(options = {}) {
   const now = options.now ?? Date.now();
-  const isOptIn = options.enabled ?? (process.env.CRUCIX_ENABLE_POLICE_HAJDU === 'true');
+  const isOptIn = options.enabled ?? (process.env.CRUCIX_ENABLE_FEED_POLICE_HAJDU === 'true' || process.env.CRUCIX_ENABLE_POLICE_HAJDU === 'true');
 
   if (!isOptIn) {
     return {

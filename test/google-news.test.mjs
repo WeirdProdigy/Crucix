@@ -344,24 +344,52 @@ test('FEED_POLICIES and live-sources integration for Google-News', () => {
 
 test('Full execution cycle with mock fetchFn aggregates all queries and diagnostics', async () => {
   resetGNewsState();
+  let fetchCount = 0;
   const mockFetch = async () => {
+    fetchCount++;
     return {
       status: 200,
       rawText: SYNTHETIC_GNEWS_XML
     };
   };
 
-  const res = await googleNewsBriefing({
+  // Sweep 1 at T=0: all 6 queries run because they have never run before
+  const res1 = await googleNewsBriefing({
     enabled: true,
     now: REF_NOW,
     fetchFn: mockFetch
   });
 
-  assert.equal(res.status, 'ok');
-  assert.ok(res.observations.length > 0);
-  assert.equal(res.diagnostics.queriesRun, 6);
-  assert.equal(res.diagnostics.requestsThisHour, 6);
-  assert.equal(res.diagnostics.totalDroppedBlocklist, 6); // 1 per query * 6 queries
-  assert.ok(res.diagnostics.totalDroppedDuplicate > 0);
+  assert.equal(res1.status, 'ok');
+  assert.ok(res1.observations.length > 0);
+  assert.equal(res1.diagnostics.queriesRun, 6);
+  assert.equal(res1.diagnostics.requestsThisHour, 6);
+  assert.equal(res1.diagnostics.totalDroppedBlocklist, 6); // 1 per query * 6 queries
+  assert.ok(res1.diagnostics.totalDroppedDuplicate > 0);
+  assert.equal(fetchCount, 6);
+
+  // Sweep 2 at T=15m: no queries are due yet (shortest interval is Hajdú-Bihar at 30m)
+  const res2 = await googleNewsBriefing({
+    enabled: true,
+    now: REF_NOW + 15 * 60 * 1000,
+    fetchFn: mockFetch
+  });
+  assert.equal(res2.status, 'ok');
+  assert.equal(res2.diagnostics.queriesRun, 0, 'No queries should run at 15m');
+  assert.equal(res2.diagnostics.queriesSkipped, 6);
+  assert.equal(fetchCount, 6, 'Zero additional fetch calls at 15m');
+  assert.ok(res2.observations.length > 0, 'Cached observations are preserved');
+
+  // Sweep 3 at T=30m: only Hajdú-Bihar (30m interval) is due
+  const res3 = await googleNewsBriefing({
+    enabled: true,
+    now: REF_NOW + 30 * 60 * 1000,
+    fetchFn: mockFetch
+  });
+  assert.equal(res3.status, 'ok');
+  assert.equal(res3.diagnostics.queriesRun, 1, 'Only Hajdú-Bihar should run at 30m');
+  assert.equal(res3.diagnostics.queriesSkipped, 5);
+  assert.equal(fetchCount, 7, 'Exactly 1 fetch call at 30m');
+
   resetGNewsState();
 });

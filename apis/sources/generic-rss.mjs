@@ -241,7 +241,8 @@ export async function checkRobotsTxt(sourceConfig, options = {}) {
   try {
     const res = await fetchFn(sourceConfig.robotsUrl, {
       timeout: 10_000,
-      retries: 0
+      retries: 0,
+      format: 'text'
     });
     if (res.status === 403 || res.status === 429) {
       // Do NOT permanently cache a 403 or 429 error
@@ -643,7 +644,8 @@ export function createRssBriefing(sourceKey) {
       fetchRes = await fetchFn(sourceConfig.url, {
         timeout: options.timeout ?? 15_000,
         headers,
-        retries: 0
+        retries: 0,
+        format: 'text'
       });
     } catch (err) {
       return unavailableResult(sourceConfig.name, `Hálózati hiba: ${err.message}`, { url: sourceConfig.url }, now);
@@ -694,8 +696,9 @@ export function createRssBriefing(sourceKey) {
       return res;
     }
 
-    if (fetchRes.status !== 200 || !fetchRes.rawText) {
-      return unavailableResult(sourceConfig.name, `HTTP ${fetchRes.status} válasz a feed végpontról`, {
+    const statusCode = fetchRes.status ?? (fetchRes.rawText ? 200 : undefined);
+    if (statusCode !== 200 || !fetchRes.rawText) {
+      return unavailableResult(sourceConfig.name, `HTTP ${statusCode} válasz a feed végpontról`, {
         url: sourceConfig.url
       }, now);
     }

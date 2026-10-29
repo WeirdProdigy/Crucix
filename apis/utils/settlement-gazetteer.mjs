@@ -20,11 +20,14 @@ export const AMBIGUOUS_SETTLEMENT_NAMES = new Set([
   'bojt',   // noun: tassel / pompom (bojt)
   'darvas', // adjective: crane-related (darvas)
   'ebes',   // adjective / slang
-  'szerep'  // common noun: role / part (szerep, szerepet játszik)
+  'szerep', // common noun: role / part (szerep, szerepet játszik)
+  'kaba',   // adjective: dazed / groggy (kába, kába viselkedés)
+  'polgar'  // common noun: citizen (polgár), surname (Polgár Péter)
 ]);
 
 /**
- * Complete official KSH gazetteer of Hajdú-Bihar vármegye settlements (82 settlements).
+ * Hajdú-Bihar vármegye településlistája (82 település) a Wikipédia kategórianévjegyzék
+ * ("Kategória:Hajdú-Bihar megye települései") alapján összeállítva és egyeztetve.
  */
 export const HAJDU_BIHAR_KSH_SETTLEMENTS = Object.freeze([
   { id: 'almosd', name: 'Álmosd' },
@@ -66,7 +69,7 @@ export const HAJDU_BIHAR_KSH_SETTLEMENTS = Object.freeze([
   { id: 'hencida', name: 'Hencida' },
   { id: 'hortobagy', name: 'Hortobágy' },
   { id: 'hosszupalyi', name: 'Hosszúpályi' },
-  { id: 'kaba', name: 'Kaba' },
+  { id: 'kaba', name: 'Kaba', ambiguous: true },
   { id: 'kismarja', name: 'Kismarja' },
   { id: 'kokad', name: 'Kokad' },
   { id: 'komadi', name: 'Komádi' },
@@ -88,7 +91,7 @@ export const HAJDU_BIHAR_KSH_SETTLEMENTS = Object.freeze([
   { id: 'nyirabrany', name: 'Nyírábrány' },
   { id: 'nyirmartonfalva', name: 'Nyírmártonfalva' },
   { id: 'pocsaj', name: 'Pocsaj' },
-  { id: 'polgar', name: 'Polgár' },
+  { id: 'polgar', name: 'Polgár', ambiguous: true },
   { id: 'puspokladany', name: 'Püspökladány' },
   { id: 'sap', name: 'Sáp', ambiguous: true },
   { id: 'sarand', name: 'Sáránd' },
@@ -180,15 +183,26 @@ export function detectSettlementMention(title, territoryConfig = DEFAULT_TERRITO
         continue;
       }
 
-      // c) Bare lowercase occurrence (e.g. "szerepet játszik", "sápot húz")
-      const capitalizedRegex = new RegExp(`(?<![\\p{L}\\p{N}])${ambName[0].toUpperCase()}${ambName.slice(1)}`, 'u');
+      // Stem pattern with stem-final vowel lengthening (e.g. Kaba -> Kab[aá], Furta -> Furt[aá], Tépe -> Tép[eé])
+      let stemPattern;
+      if (ambName.endsWith('a') || ambName.endsWith('e')) {
+        const stem = ambName.slice(0, -1);
+        const lastChar = ambName.slice(-1);
+        const lengthened = lastChar === 'a' ? '[aá]' : '[eé]';
+        stemPattern = `${ambName[0].toUpperCase()}${stem.slice(1)}${lengthened}`;
+      } else {
+        stemPattern = `${ambName[0].toUpperCase()}${ambName.slice(1)}`;
+      }
+
+      // c) Bare lowercase occurrence (e.g. "szerepet játszik", "sápot húz", "kaba viselkedés")
+      const capitalizedRegex = new RegExp(`(?<![\\p{L}\\p{N}])${stemPattern}`, 'u');
       if (!capitalizedRegex.test(rawTitle)) {
         continue;
       }
 
       // Positive acceptance conditions:
-      // 1) Locative / adverbial inflection (e.g. Fülöpön, Szerepen, Ebesen, Toldon, Sápon, Bojton, Darvason)
-      const locativeRegex = new RegExp(`(?<![\\p{L}\\p{N}])${ambName[0].toUpperCase()}${ambName.slice(1)}${LOCATIVE_SUFFIXES}(?![\\p{L}\\p{N}])`, 'u');
+      // 1) Locative / adverbial inflection (e.g. Fülöpön, Szerepen, Ebesen, Toldon, Sápon, Bojton, Darvason, Kabán, Polgáron)
+      const locativeRegex = new RegExp(`(?<![\\p{L}\\p{N}])${stemPattern}${LOCATIVE_SUFFIXES}(?![\\p{L}\\p{N}])`, 'u');
       const hasLocative = locativeRegex.test(rawTitle);
 
       // 2) Geographic noun context ("<név> település/község/falu/város")

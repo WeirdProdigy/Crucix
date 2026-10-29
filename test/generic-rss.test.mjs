@@ -1006,3 +1006,96 @@ test('27. HistoryStore exclusion: news events are strictly rejected from history
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('28. News ceiling prioritization: 100 national items do not squeeze out local and hazard items', () => {
+  // Generate 100 national items with recent timestamps
+  const nationalItems = [];
+  for (let i = 0; i < 100; i++) {
+    nationalItems.push({
+      id: `gnews-national-${String(i).padStart(3, '0')}`,
+      title: `[TESZTADAT] Országos gazdasági és belpolitikai hír #${i}`,
+      link: `https://news.google.com/articles/national-${i}`,
+      kind: 'news',
+      newsCategory: 'news_national',
+      publishedAt: new Date(REF_NOW - i * 60 * 1000).toISOString(),
+      observedAt: new Date(REF_NOW).toISOString(),
+      source: { name: 'RSS-Telex', status: 'ok' },
+      territory: { territoryLevel: 'national' }
+    });
+  }
+
+  // Generate 1 hazard item and 1 local settlement item (arriving AFTER the 100 national items)
+  const hazardItem = {
+    id: 'gnews-hazard-urgent',
+    title: '[TESZTADAT] Súlyos áramszünet és vízhiány keletkezett',
+    link: 'https://news.google.com/articles/hazard-1',
+    kind: 'news',
+    newsCategory: 'news_hazard',
+    publishedAt: new Date(REF_NOW - 120 * 60 * 1000).toISOString(), // Older timestamp!
+    observedAt: new Date(REF_NOW).toISOString(),
+    source: { name: 'RSS-Index', status: 'ok' },
+    territory: { territoryLevel: 'national' }
+  };
+
+  const localItem = {
+    id: 'gnews-local-bihartorda',
+    title: '[TESZTADAT] Hírek Bihartorda térségéből',
+    link: 'https://news.google.com/articles/local-1',
+    kind: 'news',
+    newsCategory: 'news_local',
+    publishedAt: new Date(REF_NOW - 150 * 60 * 1000).toISOString(), // Older timestamp!
+    observedAt: new Date(REF_NOW).toISOString(),
+    source: { name: 'RSS-Dehir', status: 'ok' },
+    territory: {
+      territoryLevel: 'settlement',
+      settlementId: 'bihartorda',
+      settlementName: 'Bihartorda',
+      needsLocalReview: true,
+      localRelevanceReason: 'text_mention'
+    }
+  };
+
+  // Pass national items first in arrival order
+  const allEvents = [...nationalItems, hazardItem, localItem];
+  const partitioned = partitionEventsByView(allEvents);
+
+  // Total news collection contains capped items (up to VIEW_NEWS_CAP=50 for national view)
+  assert.equal(partitioned.news.length, 50);
+
+  // Prioritization check: hazard (rank 0) and local (rank 1) MUST be retained
+  const hasHazard = partitioned.news.some(n => n.id === hazardItem.id);
+  const hasLocal = partitioned.news.some(n => n.id === localItem.id);
+  assert.equal(hasHazard, true, 'Hazard item must NOT be squeezed out by 100 national items');
+  assert.equal(hasLocal, true, 'Local item must NOT be squeezed out by 100 national items');
+
+  // Verify they occupy top priority slots ahead of any national items
+  assert.equal(partitioned.news[0].id, hazardItem.id, 'Hazard news is top priority (slot 0)');
+  assert.equal(partitioned.news[1].id, localItem.id, 'Local news is second priority (slot 1)');
+
+  // Local view news accessor must find the local item
+  const localViewNews = getViewNews(partitioned, VIEWS.LOCAL);
+  assert.ok(localViewNews.some(n => n.id === localItem.id), 'Local view contains local item');
+});
+
+test('29. Ambiguous settlement gazetteer: Kaba and Polgár disambiguation and locative acceptance', () => {
+  // Negative tests: common words, plurals, surnames must NOT trigger settlement matches
+  const negKaba = detectSettlementMention('kaba viselkedés miatt figyelmeztettek a szakértők');
+  assert.equal(negKaba.settlementId, undefined, '"kaba viselkedés" must NOT match settlement Kaba');
+
+  const negPolgarPlural = detectSettlementMention('A polgárok tüntetést szerveztek a belvárosban');
+  assert.equal(negPolgarPlural.settlementId, undefined, '"polgárok" must NOT match settlement Polgár');
+
+  const negPolgarSurname = detectSettlementMention('Polgár Péter nyerte a sakkbajnokságot');
+  assert.equal(negPolgarSurname.settlementId, undefined, '"Polgár Péter" surname must NOT match settlement Polgár');
+
+  // Positive tests: locative inflections MUST match
+  const posPolgar = detectSettlementMention('Polgáron felújították a helyi rendelőt');
+  assert.equal(posPolgar.settlementId, 'polgar', '"Polgáron" must match settlement Polgár');
+  assert.equal(posPolgar.settlementName, 'Polgár');
+  assert.equal(posPolgar.matchState, 'match');
+
+  const posKaba = detectSettlementMention('Kabán új ipari létesítményt adtak át');
+  assert.equal(posKaba.settlementId, 'kaba', '"Kabán" must match settlement Kaba');
+  assert.equal(posKaba.settlementName, 'Kaba');
+  assert.equal(posKaba.matchState, 'match');
+});
