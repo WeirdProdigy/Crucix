@@ -7,6 +7,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { openBrowser } from './lib/open-browser.mjs';
+import { loadLiveStreams } from './lib/intelligence/live-streams.mjs';
 import { inlineJson } from './lib/html.mjs';
 import { installApiErrorHandler } from './lib/api-errors.mjs';
 import { installHttpSecurity } from './lib/http-security.mjs';
@@ -51,6 +52,8 @@ for (const dir of [RUNS_DIR, MEMORY_DIR, join(MEMORY_DIR, 'cold')]) {
 
 // === State ===
 let currentData = null;    // Current synthesized dashboard data
+let liveStreamsRegistry = [];
+try { liveStreamsRegistry = loadLiveStreams(); } catch (e) { console.warn('[LiveStreams] Could not load registry:', e.message); }
 let lastSweepTime = null;  // Timestamp of last sweep
 let sweepStartedAt = null; // Timestamp when current/last sweep started
 let sweepInProgress = false;
@@ -384,6 +387,11 @@ app.get('/api/locales', (req, res) => {
   });
 });
 
+// API: public live streams and webcams registry
+app.get('/api/live-streams', (_req, res) => {
+  res.json({ liveStreams: liveStreamsRegistry });
+});
+
 // After the last /api route: JSON for what a route could not answer itself (a broken percent-encoding in an id, an escaped error).
 installApiErrorHandler(app);
 
@@ -477,6 +485,7 @@ async function runSweepCycle() {
     // Sets synthesized.changes and stores the sweep; never throws. After a failed write the next changes are counted from
     // the last sweep on disk, so the next archived sweep also covers this one.
     if (!archiveSweep({ archive: sweepArchive, snapshot: synthesized, timing: rawData.timing, previous: previousArchived }).error) previousArchived = synthesized;
+    synthesized.liveStreams = liveStreamsRegistry;
     currentData = synthesized;
 
     // 6. Push to all connected browsers
@@ -569,6 +578,7 @@ async function start() {
       // news, and the sweep behind runs/latest.json was archived when it ran - except on the first start after the upgrade to a
       // version with an archive, when that sweep ran before there was one. The initial sweep below is then the first one stored.
       attachAlertSummary(data, alertEngine);
+      data.liveStreams = liveStreamsRegistry;
       currentData = data;
       lastSweepTime = data.meta?.timestamp || null;
       console.log('[Crucix] Loaded existing data from runs/latest.json — dashboard ready instantly');

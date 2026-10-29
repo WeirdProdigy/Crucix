@@ -27,6 +27,7 @@
 <script src="live-sources.js"></script>
 <script src="record-inspector.js"></script>
 <script src="views-panel.js"></script>
+<script src="live-media-panel.js"></script>
 <script src="alerts-core.js"></script>
 <script src="alerts.js"></script>
 <script src="alert-rules.js"></script>
@@ -44,6 +45,7 @@
 <link rel="stylesheet" href="briefing.css">
 <link rel="stylesheet" href="palette.css">
 <link rel="stylesheet" href="views-panel.css">
+<link rel="stylesheet" href="live-media-panel.css">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#020408">
 <script src="pwa.js"></script>
@@ -1296,6 +1298,7 @@ function buildPanelHtml(panelId, zone){
     case 'spaceWatch': return buildSpaceWatchPanel();
     case 'territoryViews': return window.CrucixViewsPanel?.panelHtml(currentSnapshot())||'';
     case 'coveragePanel': return window.CrucixViewsPanel?.coveragePanelHtml(currentSnapshot())||'';
+    case 'liveMedia': return window.CrucixLiveMedia?.panelHtml(currentSnapshot())||'';
     case 'newsTicker': return buildNewsTickerPanel();
     case 'macroMarkets': return buildMacroMarketsPanel();
     case 'tradeIdeas': return buildTradeIdeasPanel();

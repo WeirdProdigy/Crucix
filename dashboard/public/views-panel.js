@@ -97,6 +97,24 @@
     newsScope = 'view';
   }
 
+  let contentTab = 'news'; // 'news' | 'live'
+
+  function setContentTab(tab) {
+    if (tab === 'news' || tab === 'live') {
+      if (contentTab === 'live' && tab !== 'live') {
+        try { window.CrucixLiveMedia?.stopStream(); } catch {}
+      }
+      contentTab = tab;
+      for (const fn of changeListeners) {
+        try { fn(activeView); } catch {}
+      }
+    }
+  }
+
+  function getContentTab() {
+    return contentTab;
+  }
+
   let activeView = readSavedView();
   let changeListeners = [];
 
@@ -175,6 +193,9 @@
 
   function setActiveView(view, notify = true) {
     if (!Object.values(VIEWS).includes(view)) return;
+    if (contentTab === 'live') {
+      try { window.CrucixLiveMedia?.stopStream(); } catch {}
+    }
     activeView = view;
     saveView(view);
     updateSelectorUI();
@@ -673,6 +694,15 @@
       `;
     }
 
+    const liveStreams = Array.isArray(snapshot?.liveStreams)
+      ? snapshot.liveStreams
+      : (Array.isArray(window.__CRUCIX_DATA__?.liveStreams) ? window.__CRUCIX_DATA__.liveStreams : []);
+    const liveCount = liveStreams.length;
+
+    const contentHtml = contentTab === 'live'
+      ? (window.CrucixLiveMedia?.panelHtml(snapshot) || '<div class="lm-empty-state"><div class="lm-empty-text">Élő modul nem elérhető</div></div>')
+      : newsFeedHtml(snapshot);
+
     return `
       <div class="vp-panel" id="panel-territoryViews">
         <div class="vp-panel-head">
@@ -681,7 +711,11 @@
         </div>
         ${sectionsHtml}
         ${unlocatedStripHtml}
-        ${newsFeedHtml(snapshot)}
+        <div class="vp-section-nav" role="tablist" aria-label="Nézeti média és hírek">
+          <button type="button" class="vp-sec-nav-tab${contentTab === 'news' ? ' active' : ''}" role="tab" aria-selected="${contentTab === 'news'}" onclick="window.CrucixViewsPanel?.setContentTab('news')">Hírfolyam</button>
+          <button type="button" class="vp-sec-nav-tab${contentTab === 'live' ? ' active' : ''}" role="tab" aria-selected="${contentTab === 'live'}" onclick="window.CrucixViewsPanel?.setContentTab('live')">Élő (${liveCount} stream)</button>
+        </div>
+        ${contentHtml}
         ${staleHtml}
       </div>
     `;
@@ -753,7 +787,9 @@
     resetNewsFilter,
     setNewsScope,
     getNewsScope,
-    resetNewsScope
+    resetNewsScope,
+    setContentTab,
+    getContentTab
   });
 
 })(window, document);

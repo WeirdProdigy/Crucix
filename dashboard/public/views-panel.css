@@ -825,3 +825,34 @@
     padding: 6px 8px;
   }
 }
+
+.vp-section-nav {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  border-bottom: 1px solid var(--border, rgba(100, 240, 200, 0.12));
+  padding-bottom: 4px;
+}
+
+.vp-sec-nav-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--dim, #6a8a82);
+  font-family: var(--sans, sans-serif);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vp-sec-nav-tab:hover {
+  color: var(--text, #e8f4f0);
+}
+
+.vp-sec-nav-tab.active {
+  background: rgba(100, 240, 200, 0.15);
+  border-color: var(--accent, #64f0c8);
+  color: var(--accent, #64f0c8);
+}

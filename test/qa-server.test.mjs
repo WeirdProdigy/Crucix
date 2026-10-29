@@ -69,6 +69,14 @@ test('2. startQaServer spawns isolated server, verifies sweeps-disabled confirma
   const json = await res.json();
   assert.equal(json.status, 'ok');
 
+  // Test live streams endpoint and CSP header
+  const liveRes = await fetch(`http://127.0.0.1:${port}/api/live-streams`);
+  assert.equal(liveRes.status, 200);
+  const liveJson = await liveRes.json();
+  assert.ok(Array.isArray(liveJson.liveStreams));
+  assert.ok(liveJson.liveStreams.length >= 10);
+  assert.ok(liveRes.headers.get('content-security-policy').includes("frame-src 'self' https://www.youtube-nocookie.com;"));
+
   // Stop specifically by PID
   const exitCode = await handle.stop();
   assert.ok(exitCode === 0 || exitCode === null || exitCode === 143 || exitCode === 1, 'Clean shutdown of QA server');
