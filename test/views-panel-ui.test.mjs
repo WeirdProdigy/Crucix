@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 
@@ -628,7 +628,17 @@ test('16. Üres, disabled és hibás állapotok megkülönböztetése', () => {
     views: { local: { newsCount: 0, retainedNewsCount: 0, newsIds: [] }, news: [] }
   };
   const optInHtml = api.newsFeedHtml(optInSnapshot);
-  assert.ok(optInHtml.includes('CRUCIX_ENABLE_FEED_* vagy CRUCIX_ENABLE_GNEWS'));
+  assert.ok(optInHtml.includes('CRUCIX_ENABLE_FEED_&lt;ID&gt; vagy CRUCIX_ENABLE_GNEWS') || optInHtml.includes('CRUCIX_ENABLE_FEED_<ID> vagy CRUCIX_ENABLE_GNEWS'), 'Must mention supported switches');
+  assert.ok(!optInHtml.includes('CRUCIX_ENABLE_NEWS_RSS'), 'Must NOT contain unsupported CRUCIX_ENABLE_NEWS_RSS');
+  assert.ok(!optInHtml.includes('CRUCIX_ENABLE_GOOGLE_NEWS_RSS'), 'Must NOT contain unsupported CRUCIX_ENABLE_GOOGLE_NEWS_RSS');
+
+  // 1b. Missing source state in snapshot
+  const missingCoverageSnapshot = {
+    views: { local: { newsCount: 0, retainedNewsCount: 0, newsIds: [] }, news: [] }
+  };
+  const missingCoverageHtml = api.newsFeedHtml(missingCoverageSnapshot);
+  assert.ok(missingCoverageHtml.includes('forrásállapot-adat nem áll rendelkezésre'), 'Must indicate lack of source state');
+  assert.ok(!missingCoverageHtml.includes('opt-in kikapcsolva'), 'Must NOT claim all sources disabled without coverage data');
 
   // 2. Technical block (robots / 403)
   const robotsBlockedSnapshot = {
@@ -668,6 +678,24 @@ test('16. Üres, disabled és hibás állapotok megkülönböztetése', () => {
   const filterEmptyHtml = api.newsFeedHtml(staleSnapshot);
   assert.ok(filterEmptyHtml.includes('Van hír (1 db), de a szűrés után nincs találat.'));
   api.resetNewsFilter();
+});
+
+test('16b. Útmutató, README és .env.example összhangja', () => {
+  const rootDir = join(__dirname, '..');
+  const readmeContent = readFileSync(join(rootDir, 'README.md'), 'utf8');
+  const envExampleContent = readFileSync(join(rootDir, '.env.example'), 'utf8');
+
+  // Verify supported switches exist
+  assert.ok(readmeContent.includes('CRUCIX_ENABLE_FEED_'), 'README must document CRUCIX_ENABLE_FEED_* switches');
+  assert.ok(readmeContent.includes('CRUCIX_ENABLE_GNEWS'), 'README must document CRUCIX_ENABLE_GNEWS');
+  assert.ok(envExampleContent.includes('CRUCIX_ENABLE_FEED_'), '.env.example must document CRUCIX_ENABLE_FEED_* switches');
+  assert.ok(envExampleContent.includes('CRUCIX_ENABLE_GNEWS'), '.env.example must document CRUCIX_ENABLE_GNEWS');
+
+  // Verify unsupported switches do NOT exist
+  assert.ok(!readmeContent.includes('CRUCIX_ENABLE_NEWS_RSS'), 'README must NOT contain CRUCIX_ENABLE_NEWS_RSS');
+  assert.ok(!readmeContent.includes('CRUCIX_ENABLE_GOOGLE_NEWS_RSS'), 'README must NOT contain CRUCIX_ENABLE_GOOGLE_NEWS_RSS');
+  assert.ok(!envExampleContent.includes('CRUCIX_ENABLE_NEWS_RSS'), '.env.example must NOT contain CRUCIX_ENABLE_NEWS_RSS');
+  assert.ok(!envExampleContent.includes('CRUCIX_ENABLE_GOOGLE_NEWS_RSS'), '.env.example must NOT contain CRUCIX_ENABLE_GOOGLE_NEWS_RSS');
 });
 
 test('17. isPublisherPromo kizárása a hírfolyamból', () => {
@@ -745,9 +773,36 @@ test('19. HTML-injekció és veszélyes linkek (XSS) megelőzése', () => {
   assert.ok(!cardHtml.includes('<b onmouseover'), 'Raw HTML tag in publisher must be escaped');
   assert.ok(cardHtml.includes('&lt;b onmouseover'), 'Publisher must be HTML entity escaped');
 
-  // Sanitized javascript: link
+  // Sanitized javascript: link: must NOT render <a> tag with href="#" or href="javascript:"
   assert.ok(!cardHtml.includes('href="javascript:'), 'javascript: URLs must be neutralized');
-  assert.ok(!cardHtml.includes('href="data:'), 'data: URLs must be neutralized');
+  assert.ok(!cardHtml.includes('href="#"'), 'Dangerous URLs must NOT render href="#" dummy link');
+  assert.ok(!cardHtml.includes('<a href='), 'Invalid or dangerous URLs must NOT render any <a> anchor tag');
+  assert.ok(cardHtml.includes('<span class="vp-news-card-title">'), 'Title must remain non-clickable plain text span');
+
+  // Test data: URL
+  const dataItem = { id: 'xss-2', title: 'Data URL', link: 'data:text/html,<script>alert(1)</script>' };
+  const dataHtml = api.renderNewsCard(dataItem);
+  assert.ok(!dataHtml.includes('href="data:'), 'data: URLs must be neutralized');
+  assert.ok(!dataHtml.includes('href="#"'), 'data: URLs must not render href="#"');
+  assert.ok(dataHtml.includes('<span class="vp-news-card-title">Data URL</span>'), 'data: URL title must remain plain text span');
+
+  // Test missing and invalid URLs
+  const missingItem = { id: 'no-link', title: 'Nincs link' };
+  const missingHtml = api.renderNewsCard(missingItem);
+  assert.ok(!missingHtml.includes('<a href='), 'Missing URL must NOT render <a> tag');
+  assert.ok(!missingHtml.includes('href="#"'), 'Missing URL must NOT render href="#"');
+  assert.ok(missingHtml.includes('<span class="vp-news-card-title">Nincs link</span>'));
+
+  const invalidItem = { id: 'bad-link', title: 'Hibás link', link: 'not-a-valid-url' };
+  const invalidHtml = api.renderNewsCard(invalidItem);
+  assert.ok(!invalidHtml.includes('<a href='), 'Invalid URL must NOT render <a> tag');
+  assert.ok(invalidHtml.includes('<span class="vp-news-card-title">Hibás link</span>'));
+
+  // Test valid http/https link behavior
+  const validItem = { id: 'valid-link', title: 'Érvényes link', link: 'https://example.com/hir' };
+  const validHtml = api.renderNewsCard(validItem);
+  assert.ok(validHtml.includes('<a href="https://example.com/hir" target="_blank" rel="noopener noreferrer" class="vp-news-card-title">Érvényes link</a>'));
+  assert.ok(validHtml.includes('class="vp-news-extlink"'));
 });
 
 test('20. Régi snapshot kompatibilitás (hiányzó mezők)', () => {
@@ -758,7 +813,7 @@ test('20. Régi snapshot kompatibilitás (hiányzó mezők)', () => {
   assert.doesNotThrow(() => api.newsFeedHtml({}), 'Must not throw on empty snapshot in newsFeedHtml');
 });
 
-test('21. Nézeti plafon figyelmeztetés', () => {
+test('21. Nézeti plafon figyelmeztetés és szűrési darabszám', () => {
   const { api } = createHarness();
   api.resetNewsFilter();
 
@@ -771,5 +826,13 @@ test('21. Nézeti plafon figyelmeztetés', () => {
 
   const html = api.newsFeedHtml(mockSnapshot);
   assert.ok(html.includes('vp-newsfeed-ceiling-note'));
-  assert.ok(html.includes('Nézeti felső plafon aktív: 1 hír megjelenítve (összes jogosult: 65 db).'));
+  assert.ok(html.includes('Nézeti felső plafon aktív: 50 / 65 hír megtartva.'));
+  assert.ok(html.includes('<span class="vp-sec-badge">50 db</span>'));
+
+  // When filter produces subset: filtered count shown separately
+  api.setNewsFilter({ source: 'NemletezoKiadó' });
+  const filteredHtml = api.newsFeedHtml(mockSnapshot);
+  assert.ok(filteredHtml.includes('Szűrt: 0 / 50 db'), 'Filtered count must be shown separately in head badge');
+  assert.ok(filteredHtml.includes('(szűrés után látható: 0 db)'), 'Filtered count must be shown separately in ceiling note');
+  api.resetNewsFilter();
 });

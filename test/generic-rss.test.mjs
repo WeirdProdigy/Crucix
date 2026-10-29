@@ -1187,3 +1187,77 @@ test('31. Territorial view ceilings, global saturation resilience, and newsCount
   assert.equal(resolvedLocal[0].id, localItem.id);
   assert.equal(resolvedLocal[0].title, '[TESZTADAT] Helyi hír Bihartordáról');
 });
+
+test('32. Shared 100 ceiling exceeded: all newsIds resolvable, partitions.news <= 100, view newsIds <= 50', () => {
+  // Generate 150 distinct news items:
+  // - 50 global-only items (fill Global view to 50, priority 10)
+  // - 50 national items (fill National view to 50, priority 10)
+  // - 50 additional items (county/global, arriving after 100 limit is reached)
+  const items = [];
+
+  // 1. 50 global-only items
+  for (let i = 1; i <= 50; i++) {
+    items.push({
+      id: `news-glo-${String(i).padStart(3, '0')}`,
+      kind: 'news',
+      newsCategory: 'news_global',
+      title: `[TESZTADAT] Globális külpolitikai hír #${i}`,
+      source: { name: 'RSS-Telex', status: 'ok' },
+      observedAt: new Date(REF_NOW - 100000 - i * 1000).toISOString()
+    });
+  }
+
+  // 2. 50 national items (with explicit HUN domestic territory)
+  for (let i = 1; i <= 50; i++) {
+    items.push({
+      id: `news-nat-${String(i).padStart(3, '0')}`,
+      kind: 'news',
+      newsCategory: 'news_national',
+      title: `[TESZTADAT] Országos gazdasági hír #${i}`,
+      source: { name: 'RSS-Telex', status: 'ok' },
+      observedAt: new Date(REF_NOW - 200000 - i * 1000).toISOString(),
+      territory: { territoryLevel: 'national', country: 'HUN', iso3: 'HUN' }
+    });
+  }
+
+  // 3. 50 additional items (total 150 > 100)
+  for (let i = 1; i <= 50; i++) {
+    items.push({
+      id: `news-ext-${String(i).padStart(3, '0')}`,
+      kind: 'news',
+      newsCategory: 'news_global',
+      title: `[TESZTADAT] További túllépő hír #${i}`,
+      source: { name: 'RSS-Index', status: 'ok' },
+      observedAt: new Date(REF_NOW - 300000 - i * 1000).toISOString()
+    });
+  }
+
+  assert.equal(items.length, 150, 'Input must exceed 100-item aggregate ceiling');
+
+  const partitioned = partitionEventsByView(items);
+
+  // 1. Shared collection ceiling: <= 100 and saturated at 100
+  assert.ok(partitioned.news.length <= 100, `Shared collection must not exceed 100 (actual: ${partitioned.news.length})`);
+  assert.equal(partitioned.news.length, 100, 'Shared collection should be saturated at 100');
+
+  // 2. Per-view ceiling: <= 50
+  for (const view of Object.values(VIEWS)) {
+    const v = partitioned[view];
+    assert.ok(v.newsIds.length <= 50, `View ${view} newsIds.length (${v.newsIds.length}) must be <= 50`);
+    assert.equal(v.retainedNewsCount, v.newsIds.length, `retainedNewsCount must match newsIds.length for ${view}`);
+
+    // 3. CRUCIAL CONTRACT: Every single newsId in view.newsIds MUST be resolvable in partitions.news!
+    for (const newsId of v.newsIds) {
+      const found = partitioned.news.some(item => item.id === newsId);
+      assert.ok(found, `newsId ${newsId} referenced in view ${view} must exist in partitions.news!`);
+    }
+
+    // 4. Accessor resolves all items without dropping dangling references
+    const resolved = getViewNews(partitioned, view);
+    assert.equal(resolved.length, v.newsIds.length, `getViewNews for ${view} must resolve exactly ${v.newsIds.length} items`);
+  }
+
+  // 5. Eligible newsCount tracks all matching items prior to capping
+  assert.equal(partitioned[VIEWS.NATIONAL].newsCount, 50, 'National view matched 50 national items');
+  assert.equal(partitioned[VIEWS.GLOBAL].newsCount, 150, 'Global view matched all 150 items');
+});

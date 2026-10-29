@@ -105,12 +105,12 @@
   }
 
   function escSafeUrl(url) {
-    if (typeof url !== 'string') return '#';
+    if (typeof url !== 'string') return '';
     const trimmed = url.trim();
     if (/^https?:\/\/[^\s"'<>]+$/i.test(trimmed)) {
       return esc(trimmed);
     }
-    return '#';
+    return '';
   }
 
   function getPublisherName(item) {
@@ -294,7 +294,7 @@
   function renderNewsCard(item) {
     if (!item || typeof item !== 'object') return '';
     const safeUrl = escSafeUrl(item.link || item.url);
-    const hasValidUrl = safeUrl !== '#';
+    const hasValidUrl = Boolean(safeUrl);
     const titleHtml = hasValidUrl
       ? `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="vp-news-card-title">${esc(item.title)}</a>`
       : `<span class="vp-news-card-title">${esc(item.title)}</span>`;
@@ -383,7 +383,7 @@
     if (newsSourceEntries.length > 0 && !hasAnyConfigured) {
       const isRateLimited = newsSourceEntries.some(s => s.rateLimited === true);
       const isRobotsBlocked = newsSourceEntries.some(s => s.robotsBlocked === true);
-      let disabledMsg = 'Nincs bekapcsolt hírforrás (opt-in kikapcsolva). Engedélyezze a CRUCIX_ENABLE_FEED_* vagy CRUCIX_ENABLE_GNEWS változót.';
+      let disabledMsg = 'Nincs bekapcsolt hírforrás (opt-in kikapcsolva). Engedélyezze a CRUCIX_ENABLE_FEED_<ID> vagy CRUCIX_ENABLE_GNEWS változót.';
       if (isRateLimited) {
         disabledMsg = 'Hírforrás sebességkorlátozás miatt ideiglenesen felfüggesztve (várakozási idő aktív).';
       } else if (isRobotsBlocked) {
@@ -405,6 +405,9 @@
     }
 
     if (nonPromoNews.length === 0) {
+      const emptyMsg = newsSourceEntries.length === 0
+        ? 'Nincs az aktív nézethez illő hír (forrásállapot-adat nem áll rendelkezésre).'
+        : 'Nincs az aktív nézethez illő hír.';
       return `
         <div class="vp-newsfeed-section" id="vp-newsfeed">
           <div class="vp-newsfeed-head">
@@ -415,7 +418,7 @@
             <strong>Figyelem:</strong> Sajtó- és hatósági hírek; nem igazolt veszélyesemények.
           </div>
           ${coverageAlertHtml}
-          <div class="vp-empty">Nincs az aktív nézethez illő hír.</div>
+          <div class="vp-empty">${esc(emptyMsg)}</div>
         </div>
       `;
     }
@@ -471,9 +474,14 @@
 
     // 7. Ceiling notice
     let ceilingNote = '';
+    const retainedCount = viewCounters.retainedNewsCount ?? nonPromoNews.length;
     const eligibleCount = viewCounters.newsCount ?? nonPromoNews.length;
-    if (eligibleCount > nonPromoNews.length) {
-      ceilingNote = `<div class="vp-newsfeed-ceiling-note">Nézeti felső plafon aktív: ${nonPromoNews.length} hír megjelenítve (összes jogosult: ${eligibleCount} db).</div>`;
+    if (eligibleCount > retainedCount) {
+      let filterSuffix = '';
+      if (filtered.length !== nonPromoNews.length) {
+        filterSuffix = ` (szűrés után látható: ${filtered.length} db)`;
+      }
+      ceilingNote = `<div class="vp-newsfeed-ceiling-note">Nézeti felső plafon aktív: ${retainedCount} / ${eligibleCount} hír megtartva${filterSuffix}.</div>`;
     }
 
     // 8. Render news cards or empty filter state
@@ -484,11 +492,16 @@
       cardsContent = `<div class="vp-news-items">${filtered.map(item => renderNewsCard(item)).join('')}</div>`;
     }
 
+    let headBadgeText = `${retainedCount} db`;
+    if (filtered.length !== nonPromoNews.length) {
+      headBadgeText = `Szűrt: ${filtered.length} / ${retainedCount} db`;
+    }
+
     return `
       <div class="vp-newsfeed-section" id="vp-newsfeed">
         <div class="vp-newsfeed-head">
           <span class="vp-newsfeed-title">Hírfolyam – ${esc(VIEW_LABELS[activeView])}</span>
-          <span class="vp-sec-badge">${filtered.length} / ${nonPromoNews.length} db</span>
+          <span class="vp-sec-badge">${esc(headBadgeText)}</span>
         </div>
         <div class="vp-newsfeed-disclaimer" role="note">
           <strong>Figyelem:</strong> Sajtó- és hatósági hírek; nem igazolt veszélyesemények.
