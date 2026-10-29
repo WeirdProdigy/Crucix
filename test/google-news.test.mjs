@@ -14,7 +14,8 @@ import {
   parseGoogleNewsRss,
   briefing as googleNewsBriefing,
   resetGNewsState,
-  isGNewsEnabled
+  isGNewsEnabled,
+  isGNewsBriefingActive
 } from '../apis/sources/google-news.mjs';
 
 import { FEED_POLICIES } from '../apis/utils/freshness.mjs';
@@ -393,3 +394,115 @@ test('Full execution cycle with mock fetchFn aggregates all queries and diagnost
 
   resetGNewsState();
 });
+
+test('runSource source-specific timeout: Google-News receives 75s while others default to 30s', async () => {
+  // Test default 30s timeout on generic source
+  let genericTimedOut = false;
+  const mockSlowGeneric = async () => {
+    await new Promise(r => setTimeout(r, 50));
+    return { status: 'ok' };
+  };
+  const resGeneric = await runSource('TestGeneric', mockSlowGeneric, { sourceTimeoutMs: 20 });
+  assert.equal(resGeneric.status, 'error');
+  assert.ok(resGeneric.error.includes('timed out after 0.02s'));
+
+  // Test custom 75s timeout (tested here with small synthetic value e.g. 80ms vs 40ms)
+  const mockSlowGNews = async (opts) => {
+    assert.ok(opts.signal instanceof AbortSignal, 'Must receive AbortSignal');
+    await new Promise(r => setTimeout(r, 30));
+    return { status: 'ok', observations: [] };
+  };
+  const resGNews = await runSource('Google-News', mockSlowGNews, { timeoutMs: 100 });
+  assert.equal(resGNews.status, 'ok');
+});
+
+test('Concurrency guard prevents overlapping simultaneous briefing executions', async () => {
+  resetGNewsState();
+  let concurrentDetected = false;
+  let slowFetchResolve;
+  const slowFetchPromise = new Promise(resolve => { slowFetchResolve = resolve; });
+
+  const mockSlowFetch = async () => {
+    await slowFetchPromise;
+    return { status: 200, rawText: SYNTHETIC_GNEWS_XML };
+  };
+
+  // Launch first briefing (will hang until slowFetchResolve is called)
+  const p1 = googleNewsBriefing({
+    enabled: true,
+    now: REF_NOW,
+    fetchFn: mockSlowFetch
+  });
+
+  assert.equal(isGNewsBriefingActive(), true, 'isBriefingActive must be true while first run is in progress');
+
+  // Launch second briefing concurrently
+  const res2 = await googleNewsBriefing({
+    enabled: true,
+    now: REF_NOW,
+    fetchFn: async () => {
+      concurrentDetected = true;
+      return { status: 200, rawText: SYNTHETIC_GNEWS_XML };
+    }
+  });
+
+  assert.equal(concurrentDetected, false, 'Second run must not trigger any fetch calls');
+  assert.equal(res2.diagnostics.skippedConcurrent, true, 'Second run must flag skippedConcurrent: true');
+
+  // Complete first run
+  slowFetchResolve();
+  const res1 = await p1;
+  assert.equal(res1.status, 'ok');
+  assert.equal(isGNewsBriefingActive(), false, 'isBriefingActive must reset to false after completion');
+
+  resetGNewsState();
+});
+
+test('AbortSignal immediately stops execution without running subsequent queries', async () => {
+  resetGNewsState();
+  const controller = new AbortController();
+  let calls = 0;
+
+  const mockFetch = async () => {
+    calls++;
+    if (calls === 2) {
+      // Abort when query 2 finishes
+      controller.abort();
+    }
+    return { status: 200, rawText: SYNTHETIC_GNEWS_XML };
+  };
+
+  const res = await googleNewsBriefing({
+    enabled: true,
+    now: REF_NOW,
+    signal: controller.signal,
+    fetchFn: mockFetch
+  });
+
+  assert.equal(calls, 2, 'Should abort after 2 queries, not completing the remaining 4 queries');
+  assert.ok(res.diagnostics.queryDetails.some(d => d.status === 'aborted'), 'Must record aborted status in queryDetails');
+  assert.equal(isGNewsBriefingActive(), false, 'isBriefingActive must reset after abort');
+
+  resetGNewsState();
+});
+
+test('runSource aborts Google News adapter when timeout occurs', async () => {
+  resetGNewsState();
+  let adapterSawAbort = false;
+
+  const mockAdapter = async (opts) => {
+    assert.ok(opts.signal instanceof AbortSignal);
+    return new Promise((resolve) => {
+      opts.signal.addEventListener('abort', () => {
+        adapterSawAbort = true;
+        resolve({ status: 'aborted' });
+      });
+    });
+  };
+
+  const res = await runSource('Google-News', mockAdapter, { timeoutMs: 25 });
+  assert.equal(res.status, 'error');
+  assert.ok(res.error.includes('timed out'));
+  assert.equal(adapterSawAbort, true, 'Adapter signal must receive abort event on timeout');
+});
+

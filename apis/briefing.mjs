@@ -100,10 +100,19 @@ export function sourceErrors(value, depth = 0) {
 export async function runSource(name, fn, ...args) {
   const start = Date.now();
   let timer;
+  const timeoutMs = args[0]?.sourceTimeoutMs || args[0]?.timeoutMs || SOURCE_TIMEOUT_MS;
+  const controller = new AbortController();
   try {
-    const dataPromise = fn(...args);
+    let callArgs = args;
+    if (args.length > 0 && typeof args[0] === 'object' && args[0] !== null && !Array.isArray(args[0])) {
+      callArgs = [{ ...args[0], signal: controller.signal }, ...args.slice(1)];
+    }
+    const dataPromise = fn(...callArgs);
     const timeoutPromise = new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`Source ${name} timed out after ${SOURCE_TIMEOUT_MS / 1000}s`)), SOURCE_TIMEOUT_MS);
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error(`Source ${name} timed out after ${timeoutMs / 1000}s`));
+      }, timeoutMs);
     });
     const data = await Promise.race([dataPromise, timeoutPromise]);
     const errors = sourceErrors(data);
@@ -180,7 +189,7 @@ export async function fullBriefing() {
     runSource('RSS-HVG', hvgRss, { territoryConfig: config.territory }),
     runSource('RSS-Portfolio', portfolioRss, { territoryConfig: config.territory }),
     runSource('RSS-Qubit', qubitRss, { territoryConfig: config.territory }),
-    runSource('Google-News', googleNews, { territoryConfig: config.territory }),
+    runSource('Google-News', googleNews, { territoryConfig: config.territory, timeoutMs: 75_000 }),
     runSource('GDACS', gdacs),
     runSource('NOAA-SWPC', swpc),
     runSource('ECB', ecb),

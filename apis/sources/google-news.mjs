@@ -100,6 +100,7 @@ export const GNEWS_CATALOG = Object.freeze([
 let globalBackoffUntil = 0;
 let requestCountWindowStart = Date.now();
 let requestsInCurrentHour = 0;
+let isBriefingActive = false;
 const queryLastRunTimes = new Map();
 const queryObservationCache = new Map();
 
@@ -107,8 +108,13 @@ export function resetGNewsState() {
   globalBackoffUntil = 0;
   requestCountWindowStart = Date.now();
   requestsInCurrentHour = 0;
+  isBriefingActive = false;
   queryLastRunTimes.clear();
   queryObservationCache.clear();
+}
+
+export function isGNewsBriefingActive() {
+  return isBriefingActive;
 }
 
 export function getQueryLastRunTimes() {
@@ -321,7 +327,18 @@ export async function briefing(options = {}) {
     return res;
   }
 
-  // 2. Backoff window gate
+  // 2. Concurrency guard: strictly prevent overlapping runs
+  if (isBriefingActive) {
+    const cachedObs = Array.from(queryObservationCache.values()).flat();
+    const res = freshResult(GNEWS_SOURCE_NAME, new Date(now).toISOString(), cachedObs, {
+      itemCount: cachedObs.length,
+      diagnostics: { skippedConcurrent: true }
+    }, now);
+    res.domain = 'security';
+    return res;
+  }
+
+  // 3. Backoff window gate
   if (now < globalBackoffUntil) {
     const remainingSec = Math.ceil((globalBackoffUntil - now) / 1000);
     const res = unavailableResult(GNEWS_SOURCE_NAME, `Sebességkorlátozás miatt várakozás (${remainingSec}s hátralévő)`, {
@@ -338,140 +355,171 @@ export async function briefing(options = {}) {
     requestsInCurrentHour = 0;
   }
 
-  const fetchFn = options.fetchFn || safeFetch;
-  const catalog = Array.isArray(options.catalog) ? options.catalog : GNEWS_CATALOG;
-  const seenUrls = new Set();
-  const allObservations = [];
-  const queryDiagnostics = [];
-  let totalDroppedBlocklist = 0;
-  let totalDroppedDuplicate = 0;
-  let totalDroppedHaon = 0;
-  let anyTruncation = false;
+  isBriefingActive = true;
+  try {
+    const fetchFn = options.fetchFn || safeFetch;
+    const catalog = Array.isArray(options.catalog) ? options.catalog : GNEWS_CATALOG;
+    const seenUrls = new Set();
+    const allObservations = [];
+    const queryDiagnostics = [];
+    let totalDroppedBlocklist = 0;
+    let totalDroppedDuplicate = 0;
+    let totalDroppedHaon = 0;
+    let anyTruncation = false;
 
-  let queriesActuallyRun = 0;
-  let queriesSkippedNotDue = 0;
+    let queriesActuallyRun = 0;
+    let queriesSkippedNotDue = 0;
 
-  for (let idx = 0; idx < catalog.length; idx++) {
-    const queryConfig = catalog[idx];
-    const lastRun = queryLastRunTimes.get(queryConfig.id) || 0;
-    const interval = typeof queryConfig.intervalMs === 'number' ? queryConfig.intervalMs : 0;
+    for (let idx = 0; idx < catalog.length; idx++) {
+      if (options.signal?.aborted) {
+        queryDiagnostics.push({
+          query: catalog[idx].id,
+          status: 'aborted',
+          message: 'Lekérdezés megszakítva timeout/abort jelzés miatt'
+        });
+        break;
+      }
 
-    // Check cadence: only run if never run before (lastRun === 0),
-    // intervalMs elapsed, or options.forceRun === true
-    if (!options.forceRun && lastRun > 0 && (now - lastRun) < interval) {
-      queriesSkippedNotDue++;
-      const cached = queryObservationCache.get(queryConfig.id) || [];
-      for (const obs of cached) {
-        if (!seenUrls.has(obs.link)) {
-          seenUrls.add(obs.link);
-          allObservations.push(obs);
+      const queryConfig = catalog[idx];
+      const lastRun = queryLastRunTimes.get(queryConfig.id) || 0;
+      const interval = typeof queryConfig.intervalMs === 'number' ? queryConfig.intervalMs : 0;
+
+      // Check cadence: only run if never run before (lastRun === 0),
+      // intervalMs elapsed, or options.forceRun === true
+      if (!options.forceRun && lastRun > 0 && (now - lastRun) < interval) {
+        queriesSkippedNotDue++;
+        const cached = queryObservationCache.get(queryConfig.id) || [];
+        for (const obs of cached) {
+          if (!seenUrls.has(obs.link)) {
+            seenUrls.add(obs.link);
+            allObservations.push(obs);
+          }
         }
-      }
-      queryDiagnostics.push({
-        query: queryConfig.id,
-        status: 'cached_not_due',
-        itemCount: cached.length,
-        nextDueMs: interval - (now - lastRun)
-      });
-      continue;
-    }
-
-    // Enforce >= 5s pacing and jitter between consecutive live requests
-    if (queriesActuallyRun > 0 && typeof options.fetchFn !== 'function') {
-      const jitterMs = Math.floor(Math.random() * 1500);
-      const delayMs = 5000 + jitterMs;
-      await new Promise(r => setTimeout(r, delayMs));
-    }
-
-    const encodedQ = encodeURIComponent(queryConfig.query);
-    const url = `https://news.google.com/rss/search?q=${encodedQ}&hl=hu&gl=HU&ceid=HU:hu`;
-
-    requestsInCurrentHour++;
-    queriesActuallyRun++;
-    queryLastRunTimes.set(queryConfig.id, now);
-
-    try {
-      const response = await fetchFn(url, {
-        timeout: 15_000,
-        headers: {
-          'User-Agent': options.userAgent || 'Crucix/2.13.6 (https://github.com/mp3pintyo/Crucix)'
-        },
-        format: 'text'
-      });
-
-      if (response.status === 403 || response.status === 429) {
-        const retryAfterHeader = response.headers?.get?.('retry-after') || response.headers?.['retry-after'];
-        const backoffMs = retryAfterMs(retryAfterHeader, now) || (60 * 60 * 1000);
-        globalBackoffUntil = now + backoffMs;
-
-        const res = unavailableResult(GNEWS_SOURCE_NAME, `Google News blokkolás: HTTP ${response.status}`, {
-          blocked: true,
-          status: response.status,
-          backoffMs
-        }, now);
-        res.status = 'disabled';
-        res.domain = 'security';
-        return res;
-      }
-
-      const statusCode = response.status ?? (response.rawText ? 200 : undefined);
-      if (statusCode !== 200 || !response.rawText) {
         queryDiagnostics.push({
           query: queryConfig.id,
-          status: statusCode || 'network_error',
-          itemCount: 0
+          status: 'cached_not_due',
+          itemCount: cached.length,
+          nextDueMs: interval - (now - lastRun)
         });
         continue;
       }
 
-      const parsedRes = parseGoogleNewsRss(response.rawText, queryConfig, {
-        now,
-        territoryConfig: options.territoryConfig,
-        seenUrls
-      });
-
-      if (parsedRes.observations) {
-        queryObservationCache.set(queryConfig.id, parsedRes.observations);
-        allObservations.push(...parsedRes.observations);
-      }
-      if (parsedRes.diagnostics) {
-        queryDiagnostics.push(parsedRes.diagnostics);
-        totalDroppedBlocklist += parsedRes.diagnostics.droppedBlocklist || 0;
-        totalDroppedDuplicate += parsedRes.diagnostics.droppedDuplicate || 0;
-        totalDroppedHaon += parsedRes.diagnostics.droppedHaonIrrelevant || 0;
-        if (parsedRes.diagnostics.possibleTruncation) {
-          anyTruncation = true;
+      // Enforce >= 5s pacing and jitter between consecutive live requests
+      if (queriesActuallyRun > 0 && typeof options.fetchFn !== 'function') {
+        const jitterMs = Math.floor(Math.random() * 1500);
+        const delayMs = 5000 + jitterMs;
+        await new Promise(resolve => {
+          const t = setTimeout(resolve, delayMs);
+          if (options.signal) {
+            options.signal.addEventListener('abort', () => {
+              clearTimeout(t);
+              resolve();
+            }, { once: true });
+          }
+        });
+        if (options.signal?.aborted) {
+          queryDiagnostics.push({
+            query: queryConfig.id,
+            status: 'aborted',
+            message: 'Várakozás megszakítva timeout/abort jelzés miatt'
+          });
+          break;
         }
       }
 
-    } catch (err) {
-      queryDiagnostics.push({
-        query: queryConfig.id,
-        status: 'error',
-        error: err.message
-      });
+      const encodedQ = encodeURIComponent(queryConfig.query);
+      const url = `https://news.google.com/rss/search?q=${encodedQ}&hl=hu&gl=HU&ceid=HU:hu`;
+
+      requestsInCurrentHour++;
+      queriesActuallyRun++;
+      queryLastRunTimes.set(queryConfig.id, now);
+
+      try {
+        const response = await fetchFn(url, {
+          timeout: 15_000,
+          signal: options.signal,
+          headers: {
+            'User-Agent': options.userAgent || 'Crucix/2.13.6 (https://github.com/mp3pintyo/Crucix)'
+          },
+          format: 'text'
+        });
+
+        if (response.status === 403 || response.status === 429) {
+          const retryAfterHeader = response.headers?.get?.('retry-after') || response.headers?.['retry-after'];
+          const backoffMs = retryAfterMs(retryAfterHeader, now) || (60 * 60 * 1000);
+          globalBackoffUntil = now + backoffMs;
+
+          const res = unavailableResult(GNEWS_SOURCE_NAME, `Google News blokkolás: HTTP ${response.status}`, {
+            blocked: true,
+            status: response.status,
+            backoffMs
+          }, now);
+          res.status = 'disabled';
+          res.domain = 'security';
+          return res;
+        }
+
+        const statusCode = response.status ?? (response.rawText ? 200 : undefined);
+        if (statusCode !== 200 || !response.rawText) {
+          queryDiagnostics.push({
+            query: queryConfig.id,
+            status: statusCode || 'network_error',
+            itemCount: 0
+          });
+          continue;
+        }
+
+        const parsedRes = parseGoogleNewsRss(response.rawText, queryConfig, {
+          now,
+          territoryConfig: options.territoryConfig,
+          seenUrls
+        });
+
+        if (parsedRes.observations) {
+          queryObservationCache.set(queryConfig.id, parsedRes.observations);
+          allObservations.push(...parsedRes.observations);
+        }
+        if (parsedRes.diagnostics) {
+          queryDiagnostics.push(parsedRes.diagnostics);
+          totalDroppedBlocklist += parsedRes.diagnostics.droppedBlocklist || 0;
+          totalDroppedDuplicate += parsedRes.diagnostics.droppedDuplicate || 0;
+          totalDroppedHaon += parsedRes.diagnostics.droppedHaonIrrelevant || 0;
+          if (parsedRes.diagnostics.possibleTruncation) {
+            anyTruncation = true;
+          }
+        }
+
+      } catch (err) {
+        queryDiagnostics.push({
+          query: queryConfig.id,
+          status: 'error',
+          error: err.message
+        });
+      }
     }
+
+    const latestObservedAt = allObservations[0]?.observedAt || new Date(now).toISOString();
+
+    const compositeDiagnostics = {
+      queriesRun: queriesActuallyRun,
+      queriesSkipped: queriesSkippedNotDue,
+      requestsThisHour: requestsInCurrentHour,
+      totalDroppedBlocklist,
+      totalDroppedDuplicate,
+      totalDroppedHaon,
+      possibleTruncation: anyTruncation,
+      queryDetails: queryDiagnostics
+    };
+
+    const finalRes = freshResult(GNEWS_SOURCE_NAME, latestObservedAt, allObservations, {
+      itemCount: allObservations.length,
+      diagnostics: compositeDiagnostics
+    }, now);
+
+    finalRes.domain = 'security';
+    finalRes.diagnostics = compositeDiagnostics;
+    return finalRes;
+  } finally {
+    isBriefingActive = false;
   }
-
-  const latestObservedAt = allObservations[0]?.observedAt || new Date(now).toISOString();
-
-  const compositeDiagnostics = {
-    queriesRun: queriesActuallyRun,
-    queriesSkipped: queriesSkippedNotDue,
-    requestsThisHour: requestsInCurrentHour,
-    totalDroppedBlocklist,
-    totalDroppedDuplicate,
-    totalDroppedHaon,
-    possibleTruncation: anyTruncation,
-    queryDetails: queryDiagnostics
-  };
-
-  const finalRes = freshResult(GNEWS_SOURCE_NAME, latestObservedAt, allObservations, {
-    itemCount: allObservations.length,
-    diagnostics: compositeDiagnostics
-  }, now);
-
-  finalRes.domain = 'security';
-  finalRes.diagnostics = compositeDiagnostics;
-  return finalRes;
 }
