@@ -2068,6 +2068,7 @@
       "uniqueEvents": 4,
       "cancelledChains": 0,
       "newsCount": 0,
+      "retainedNewsCount": 0,
       "newsIds": [],
       "breakdown": {
         "confirmedLocal": 2,
@@ -2441,6 +2442,7 @@
       "uniqueEvents": 4,
       "cancelledChains": 0,
       "newsCount": 1,
+      "retainedNewsCount": 1,
       "newsIds": [
         "event-33333333333333333333333333333303"
       ],
@@ -2814,6 +2816,7 @@
       "uniqueEvents": 5,
       "cancelledChains": 0,
       "newsCount": 1,
+      "retainedNewsCount": 1,
       "newsIds": [
         "event-33333333333333333333333333333303"
       ],
@@ -3289,6 +3292,7 @@
       "uniqueEvents": 8,
       "cancelledChains": 0,
       "newsCount": 1,
+      "retainedNewsCount": 1,
       "newsIds": [
         "event-33333333333333333333333333333303"
       ],

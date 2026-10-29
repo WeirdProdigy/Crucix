@@ -446,3 +446,330 @@ test('11. View persistence across reloads via localStorage', () => {
   const harness2 = createHarness(sharedStorage);
   assert.equal(harness2.api.getActiveView(), 'county', 'Reload must restore saved view mode from localStorage');
 });
+
+test('12. Hírfolyam newsIds-feloldás és nézetváltás', () => {
+  const { api } = createHarness();
+  api.resetNewsFilter();
+
+  const mockSnapshot = {
+    events: [],
+    views: {
+      local: { newsCount: 1, retainedNewsCount: 1, newsIds: ['news-loc-1'] },
+      global: { newsCount: 2, retainedNewsCount: 2, newsIds: ['news-loc-1', 'news-glob-2'] },
+      news: [
+        {
+          id: 'news-loc-1',
+          kind: 'news',
+          newsCategory: 'news_local',
+          title: '[TESZTADAT] Helyi hír Bihartordáról',
+          source: { name: 'RSS-Dehir', displayName: 'Dehir' },
+          link: 'https://example.com/loc-1',
+          publishedAt: '2026-10-28T12:00:00Z',
+          territory: { settlementName: 'Bihartorda' }
+        },
+        {
+          id: 'news-glob-2',
+          kind: 'news',
+          newsCategory: 'news_global',
+          title: '[TESZTADAT] Globális nemzetközi csúcstalálkozó',
+          source: { name: 'RSS-Telex', displayName: 'Telex' },
+          link: 'https://example.com/glob-2',
+          publishedAt: '2026-10-28T13:00:00Z'
+        }
+      ]
+    }
+  };
+
+  // 1. In Local view: ONLY news-loc-1 is resolved and rendered
+  api.setView(api.VIEWS.LOCAL, false);
+  const localHtml = api.panelHtml(mockSnapshot);
+  assert.ok(localHtml.includes('Helyi hír Bihartordáról'), 'Local view must render news-loc-1');
+  assert.ok(!localHtml.includes('Globális nemzetközi csúcstalálkozó'), 'Local view must NOT render news-glob-2');
+
+  // 2. In Global view: BOTH news-loc-1 and news-glob-2 are rendered
+  api.setView(api.VIEWS.GLOBAL, false);
+  const globalHtml = api.panelHtml(mockSnapshot);
+  assert.ok(globalHtml.includes('Helyi hír Bihartordáról'), 'Global view must render news-loc-1');
+  assert.ok(globalHtml.includes('Globális nemzetközi csúcstalálkozó'), 'Global view must render news-glob-2');
+});
+
+test('13. Kártyaelemek megjelenítése: Google News eredeti kiadó, publikálási idő és címkék', () => {
+  const { api } = createHarness();
+  api.resetNewsFilter();
+
+  const gnewsItem = {
+    id: 'news-gnews-1',
+    kind: 'news',
+    newsCategory: 'news_hazard',
+    title: '[TESZTADAT] Viharos szél és áramkimaradások a térségben',
+    source: { name: 'Google-News', publisher: 'HAON' },
+    facts: { sourcePublisher: 'HAON', settlement: 'Debrecen' },
+    territory: { settlementName: 'Debrecen', needsLocalReview: true },
+    link: 'https://news.google.com/rss/articles/CBMi123456',
+    publishedAt: '2026-10-28T14:30:00Z'
+  };
+
+  const cardHtml = api.renderNewsCard(gnewsItem);
+
+  // 1. Google News original publisher
+  assert.ok(cardHtml.includes('HAON via Google Hírek'), 'Must show original publisher "HAON via Google Hírek"');
+
+  // 2. Published time (NEVER event time)
+  assert.ok(cardHtml.includes('Publikálva:'), 'Must be explicitly labelled "Publikálva:"');
+  assert.ok(!cardHtml.includes('Esemény ideje:'), 'Must NOT label published time as event time');
+  assert.ok(cardHtml.includes('2026-10-28T14:30:00Z'), 'Full ISO must be present in title attribute');
+
+  // 3. Topic badge for news_hazard: "Veszélyhelyzeti témájú hír" (NEVER "Aktív veszély")
+  assert.ok(cardHtml.includes('Veszélyhelyzeti témájú hír'), 'Must label news_hazard as "Veszélyhelyzeti témájú hír"');
+  assert.ok(!cardHtml.includes('Aktív veszély'), 'Strictly forbidden to label news as "Aktív veszély"');
+
+  // 4. Territory badges
+  assert.ok(cardHtml.includes('Település: Debrecen'));
+  assert.ok(cardHtml.includes('Ellenőrizendő említés'));
+
+  // 5. External link
+  assert.ok(cardHtml.includes('target="_blank"'));
+  assert.ok(cardHtml.includes('rel="noopener noreferrer"'));
+  assert.ok(cardHtml.includes('https://news.google.com/rss/articles/CBMi123456'));
+});
+
+test('14. Kötelező értelmezési határ: Sajtó- és hatósági hírek; nem igazolt veszélyesemények', () => {
+  const { api } = createHarness();
+  const mockSnapshot = {
+    views: {
+      local: { newsCount: 0, retainedNewsCount: 0, newsIds: [] },
+      news: []
+    }
+  };
+  const html = api.newsFeedHtml(mockSnapshot);
+  assert.ok(html.includes('Sajtó- és hatósági hírek; nem igazolt veszélyesemények.'), 'Disclaimer banner must be present');
+});
+
+test('15. Forrás- és témaszűrés, rendezésváltás', () => {
+  const { api } = createHarness();
+  api.setView(api.VIEWS.GLOBAL, false);
+
+  const mockSnapshot = {
+    views: {
+      global: { newsCount: 3, retainedNewsCount: 3, newsIds: ['n1', 'n2', 'n3'] },
+      news: [
+        {
+          id: 'n1',
+          kind: 'news',
+          newsCategory: 'news_hazard',
+          title: '[TESZTADAT] Veszélyhír',
+          source: { name: 'RSS-Telex', displayName: 'Telex' },
+          link: 'https://example.com/1',
+          publishedAt: '2026-10-28T10:00:00Z'
+        },
+        {
+          id: 'n2',
+          kind: 'news',
+          newsCategory: 'news_energy',
+          title: '[TESZTADAT] Energiahír',
+          source: { name: 'RSS-HVG', displayName: 'HVG' },
+          link: 'https://example.com/2',
+          publishedAt: '2026-10-28T12:00:00Z'
+        },
+        {
+          id: 'n3',
+          kind: 'news',
+          newsCategory: 'news_local',
+          title: '[TESZTADAT] Helyi hír',
+          source: { name: 'RSS-Dehir', displayName: 'Dehir' },
+          link: 'https://example.com/3',
+          publishedAt: '2026-10-28T14:00:00Z'
+        }
+      ]
+    }
+  };
+
+  // Default: all 3 rendered
+  api.resetNewsFilter();
+  let html = api.newsFeedHtml(mockSnapshot);
+  assert.ok(html.includes('[TESZTADAT] Veszélyhír'));
+  assert.ok(html.includes('[TESZTADAT] Energiahír'));
+  assert.ok(html.includes('[TESZTADAT] Helyi hír'));
+
+  // Filter by source: Telex
+  api.setNewsFilter({ source: 'Telex' });
+  html = api.newsFeedHtml(mockSnapshot);
+  assert.ok(html.includes('[TESZTADAT] Veszélyhír'));
+  assert.ok(!html.includes('[TESZTADAT] Energiahír'));
+  assert.ok(!html.includes('[TESZTADAT] Helyi hír'));
+
+  // Filter by category: news_energy
+  api.setNewsFilter({ source: 'all', category: 'news_energy' });
+  html = api.newsFeedHtml(mockSnapshot);
+  assert.ok(!html.includes('[TESZTADAT] Veszélyhír'));
+  assert.ok(html.includes('[TESZTADAT] Energiahír'));
+  assert.ok(!html.includes('[TESZTADAT] Helyi hír'));
+
+  // Sort by latest: n3 (14:00) comes before n1 (10:00)
+  api.setNewsFilter({ source: 'all', category: 'all', sort: 'latest' });
+  html = api.newsFeedHtml(mockSnapshot);
+  const idxN3 = html.indexOf('[TESZTADAT] Helyi hír');
+  const idxN1 = html.indexOf('[TESZTADAT] Veszélyhír');
+  assert.ok(idxN3 < idxN1, 'Latest sort puts newest 14:00 item before 10:00 item');
+
+  api.resetNewsFilter();
+});
+
+test('16. Üres, disabled és hibás állapotok megkülönböztetése', () => {
+  const { api } = createHarness();
+  api.resetNewsFilter();
+
+  // 1. Opt-in disabled
+  const optInSnapshot = {
+    coverage: {
+      'Police-Hajdu': { status: 'disabled' },
+      'RSS-Dehir': { status: 'disabled' }
+    },
+    views: { local: { newsCount: 0, retainedNewsCount: 0, newsIds: [] }, news: [] }
+  };
+  const optInHtml = api.newsFeedHtml(optInSnapshot);
+  assert.ok(optInHtml.includes('CRUCIX_ENABLE_FEED_* vagy CRUCIX_ENABLE_GNEWS'));
+
+  // 2. Technical block (robots / 403)
+  const robotsBlockedSnapshot = {
+    coverage: {
+      'RSS-Telex': { status: 'disabled', robotsBlocked: true }
+    },
+    views: { local: { newsCount: 0, retainedNewsCount: 0, newsIds: [] }, news: [] }
+  };
+  const robotsHtml = api.newsFeedHtml(robotsBlockedSnapshot);
+  assert.ok(robotsHtml.includes('technikai tiltás (robots.txt vagy HTTP 403)'));
+
+  // 3. Rate limited / backoff (429)
+  const rateLimitSnapshot = {
+    coverage: {
+      'Google-News': { status: 'disabled', rateLimited: true }
+    },
+    views: { local: { newsCount: 0, retainedNewsCount: 0, newsIds: [] }, news: [] }
+  };
+  const rateHtml = api.newsFeedHtml(rateLimitSnapshot);
+  assert.ok(rateHtml.includes('sebességkorlátozás miatt ideiglenesen felfüggesztve'));
+
+  // 4. Stale / error warning
+  const staleSnapshot = {
+    coverage: {
+      'RSS-Dehir': { status: 'stale_error' }
+    },
+    views: {
+      local: { newsCount: 1, retainedNewsCount: 1, newsIds: ['n1'] },
+      news: [{ id: 'n1', title: 'Hír', kind: 'news', link: 'https://example.com' }]
+    }
+  };
+  const staleHtml = api.newsFeedHtml(staleSnapshot);
+  assert.ok(staleHtml.includes('vp-news-alert-stale'));
+
+  // 5. Filter produced empty result
+  api.setNewsFilter({ source: 'NemletezoKiadó' });
+  const filterEmptyHtml = api.newsFeedHtml(staleSnapshot);
+  assert.ok(filterEmptyHtml.includes('Van hír (1 db), de a szűrés után nincs találat.'));
+  api.resetNewsFilter();
+});
+
+test('17. isPublisherPromo kizárása a hírfolyamból', () => {
+  const { api } = createHarness();
+  api.resetNewsFilter();
+  api.setView(api.VIEWS.GLOBAL, false);
+
+  const mockSnapshot = {
+    views: {
+      global: { newsCount: 2, retainedNewsCount: 2, newsIds: ['promo-1', 'real-1'] },
+      news: [
+        {
+          id: 'promo-1',
+          kind: 'news',
+          isPublisherPromo: true,
+          title: '[TESZTADAT] Kiadói promóciós cikk',
+          link: 'https://example.com/promo'
+        },
+        {
+          id: 'real-1',
+          kind: 'news',
+          isPublisherPromo: false,
+          title: '[TESZTADAT] Valós hír',
+          link: 'https://example.com/real'
+        }
+      ]
+    }
+  };
+
+  const html = api.newsFeedHtml(mockSnapshot);
+  assert.ok(!html.includes('Kiadói promóciós cikk'), 'Promo items must NEVER appear in newsfeed');
+  assert.ok(html.includes('Valós hír'), 'Real news must appear');
+});
+
+test('18. Eseményszámlálók változatlansága', () => {
+  const { api } = createHarness();
+  const mockSnapshot = {
+    events: [
+      { id: 'ev-1', kind: 'incident', title: 'Fizikai esemény', views: { local: { inView: true, category: 'confirmedLocal' } } }
+    ],
+    views: {
+      local: { uniqueEvents: 42, totalEvents: 100, newsCount: 1, newsIds: ['n1'] },
+      news: [{ id: 'n1', kind: 'news', title: 'Hír', link: 'https://example.com' }]
+    }
+  };
+
+  // Call panelHtml and newsFeedHtml
+  api.panelHtml(mockSnapshot);
+  api.newsFeedHtml(mockSnapshot);
+
+  // Assert counters remained intact
+  assert.equal(mockSnapshot.views.local.uniqueEvents, 42, 'uniqueEvents must be untouched');
+  assert.equal(mockSnapshot.views.local.totalEvents, 100, 'totalEvents must be untouched');
+});
+
+test('19. HTML-injekció és veszélyes linkek (XSS) megelőzése', () => {
+  const { api } = createHarness();
+
+  const maliciousItem = {
+    id: 'xss-1',
+    kind: 'news',
+    title: '<img src=x onerror=alert("XSS")>Ártalmas cím',
+    source: { name: '<b onmouseover=alert(1)>Kiadó</b>' },
+    link: 'javascript:alert(document.cookie)',
+    publishedAt: '2026-10-28T10:00:00Z'
+  };
+
+  const cardHtml = api.renderNewsCard(maliciousItem);
+
+  // Escaped title
+  assert.ok(!cardHtml.includes('<img src=x'), 'Raw HTML tag in title must be escaped');
+  assert.ok(cardHtml.includes('&lt;img src=x'), 'Title must be HTML entity escaped');
+
+  // Escaped publisher
+  assert.ok(!cardHtml.includes('<b onmouseover'), 'Raw HTML tag in publisher must be escaped');
+  assert.ok(cardHtml.includes('&lt;b onmouseover'), 'Publisher must be HTML entity escaped');
+
+  // Sanitized javascript: link
+  assert.ok(!cardHtml.includes('href="javascript:'), 'javascript: URLs must be neutralized');
+  assert.ok(!cardHtml.includes('href="data:'), 'data: URLs must be neutralized');
+});
+
+test('20. Régi snapshot kompatibilitás (hiányzó mezők)', () => {
+  const { api } = createHarness();
+  assert.doesNotThrow(() => api.panelHtml({}), 'Must not throw on empty object snapshot');
+  assert.doesNotThrow(() => api.panelHtml(null), 'Must not throw on null snapshot');
+  assert.doesNotThrow(() => api.panelHtml({ events: [] }), 'Must not throw on snapshot without views');
+  assert.doesNotThrow(() => api.newsFeedHtml({}), 'Must not throw on empty snapshot in newsFeedHtml');
+});
+
+test('21. Nézeti plafon figyelmeztetés', () => {
+  const { api } = createHarness();
+  api.resetNewsFilter();
+
+  const mockSnapshot = {
+    views: {
+      local: { newsCount: 65, retainedNewsCount: 50, newsIds: ['n1'] },
+      news: [{ id: 'n1', kind: 'news', title: 'Helyi hír', link: 'https://example.com' }]
+    }
+  };
+
+  const html = api.newsFeedHtml(mockSnapshot);
+  assert.ok(html.includes('vp-newsfeed-ceiling-note'));
+  assert.ok(html.includes('Nézeti felső plafon aktív: 1 hír megjelenítve (összes jogosult: 65 db).'));
+});

@@ -1124,3 +1124,66 @@ test('30. Categorization regression: ceasefire (tűzszünet) exclusion and speci
   const catBattery = classifyNewsCategory('Gajdos László: Feketelistára került az iváncsai akkumulátorgyár', 'zhvg');
   assert.equal(catBattery, 'news_energy', 'Battery factory headline classified as news_energy specifically due to "akkumulátorgyár" keyword match');
 });
+
+test('31. Territorial view ceilings, global saturation resilience, and newsCount semantics', () => {
+  // 1. Generate 70 pure global items
+  const globalItems = [];
+  for (let i = 1; i <= 70; i++) {
+    globalItems.push({
+      id: `news-glob-${String(i).padStart(3, '0')}`,
+      kind: 'news',
+      newsCategory: 'news_global',
+      title: `[TESZTADAT] Külföldi hír ${i}`,
+      source: { name: 'RSS-Telex', status: 'ok' },
+      observedAt: new Date(Date.now() - i * 60000).toISOString(),
+      publishedAt: new Date(Date.now() - i * 60000).toISOString()
+    });
+  }
+
+  // 2. Add 1 local item (with settlement context) arriving AFTER global items
+  const localItem = {
+    id: 'news-local-bihartorda-audit',
+    kind: 'news',
+    newsCategory: 'news_local',
+    title: '[TESZTADAT] Helyi hír Bihartordáról',
+    source: { name: 'RSS-Dehir', status: 'ok' },
+    observedAt: new Date().toISOString(),
+    publishedAt: new Date().toISOString(),
+    territory: {
+      territoryLevel: 'settlement',
+      settlementId: 'bihartorda',
+      settlementName: 'Bihartorda',
+      needsLocalReview: true,
+      localRelevanceReason: 'text_mention'
+    }
+  };
+
+  // Run partitioning with global items first, then local item
+  const allEvents = [...globalItems, localItem];
+  const partitioned = partitionEventsByView(allEvents);
+
+  // 3. Semantics check: newsCount vs retainedNewsCount / newsIds.length
+  const globalView = partitioned[VIEWS.GLOBAL];
+  assert.equal(globalView.newsCount, 71, 'newsCount represents all eligible items (70 global + 1 local = 71)');
+  assert.equal(globalView.retainedNewsCount, 50, 'retainedNewsCount is capped at VIEW_NEWS_CAP = 50');
+  assert.equal(globalView.newsIds.length, 50, 'newsIds.length is capped at 50');
+
+  // 4. Local view qualification and global saturation resilience:
+  // Global view saturation (50 items) must NOT drop local news which has space in Local view
+  const localView = partitioned[VIEWS.LOCAL];
+  assert.equal(localView.newsCount, 1, 'Local view newsCount is 1');
+  assert.equal(localView.retainedNewsCount, 1, 'Local view retainedNewsCount is 1');
+  assert.equal(localView.newsIds.length, 1);
+  assert.equal(localView.newsIds[0], localItem.id, 'Local item must be retained in Local view newsIds');
+
+  // 5. Shared collection contains the union of referenced items
+  assert.ok(partitioned.news.some(n => n.id === localItem.id), 'Local item must be present in partitions.news');
+  assert.equal(partitioned.news[0].id, localItem.id, 'Local item took slot 0 in partitions.news due to priority');
+  assert.equal(partitioned.news.length, 50, 'partitions.news holds union of referenced items (1 local + 49 global = 50, as local item also occupies global view slot)');
+
+  // 6. Accessor getViewNews returns the local item cleanly
+  const resolvedLocal = getViewNews(partitioned, VIEWS.LOCAL);
+  assert.equal(resolvedLocal.length, 1);
+  assert.equal(resolvedLocal[0].id, localItem.id);
+  assert.equal(resolvedLocal[0].title, '[TESZTADAT] Helyi hír Bihartordáról');
+});

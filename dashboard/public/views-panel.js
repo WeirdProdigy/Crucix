@@ -45,6 +45,38 @@
     offline_snapshot: 'Offline pillanatkép'
   });
 
+  const NEWS_TOPIC_LABELS = Object.freeze({
+    news_hazard: 'Veszélyhelyzeti témájú hír',
+    news_local: 'Helyi hír',
+    news_regional: 'Megyei hír',
+    news_national: 'Országos hír',
+    news_global: 'Nemzetközi hír',
+    news_energy: 'Energetikai hír',
+    news_economy: 'Gazdasági hír',
+    news_agriculture: 'Agrár és állategészségügyi hír',
+    news_science: 'Tudományos hír',
+    news_other: 'Hír'
+  });
+
+  const HUNGARIAN_NEWS_SOURCES = Object.freeze([
+    'Police-Hajdu',
+    'RSS-Dehir',
+    'RSS-Telex',
+    'RSS-444',
+    'RSS-24hu',
+    'RSS-Index',
+    'RSS-HVG',
+    'RSS-Portfolio',
+    'RSS-Qubit',
+    'Google-News'
+  ]);
+
+  let newsFilter = {
+    source: 'all',
+    category: 'all',
+    sort: 'priority' // 'priority' | 'latest'
+  };
+
   let activeView = readSavedView();
   let changeListeners = [];
 
@@ -70,6 +102,28 @@
       '"': '&quot;',
       "'": '&#39;'
     }[c]));
+  }
+
+  function escSafeUrl(url) {
+    if (typeof url !== 'string') return '#';
+    const trimmed = url.trim();
+    if (/^https?:\/\/[^\s"'<>]+$/i.test(trimmed)) {
+      return esc(trimmed);
+    }
+    return '#';
+  }
+
+  function getPublisherName(item) {
+    if (!item || typeof item !== 'object') return 'Ismeretlen kiadó';
+    const isGNews = item.source?.name === 'Google-News' || item.source === 'Google-News';
+    const origPublisher = item.source?.publisher || item.facts?.sourcePublisher;
+    if (isGNews && origPublisher) {
+      return `${origPublisher} via Google Hírek`;
+    }
+    if (isGNews) {
+      return 'Google Hírek';
+    }
+    return item.source?.displayName || item.source?.name || item.source || 'Ismeretlen kiadó';
   }
 
   function formatTime(val) {
@@ -237,6 +291,216 @@
     `;
   }
 
+  function renderNewsCard(item) {
+    if (!item || typeof item !== 'object') return '';
+    const safeUrl = escSafeUrl(item.link || item.url);
+    const hasValidUrl = safeUrl !== '#';
+    const titleHtml = hasValidUrl
+      ? `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="vp-news-card-title">${esc(item.title)}</a>`
+      : `<span class="vp-news-card-title">${esc(item.title)}</span>`;
+
+    const topicKey = item.newsCategory || 'news_other';
+    const topicLabel = NEWS_TOPIC_LABELS[topicKey] || 'Hír';
+    const topicBadge = `<span class="vp-badge-news-topic vp-badge-topic-${esc(topicKey)}">${esc(topicLabel)}</span>`;
+
+    let settlementBadge = '';
+    const settlement = item.territory?.settlementName || item.facts?.settlement;
+    if (settlement) {
+      settlementBadge = `<span class="vp-badge-news-settlement">Település: ${esc(settlement)}</span>`;
+    }
+
+    let reviewBadge = '';
+    if (item.needsLocalReview || item.territory?.needsLocalReview) {
+      reviewBadge = `<span class="vp-badge-news-review" title="A hír szövege alapján ellenőrizendő említés">Ellenőrizendő említés</span>`;
+    }
+
+    const publisher = getPublisherName(item);
+    const rawTime = item.publishedAt || item.observedAt || '';
+    const timeStr = formatTime(rawTime);
+    const pubTimeHtml = timeStr ? `<span class="vp-news-time" title="${esc(rawTime)}">Publikálva: ${esc(timeStr)}</span>` : '';
+
+    const extLinkHtml = hasValidUrl
+      ? `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="vp-news-extlink" aria-label="Cikk megnyitása új lapon">&#8599; Cikk</a>`
+      : '';
+
+    return `
+      <div class="vp-news-card" data-news-id="${esc(item.id)}">
+        <div class="vp-news-card-top">
+          ${titleHtml}
+          <div class="vp-news-badges">
+            ${topicBadge}
+            ${settlementBadge}
+            ${reviewBadge}
+          </div>
+        </div>
+        <div class="vp-news-card-meta">
+          <span class="vp-news-publisher">${esc(publisher)}</span>
+          ${pubTimeHtml ? `<span>·</span>${pubTimeHtml}` : ''}
+          ${extLinkHtml}
+        </div>
+      </div>
+    `;
+  }
+
+  function setNewsFilter(filter = {}) {
+    if (filter.source !== undefined) newsFilter.source = filter.source;
+    if (filter.category !== undefined) newsFilter.category = filter.category;
+    if (filter.sort !== undefined) newsFilter.sort = filter.sort;
+    for (const fn of changeListeners) {
+      try { fn(activeView); } catch {}
+    }
+  }
+
+  function getNewsFilter() {
+    return { ...newsFilter };
+  }
+
+  function resetNewsFilter() {
+    newsFilter = { source: 'all', category: 'all', sort: 'priority' };
+  }
+
+  function newsFeedHtml(snapshot) {
+    const rawNews = getViewNews(snapshot, activeView);
+    const viewCounters = snapshot?.views?.[activeView] || {};
+    const coverage = snapshot?.coverage || {};
+
+    // 1. Filter out publisher promo items
+    const nonPromoNews = rawNews.filter(n => n && n.isPublisherPromo !== true);
+
+    // 2. Coverage health and opt-in / technical block evaluation
+    const newsSourceEntries = HUNGARIAN_NEWS_SOURCES
+      .map(name => coverage[name])
+      .filter(Boolean);
+
+    let coverageAlertHtml = '';
+    const hasAnyConfigured = newsSourceEntries.some(s => s.status !== 'unconfigured' && s.status !== 'disabled');
+    const hasAnyStaleError = newsSourceEntries.some(s => s.status === 'stale_error');
+
+    if (hasAnyStaleError) {
+      coverageAlertHtml = `<div class="vp-news-alert-stale">Figyelem: Egy vagy több hírforrás frissítése késik vagy hibát jelzett.</div>`;
+    }
+
+    if (newsSourceEntries.length > 0 && !hasAnyConfigured) {
+      const isRateLimited = newsSourceEntries.some(s => s.rateLimited === true);
+      const isRobotsBlocked = newsSourceEntries.some(s => s.robotsBlocked === true);
+      let disabledMsg = 'Nincs bekapcsolt hírforrás (opt-in kikapcsolva). Engedélyezze a CRUCIX_ENABLE_FEED_* vagy CRUCIX_ENABLE_GNEWS változót.';
+      if (isRateLimited) {
+        disabledMsg = 'Hírforrás sebességkorlátozás miatt ideiglenesen felfüggesztve (várakozási idő aktív).';
+      } else if (isRobotsBlocked) {
+        disabledMsg = 'Hírforrás technikai tiltás (robots.txt vagy HTTP 403) miatt leállítva.';
+      }
+
+      return `
+        <div class="vp-newsfeed-section" id="vp-newsfeed">
+          <div class="vp-newsfeed-head">
+            <span class="vp-newsfeed-title">Hírfolyam – ${esc(VIEW_LABELS[activeView])}</span>
+            <span class="vp-sec-badge">0 db</span>
+          </div>
+          <div class="vp-newsfeed-disclaimer" role="note">
+            <strong>Figyelem:</strong> Sajtó- és hatósági hírek; nem igazolt veszélyesemények.
+          </div>
+          <div class="vp-empty vp-news-disabled">${esc(disabledMsg)}</div>
+        </div>
+      `;
+    }
+
+    if (nonPromoNews.length === 0) {
+      return `
+        <div class="vp-newsfeed-section" id="vp-newsfeed">
+          <div class="vp-newsfeed-head">
+            <span class="vp-newsfeed-title">Hírfolyam – ${esc(VIEW_LABELS[activeView])}</span>
+            <span class="vp-sec-badge">0 db</span>
+          </div>
+          <div class="vp-newsfeed-disclaimer" role="note">
+            <strong>Figyelem:</strong> Sajtó- és hatósági hírek; nem igazolt veszélyesemények.
+          </div>
+          ${coverageAlertHtml}
+          <div class="vp-empty">Nincs az aktív nézethez illő hír.</div>
+        </div>
+      `;
+    }
+
+    // 3. Unique publishers and categories for filter controls
+    const uniquePublishers = [...new Set(nonPromoNews.map(n => getPublisherName(n)).filter(Boolean))].sort();
+    const uniqueCategories = [...new Set(nonPromoNews.map(n => n.newsCategory || 'news_other'))].sort();
+
+    // 4. Apply active filters
+    let filtered = nonPromoNews;
+    if (newsFilter.source !== 'all') {
+      filtered = filtered.filter(n => getPublisherName(n) === newsFilter.source);
+    }
+    if (newsFilter.category !== 'all') {
+      filtered = filtered.filter(n => (n.newsCategory || 'news_other') === newsFilter.category);
+    }
+
+    // 5. Apply sorting
+    if (newsFilter.sort === 'latest') {
+      filtered = [...filtered].sort((a, b) => {
+        const ta = Date.parse(a.publishedAt || a.observedAt || '') || 0;
+        const tb = Date.parse(b.publishedAt || b.observedAt || '') || 0;
+        return tb - ta;
+      });
+    }
+
+    // 6. Build filter controls HTML
+    const filtersHtml = `
+      <div class="vp-newsfeed-filters" role="toolbar" aria-label="Hírfolyam szűrők">
+        <div class="vp-filter-group">
+          <label for="vp-filter-source" class="vp-filter-label">Kiadó:</label>
+          <select id="vp-filter-source" class="vp-select" onchange="window.CrucixViewsPanel?.setNewsFilter({source:this.value})">
+            <option value="all"${newsFilter.source === 'all' ? ' selected' : ''}>Összes kiadó (${uniquePublishers.length})</option>
+            ${uniquePublishers.map(pub => `<option value="${esc(pub)}"${newsFilter.source === pub ? ' selected' : ''}>${esc(pub)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="vp-filter-group">
+          <label for="vp-filter-category" class="vp-filter-label">Téma:</label>
+          <select id="vp-filter-category" class="vp-select" onchange="window.CrucixViewsPanel?.setNewsFilter({category:this.value})">
+            <option value="all"${newsFilter.category === 'all' ? ' selected' : ''}>Összes téma (${uniqueCategories.length})</option>
+            ${uniqueCategories.map(cat => `<option value="${esc(cat)}"${newsFilter.category === cat ? ' selected' : ''}>${esc(NEWS_TOPIC_LABELS[cat] || cat)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="vp-filter-group">
+          <label for="vp-filter-sort" class="vp-filter-label">Rendezés:</label>
+          <select id="vp-filter-sort" class="vp-select" onchange="window.CrucixViewsPanel?.setNewsFilter({sort:this.value})">
+            <option value="priority"${newsFilter.sort === 'priority' ? ' selected' : ''}>Alapértelmezett prioritás</option>
+            <option value="latest"${newsFilter.sort === 'latest' ? ' selected' : ''}>Legfrissebb elöl</option>
+          </select>
+        </div>
+      </div>
+    `;
+
+    // 7. Ceiling notice
+    let ceilingNote = '';
+    const eligibleCount = viewCounters.newsCount ?? nonPromoNews.length;
+    if (eligibleCount > nonPromoNews.length) {
+      ceilingNote = `<div class="vp-newsfeed-ceiling-note">Nézeti felső plafon aktív: ${nonPromoNews.length} hír megjelenítve (összes jogosult: ${eligibleCount} db).</div>`;
+    }
+
+    // 8. Render news cards or empty filter state
+    let cardsContent = '';
+    if (filtered.length === 0) {
+      cardsContent = `<div class="vp-empty">Van hír (${nonPromoNews.length} db), de a szűrés után nincs találat.</div>`;
+    } else {
+      cardsContent = `<div class="vp-news-items">${filtered.map(item => renderNewsCard(item)).join('')}</div>`;
+    }
+
+    return `
+      <div class="vp-newsfeed-section" id="vp-newsfeed">
+        <div class="vp-newsfeed-head">
+          <span class="vp-newsfeed-title">Hírfolyam – ${esc(VIEW_LABELS[activeView])}</span>
+          <span class="vp-sec-badge">${filtered.length} / ${nonPromoNews.length} db</span>
+        </div>
+        <div class="vp-newsfeed-disclaimer" role="note">
+          <strong>Figyelem:</strong> Sajtó- és hatósági hírek; nem igazolt veszélyesemények.
+        </div>
+        ${coverageAlertHtml}
+        ${filtersHtml}
+        ${ceilingNote}
+        ${cardsContent}
+      </div>
+    `;
+  }
+
   function getViewNews(snapshot, viewName) {
     if (!snapshot || !viewName) return [];
     const views = snapshot.views || snapshot;
@@ -376,6 +640,7 @@
         </div>
         ${sectionsHtml}
         ${unlocatedStripHtml}
+        ${newsFeedHtml(snapshot)}
         ${staleHtml}
       </div>
     `;
@@ -431,13 +696,20 @@
     VIEW_LABELS,
     CATEGORY_LABELS,
     COVERAGE_LABELS,
+    NEWS_TOPIC_LABELS,
     getView: getActiveView,
     getActiveView,
     setView: setActiveView,
     onChange,
     mountSelector,
     panelHtml,
-    coveragePanelHtml
+    coveragePanelHtml,
+    renderNewsCard,
+    newsFeedHtml,
+    getViewNews,
+    setNewsFilter,
+    getNewsFilter,
+    resetNewsFilter
   });
 
 })(window, document);
