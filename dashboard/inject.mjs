@@ -17,7 +17,7 @@ import { createLLMProvider } from '../lib/llm/index.mjs';
 import { generateRuleBasedIdeas, resolveIdeas } from '../lib/llm/rule-ideas.mjs';
 import { buildEvents, stampLiveEventIds } from '../lib/intelligence/events.mjs';
 import { normalizeLiveSources } from '../lib/intelligence/live-sources.mjs';
-import { partitionEventsByView, evaluateSourceCoverage, evaluateEventTerritoryViews, COVERAGE_STATES } from '../lib/intelligence/views.mjs';
+import { partitionEventsByView, evaluateSourceCoverage, evaluateEventTerritoryViews, isNewsEvent, COVERAGE_STATES } from '../lib/intelligence/views.mjs';
 import { DEFAULT_TERRITORY_CONFIG } from '../lib/intelligence/territory.mjs';
 import { domainOfSource } from '../lib/domains.mjs';
 
