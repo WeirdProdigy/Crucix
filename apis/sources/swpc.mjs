@@ -12,7 +12,30 @@ const SCALES = [
   ['S', 'solarRadiationStorms', 'solar radiation storms'],
   ['G', 'geomagneticStorms', 'geomagnetic storms'],
 ];
+export function getSwpcHeaders() {
+  const contact = process.env.CRUCIX_CONTACT_URL || 'https://github.com/WeirdProdigy/Crucix';
+  return Object.freeze({
+    'User-Agent': `Crucix/2.13 (+${contact})`
+  });
+}
 const META = { url: SOURCE_URL, feedUrl: FEED_URL, attribution: 'NOAA / NWS Space Weather Prediction Center' };
+
+/**
+ * Parses configurable SWPC notification thresholds from environment string (e.g. 'G4,R4,S3').
+ * Defaults to G4+/R4+/S3+ for notification dispatch.
+ */
+export function parseSwpcNotifyThreshold(envVal = process.env.CRUCIX_SWPC_NOTIFY_MIN) {
+  const defaults = { g: 4, r: 4, s: 3 };
+  if (!envVal || typeof envVal !== 'string') return defaults;
+  const gMatch = envVal.match(/G(\d)/i);
+  const rMatch = envVal.match(/R(\d)/i);
+  const sMatch = envVal.match(/S(\d)/i);
+  return {
+    g: gMatch ? parseInt(gMatch[1], 10) : defaults.g,
+    r: rMatch ? parseInt(rMatch[1], 10) : defaults.r,
+    s: sMatch ? parseInt(sMatch[1], 10) : defaults.s
+  };
+}
 
 /**
  * Normalizes input raw JSON into an array of objects.
@@ -258,7 +281,7 @@ export function parseSWPC(data, { now = Date.now() } = {}) {
  * Enhanced SWPC telemetry parser.
  * Combines scales with Kp, solar wind, X-ray flux, active alerts, and 3-day forecast.
  */
-export function parseEnhancedSWPC(data, { now = Date.now() } = {}) {
+export function parseEnhancedSWPC(data, { now = Date.now(), notifyMin = parseSwpcNotifyThreshold() } = {}) {
   const baseResult = parseSWPC(data.scales || data, { now });
   if (baseResult.status === 'error') return baseResult;
 
@@ -288,28 +311,45 @@ export function parseEnhancedSWPC(data, { now = Date.now() } = {}) {
 
   const observations = [...baseResult.observations];
 
-  // High threshold enforcement: S2+ gets high severity
+  // Calibrate scale severity:
+  // - G4+, R4+, S3+ trigger notification -> severity: 'high' (or 'critical')
+  // - G3, R3, S2 are dashboard-only alerts -> severity: 'moderate' (watch level: rendered on dashboard, but does NOT trigger Telegram dispatch)
   for (const obs of observations) {
-    if (obs.providerId === 'S2' && obs.severity !== 'high') {
-      obs.severity = 'high';
+    const code = obs.providerId?.[0];
+    const lvl = parseInt(obs.providerId?.slice(1), 10);
+    if (!isNaN(lvl)) {
+      const meetsNotify = (code === 'G' && lvl >= notifyMin.g) ||
+                          (code === 'R' && lvl >= notifyMin.r) ||
+                          (code === 'S' && lvl >= notifyMin.s);
+      if (meetsNotify) {
+        if (obs.severity !== 'critical') obs.severity = 'high';
+      } else if ((code === 'G' && lvl >= 3) || (code === 'R' && lvl >= 3) || (code === 'S' && lvl >= 2)) {
+        obs.severity = 'moderate';
+      }
     }
   }
 
   // Active high severity alerts (G3+, R3+, S2+)
   if (parsedAlerts?.highSeverityAlerts?.length) {
     for (const hAlert of parsedAlerts.highSeverityAlerts) {
-      const alertCode = hAlert.gLevel >= 3 ? `G${hAlert.gLevel}` : (hAlert.rLevel >= 3 ? `R${hAlert.rLevel}` : `S${hAlert.sLevel}`);
+      const gLvl = hAlert.gLevel || 0;
+      const rLvl = hAlert.rLevel || 0;
+      const sLvl = hAlert.sLevel || 0;
+      const alertCode = gLvl >= 3 ? `G${gLvl}` : (rLvl >= 3 ? `R${rLvl}` : `S${sLvl}`);
+      const meetsNotify = (gLvl >= notifyMin.g) || (rLvl >= notifyMin.r) || (sLvl >= notifyMin.s);
+      const alertSeverity = meetsNotify ? 'high' : 'moderate';
+
       if (!observations.some(o => o.providerId === alertCode)) {
         observations.push({
           kind: 'space-weather',
-          title: `NOAA High Space Weather Alert ${alertCode}`,
+          title: `NOAA ${meetsNotify ? 'High' : 'Moderate'} Space Weather Alert ${alertCode}`,
           summary: `Active SWPC alert: ${hAlert.messageSnippet}`,
           source: SOURCE,
           url: SOURCE_URL,
           providerId: `alert-${alertCode}`,
           observedAt: baseResult.observedAt,
           publishedAt: baseResult.observedAt,
-          severity: 'high',
+          severity: alertSeverity,
           lat: null,
           lon: null,
           locationMethod: 'global',
@@ -349,21 +389,23 @@ export function parseEnhancedSWPC(data, { now = Date.now() } = {}) {
  */
 export async function briefing({
   now = Date.now(),
-  enableEnhanced = (process.env.CRUCIX_ENABLE_SWPC === 'true')
+  enableEnhanced = (process.env.CRUCIX_ENABLE_SWPC === 'true'),
+  notifyMin = parseSwpcNotifyThreshold()
 } = {}) {
+  const swpcHeaders = getSwpcHeaders();
   if (!enableEnhanced) {
-    const data = await safeFetch(FEED_URL, { timeout: 10000, retries: 0, maxBytes: 2 * 1024 * 1024 });
+    const data = await safeFetch(FEED_URL, { timeout: 10000, retries: 0, maxBytes: 2 * 1024 * 1024, headers: swpcHeaders });
     return data?.error ? unavailableResult(SOURCE, data.error, { ...META, metrics: {} }, now) : parseSWPC(data, { now });
   }
 
   const [scalesRes, kpRes, windRes, magRes, xraysRes, alertsRes, forecastRes] = await Promise.allSettled([
-    safeFetch(FEED_URL, { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024 }),
-    safeFetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024 }),
-    safeFetch('https://services.swpc.noaa.gov/products/summary/solar-wind-speed.json', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024 }),
-    safeFetch('https://services.swpc.noaa.gov/products/summary/solar-wind-mag-field.json', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024 }),
-    safeFetch('https://services.swpc.noaa.gov/json/goes/primary/xrays-1-day.json', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024 }),
-    safeFetch('https://services.swpc.noaa.gov/products/alerts.json', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024 }),
-    safeFetch('https://services.swpc.noaa.gov/text/3-day-forecast.txt', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024, format: 'text' })
+    safeFetch(FEED_URL, { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024, headers: swpcHeaders }),
+    safeFetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024, headers: swpcHeaders }),
+    safeFetch('https://services.swpc.noaa.gov/products/summary/solar-wind-speed.json', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024, headers: swpcHeaders }),
+    safeFetch('https://services.swpc.noaa.gov/products/summary/solar-wind-mag-field.json', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024, headers: swpcHeaders }),
+    safeFetch('https://services.swpc.noaa.gov/json/goes/primary/xrays-1-day.json', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024, headers: swpcHeaders }),
+    safeFetch('https://services.swpc.noaa.gov/products/alerts.json', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024, headers: swpcHeaders }),
+    safeFetch('https://services.swpc.noaa.gov/text/3-day-forecast.txt', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024, format: 'text', headers: swpcHeaders })
   ]);
 
   const scales = scalesRes.status === 'fulfilled' ? scalesRes.value : { error: scalesRes.reason?.message };
@@ -381,5 +423,5 @@ export async function briefing({
     xrays: xraysRes.status === 'fulfilled' ? xraysRes.value : null,
     alerts: alertsRes.status === 'fulfilled' ? alertsRes.value : null,
     forecast: forecastRes.status === 'fulfilled' ? forecastRes.value : null
-  }, { now });
+  }, { now, notifyMin });
 }

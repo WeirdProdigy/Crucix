@@ -114,7 +114,7 @@ test('4. GOES X-rays: selects primary satellite (GOES-18), filters long waveleng
   assert.equal(res.xrayClass, 'C3.5');
 });
 
-test('5. Alert thresholds: low/moderate levels (G1, G2, R1, R2, S1) do NOT alert; G3+, R3+, S2+ trigger high severity', () => {
+test('5. Alert thresholds: G3/R3/S2 display on dashboard without notification; G4+/R4+/S3+ trigger notification dispatch', () => {
   // Low scales: G1, R1, S1
   const lowData = {
     scales: {
@@ -132,17 +132,38 @@ test('5. Alert thresholds: low/moderate levels (G1, G2, R1, R2, S1) do NOT alert
   };
   const lowResult = parseEnhancedSWPC(lowData, { now });
   assert.equal(lowResult.status, 'ok');
-  // Confirm no observation has high or critical severity (display only)
-  assert.ok(lowResult.observations.every(obs => obs.severity !== 'high' && obs.severity !== 'critical'), 'Low/moderate space weather must not fire high/critical alerts');
+  assert.ok(lowResult.observations.every(obs => obs.severity !== 'high' && obs.severity !== 'critical'), 'Low levels (G1/R1/S1) must not fire high/critical alerts');
 
-  // High scales: G3, R3, S2
-  const highData = {
+  // Tier 1: Dashboard-only display alerts (G3, R3, S2)
+  // These appear on dashboard (severity: 'moderate' / watch level) and do NOT trigger Telegram notification
+  const dashboardOnlyData = {
     scales: {
       '0': {
         DateStamp: '2026-10-30',
         TimeStamp: '11:55:00',
         R: { Scale: 3, Text: 'Strong' },
         S: { Scale: 2, Text: 'Moderate' },
+        G: { Scale: 3, Text: 'Strong' }
+      }
+    },
+    alerts: [
+      { product_id: 'WARK07', issue_datetime: '2026-10-30 11:00:00', message: 'WARNING: Geomagnetic Storm Category G3 In Effect' }
+    ]
+  };
+  const dashResult = parseEnhancedSWPC(dashboardOnlyData, { now });
+  assert.equal(dashResult.status, 'ok');
+  const dashObs = dashResult.observations.filter(obs => obs.severity === 'moderate');
+  assert.ok(dashObs.length >= 3, 'G3, R3, S2 must produce moderate severity dashboard alert observations');
+  assert.ok(dashResult.observations.every(obs => obs.severity !== 'high' && obs.severity !== 'critical'), 'G3/R3/S2 must NOT trigger high/critical notification severity');
+
+  // Tier 2: Notification dispatch alerts (G4+, R4+, S3+)
+  const notifyData = {
+    scales: {
+      '0': {
+        DateStamp: '2026-10-30',
+        TimeStamp: '11:55:00',
+        R: { Scale: 4, Text: 'Severe' },
+        S: { Scale: 3, Text: 'Strong' },
         G: { Scale: 4, Text: 'Severe' }
       }
     },
@@ -150,13 +171,18 @@ test('5. Alert thresholds: low/moderate levels (G1, G2, R1, R2, S1) do NOT alert
       { product_id: 'WARK07', issue_datetime: '2026-10-30 11:00:00', message: 'WARNING: Geomagnetic Storm Category G4 In Effect' }
     ]
   };
-  const highResult = parseEnhancedSWPC(highData, { now });
-  assert.equal(highResult.status, 'ok');
-  const highObs = highResult.observations.filter(obs => obs.severity === 'high' || obs.severity === 'critical');
-  assert.ok(highObs.length >= 3, 'G3+, R3+, S2+ must trigger high severity observations');
+  const notifyResult = parseEnhancedSWPC(notifyData, { now });
+  assert.equal(notifyResult.status, 'ok');
+  const highObs = notifyResult.observations.filter(obs => obs.severity === 'high' || obs.severity === 'critical');
+  assert.ok(highObs.length >= 3, 'G4+, R4+, S3+ must trigger high/critical severity for Telegram notification dispatch');
   assert.ok(highObs.some(o => o.providerId === 'G4'));
-  assert.ok(highObs.some(o => o.providerId === 'R3'));
-  assert.ok(highObs.some(o => o.providerId === 'S2'));
+  assert.ok(highObs.some(o => o.providerId === 'R4'));
+  assert.ok(highObs.some(o => o.providerId === 'S3'));
+
+  // Tier 3: Custom threshold configuration (e.g. CRUCIX_SWPC_NOTIFY_MIN='G3,R3,S2')
+  const customResult = parseEnhancedSWPC(dashboardOnlyData, { now, notifyMin: { g: 3, r: 3, s: 2 } });
+  const customHigh = customResult.observations.filter(obs => obs.severity === 'high' || obs.severity === 'critical');
+  assert.ok(customHigh.length >= 3, 'When threshold is lowered to G3/R3/S2, they must trigger high severity');
 });
 
 test('6. Stale and error handling: stale data becomes empty metrics, technical block (403/429) marks disabled', async () => {

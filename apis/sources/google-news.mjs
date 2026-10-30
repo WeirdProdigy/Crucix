@@ -435,7 +435,7 @@ export async function briefing(options = {}) {
           timeout: 15_000,
           signal: options.signal,
           headers: {
-            'User-Agent': options.userAgent || 'Crucix/2.13.6 (https://github.com/mp3pintyo/Crucix)'
+            'User-Agent': options.userAgent || `Crucix/2.13.6 (+${process.env.CRUCIX_CONTACT_URL || 'https://github.com/WeirdProdigy/Crucix'})`
           },
           format: 'text'
         });
