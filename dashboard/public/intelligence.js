@@ -59,7 +59,10 @@
   }
   function allEvents() {
     let current; try { current = pushedSnapshot ? snapshot : options.getSnapshot?.() || snapshot; } catch { current = snapshot; }
-    const active = Array.isArray(current?.events) ? current.events : []; const stale = Array.isArray(current?.staleEvents) ? current.staleEvents : []; return [...active, ...stale].slice(0, 10000);
+    const active = Array.isArray(current?.events) ? current.events : [];
+    const stale = Array.isArray(current?.staleEvents) ? current.staleEvents : [];
+    const news = Array.isArray(current?.views?.news) ? current.views.news : [];
+    return [...active, ...stale, ...news].slice(0, 10000);
   }
   function focusable() {
     if (!dialog) return [];

@@ -1799,7 +1799,8 @@ function refreshLiveFreshness(){
 }
 function findEvent(item){
   const url=safeExternalUrl(item?.url);const title=String(item?.title||item?.headline||item?.text||'');
-  return D.events.find(e=>(url&&e.source.url===url)||(title&&e.title===title));
+  const all=[...(Array.isArray(D.events)?D.events:[]), ...(Array.isArray(D.views?.news)?D.views.news:[])];
+  return all.find(e=>(url&&e.source.url===url)||(title&&e.title===title));
 }
 let groupNews=readPreference('crucix.newsGrouping.v1')==='true';
 function visibleEventClusters(){return D.eventClusters.filter(c=>hasCoordinates(c.lat,c.lon)&&Array.isArray(c.eventIds)&&c.eventIds.length>1);}
@@ -1831,9 +1832,10 @@ function showPopup(event,head,text,meta,lat,lng,alt){
   popup.querySelector('.pp-text').textContent=String(text??'').replace(/<br\s*\/?\s*>/gi,'\n').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&');
   popup.querySelector('.pp-meta').textContent=meta||'';
   popup.querySelector('.pp-detail')?.remove();
-  const match=D.events.find(e=>e.title===String(head||'')||e.title===String(text||'')||
-    (Number.isFinite(lat)&&Number.isFinite(lng)&&e.location.lat===lat&&e.location.lon===lng&&
-      [head,text,meta].some(value=>String(value||'').includes(e.source.name))));
+  const allEv=[...(Array.isArray(D.events)?D.events:[]), ...(Array.isArray(D.views?.news)?D.views.news:[])];
+  const match=allEv.find(e=>e.title===String(head||'')||e.title===String(text||'')||
+    (Number.isFinite(lat)&&Number.isFinite(lng)&&e.location?.lat===lat&&e.location?.lon===lng&&
+      [head,text,meta].some(value=>String(value||'').includes(e.source?.name))));
   if(match){const button=document.createElement('button');button.className='guide-btn pp-detail';button.textContent=t('intelligence.details','Event details');button.onclick=()=>CrucixIntelligence.openEvent(match);popup.append(button);}
   popup.classList.add('show');
 }
@@ -2004,7 +2006,7 @@ function plotFlatMarkers(){
   }
   // NOAA weather
   // Without record-core.js (a script that failed to load) rows pair by source + title + observedAt, as 2.8.0 did.
-  const snapshotEvents=currentSnapshot().events,eventsById=window.CrucixRecords?.indexEvents(snapshotEvents);
+  const sn=currentSnapshot(),snapshotEvents=[...(Array.isArray(sn.events)?sn.events:[]),...(Array.isArray(sn.views?.news)?sn.views.news:[])],eventsById=window.CrucixRecords?.indexEvents(snapshotEvents);
   for(const row of lensMarkerRows()){
     flatMarkerType=liveMarkerType(row.kind);
     const event=window.CrucixRecords?CrucixRecords.eventForRow(row,eventsById,snapshotEvents):snapshotEvents.find(e=>e.source?.name===row.source&&e.title===row.title&&e.observedAt===row.observedAt);
@@ -2487,6 +2489,7 @@ function updateRuntimeStatus(){
   fresh.dataset.state=stale?'stale':'live';
   fresh.textContent=t('status.data','Data')+': '+(!Number.isFinite(timestamp)?t('status.noSnapshot','Waiting for the first snapshot'):stale?t('status.stale','Stale / cached'):t('status.fresh','Fresh'))+' · '+getAge(D.meta?.timestamp);
   if(air)air.textContent=D.airMeta?.fallback?t('status.airCached','Air positions are cached')+' · '+getAge(D.airMeta.timestamp):'';
+  if(window.__crucixHealth?.telegramConsecutiveFailures>0){live.title='Telegram: '+window.__crucixHealth.telegramConsecutiveFailures+' sikertelen lekérdezés (újrapróbálás: '+window.__crucixHealth.telegramPollingIntervalSec+'s)';}
   window.CrucixPWA?.renderStatus();
 }
 // force: a sweep replay (and its way back to live) renders an older snapshot on purpose; live updates never pass it.
@@ -2582,7 +2585,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   // The alert strip and tray are live state (also during a sweep replay): they keep real time. The inspector shows the records
   // of the snapshot on screen, so it reads the dashboard clock (frozen at an archived sweep's time during a replay).
   window.CrucixAlerts?.mount({getSummary:()=>D.alerts,t});
-  window.CrucixRecordInspector?.mount({getSources:()=>D.liveSources,getEvents:()=>currentSnapshot().events,t,now:clockNow});
+  window.CrucixRecordInspector?.mount({getSources:()=>D.liveSources,getEvents:()=>{const sn=currentSnapshot();return [...(Array.isArray(sn?.events)?sn.events:[]),...(Array.isArray(sn?.views?.news)?sn.views.news:[])];},t,now:clockNow});
   // Before init: the first top bar already carries the replay button. Not on file pages or the offline shell (no archive there).
   if(location.protocol!=='file:'&&!window.__CRUCIX_OFFLINE_SHELL__)window.CrucixReplay?.mount({root:document.getElementById('replayBar'),fetchJson:fetchJsonNoStore,
     applySnapshot:applyReplaySnapshot,restoreLive:restoreLiveSnapshot,redrive:redriveClock,getLive:()=>D,t,locale:uiLocale()});
@@ -2612,7 +2615,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   if(location.protocol!=='file:')CrucixPWA.init({getSnapshot:()=>D,applySnapshot:data=>!D.meta.timestamp&&applySnapshot(data,{cached:true}),t});
   if(location.protocol!=='file:'){
     connectSSE();pollSnapshot();
-    fetch('/api/health',{cache:'no-store',signal:AbortSignal.timeout(10000)}).then(response=>response.ok?response.json():null).then(health=>{if(Number.isFinite(health?.refreshIntervalMinutes)&&health.refreshIntervalMinutes>0)refreshIntervalMinutes=health.refreshIntervalMinutes;updateRuntimeStatus();}).catch(()=>{});
+    fetch('/api/health',{cache:'no-store',signal:AbortSignal.timeout(10000)}).then(response=>response.ok?response.json():null).then(health=>{if(health)window.__crucixHealth=health;if(Number.isFinite(health?.refreshIntervalMinutes)&&health.refreshIntervalMinutes>0)refreshIntervalMinutes=health.refreshIntervalMinutes;updateRuntimeStatus();}).catch(()=>{});
     fallbackTimer=setInterval(()=>{if(!sseConnected||!hasSnapshot())pollSnapshot();},60000);
   }
   freshnessTimer=setInterval(()=>{updateRuntimeStatus();refreshLiveFreshness();window.CrucixChanges?.refresh();},30000);
