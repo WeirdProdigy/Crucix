@@ -186,6 +186,26 @@
           </div>
         </div>
       `;
+    } else if (stream.sourceType === 'link-only') {
+      mediaAreaHtml = `
+        <div class="lm-placeholder-box lm-link-only-box">
+          <div class="lm-placeholder-icon">${stream.type === 'news' ? '📰' : '📷'}</div>
+          <div class="lm-placeholder-title">${esc(stream.provider)}</div>
+          <div class="lm-placeholder-privacy">Közvetlen szolgáltatói elérés: Ez a közvetítés nem beágyazható formátumú, a szolgáltató hivatalos weboldalán érhető el.</div>
+          <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">
+            Megnyitás a szolgáltató oldalán ↗
+          </a>
+        </div>
+      `;
+    } else if (stream.status === 'unverified') {
+      mediaAreaHtml = `
+        <div class="lm-placeholder-box lm-unverified-box">
+          <div class="lm-placeholder-icon">⚠️</div>
+          <div class="lm-placeholder-title">${esc(stream.provider)}</div>
+          <div class="lm-placeholder-privacy">Nem igazolt közvetítés: A szolgáltatótól jelenleg nem áll rendelkezésre ellenőrzött, beágyazható 24/7 YouTube élő közvetítés.</div>
+          ${stream.channelId ? `<a href="https://www.youtube.com/channel/${esc(stream.channelId)}" target="_blank" rel="noopener noreferrer" class="lm-link-external">Szolgáltató csatornája ↗</a>` : ''}
+        </div>
+      `;
     } else if (isPlaying) {
       const embedUrl = buildSafeEmbedUrl(stream.videoId);
       const watchUrl = buildSafeWatchUrl(stream.videoId);
@@ -198,6 +218,7 @@
             frameborder="0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowfullscreen
+            referrerpolicy="strict-origin-when-cross-origin"
             sandbox="allow-scripts allow-same-origin allow-presentation"
             loading="lazy">
           </iframe>
@@ -228,6 +249,7 @@
             <span class="lm-card-type-badge lm-type-${esc(stream.type)}">${esc(typeLabel)}</span>
             <span class="lm-card-region-badge">${esc(regionLabel)}</span>
             <span class="lm-card-lang-badge">${esc(langCode)}</span>
+            ${stream.status === 'unverified' ? '<span class="lm-card-status-badge lm-status-unverified">Nem igazolt</span>' : ''}
             <span class="lm-card-title">${esc(stream.name)}</span>
           </div>
           <div class="lm-card-provider">${esc(stream.provider)}</div>

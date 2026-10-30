@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, unlinkSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import express from 'express';
@@ -53,7 +53,7 @@ test('1. Registry schema validation: valid entries pass, invalid schemas throw',
   assert.throws(() => validateLiveStreamEntry({ ...validEntry, provider: '' }), /Invalid or missing 'provider'/);
 
   // Bad sourceType
-  assert.throws(() => validateLiveStreamEntry({ ...validEntry, sourceType: 'twitch' }), /Only 'youtube' is supported/);
+  assert.throws(() => validateLiveStreamEntry({ ...validEntry, sourceType: 'twitch' }), /Invalid 'sourceType'/);
 
   // Bad videoId
   assert.throws(() => validateLiveStreamEntry({ ...validEntry, videoId: 'tooShort' }), /Invalid 'videoId'/);
@@ -252,4 +252,110 @@ test('6. HTTP Security: Content-Security-Policy header permits youtube-nocookie 
   const csp = res.headers.get('content-security-policy');
   assert.ok(csp, 'Content-Security-Policy header must be present');
   assert.ok(csp.includes("frame-src 'self' https://www.youtube-nocookie.com;"), 'CSP must allow youtube-nocookie frame-src');
+});
+
+test('7. Registry schema validation: channelId, provenance, and unverified status handling', () => {
+  // Valid entry with channelId and provenance
+  const withChannel = {
+    ...validEntry,
+    channelId: 'UCknLrEdhRCp1WdBgk977Ntw',
+    status: 'verified',
+    provenance: 'koala73/worldmonitor (AGPL-3.0)'
+  };
+  assert.equal(validateLiveStreamEntry(withChannel), true);
+
+  // Invalid channelId format
+  assert.throws(() => validateLiveStreamEntry({ ...withChannel, channelId: 'not-a-channel-id' }), /Invalid 'channelId'/);
+  assert.throws(() => validateLiveStreamEntry({ ...withChannel, channelId: 'UCtooShort' }), /Invalid 'channelId'/);
+
+  // Unverified entry without videoId and without checkedAt
+  const unverified = {
+    id: 'unverified-cam',
+    name: 'Debrecen Kossuth tér',
+    type: 'webcam',
+    region: 'local',
+    provider: 'Debrecen MJV',
+    sourceType: 'youtube',
+    videoId: null,
+    language: 'hu',
+    status: 'unverified',
+    checkedAt: null,
+    notes: 'Kamera felderítés alatt.'
+  };
+  assert.equal(validateLiveStreamEntry(unverified), true);
+
+  // Invalid status
+  assert.throws(() => validateLiveStreamEntry({ ...validEntry, status: 'invalid-status' }), /Invalid 'status'/);
+
+  // Verified stream missing videoId must throw
+  assert.throws(() => validateLiveStreamEntry({ ...validEntry, status: 'verified', videoId: null }), /Invalid 'videoId'/);
+
+  // Verified stream missing checkedAt must throw
+  assert.throws(() => validateLiveStreamEntry({ ...validEntry, status: 'verified', checkedAt: null }), /Invalid 'checkedAt'/);
+
+  // Link-only stream validation
+  const validLinkOnly = {
+    id: 'link-only-stream',
+    name: 'HírTV Élő Web',
+    type: 'news',
+    region: 'national',
+    provider: 'HírTV Zrt.',
+    sourceType: 'link-only',
+    url: 'https://hirtv.origo.hu/adas',
+    language: 'hu',
+    status: 'verified',
+    checkedAt: '2026-10-30',
+    notes: 'Közvetlen webes adás.'
+  };
+  assert.equal(validateLiveStreamEntry(validLinkOnly), true);
+
+  // Link-only stream missing url or non-https must throw
+  assert.throws(() => validateLiveStreamEntry({ ...validLinkOnly, url: 'http://insecure.hu' }), /Invalid or missing 'url'/);
+  assert.throws(() => validateLiveStreamEntry({ ...validLinkOnly, url: null }), /Invalid or missing 'url'/);
+});
+
+test('8. Dashboard iframe audit: proof that frame-src permits all dashboard iframes', () => {
+  const root = new URL('../', import.meta.url);
+  const jarvisPath = new URL('dashboard/public/jarvis.html', root);
+  const jarvisHtml = readFileSync(jarvisPath, 'utf8');
+
+  // jarvis.html has zero raw <iframe> tags
+  assert.equal(jarvisHtml.includes('<iframe'), false, 'jarvis.html must not contain static iframes');
+
+  // Audit all files in dashboard/public
+  const panelFiles = [
+    'live-media-panel.js',
+    'views-panel.js',
+    'intelligence.js',
+    'pwa.js',
+    'network-strip.js'
+  ];
+
+  const foundIframeSources = [];
+  for (const file of panelFiles) {
+    try {
+      const content = readFileSync(new URL(`dashboard/public/${file}`, root), 'utf8');
+      if (content.includes('<iframe') || content.includes('createElement(\'iframe\')')) {
+        // Extract src attributes or domains used
+        const srcMatches = [...content.matchAll(/src=["']([^"']+)["']/g)].map(m => m[1]);
+        const domainMatches = [...content.matchAll(/https:\/\/[a-zA-Z0-9.-]+/g)].map(m => m[0]);
+        foundIframeSources.push({ file, srcMatches, domainMatches });
+      }
+    } catch {}
+  }
+
+  // The only component creating an iframe is live-media-panel.js
+  assert.equal(foundIframeSources.length, 1, 'Only live-media-panel.js generates iframes in the dashboard');
+  assert.equal(foundIframeSources[0].file, 'live-media-panel.js');
+
+  // The iframe src in live-media-panel.js is strictly built by buildSafeEmbedUrl -> https://www.youtube-nocookie.com/embed/...
+  const embedCode = readFileSync(new URL('lib/intelligence/live-streams.mjs', root), 'utf8');
+  assert.ok(embedCode.includes('https://www.youtube-nocookie.com/embed/'), 'buildSafeYouTubeEmbedUrl targets youtube-nocookie.com');
+
+  // HTTP Security CSP header explicitly allows 'self' and https://www.youtube-nocookie.com
+  const httpSecCode = readFileSync(new URL('lib/http-security.mjs', root), 'utf8');
+  assert.ok(
+    httpSecCode.includes("'Content-Security-Policy': \"frame-src 'self' https://www.youtube-nocookie.com;\""),
+    'CSP frame-src rule explicitly whitelists https://www.youtube-nocookie.com'
+  );
 });

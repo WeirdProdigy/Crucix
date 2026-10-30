@@ -212,13 +212,24 @@
   border: 1px solid rgba(100, 240, 200, 0.3);
 }
 
-.lm-card-region-badge, .lm-card-lang-badge {
+.lm-card-region-badge, .lm-card-lang-badge, .lm-card-status-badge {
   font-family: var(--mono, monospace);
   font-size: 9px;
   background: rgba(255, 255, 255, 0.08);
   color: var(--dim, #6a8a82);
   padding: 1px 4px;
   border-radius: 2px;
+}
+
+.lm-status-unverified {
+  background: rgba(255, 170, 0, 0.15);
+  color: #ffaa00;
+  border: 1px solid rgba(255, 170, 0, 0.3);
+}
+
+.lm-unverified-box {
+  background: rgba(20, 16, 6, 0.85);
+  border: 1px dashed rgba(255, 170, 0, 0.3);
 }
 
 .lm-card-title {

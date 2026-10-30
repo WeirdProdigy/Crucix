@@ -756,3 +756,7 @@ For contribution guidelines, review expectations, and source-add rules, see `CON
 ## License
 
 AGPL-3.0
+
+### Third-Party Data & Component Acknowledgments
+
+- **World Monitor (`koala73/worldmonitor`, AGPL-3.0-only):** The architectural concept of the "Élő" broadcast and webcam panel, as well as selected international live stream identifiers (`data/live-streams.json`), are derived from the World Monitor project under the GNU Affero General Public License v3.0.
