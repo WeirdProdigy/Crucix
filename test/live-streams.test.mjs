@@ -359,3 +359,41 @@ test('8. Dashboard iframe audit: proof that frame-src permits all dashboard ifra
     'CSP frame-src rule explicitly whitelists https://www.youtube-nocookie.com'
   );
 });
+
+test('9. Institutional operator audit: verified-live webcams must have strictly institutional legal entities, zero private individual names', () => {
+  const streams = loadLiveStreams();
+  const verifiedWebcams = streams.filter(s => s.type === 'webcam' && s.status === 'verified-live');
+
+  assert.ok(verifiedWebcams.length >= 4, 'Must have at least 4 verified-live webcams');
+
+  // Verify that deb / hajduszoboszlo webcams are present
+  const kossuth = verifiedWebcams.find(s => s.id === 'debrecen-kossuth-ter-webcam');
+  assert.ok(kossuth, 'Kossuth tér webcam must be registered and verified-live');
+  assert.equal(kossuth.url, 'https://www.idokep.hu/webkamera/dmjvcam');
+  assert.ok(kossuth.provider.includes('Önkormányzata'), 'Provider must be municipality');
+
+  const bekas = verifiedWebcams.find(s => s.id === 'debrecen-bekas-to-webcam');
+  assert.ok(bekas, 'Békás tó webcam must be registered and verified-live');
+  assert.equal(bekas.url, 'https://www.idokep.hu/webkamera/dmjvcam3');
+  assert.ok(bekas.provider.includes('Önkormányzata'), 'Provider must be municipality');
+
+  const egyetem = verifiedWebcams.find(s => s.id === 'debrecen-egyetem-ter-webcam');
+  assert.ok(egyetem, 'Egyetem tér webcam must be registered and verified-live');
+  assert.equal(egyetem.url, 'https://www.idokep.hu/webkamera/deegyetemter');
+  assert.ok(egyetem.provider.includes('Debreceni Egyetem'), 'Provider must be university');
+
+  const aeroclub = verifiedWebcams.find(s => s.id === 'hajduszoboszlo-aeroclub-webcam');
+  assert.ok(aeroclub, 'Hajdúszoboszló Aero Club webcam must be registered and verified-live');
+  assert.equal(aeroclub.url, 'https://www.idokep.hu/webkamera/lhho2');
+  assert.ok(aeroclub.provider.includes('Aero Club'), 'Provider must be Aero Club');
+
+  // Disallowed private individual checks across the entire registry
+  const disallowedNames = ['Nagy Csilla', 'Szatmári Tamás', 'nagy_csilla', 'debrecen_toci_kelet', 'elco'];
+  for (const s of streams) {
+    for (const disallowed of disallowedNames) {
+      assert.ok(!s.provider.includes(disallowed), `Provider must not contain private name or unverified operator '${disallowed}'`);
+      assert.ok(!s.notes?.includes(disallowed), `Notes must not contain private name or unverified operator '${disallowed}'`);
+      assert.ok(!s.name.includes(disallowed), `Name must not contain private name or unverified operator '${disallowed}'`);
+    }
+  }
+});
