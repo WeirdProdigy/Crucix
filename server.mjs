@@ -89,7 +89,7 @@ function recordRisk(snapshot, raw) {
   if (result.ok) riskLatest = result;
 }
 // Alert state lives in runs/alerts/; a missing or corrupt file starts empty and never stops the server.
-const alertEngine = new AlertEngine(RUNS_DIR, { config: { maxActivePerRule: config.alerts.maxActivePerRule } });
+const alertEngine = new AlertEngine(RUNS_DIR, { config: { maxActivePerRule: config.alerts.maxActivePerRule, regionalScope: config.alerts.regionalScope } });
 alertEngine.load();
 // Sweep archive in runs/sweeps/: every completed sweep is stored for replay, the changes windows and the source-health matrix.
 // previousArchived is the baseline of the next sweep's changes; after a restart it is the newest archived sweep.
@@ -105,7 +105,7 @@ const discordAlerter = new DiscordAlerter(config.discord || {});
 const alertNotifier = new AlertNotifier({
   telegram: telegramAlerter, discord: discordAlerter, notifyChannels: config.alerts.notifyChannels, ntfy: config.alerts.ntfy, webhook: config.alerts.webhook,
   minSeverity: config.alerts.notifyMinSeverity, quietHours: config.alerts.quietHours,
-  maxPerSweep: config.alerts.maxNotificationsPerSweep, publicUrl: config.alerts.publicUrl,
+  maxPerSweep: config.alerts.maxNotificationsPerSweep, publicUrl: config.alerts.publicUrl, regionalScope: config.alerts.regionalScope,
 });
 
 if (llmProvider) console.log(`[Crucix] LLM enabled: ${llmProvider.name} (${llmProvider.model})`);
@@ -370,6 +370,13 @@ app.get('/api/health', (req, res) => {
     ideasEveryNSweeps: ideaCadence.everyNSweeps,
     llmProvider: config.llm.provider,
     telegramEnabled: !!(config.telegram.botToken && config.telegram.chatId),
+    telegramConsecutiveFailures: telegramAlerter?.consecutiveFailures ?? 0,
+    telegramPollingIntervalSec: Math.round((telegramAlerter?.currentIntervalMs ?? 5000) / 1000),
+    telegramStatus: (telegramAlerter?.consecutiveFailures > 0) ? 'error' : (telegramAlerter?.isConfigured ? 'ok' : 'disabled'),
+    telegramOutboundSuccessCount: telegramAlerter?.outboundSuccessCount ?? 0,
+    telegramOutboundErrorCount: telegramAlerter?.outboundErrorCount ?? 0,
+    telegramLastOutboundSuccessAt: telegramAlerter?.lastOutboundSuccessAt ?? null,
+    telegramLastOutboundErrorAt: telegramAlerter?.lastOutboundErrorAt ?? null,
     refreshIntervalMinutes: config.refreshIntervalMinutes,
     language: currentLanguage,
     historyStatus,
