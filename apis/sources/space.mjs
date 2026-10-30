@@ -137,7 +137,39 @@ function generateSignals(data) {
 }
 
 // Briefing export
-export async function briefing() {
+export const SPACE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+let cachedSpaceResult = null;
+let cachedSpaceTime = 0;
+let spaceBackoffMs = 0;
+let spaceLastAttempt = 0;
+
+export function _resetSpaceCache() {
+  cachedSpaceResult = null;
+  cachedSpaceTime = 0;
+  spaceBackoffMs = 0;
+  spaceLastAttempt = 0;
+}
+
+export async function briefing(options = {}) {
+  const now = typeof options.now === 'function' ? options.now() : (Number.isFinite(options.now) ? options.now : Date.now());
+  const ttl = options.ttlMs ?? SPACE_CACHE_TTL_MS;
+
+  if (!options.bypassCache && cachedSpaceResult && (now - cachedSpaceTime < ttl)) {
+    return { ...cachedSpaceResult, cached: true };
+  }
+
+  if (!options.bypassCache && spaceBackoffMs > 0 && (now - spaceLastAttempt < spaceBackoffMs)) {
+    if (cachedSpaceResult) return { ...cachedSpaceResult, cached: true, warning: 'Using cached Space data (backoff active)' };
+    return {
+      source: 'Space',
+      timestamp: new Date(now).toISOString(),
+      error: `CelesTrak exponential backoff active (${Math.round(spaceBackoffMs / 60000)}m cooldown)`,
+      recentLaunches: [],
+      signals: ['Space activity temporarily unavailable (backoff)'],
+    };
+  }
+
+  spaceLastAttempt = now;
   try {
     const [launches, stations, military, constellations] = await Promise.all([
       getRecentLaunches(),
@@ -149,9 +181,10 @@ export async function briefing() {
     const hasData = !launches.error || !stations.error;
 
     if (!hasData) {
+      spaceBackoffMs = Math.min(Math.max(15 * 60 * 1000, spaceBackoffMs * 2), SPACE_CACHE_TTL_MS);
       return {
         source: 'Space/CelesTrak',
-        timestamp: new Date().toISOString(),
+        timestamp: new Date(now).toISOString(),
         status: 'error',
         error: launches.error || stations.error || 'Failed to fetch space data',
       };
@@ -160,9 +193,9 @@ export async function briefing() {
     const data = { launches, stations, military, constellations };
     const signals = generateSignals(data);
 
-    return {
+    const result = {
       source: 'Space/CelesTrak',
-      timestamp: new Date().toISOString(),
+      timestamp: new Date(now).toISOString(),
       status: 'active',
       recentLaunches: launches.recentLaunches || [],
       totalNewObjects: launches.totalObjects || 0,
@@ -174,10 +207,16 @@ export async function briefing() {
       constellations: constellations || {},
       signals,
     };
+
+    spaceBackoffMs = 0;
+    cachedSpaceResult = result;
+    cachedSpaceTime = now;
+    return result;
   } catch (e) {
+    spaceBackoffMs = Math.min(Math.max(15 * 60 * 1000, spaceBackoffMs * 2), SPACE_CACHE_TTL_MS);
     return {
       source: 'Space/CelesTrak',
-      timestamp: new Date().toISOString(),
+      timestamp: new Date(now).toISOString(),
       status: 'error',
       error: e.message,
     };

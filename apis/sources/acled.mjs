@@ -16,6 +16,19 @@ const API_BASE  = 'https://acleddata.com/api/acled/read';
 // Session cache
 let sessionCache = { cookies: null, token: null, method: null, expires: 0 };
 
+export const ACLED_CIRCUIT_BREAKER_TTL_MS = 24 * 60 * 60 * 1000;
+let circuitBreaker = {
+  tripped: false,
+  trippedUntil: 0,
+  errorReason: null,
+  credentialsHash: null,
+};
+
+export function _resetAcledBreaker() {
+  circuitBreaker = { tripped: false, trippedUntil: 0, errorReason: null, credentialsHash: null };
+  sessionCache = { cookies: null, token: null, method: null, expires: 0 };
+}
+
 // Strategy 1: Cookie-based session login (mirrors browser login)
 async function loginCookie(email, password) {
   const signal = AbortSignal.timeout(15000);
@@ -92,6 +105,14 @@ async function authenticate() {
     return { error: 'No ACLED credentials. Set ACLED_EMAIL and ACLED_PASSWORD in .env.' };
   }
 
+  const credsHash = `${email}:${password}`;
+  if (circuitBreaker.tripped) {
+    if (Date.now() < circuitBreaker.trippedUntil && circuitBreaker.credentialsHash === credsHash) {
+      return { error: `ACLED circuit breaker active (24h cooldown after 401/403). ${circuitBreaker.errorReason}` };
+    }
+    circuitBreaker.tripped = false;
+  }
+
   // Return cached session if still valid
   if (sessionCache.method && Date.now() < sessionCache.expires) {
     return sessionCache;
@@ -119,6 +140,15 @@ async function authenticate() {
   }
   errors.push(`Cookie: ${cookieResult.error}`);
 
+  const isAuthRejection = errors.some(e => e.includes('401') || e.includes('403'));
+  if (isAuthRejection) {
+    circuitBreaker = {
+      tripped: true,
+      trippedUntil: Date.now() + ACLED_CIRCUIT_BREAKER_TTL_MS,
+      errorReason: 'Authentication rejected with HTTP 401/403. Next retry in 24 hours or upon credential update.',
+      credentialsHash: credsHash,
+    };
+  }
   return { error: `All ACLED auth methods failed.\n${errors.join('\n')}` };
 }
 

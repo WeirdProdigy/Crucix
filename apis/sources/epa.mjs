@@ -124,13 +124,48 @@ function checkReading(reading) {
 }
 
 // Briefing — get recent radiation readings from EPA network, flag anomalies
-export async function briefing() {
+export const EPA_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+let cachedEpaResult = null;
+let cachedEpaTime = 0;
+let epaBackoffMs = 0;
+let epaLastAttempt = 0;
+
+export function _resetEpaCache() {
+  cachedEpaResult = null;
+  cachedEpaTime = 0;
+  epaBackoffMs = 0;
+  epaLastAttempt = 0;
+}
+
+export async function briefing(options = {}) {
+  const now = typeof options.now === 'function' ? options.now() : (Number.isFinite(options.now) ? options.now : Date.now());
+  const ttl = options.ttlMs ?? EPA_CACHE_TTL_MS;
+
+  if (!options.bypassCache && cachedEpaResult && (now - cachedEpaTime < ttl)) {
+    return { ...cachedEpaResult, cached: true };
+  }
+
+  if (!options.bypassCache && epaBackoffMs > 0 && (now - epaLastAttempt < epaBackoffMs)) {
+    if (cachedEpaResult) return { ...cachedEpaResult, cached: true, warning: 'Using cached EPA data (backoff active)' };
+    return {
+      source: 'EPA RadNet',
+      timestamp: new Date(now).toISOString(),
+      error: `EPA RadNet exponential backoff active (${Math.round(epaBackoffMs / 60000)}m cooldown)`,
+      readings: [],
+      signals: ['Radiation readings temporarily unavailable (backoff)'],
+    };
+  }
+
+  epaLastAttempt = now;
   const readings = [];
   const signals = [];
 
   // Fetch recent analytical results (broad pull)
   const recentData = await getAnalyticalResults({ rows: 100 });
-  if (recentData.error) return { source: 'EPA RadNet', timestamp: new Date().toISOString(), error: recentData.status === 403 ? 'EPA RadNet provider access denied (HTTP 403)' : recentData.error, readings: [], signals: ['Radiation readings unavailable'] };
+  if (recentData.error) {
+    epaBackoffMs = Math.min(Math.max(15 * 60 * 1000, epaBackoffMs * 2), EPA_CACHE_TTL_MS);
+    return { source: 'EPA RadNet', timestamp: new Date(now).toISOString(), error: recentData.status === 403 ? 'EPA RadNet provider access denied (HTTP 403)' : recentData.error, readings: [], signals: ['Radiation readings unavailable'] };
+  }
   const recentRecords = Array.isArray(recentData) ? recentData : [];
 
   // Compact all readings
@@ -194,7 +229,7 @@ export async function briefing() {
     ])
   );
 
-  return {
+  const result = {
     source: 'EPA RadNet',
     timestamp: new Date().toISOString(),
     totalReadings: readings.length,
@@ -210,6 +245,10 @@ export async function briefing() {
     thresholds: THRESHOLDS,
     note: 'RadNet data may lag by hours to days. Near-real-time gamma data updates more frequently.',
   };
+  epaBackoffMs = 0;
+  cachedEpaResult = result;
+  cachedEpaTime = now;
+  return result;
 }
 
 // Run standalone

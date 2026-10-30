@@ -4,8 +4,8 @@ import { safeFetch } from '../utils/fetch.mjs';
 import { providerTime, freshness, freshResult, unavailableResult } from '../utils/freshness.mjs';
 
 const SOURCE = 'RIPEstat';
-const MAX_AGE = 8 * 3600000;
-const CACHE_MS = 30 * 60000;
+export const MAX_AGE = 12 * 3600000; // 12 hours freshness window
+export const CACHE_MS = 2 * 3600000; // 2 hours cache TTL (worst case: 8h dump age + 2h TTL = 10h <= 12h)
 const cache = new Map();
 const REQUEST = Object.freeze({ timeout: 10000, retries: 0, maxBytes: 2 * 1024 * 1024 });
 const ATTRIBUTION = 'RIPE NCC / RIPEstat, RIS route collectors';

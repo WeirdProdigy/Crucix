@@ -137,7 +137,7 @@ export async function fullBriefing() {
   const allPromises = [
     // Tier 1: Core OSINT & Geopolitical
     runSource('GDELT', gdelt),
-    runSource('OpenSky', opensky),
+    runSource('OpenSky', opensky, { timeoutMs: 60_000 }),
     runSource('FIRMS', firms),
     runSource('Maritime', ships),
     runSource('Safecast', safecast),
