@@ -49,3 +49,4 @@ dashboard/public/vercel.json
 
 # Benchmarking & scratch
 scratch/
+.tmp_probe/
