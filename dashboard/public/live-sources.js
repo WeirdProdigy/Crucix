@@ -86,6 +86,26 @@
     }).join('');
   }
   // `events` is unused (the inspector pairs records by eventId); it stays so `now` keeps its position.
+  function localizeSummary(name, summary) {
+    if (name === 'NOAA-SWPC' && typeof summary === 'string') {
+      return summary
+        .replace(/^Current NOAA scales:/i, 'Aktuális NOAA skálák:')
+        .replace(/radio blackouts/gi, 'rádió-blackout')
+        .replace(/solar radiation storms/gi, 'sugárzási vihar')
+        .replace(/geomagnetic storms/gi, 'geomágneses vihar')
+        .replace(/\(none\)/gi, '(nincs)')
+        .replace(/\(minor\)/gi, '(kisebb)')
+        .replace(/\(moderate\)/gi, '(mérsékelt)')
+        .replace(/\(strong\)/gi, '(erős)')
+        .replace(/\(severe\)/gi, '(súlyos)')
+        .replace(/\(extreme\)/gi, '(szélsőséges)')
+        .replace(/These are current conditions, separate from NOAA forecasts\./gi, 'Jelenlegi állapotok, nem NOAA-előrejelzés.')
+        .replace(/Solar wind:/gi, 'Napszél:')
+        .replace(/X-ray:/gi, 'Röntgen:')
+        .replace(/Forecast max:/gi, 'Várható max:');
+    }
+    return summary;
+  }
   function renderPanel(sources,t,events,now=nowMs()){
     const R=window.CrucixRecords,tr=(key,fallback)=>esc(t('liveSources.'+key,fallback));
     const providers=(Array.isArray(sources)?sources:[]).slice(0,limit()).filter(source=>source&&Object.hasOwn(policies,source.source));
@@ -93,7 +113,7 @@
       const status=state(source,now),rows=observations([source],now),url=safeUrl(source.url);
       const partialForecast=source.source==='MET-Norway'&&rows.length!==(source.observations||[]).length;
       const recs=R?R.toRecords(rows,source.source):[],count=R?recs.length:rows.length;
-      const detail=status==='ok'?(partialForecast?'':source.summary||metricText(source.metrics))||(count?'':t('liveSources.noRecords','No current records in the watched scope')):'';
+      const detail=status==='ok'?(partialForecast?'':localizeSummary(source.source,source.summary)||metricText(source.metrics))||(count?'':t('liveSources.noRecords','No current records in the watched scope')):'';
       const content=status==='ok'?(detail?`<p class="live-summary">${esc(detail)}</p>`:''):`<p class="live-summary">${status==='error'?tr('unavailable','Source unavailable'):tr('expired','Provider data expired or its timestamp is unknown. Live records are hidden.')}</p>`;
       const top=R?R.sortRecords(recs,'severity').slice(0,3).map(rec=>`<li>${esc(rec.title)}</li>`).join(''):'';
       const overview=count?`<div class="live-meta"><span>${count} ${tr('records','current records')}</span>${R?badges(R,recs,t):''}</div>${top?`<ul class="live-top" aria-label="${tr('topRecords','Top records')}">${top}</ul>`:''}`:'';

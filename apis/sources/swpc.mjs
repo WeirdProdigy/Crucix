@@ -7,6 +7,12 @@ const FEED_URL = 'https://services.swpc.noaa.gov/products/noaa-scales.json';
 const SOURCE_URL = 'https://www.swpc.noaa.gov/noaa-scales-explanation';
 const LEVELS = ['none', 'minor', 'moderate', 'strong', 'severe', 'extreme'];
 const SEVERITIES = ['monitor', 'low', 'moderate', 'high', 'high', 'critical'];
+const SCALES_HU = Object.freeze({
+  radioBlackouts: 'rádió-blackout',
+  solarRadiationStorms: 'sugárzási vihar',
+  geomagneticStorms: 'geomágneses vihar',
+});
+const LEVELS_HU = Object.freeze(['nincs', 'kisebb', 'mérsékelt', 'erős', 'súlyos', 'szélsőséges']);
 const SCALES = [
   ['R', 'radioBlackouts', 'radio blackouts'],
   ['S', 'solarRadiationStorms', 'solar radiation storms'],
@@ -271,9 +277,10 @@ export function parseSWPC(data, { now = Date.now() } = {}) {
       severity: SEVERITIES[scale], lat: null, lon: null, locationMethod: 'global', locationPrecision: 'unknown',
     });
   }
-  const summary = `Current NOAA scales: ${SCALES.map(([code, key, title]) => `${code}${metrics[key].scale} ${title} (${metrics[key].label})`).join('; ')}. These are current conditions, separate from NOAA forecasts.`;
+  const scaleSummaryHu = SCALES.map(([code, key]) => `${code}${metrics[key].scale} ${SCALES_HU[key] || key} (${LEVELS_HU[metrics[key].scale] || metrics[key].label})`).join('; ');
+  const summary = `Aktuális NOAA skálák: ${scaleSummaryHu}. Jelenlegi állapotok, nem NOAA-előrejelzés.`;
   const out = freshResult(SOURCE, observedAt, observations, { ...META, metrics, summary }, now);
-  if (out.stale) { out.metrics = {}; out.summary = 'Current NOAA space-weather scales are unavailable within the one-hour freshness window.'; }
+  if (out.stale) { out.metrics = {}; out.summary = 'A jelenlegi NOAA űridőjárási skálák nem érhetők el az 1 órás frissességi ablakban.'; }
   return out;
 }
 
@@ -361,9 +368,9 @@ export function parseEnhancedSWPC(data, { now = Date.now(), notifyMin = parseSwp
 
   const summaryParts = [baseResult.summary];
   if (parsedKp) summaryParts.push(`Kp: ${parsedKp.kp}`);
-  if (parsedWind?.speed != null) summaryParts.push(`Solar wind: ${parsedWind.speed} km/s (Bz: ${parsedWind.bz ?? 0} nT)`);
-  if (parsedXrays?.xrayClass) summaryParts.push(`X-ray: ${parsedXrays.xrayClass}`);
-  if (parsedForecast?.maxExpectedKp != null) summaryParts.push(`Forecast max: Kp ${parsedForecast.maxExpectedKp} (${parsedForecast.maxExpectedGScale})`);
+  if (parsedWind?.speed != null) summaryParts.push(`Napszél: ${parsedWind.speed} km/s (Bz: ${parsedWind.bz ?? 0} nT)`);
+  if (parsedXrays?.xrayClass) summaryParts.push(`Röntgen: ${parsedXrays.xrayClass}`);
+  if (parsedForecast?.maxExpectedKp != null) summaryParts.push(`Várható max: Kp ${parsedForecast.maxExpectedKp} (${parsedForecast.maxExpectedGScale})`);
 
   const summary = summaryParts.join(' | ');
 
@@ -376,7 +383,7 @@ export function parseEnhancedSWPC(data, { now = Date.now(), notifyMin = parseSwp
 
   if (out.stale) {
     out.metrics = {};
-    out.summary = 'Current NOAA space-weather telemetry is unavailable within the one-hour freshness window.';
+    out.summary = 'A jelenlegi NOAA űridőjárási telemetria nem érhető el az 1 órás frissességi ablakban.';
   }
 
   return out;

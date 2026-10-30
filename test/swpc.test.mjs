@@ -252,3 +252,31 @@ test('9. CRUCIX_CONTACT_URL fallback logic: empty string and undefined correctly
     }
   }
 });
+
+test('10. Hungarian localization: parseSWPC and parseEnhancedSWPC summaries are localized to Hungarian', () => {
+  const data = {
+    scales: {
+      '0': {
+        DateStamp: '2026-10-30',
+        TimeStamp: '11:55:00',
+        R: { Scale: 0, Text: 'None' },
+        S: { Scale: 0, Text: 'None' },
+        G: { Scale: 0, Text: 'None' }
+      }
+    },
+    kp: [{ time_tag: '2026-10-30T11:00:00', Kp: 1.67 }],
+    wind: [{ time_tag: '2026-10-30T11:00:00', active: true, source: 'ACE', proton_speed: 340, proton_density: 4.5, proton_temperature: 15000 }],
+    mag: [{ time_tag: '2026-10-30T11:00:00', active: true, source: 'ACE', bt: 7.0, bz_gsm: -6.0 }],
+    xrays: [{ time_tag: '2026-10-30T11:50:00Z', satellite: 18, energy: '0.1-0.8nm', flux: 7.1e-7 }],
+    forecast: 'The greatest expected 3 hr Kp for Oct 30-Nov 01 2026 is 5.00 (NOAA Scale G1).'
+  };
+
+  const result = parseEnhancedSWPC(data, { now: Date.parse('2026-10-30T12:00:00.000Z') });
+  assert.equal(result.status, 'ok');
+  assert.ok(result.summary.includes('Aktuális NOAA skálák:'), 'Must contain Hungarian header');
+  assert.ok(result.summary.includes('rádió-blackout (nincs)'), 'Must contain Hungarian scale labels');
+  assert.ok(result.summary.includes('Jelenlegi állapotok, nem NOAA-előrejelzés.'), 'Must contain Hungarian disclaimer');
+  assert.ok(result.summary.includes('Napszél: 340 km/s (Bz: -6 nT)'), 'Must localize solar wind label');
+  assert.ok(result.summary.includes('Röntgen: B7.1'), 'Must localize X-ray flux label');
+  assert.ok(result.summary.includes('Várható max: Kp 5 (G1)'), 'Must localize forecast label');
+});
