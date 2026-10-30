@@ -65,6 +65,7 @@
 .at-count{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .at-state-firing{color:var(--text)}
 .at-badge{padding:0 6px;border:1px dashed var(--warn);border-radius:3px;color:var(--warn);font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+.al-badge-regional{border-color:var(--dim);color:var(--dim);margin-left:6px}
 .at-summary{white-space:pre-wrap}
 .at-evidence{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;margin:2px 0 4px;font-size:11px}
 .at-label{color:var(--dim);font-size:10px;letter-spacing:.08em;text-transform:uppercase}

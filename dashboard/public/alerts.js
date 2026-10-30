@@ -88,7 +88,7 @@
     const actions=resolved?'':`<div class="at-actions">${alert.state==='acked'?'':button(tx,'ack',id,'ack','Acknowledge')}${snoozeControl(tx,id,menuId)}${button(tx,'resolve',id,'resolve','Resolve')}</div>`;
     return `<li class="at-alert at-${level}" data-alert-id="${id}">${glyph(tx,level)}<div class="at-body"><p class="at-title">${esc(alert.title)}</p>`
       +`<p class="at-meta"><span class="at-rule"><span class="ri-sr">${tx('alerts.rule','Rule')}: </span>${ruleLabel(tx,alert.ruleId,alert.ruleName)}</span><span class="at-age">${esc(ageLabel(alert.firstSeenAt,now))}</span>${n?`<span class="at-count">${tx('alerts.count','seen')} ${n}×</span>`:''}</p>`
-      +`<p class="at-status">${stateLine(tx,alert,now)}${alert.silent===true?`<span class="at-badge">${tx('alerts.silent','Initial baseline')}</span>`:''}</p>`
+      +`<p class="at-status">${stateLine(tx,alert,now)}${alert.silent===true?`<span class="at-badge">${tx('alerts.silent','Initial baseline')}</span>`:''}${alert.regionalNotice?`<span class="at-badge al-badge-regional">${esc(alert.regionalNotice)}</span>`:''}</p>`
       +`${text(alert.summary)?`<p class="at-summary">${esc(alert.summary)}</p>`:''}`
       +`${evidence?`<div class="at-evidence"><span class="at-label">${tx('alerts.evidence','Evidence')}</span><ul>${evidence}</ul></div>`:''}${actions}</div></li>`;
   }

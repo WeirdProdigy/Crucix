@@ -136,6 +136,7 @@ export default {
 
   // Alert engine: notification channels exist only when their variable is set (see .env.example)
   alerts: {
+    regionalScope: ['domestic', 'carpathian_basin', 'karpat_medence'].includes((process.env.ALERT_REGIONAL_SCOPE || 'all').trim().toLowerCase()) ? ((process.env.ALERT_REGIONAL_SCOPE || '').trim().toLowerCase() === 'carpathian_basin' ? 'carpathian_basin' : 'domestic') : 'all',
     // Telegram and Discord carry engine alerts only when listed here (their bots already send the delta alerts)
     notifyChannels: envList('ALERT_NOTIFY_CHANNELS', entry => entry === 'telegram' || entry === 'discord', 'telegram or discord'),
     notifyMinSeverity:(process.env.ALERT_NOTIFY_MIN_SEVERITY || '').trim().toLowerCase() || 'high', // critical | high | watch | info; the notifier validates it
