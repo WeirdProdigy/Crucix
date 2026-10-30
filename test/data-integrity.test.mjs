@@ -36,8 +36,13 @@ test('news without a location stays in feed; inferred map coordinates remain sta
   assert.equal(buildNewsFeed(first, {}, [], []).length, 2);
 });
 test('GDELT timestamps preserve provider time, unknown dates remain unknown', () => {
-  const feed = buildNewsFeed([], { allArticles: [{ title: 'Known', seendate: '20260930T123456Z' }, { title: 'Unknown', seendate: 'bad' }] }, [], []);
-  assert.equal(feed[0].timestamp, '2026-09-30T12:34:56.000Z');
+  const recentDate = new Date(Date.now() - 3600000);
+  recentDate.setMilliseconds(0);
+  const recentIso = recentDate.toISOString();
+  const recentSeen = recentIso.replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const feed = buildNewsFeed([], { allArticles: [{ title: 'Known', seendate: recentSeen }, { title: 'Unknown', seendate: 'bad' }] }, [], []);
+  assert.equal(feed[0].timestamp, recentIso);
+  assert.equal(sourceTimestamp('20260930T123456Z'), '2026-09-30T12:34:56.000Z');
   assert.equal(feed[1].timestamp, null);
   assert.equal(sourceTimestamp('20260230T120000Z'), null);
   assert.equal(sourceTimestamp('2026-02-30T12:00:00Z'), null);
