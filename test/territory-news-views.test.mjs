@@ -494,3 +494,93 @@ test('6. County view territorial gating: Qubit tudományos, Portfolio gazdasági
   // Police-Hajdu: Vármegyei hír bekerül a megyei nézetbe
   assert.ok(countyNews.some(n => n.id === 'police-county-1'), 'Police-Hajdu vármegyei hír a megyei nézetbe kerül');
 });
+
+test('8. View fairness: source round-robin interleaving, local/county priority allocation, and legacy international representation', () => {
+  // Synthesize a scenario where high-volume source (Feed-A) has 60 items with newer timestamps,
+  // while low-volume sources (Feed-B, Feed-C, Legacy-BBC) have 5-10 items with slightly older timestamps.
+  const now = Date.now();
+  const testItems = [];
+
+  // Feed-A (high volume national news): 60 items
+  for (let i = 0; i < 60; i++) {
+    testItems.push({
+      id: `feed-a-${i}`,
+      source: { name: 'RSS-A' },
+      kind: 'news',
+      newsCategory: 'news_national',
+      title: `Feed A hír ${i}`,
+      publishedAt: new Date(now - i * 1000).toISOString()
+    });
+  }
+
+  // Feed-B (medium volume national news, e.g. 444): 10 items
+  for (let i = 0; i < 10; i++) {
+    testItems.push({
+      id: `feed-b-${i}`,
+      source: { name: 'RSS-B' },
+      kind: 'news',
+      newsCategory: 'news_national',
+      title: `Feed B hír ${i}`,
+      publishedAt: new Date(now - (i + 100) * 1000).toISOString() // older than Feed-A
+    });
+  }
+
+  // Feed-C (science/economy, e.g. Qubit/Portfolio): 10 items
+  for (let i = 0; i < 10; i++) {
+    testItems.push({
+      id: `feed-c-${i}`,
+      source: { name: 'RSS-C' },
+      kind: 'news',
+      newsCategory: 'news_science',
+      title: `Feed C hír ${i}`,
+      publishedAt: new Date(now - (i + 150) * 1000).toISOString() // older than Feed-A
+    });
+  }
+
+  // Local portal (Police-Hajdu): 3 items
+  for (let i = 0; i < 3; i++) {
+    testItems.push({
+      id: `police-ph-${i}`,
+      source: { name: 'Police-Hajdu' },
+      kind: 'news',
+      title: `Rendőrségi tájékoztató ${i}`,
+      publishedAt: new Date(now - (i + 200) * 1000).toISOString()
+    });
+  }
+
+  // Legacy international news (e.g. BBC): 15 items
+  for (let i = 0; i < 15; i++) {
+    testItems.push({
+      id: `legacy-bbc-${i}`,
+      source: { name: 'BBC' },
+      kind: 'news',
+      newsCategory: 'news_global',
+      title: `BBC World report ${i}`,
+      country: 'GBR',
+      publishedAt: new Date(now - (i + 300) * 1000).toISOString()
+    });
+  }
+
+  // Run view partitioning with totalNewsCap = 50 to test severe constraint
+  const partitions = partitionEventsByView(testItems, undefined, { totalNewsCap: 50, viewNewsCap: 30 });
+
+  const nationalNews = getViewNews(partitions, VIEWS.NATIONAL);
+  const countyNews = getViewNews(partitions, VIEWS.COUNTY);
+  const globalNews = getViewNews(partitions, VIEWS.GLOBAL);
+
+  // 1. All 3 Police-Hajdu items are admitted to county view (local/county allocation prioritized)
+  assert.equal(countyNews.filter(n => n.source?.name === 'Police-Hajdu').length, 3, 'Mind a 3 Police-Hajdu hírnek be kell kerülnie a megyei nézetbe');
+
+  // 2. Feed-B and Feed-C are NOT starved in National view despite older timestamps
+  const feedBCount = nationalNews.filter(n => n.source?.name === 'RSS-B').length;
+  const feedCCount = nationalNews.filter(n => n.source?.name === 'RSS-C').length;
+  assert.ok(feedBCount > 0, 'RSS-B (444 típusú) nem szorulhat ki az országos nézetből (count > 0)');
+  assert.ok(feedCCount > 0, 'RSS-C (Qubit/Portfolio típusú) nem szorulhat ki az országos nézetből (count > 0)');
+
+  // 3. Legacy international news is NOT starved in Global view
+  const bbcCount = globalNews.filter(n => n.source?.name === 'BBC').length;
+  assert.ok(bbcCount > 0, 'A legacy nemzetközi hírek (BBC) nem szorulhatnak ki a globális nézetből (count > 0)');
+
+  // 4. Total retained news respects ceiling
+  assert.ok(partitions.news.length <= 50, 'A közös plafon (50) nem léphető túl');
+});
