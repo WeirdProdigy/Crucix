@@ -91,8 +91,24 @@ function momChange(seriesData) {
   };
 }
 
+// 12-hour in-memory cache to prevent exceeding BLS keyless quota (25 requests/day)
+export const BLS_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+let cachedBlsResult = null;
+let cachedBlsTime = 0;
+
+export function _resetBlsCache() {
+  cachedBlsResult = null;
+  cachedBlsTime = 0;
+}
+
 // Briefing — pull latest CPI, unemployment, payrolls
-export async function briefing(apiKey) {
+export async function briefing(apiKey, options = {}) {
+  const now = typeof options.now === 'function' ? options.now() : (Number.isFinite(options.now) ? options.now : Date.now());
+  const ttl = options.ttlMs ?? BLS_CACHE_TTL_MS;
+
+  if (!options.bypassCache && cachedBlsResult && (now - cachedBlsTime < ttl)) {
+    return { ...cachedBlsResult, cached: true };
+  }
   const seriesIds = Object.keys(SERIES);
   const resp = await getSeries(seriesIds, { apiKey });
 
@@ -151,12 +167,17 @@ export async function briefing(apiKey) {
     }
   }
 
-  return {
+  const result = {
     source: 'BLS',
-    timestamp: new Date().toISOString(),
+    timestamp: new Date(now).toISOString(),
     indicators,
     signals,
   };
+
+  cachedBlsResult = result;
+  cachedBlsTime = now;
+
+  return result;
 }
 
 if (process.argv[1]?.endsWith('bls.mjs')) {
