@@ -836,3 +836,196 @@ test('21. Nézeti plafon figyelmeztetés és szűrési darabszám', () => {
   assert.ok(filteredHtml.includes('(szűrés után látható: 0 db)'), 'Filtered count must be shown separately in ceiling note');
   api.resetNewsFilter();
 });
+
+
+test('22. Duplikátum-összevonás: normalizált cím egyezése és <= 15 perc időeltérés esetén egyetlen kártya', () => {
+  const { api } = createHarness();
+  const itemA = {
+    id: 'dehir-dog-1',
+    kind: 'news',
+    title: 'Két hónap börtönt kapott egy férfi, aki miatt éhen halt egy kutya',
+    source: { name: 'RSS-Dehir' },
+    link: 'https://dehir.hu/eletmod/ket-honap-bortont-kapott-egy-ferfi-aki-miatt-ehen-halt-egy-kutya/2026/10/29/',
+    publishedAt: '2026-10-29T19:08:13.000Z'
+  };
+  const itemB = {
+    id: 'gnews-dog-1',
+    kind: 'news',
+    title: 'Két hónap börtönt kapott egy férfi, aki miatt éhen halt egy kutya - Dehir',
+    source: { name: 'Google-News', publisher: 'Dehir' },
+    facts: { sourcePublisher: 'Dehir' },
+    link: 'https://news.google.com/rss/articles/CBMi1234567890',
+    publishedAt: '2026-10-29T19:11:19.000Z'
+  };
+
+  const deduped = api.deduplicateNewsItems([itemA, itemB]);
+  assert.equal(deduped.length, 1, 'Két tételnek 1 kártyára kell összevonódnia');
+  assert.equal(deduped[0].id, 'dehir-dog-1');
+  assert.equal(deduped[0].link, 'https://dehir.hu/eletmod/ket-honap-bortont-kapott-egy-ferfi-aki-miatt-ehen-halt-egy-kutya/2026/10/29/');
+  assert.ok(deduped[0].relatedSources.includes('Google Hírek') || deduped[0].relatedSources.includes('Google-News'));
+
+  const cardHtml = api.renderNewsCard(deduped[0]);
+  assert.ok(cardHtml.includes('vp-news-related'));
+  assert.ok(cardHtml.includes('Kapcsolódó:'));
+  assert.ok(cardHtml.includes('https://dehir.hu/eletmod/'));
+  assert.ok(!cardHtml.includes('https://news.google.com/'));
+});
+
+test('23. Közvetlen kiadói link elsőbbsége a Google-átirányítóval szemben sorrendtől függetlenül', () => {
+  const { api } = createHarness();
+  const googleFirst = {
+    id: 'gnews-1',
+    kind: 'news',
+    title: 'Elutasította a kereseteket a Debreceni Törvényszék a CATL-ügyben – videóval - Dehir',
+    source: { name: 'Google-News', publisher: 'Dehir' },
+    facts: { sourcePublisher: 'Dehir' },
+    link: 'https://news.google.com/rss/articles/CBMiCATL123',
+    publishedAt: '2026-10-29T16:15:02.000Z'
+  };
+  const directSecond = {
+    id: 'dehir-1',
+    kind: 'news',
+    title: 'Elutasította a kereseteket a Debreceni Törvényszék a CATL-ügyben – videóval',
+    source: { name: 'RSS-Dehir' },
+    link: 'https://dehir.hu/debrecen/elutasitotta-a-kereseteket-a-debreceni-torvenyszek-a-catl-ugyben/2026/10/29/',
+    publishedAt: '2026-10-29T16:15:00.000Z'
+  };
+
+  const deduped = api.deduplicateNewsItems([googleFirst, directSecond]);
+  assert.equal(deduped.length, 1);
+  assert.equal(deduped[0].link, directSecond.link, 'A közvetlen Dehir linknek kell győznie még akkor is, ha a Google News volt az első a listában');
+  assert.equal(deduped[0].title, directSecond.title);
+});
+
+test('24. Időeltérés > 15 perc esetén nincs összevonás, külön kártyák maradnak', () => {
+  const { api } = createHarness();
+  const morningItem = {
+    id: 'n-morning',
+    kind: 'news',
+    title: 'Mindenszentek: erre hívja fel a figyelmet a rendőrség és a katasztrófavédelem',
+    source: { name: 'RSS-Dehir' },
+    link: 'https://dehir.hu/debrecen/mindenszentek-1',
+    publishedAt: '2026-10-29T13:06:00.000Z'
+  };
+  const afternoonItem = {
+    id: 'n-afternoon',
+    kind: 'news',
+    title: 'Mindenszentek: erre hívja fel a figyelmet a rendőrség és a katasztrófavédelem',
+    source: { name: 'Google-News' },
+    link: 'https://news.google.com/rss/articles/CBMiMSZ',
+    publishedAt: '2026-10-29T13:39:00.000Z'
+  };
+
+  const deduped = api.deduplicateNewsItems([morningItem, afternoonItem]);
+  assert.equal(deduped.length, 2, '15 percnél nagyobb időeltérésnél tilos összevonni, 2 kártyának kell maradnia');
+});
+
+test('25. Hasonló, de eltérő című tételek: legfeljebb "kapcsolódó jelölt" jelzés, nincs összevonás', () => {
+  const { api } = createHarness();
+  const policeItem = {
+    id: 'pol-1',
+    kind: 'news',
+    title: 'Összehangolt akció Nádudvaron',
+    source: { name: 'Police-Hajdu' },
+    link: 'https://police.hu/hu/hirek/nadudvar',
+    publishedAt: '2026-10-29T13:00:00.000Z'
+  };
+  const gnewsItem = {
+    id: 'gnews-var-1',
+    kind: 'news',
+    title: 'Összehangolt akcióval kapcsolt le egy dílert a rendőrség Nádudvaron',
+    source: { name: 'Google-News' },
+    link: 'https://news.google.com/rss/articles/CBMiNadudvar',
+    publishedAt: '2026-10-29T13:20:00.000Z'
+  };
+
+  const deduped = api.deduplicateNewsItems([policeItem, gnewsItem]);
+  assert.equal(deduped.length, 2, 'Eltérő című tételeket tilos összevonni');
+
+  const cardA = api.renderNewsCard(deduped[0]);
+  const cardB = api.renderNewsCard(deduped[1]);
+  assert.ok(cardA.includes('Kapcsolódó jelölt:') || cardB.includes('Kapcsolódó jelölt:'), 'Legalább az egyik kártyán meg kell jelennie a "Kapcsolódó jelölt" jelzésnek');
+});
+
+test('26. Koordináta nélküli hírek listájában is érvényesül az összevonás', () => {
+  const { api } = createHarness();
+  const snapshot = {
+    views: {
+      local: { newsCount: 2, retainedNewsCount: 2, newsIds: ['unloc-1', 'unloc-2'] },
+      news: [
+        {
+          id: 'unloc-1',
+          kind: 'news',
+          title: 'Két hónap börtönt kapott egy férfi, aki miatt éhen halt egy kutya',
+          source: { name: 'RSS-Dehir' },
+          link: 'https://dehir.hu/dog',
+          publishedAt: '2026-10-29T19:08:00.000Z'
+        },
+        {
+          id: 'unloc-2',
+          kind: 'news',
+          title: 'Két hónap börtönt kapott egy férfi, aki miatt éhen halt egy kutya - Dehir',
+          source: { name: 'Google-News', publisher: 'Dehir' },
+          facts: { sourcePublisher: 'Dehir' },
+          link: 'https://news.google.com/rss/dog',
+          publishedAt: '2026-10-29T19:11:00.000Z'
+        }
+      ]
+    }
+  };
+
+  const panelHtml = api.panelHtml(snapshot);
+  assert.ok(panelHtml.includes('Koordináta nélküli hírek (térképi jelölő nélkül)'));
+  assert.ok(panelHtml.includes('Kapcsolódó: Google Hírek') || panelHtml.includes('Kapcsolódó: Google-News') || panelHtml.includes('Kapcsolódó: Dehir'));
+  const unlocMatches = panelHtml.match(/class="vp-unlocated-item"/g) || [];
+  assert.equal(unlocMatches.length, 1, 'A koordináta nélküli hírek listájában a duplikátumok összevonása után pontosan 1 elemnek kell szerepelnie');
+});
+
+test('27. Eseményszámlálók és plafon változatlansága duplikátum-összevonás mellett', () => {
+  const { api } = createHarness();
+  api.resetNewsFilter();
+
+  const mockSnapshot = {
+    views: {
+      local: {
+        newsCount: 58,
+        retainedNewsCount: 50,
+        newsIds: ['item-1', 'item-2', 'item-3'],
+        breakdown: { confirmedLocal: 0, keyConnection: 0, needsReview: 0, regionalAdvisories: 0, unknownTerritory: 0, countyEvent: 0, nationalEvent: 0, globalEvent: 0 }
+      },
+      news: [
+        {
+          id: 'item-1',
+          kind: 'news',
+          title: 'Azonos hír címe',
+          source: { name: 'RSS-Dehir' },
+          link: 'https://dehir.hu/hir1',
+          publishedAt: '2026-10-29T12:00:00Z'
+        },
+        {
+          id: 'item-2',
+          kind: 'news',
+          title: 'Azonos hír címe - Dehir',
+          source: { name: 'Google-News' },
+          link: 'https://news.google.com/hir1',
+          publishedAt: '2026-10-29T12:05:00Z'
+        },
+        {
+          id: 'item-3',
+          kind: 'news',
+          title: 'Másik független hír',
+          source: { name: 'HAON' },
+          link: 'https://haon.hu/hir2',
+          publishedAt: '2026-10-29T12:10:00Z'
+        }
+      ]
+    }
+  };
+
+  const html = api.newsFeedHtml(mockSnapshot);
+  assert.ok(html.includes('Nézeti felső plafon aktív: 50 / 58 hír megtartva.'));
+  assert.ok(html.includes('50 db (2 kártya)'), 'A fejléc jelvénynek mutatnia kell a megőrzött elemszámot és az összevont kártyák számát');
+
+  const panelHtml = api.panelHtml(mockSnapshot);
+  assert.ok(panelHtml.includes('0 db'), 'A fizikai eseményszámlálók nem szennyeződhetnek hírrel');
+});

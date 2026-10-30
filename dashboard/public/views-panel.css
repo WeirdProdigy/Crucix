@@ -750,6 +750,27 @@
   font-family: var(--font-mono, monospace);
 }
 
+.vp-news-related {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(56, 189, 248, 0.15);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  font-family: var(--font-mono, monospace);
+  font-weight: 500;
+}
+
+.vp-badge-related-candidate {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(148, 163, 184, 0.12);
+  color: #cbd5e1;
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  font-family: var(--font-mono, monospace);
+}
+
 .vp-news-card-meta {
   display: flex;
   flex-wrap: wrap;

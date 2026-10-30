@@ -332,6 +332,163 @@
     `;
   }
 
+  function normalizeNewsTitle(rawTitle, item) {
+    if (!rawTitle || typeof rawTitle !== 'string') return '';
+    let title = rawTitle.toLowerCase();
+
+    // 1. Strip explicit publisher suffix if known (e.g. " - HAON", " - Dehir")
+    const explicitPub = (item?.facts?.sourcePublisher || item?.source?.publisher || '');
+    if (explicitPub && explicitPub.length >= 2) {
+      const escaped = explicitPub.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      title = title.replace(new RegExp(`\\s*[-–—|]\\s*${escaped}.*$`, 'i'), '');
+    }
+
+    // 2. Strip common news outlet suffixes
+    title = title.replace(/\s*[-–—|]\s*(dehir(?:\.hu)?|haon(?:\.hu)?|index(?:\.hu)?|telex(?:\.hu)?|hvg(?:\.hu)?|24\.hu|portfolio(?:\.hu)?|civishír|világgazdaság|vg\.hu|police\.hu|qubit(?:\.hu)?|infostart|mti|euronews|magyar nemzet|népszava|blikk|femcafe|metropol|origo(?:\.hu)?).*$/i, '');
+
+    // 3. Strip punctuation ("írásjelek nélkül")
+    title = title.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()'"„”»«?–—|]/g, ' ');
+
+    // 4. Collapse whitespace
+    title = title.replace(/\s+/g, ' ').trim();
+    return title;
+  }
+
+  function arePublishTimesWithin15Min(itemA, itemB) {
+    const timeA = Date.parse(itemA.publishedAt || itemA.observedAt || '');
+    const timeB = Date.parse(itemB.publishedAt || itemB.observedAt || '');
+    if (!Number.isFinite(timeA) || !Number.isFinite(timeB)) return false;
+    return Math.abs(timeA - timeB) <= 15 * 60 * 1000;
+  }
+
+  function isDirectPublisherUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    return !url.includes('news.google.com') && !url.includes('/rss/articles/');
+  }
+
+  function getNewsTokens(normTitle) {
+    return new Set(normTitle.split(' ').filter(w => w.length > 2));
+  }
+
+  function calculateTokenSimilarity(setA, setB) {
+    if (setA.size === 0 || setB.size === 0) return 0;
+    let common = 0;
+    for (const t of setA) {
+      if (setB.has(t)) {
+        common += 1;
+      } else {
+        // Stem prefix match for Hungarian inflections (e.g. akció vs akcióval)
+        for (const o of setB) {
+          if (t.length >= 4 && o.length >= 4 && (t.startsWith(o) || o.startsWith(t))) {
+            common += 0.8;
+            break;
+          }
+        }
+      }
+    }
+    const union = setA.size + setB.size - common;
+    return union > 0 ? common / union : 0;
+  }
+
+  /**
+   * Deduplicates news items:
+   * 1. Exact normalized title match AND publish time diff <= 15 min -> merged into single card
+   *    Direct publisher link takes precedence over Google News redirect URL.
+   *    Merged card carries "Kapcsolódó: <forrás>, <forrás>".
+   * 2. Similar but distinct titles -> not merged, marked with "kapcsolódó jelölt".
+   */
+  function deduplicateNewsItems(items) {
+    if (!Array.isArray(items) || items.length === 0) return [];
+
+    // Step 1: Exact matches clustering
+    const clusters = [];
+    const assigned = new Set();
+
+    for (let i = 0; i < items.length; i++) {
+      if (assigned.has(i)) continue;
+      const current = items[i];
+      const normCurrent = normalizeNewsTitle(current.title, current);
+      const cluster = [current];
+      assigned.add(i);
+
+      for (let j = i + 1; j < items.length; j++) {
+        if (assigned.has(j)) continue;
+        const candidate = items[j];
+        const normCand = normalizeNewsTitle(candidate.title, candidate);
+
+        if (normCurrent && normCurrent === normCand && arePublishTimesWithin15Min(current, candidate)) {
+          cluster.push(candidate);
+          assigned.add(j);
+        }
+      }
+      clusters.push(cluster);
+    }
+
+    // Step 2: Merge clusters into single cards with direct link priority
+    const mergedList = clusters.map(cluster => {
+      if (cluster.length === 1) return { ...cluster[0] };
+
+      // Direct publisher link takes precedence over Google redirect
+      let primary = cluster[0];
+      for (const item of cluster) {
+        const itemUrl = item.link || item.url || '';
+        const primaryUrl = primary.link || primary.url || '';
+        if (isDirectPublisherUrl(itemUrl) && !isDirectPublisherUrl(primaryUrl)) {
+          primary = item;
+        }
+      }
+
+      const otherItems = cluster.filter(item => item !== primary);
+      const primarySourceLabel = primary.source?.name || getPublisherName(primary);
+      const relatedSourceNames = [...new Set(
+        otherItems.map(item => item.source?.name || getPublisherName(item) || item.source || 'Hírforrás')
+      )].filter(name => name !== primarySourceLabel);
+
+      const mergedIds = cluster.map(item => item.id).filter(Boolean);
+
+      return {
+        ...primary,
+        relatedSources: relatedSourceNames.length > 0 ? relatedSourceNames : ['Google-News'],
+        mergedIds,
+        mergedItemsCount: cluster.length
+      };
+    });
+
+    // Step 3: Identify similar non-matching pairs ("kapcsolódó jelölt")
+    for (let i = 0; i < mergedList.length; i++) {
+      const itemA = mergedList[i];
+      if (itemA.relatedSources?.length > 0) continue; // Already merged exact
+      const normA = normalizeNewsTitle(itemA.title, itemA);
+      const tokensA = getNewsTokens(normA);
+      if (tokensA.size < 2) continue;
+
+      for (let j = i + 1; j < mergedList.length; j++) {
+        const itemB = mergedList[j];
+        if (itemB.relatedSources?.length > 0) continue;
+        const normB = normalizeNewsTitle(itemB.title, itemB);
+        if (normA === normB) continue;
+        const tokensB = getNewsTokens(normB);
+        if (tokensB.size < 2) continue;
+
+        const sim = calculateTokenSimilarity(tokensA, tokensB);
+        const timeA = Date.parse(itemA.publishedAt || itemA.observedAt || 0);
+        const timeB = Date.parse(itemB.publishedAt || itemB.observedAt || 0);
+        const timeDiffHours = Math.abs(timeA - timeB) / (3600 * 1000);
+
+        if ((sim >= 0.25 || sim > 0) && timeDiffHours <= 24) {
+          const pubA = itemA.source?.name || getPublisherName(itemA) || 'Forrás';
+          const pubB = itemB.source?.name || getPublisherName(itemB) || 'Forrás';
+          if (pubA !== pubB) {
+            itemA.relatedCandidateSources = [...new Set([...(itemA.relatedCandidateSources || []), pubB])];
+            itemB.relatedCandidateSources = [...new Set([...(itemB.relatedCandidateSources || []), pubA])];
+          }
+        }
+      }
+    }
+
+    return mergedList;
+  }
+
   function renderNewsCard(item) {
     if (!item || typeof item !== 'object') return '';
     const safeUrl = escSafeUrl(item.link || item.url);
@@ -355,6 +512,16 @@
       reviewBadge = `<span class="vp-badge-news-review" title="A hír szövege alapján ellenőrizendő említés">Ellenőrizendő említés</span>`;
     }
 
+    let relatedBadge = '';
+    if (Array.isArray(item.relatedSources) && item.relatedSources.length > 0) {
+      relatedBadge = `<span class="vp-news-related" title="Több forrás által közölt azonos cikk">Kapcsolódó: ${esc(item.relatedSources.join(', '))}</span>`;
+    }
+
+    let candidateBadge = '';
+    if (!relatedBadge && Array.isArray(item.relatedCandidateSources) && item.relatedCandidateSources.length > 0) {
+      candidateBadge = `<span class="vp-badge-related-candidate" title="Hasonló tartalmú hír másik forrásból">Kapcsolódó jelölt: ${esc(item.relatedCandidateSources.join(', '))}</span>`;
+    }
+
     const publisher = getPublisherName(item);
     const rawTime = item.publishedAt || item.observedAt || '';
     const timeStr = formatTime(rawTime);
@@ -372,6 +539,8 @@
             ${topicBadge}
             ${settlementBadge}
             ${reviewBadge}
+            ${relatedBadge}
+            ${candidateBadge}
           </div>
         </div>
         <div class="vp-news-card-meta">
@@ -465,14 +634,17 @@
       `;
     }
 
+    // 2b. Deduplicate news items (exact normalized title + <=15 min diff -> single card with related sources; similar items -> candidate badge)
+    const dedupedNews = deduplicateNewsItems(nonPromoNews);
+
     // 3. Unique publishers and categories for filter controls
-    const uniquePublishers = [...new Set(nonPromoNews.map(n => getPublisherName(n)).filter(Boolean))].sort();
-    const uniqueCategories = [...new Set(nonPromoNews.map(n => n.newsCategory || 'news_other'))].sort();
+    const uniquePublishers = [...new Set(dedupedNews.map(n => getPublisherName(n)).filter(Boolean))].sort();
+    const uniqueCategories = [...new Set(dedupedNews.map(n => n.newsCategory || 'news_other'))].sort();
 
     // 4. Apply active filters
-    let filtered = nonPromoNews;
+    let filtered = dedupedNews;
     if (newsFilter.source !== 'all') {
-      filtered = filtered.filter(n => getPublisherName(n) === newsFilter.source);
+      filtered = filtered.filter(n => getPublisherName(n) === newsFilter.source || (Array.isArray(n.relatedSources) && n.relatedSources.includes(newsFilter.source)));
     }
     if (newsFilter.category !== 'all') {
       filtered = filtered.filter(n => (n.newsCategory || 'news_other') === newsFilter.category);
@@ -520,7 +692,7 @@
     const eligibleCount = viewCounters.newsCount ?? nonPromoNews.length;
     if (eligibleCount > retainedCount) {
       let filterSuffix = '';
-      if (filtered.length !== nonPromoNews.length) {
+      if (filtered.length !== dedupedNews.length) {
         filterSuffix = ` (szűrés után látható: ${filtered.length} db)`;
       }
       ceilingNote = `<div class="vp-newsfeed-ceiling-note">Nézeti felső plafon aktív: ${retainedCount} / ${eligibleCount} hír megtartva${filterSuffix}.</div>`;
@@ -535,7 +707,10 @@
     }
 
     let headBadgeText = `${retainedCount} db`;
-    if (filtered.length !== nonPromoNews.length) {
+    if (dedupedNews.length < nonPromoNews.length) {
+      headBadgeText = `${retainedCount} db (${dedupedNews.length} kártya)`;
+    }
+    if (filtered.length !== dedupedNews.length) {
       headBadgeText = `Szűrt: ${filtered.length} / ${retainedCount} db`;
     }
 
@@ -645,21 +820,30 @@
     }
 
     // Unlocated news strip (safe presentation without fake centroid)
+    const dedupedUnlocated = deduplicateNewsItems(unlocatedNews);
     let unlocatedStripHtml = '';
-    if (unlocatedNews.length > 0) {
+    if (dedupedUnlocated.length > 0) {
       unlocatedStripHtml = `
         <div class="vp-unlocated-strip">
           <div class="vp-unlocated-head">Koordináta nélküli hírek (térképi jelölő nélkül)</div>
-          ${unlocatedNews.map(n => `
+          ${dedupedUnlocated.map(n => {
+            let relSuffix = '';
+            if (Array.isArray(n.relatedSources) && n.relatedSources.length > 0) {
+              relSuffix = ` · Kapcsolódó: ${esc(n.relatedSources.join(', '))}`;
+            } else if (Array.isArray(n.relatedCandidateSources) && n.relatedCandidateSources.length > 0) {
+              relSuffix = ` · (Kapcsolódó jelölt: ${esc(n.relatedCandidateSources.join(', '))})`;
+            }
+            return `
             <div class="vp-unlocated-item"
                  role="button"
                  tabindex="0"
                  onclick="window.CrucixIntelligence?.openEvent?.('${esc(n.id)}')"
                  onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.CrucixIntelligence?.openEvent?.('${esc(n.id)}');}">
               <span>${esc(n.title)}</span>
-              <span style="color:#64748b">${esc(n.source?.name || '')}</span>
+              <span style="color:#64748b">${esc(getPublisherName(n) || n.source?.name || '')}${relSuffix}</span>
             </div>
-          `).join('')}
+            `;
+          }).join('')}
         </div>
       `;
     }
@@ -789,7 +973,9 @@
     getNewsScope,
     resetNewsScope,
     setContentTab,
-    getContentTab
+    getContentTab,
+    deduplicateNewsItems,
+    normalizeNewsTitle
   });
 
 })(window, document);
