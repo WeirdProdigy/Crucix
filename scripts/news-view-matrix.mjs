@@ -85,6 +85,9 @@ export function generateNewsViewMatrix(input, options = {}) {
   }
 
   // Legacy sources in data.news (if present)
+  // Obs Definition: For legacy rows (Legacy-Domestic and Legacy-International), obs is strictly defined
+  // as the count of items present directly in raw data.news (raw.news items before event building).
+  // During buildEvents, single raw items may expand into multiple distinct events (e.g. 4 raw -> 8 events, 18 raw -> 36 events).
   let legacyDomesticObs = 0;
   let legacyInternationalObs = 0;
   if (Array.isArray(data.news)) {
@@ -198,7 +201,8 @@ export function generateNewsViewMatrix(input, options = {}) {
       totalNewsCap,
       viewNewsCap,
       totalPipelineNewsEvents: newsEvents.length,
-      retainedUniqueNewsCount: partitions.news.length
+      retainedUniqueNewsCount: partitions.news.length,
+      legacyObsDefinition: 'Count of items directly in data.news (raw.news) before event building'
     },
     rows: Object.values(rows),
     totals: {

@@ -115,8 +115,8 @@
     "language": "hu",
     "status": "verified-live",
     "checkedAt": "2026-10-30",
-    "provenance": "Hivatalos szolgáltatói oldal (idokep.hu/webkamera/dmjvcam)",
-    "notes": "Debrecen MJV Önkormányzata által üzemeltetett panorámakamera. Két időpontban ellenőrzött élő felvételi időbélyeg (09:32, 13:40)."
+    "provenance": "Időkép webkamera oldal (idokep.hu/webkamera/dmjvcam)",
+    "notes": "Debrecen MJV Önkormányzata által üzemeltetett panorámakamera az Időkép felületén. Látott időbélyeg (Utolsó képkocka): T1 (09:32): 2026.10.30 09:32, T2 (13:40): 2026.10.30 13:40."
   },
   {
     "id": "debrecen-bekas-to-webcam",
@@ -129,8 +129,8 @@
     "language": "hu",
     "status": "verified-live",
     "checkedAt": "2026-10-30",
-    "provenance": "Hivatalos szolgáltatói oldal (idokep.hu/webkamera/dmjvcam3)",
-    "notes": "Debrecen MJV Önkormányzata által üzemeltetett élő videó stream (HLS). Két időpontban ellenőrzött folyamatos élő közvetítés (09:33, 13:41)."
+    "provenance": "Időkép webkamera oldal (idokep.hu/webkamera/dmjvcam3)",
+    "notes": "Debrecen MJV Önkormányzata által üzemeltetett élő videó stream az Időkép felületén. Látott élő adás állapot: T1 (09:33): Élő adás (folyamatos HLS videó), T2 (13:41): Élő adás (folyamatos HLS videó)."
   },
   {
     "id": "debrecen-egyetem-ter-webcam",
@@ -143,8 +143,8 @@
     "language": "hu",
     "status": "verified-live",
     "checkedAt": "2026-10-30",
-    "provenance": "Hivatalos szolgáltatói oldal (idokep.hu/webkamera/deegyetemter)",
-    "notes": "Debreceni Egyetem által üzemeltetett webkamera a Főépületről. Két időpontban ellenőrzött élő felvételi időbélyeg (09:32, 13:41)."
+    "provenance": "Időkép webkamera oldal (idokep.hu/webkamera/deegyetemter)",
+    "notes": "Debreceni Egyetem által üzemeltetett webkamera az Időkép felületén. Látott időbélyeg (Utolsó képkocka): T1 (09:32): 2026.10.30 09:32, T2 (13:41): 2026.10.30 13:41."
   },
   {
     "id": "hajduszoboszlo-aeroclub-webcam",
@@ -157,8 +157,8 @@
     "language": "hu",
     "status": "verified-live",
     "checkedAt": "2026-10-30",
-    "provenance": "Hivatalos szolgáltatói oldal (idokep.hu/webkamera/lhho2)",
-    "notes": "Hajdúszoboszlói Aero Club sportegyesület által üzemeltetett repülőtéri webkamera. Két időpontban ellenőrzött élő felvételi időbélyeg (09:33, 13:41)."
+    "provenance": "Időkép webkamera oldal (idokep.hu/webkamera/lhho2)",
+    "notes": "Hajdúszoboszlói Aero Club sportegyesület által üzemeltetett repülőtéri webkamera az Időkép felületén. Látott időbélyeg (Utolsó képkocka): T1 (09:33): 2026.10.30 09:33, T2 (13:41): 2026.10.30 13:41."
   },
   {
     "id": "hortobagy-puszta-webcam",
