@@ -10,7 +10,8 @@ import {
   parseAlerts,
   parseForecast,
   normalizeJsonTable,
-  briefing
+  briefing,
+  getSwpcHeaders
 } from '../apis/sources/swpc.mjs';
 import { loadLiveStreams } from '../lib/intelligence/live-streams.mjs';
 
@@ -230,4 +231,24 @@ test('8. SolarHam link-only registry card: verified link-only card without text 
   assert.equal(solarHam.url, 'https://www.solarham.com/');
   assert.equal(solarHam.status, 'page-ok');
   assert.ok(solarHam.notes.includes('Link-only'));
+});
+
+test('9. CRUCIX_CONTACT_URL fallback logic: empty string and undefined correctly fall back to default URL via || operator', () => {
+  const orig = process.env.CRUCIX_CONTACT_URL;
+  try {
+    delete process.env.CRUCIX_CONTACT_URL;
+    assert.equal(getSwpcHeaders()['User-Agent'], 'Crucix/2.13 (+https://github.com/WeirdProdigy/Crucix)');
+
+    process.env.CRUCIX_CONTACT_URL = '';
+    assert.equal(getSwpcHeaders()['User-Agent'], 'Crucix/2.13 (+https://github.com/WeirdProdigy/Crucix)');
+
+    process.env.CRUCIX_CONTACT_URL = 'https://custom-domain.org/contact';
+    assert.equal(getSwpcHeaders()['User-Agent'], 'Crucix/2.13 (+https://custom-domain.org/contact)');
+  } finally {
+    if (orig !== undefined) {
+      process.env.CRUCIX_CONTACT_URL = orig;
+    } else {
+      delete process.env.CRUCIX_CONTACT_URL;
+    }
+  }
 });
