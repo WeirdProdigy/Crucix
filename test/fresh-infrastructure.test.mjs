@@ -201,7 +201,7 @@ test('resource, country and CVE lists are capped and encoded without all-catalog
 
 test('cached payloads are revalidated and expired observations are never served as fresh fallback', async () => {
   const cases = [
-    [ripeBriefing, { resources: ['AS13335'] }, ripe('2026-10-01T13:10:00', '13335')],
+    [ripeBriefing, { resources: ['AS13335'] }, ripe('2026-10-01T09:10:00', '13335')],
     [ooniBriefing, { countries: ['IS'] }, ooni({ probe_cc: 'IS', measurement_start_time: '2026-09-30T21:10:00Z' })],
   ];
   for (const [briefing, options, payload] of cases) {
@@ -209,7 +209,7 @@ test('cached payloads are revalidated and expired observations are never served 
     assert.equal((await briefing({ now, fetcher, useCache: true, ...options })).status, 'ok');
     const expired = await briefing({ now: now + 20 * 60000, fetcher, useCache: true, ...options });
     assert.equal(requests, 1); assert.equal(expired.status, 'stale'); assert.equal(expired.observations.length, 0);
-    const failure = await briefing({ now: now + 61 * 60000, fetcher, useCache: true, ...options });
+    const failure = await briefing({ now: now + 7 * 3600000, fetcher, useCache: true, ...options });
     assert.equal(requests, 2); assert.equal(failure.status, 'error'); assert.deepEqual(failure.observations, []);
   }
 });

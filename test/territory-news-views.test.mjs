@@ -584,3 +584,87 @@ test('8. View fairness: source round-robin interleaving, local/county priority a
   // 4. Total retained news respects ceiling
   assert.ok(partitions.news.length <= 50, 'A közös plafon (50) nem léphető túl');
 });
+
+test('8. Server-side duplicate merging before cap frees up slots and retains related sources', () => {
+  const now = Date.now();
+  const testItems = [
+    // Duplicate pair 1: Index (direct) vs Google News (redirect) with same normalized title within 5 min
+    {
+      id: 'gnews-dup-1',
+      kind: 'news',
+      newsCategory: 'news_national',
+      title: 'Közlekedési változások a fővárosban - Index',
+      source: { name: 'Google-News', url: 'https://news.google.com/rss/articles/CBMi...' },
+      publishedAt: new Date(now - 10 * 60 * 1000).toISOString()
+    },
+    {
+      id: 'index-direct-1',
+      kind: 'news',
+      newsCategory: 'news_national',
+      title: 'Közlekedési változások a fővárosban',
+      source: { name: 'Index', url: 'https://index.hu/belfold/2026/10/30/kozlekedes/' },
+      publishedAt: new Date(now - 12 * 60 * 1000).toISOString()
+    },
+    // Distinct news 2
+    {
+      id: 'telex-news-2',
+      kind: 'news',
+      newsCategory: 'news_national',
+      title: 'Fontos bejelentést tett a kormány a költségvetésről',
+      source: { name: 'Telex', url: 'https://telex.hu/gazdasag/2026/10/30/bejelentes' },
+      publishedAt: new Date(now - 20 * 60 * 1000).toISOString()
+    },
+    // Distinct news 3
+    {
+      id: 'hvg-news-3',
+      kind: 'news',
+      newsCategory: 'news_national',
+      title: 'Átadták az új vasúti szakaszt',
+      source: { name: 'HVG', url: 'https://hvg.hu/gazdasag/20261030_vasut' },
+      publishedAt: new Date(now - 30 * 60 * 1000).toISOString()
+    }
+  ];
+
+  // Set totalNewsCap = 3. Without dedup, items 1a and 1b would take 2 slots, leaving only 1 slot for items 2 and 3.
+  // With dedup, 1a + 1b merge into 1 slot, freeing capacity so BOTH item 2 and item 3 are admitted!
+  const partitions = partitionEventsByView(testItems, undefined, { totalNewsCap: 3, viewNewsCap: 10 });
+
+  assert.equal(partitions.news.length, 3, 'Mind a 3 egyedi téma befért a 3-as plafonba a duplikátum összevonása miatt');
+  const merged = partitions.news.find(n => n.id === 'index-direct-1');
+  assert.ok(merged, 'A közvetlen kiadói link (Index) lett a főkártya a Google News átirányítóval szemben');
+  assert.deepEqual(merged.relatedSources, ['Google-News'], 'A kapcsolódó forrás megőrzésre került');
+  assert.ok(partitions.news.some(n => n.id === 'telex-news-2'), 'A 2. tétel bekerült');
+  assert.ok(partitions.news.some(n => n.id === 'hvg-news-3'), 'A 3. tétel bekerült a felszabadult helyre');
+});
+
+test('9. Portfolio territorial audit: company names alone (BMW, CATL) do NOT grant County view without settlement match', () => {
+  const now = Date.now();
+  const testItems = [
+    // Item A: mentions BMW and CATL, but NO settlement or county name
+    {
+      id: 'portfolio-corp-only',
+      kind: 'news',
+      newsCategory: 'news_economy',
+      title: 'Hatalmas globális megállapodást kötött a BMW és a CATL az akkumulátorok terén',
+      source: { name: 'Portfolio', url: 'https://portfolio.hu/gazdasag/bmw-catl' },
+      publishedAt: new Date(now - 10 * 60 * 1000).toISOString()
+    },
+    // Item B: mentions Debrecen explicitly alongside BMW
+    {
+      id: 'portfolio-debrecen-bmw',
+      kind: 'news',
+      newsCategory: 'news_economy',
+      title: 'Új műszak indul Debrecenben a BMW gyárban a termelés felpörgetésére',
+      source: { name: 'Portfolio', url: 'https://portfolio.hu/gazdasag/debrecen-bmw' },
+      publishedAt: new Date(now - 15 * 60 * 1000).toISOString()
+    }
+  ];
+
+  const partitions = partitionEventsByView(testItems);
+  const countyNews = getViewNews(partitions, VIEWS.COUNTY);
+  const nationalNews = getViewNews(partitions, VIEWS.NATIONAL);
+
+  assert.ok(!countyNews.some(n => n.id === 'portfolio-corp-only'), 'Cégnév (BMW, CATL) önmagában NEM kerülhet a megyei nézetbe');
+  assert.ok(nationalNews.some(n => n.id === 'portfolio-corp-only'), 'A területi kapcsolat nélküli Portfolio hír az országos nézetbe kerül');
+  assert.ok(countyNews.some(n => n.id === 'portfolio-debrecen-bmw'), 'Debrecen településnévvel bíró Portfolio hír bekerül a megyei nézetbe');
+});

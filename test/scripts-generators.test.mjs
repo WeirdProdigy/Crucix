@@ -79,14 +79,14 @@ test('2. news-view-matrix: scratch/live_api_data.json live replay exact counts a
   assert.equal(sumCheck, 372);
 
   // 4. Column sums match partition counts
-  assert.equal(report.totals.localColSum, 42);
+  assert.equal(report.totals.localColSum, 40);
   assert.equal(report.totals.countyColSum, 50);
   assert.equal(report.totals.nationalColSum, 50);
   assert.equal(report.totals.globalColSum, 50);
   assert.equal(report.verifications.allColSumsMatch, true);
 
-  // 5. Union of kept news items within cap
-  assert.equal(report.metadata.retainedUniqueNewsCount, 148);
+  // 5. Union of kept news items within cap (147 unique items after server-side duplicate merging)
+  assert.equal(report.metadata.retainedUniqueNewsCount, 147);
   assert.ok(report.metadata.retainedUniqueNewsCount <= 200);
   assert.equal(report.verifications.unionRetainedWithinCap, true);
 

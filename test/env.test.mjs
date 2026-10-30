@@ -23,7 +23,7 @@ test('port accepts five digits and rejects malformed/out-of-range values', () =>
 });
 
 // The config module reads process.env when it is evaluated, so each case imports a fresh copy (own query string).
-const ALERT_KEYS = ['ALERT_NOTIFY_CHANNELS', 'ALERT_NOTIFY_MIN_SEVERITY', 'ALERT_QUIET_HOURS', 'ALERT_MAX_NOTIFICATIONS_PER_SWEEP', 'ALERT_PUBLIC_URL', 'ALERT_ALLOWED_HOSTS', 'ALERT_NTFY_URL', 'ALERT_NTFY_TOKEN', 'ALERT_WEBHOOK_URL', 'ALERT_MAX_ACTIVE_PER_RULE'];
+const ALERT_KEYS = ['ALERT_REGIONAL_SCOPE', 'ALERT_NOTIFY_CHANNELS', 'ALERT_NOTIFY_MIN_SEVERITY', 'ALERT_QUIET_HOURS', 'ALERT_MAX_NOTIFICATIONS_PER_SWEEP', 'ALERT_PUBLIC_URL', 'ALERT_ALLOWED_HOSTS', 'ALERT_NTFY_URL', 'ALERT_NTFY_TOKEN', 'ALERT_WEBHOOK_URL', 'ALERT_MAX_ACTIVE_PER_RULE'];
 const SWEEP_KEYS = ['SWEEP_ARCHIVE_COUNT', 'SWEEP_ARCHIVE_MAX_MB'];
 const CONFIG_KEYS = [...ALERT_KEYS, ...SWEEP_KEYS];
 let freshConfigs = 0;
@@ -46,7 +46,7 @@ async function loadConfig(env = {}, section = 'alerts') {
 test('alerts config defaults', async () => {
   const { config, warnings } = await loadConfig();
   assert.deepEqual(JSON.parse(JSON.stringify(config)), {
-    notifyChannels: [], notifyMinSeverity: 'high', quietHours: null, maxNotificationsPerSweep: 5, publicUrl: null, allowedHosts: [],
+    regionalScope: 'all', notifyChannels: [], notifyMinSeverity: 'high', quietHours: null, maxNotificationsPerSweep: 5, publicUrl: null, allowedHosts: [],
     ntfy: { url: null, token: null }, webhook: { url: null }, maxActivePerRule: 50,
   });
   assert.deepEqual(warnings, []);
@@ -57,12 +57,12 @@ test('alerts config defaults', async () => {
 
 test('alerts config reads every ALERT_* variable', async () => {
   const { config, warnings } = await loadConfig({
-    ALERT_NOTIFY_CHANNELS: 'telegram,discord', ALERT_NOTIFY_MIN_SEVERITY: ' Watch ', ALERT_QUIET_HOURS: '22:00-07:00', ALERT_MAX_NOTIFICATIONS_PER_SWEEP: '12',
+    ALERT_REGIONAL_SCOPE: 'domestic', ALERT_NOTIFY_CHANNELS: 'telegram,discord', ALERT_NOTIFY_MIN_SEVERITY: ' Watch ', ALERT_QUIET_HOURS: '22:00-07:00', ALERT_MAX_NOTIFICATIONS_PER_SWEEP: '12',
     ALERT_PUBLIC_URL: 'https://dash.example.test/crucix/', ALERT_ALLOWED_HOSTS: 'crucix.lan', ALERT_NTFY_URL: 'https://ntfy.example.test/topic', ALERT_NTFY_TOKEN: 'tk_example',
     ALERT_WEBHOOK_URL: 'http://hooks.example.test:8080/in', ALERT_MAX_ACTIVE_PER_RULE: '200',
   });
   assert.deepEqual(JSON.parse(JSON.stringify(config)), {
-    notifyChannels: ['telegram', 'discord'], notifyMinSeverity: 'watch', quietHours: '22:00-07:00', maxNotificationsPerSweep: 12, publicUrl: 'https://dash.example.test/crucix',
+    regionalScope: 'domestic', notifyChannels: ['telegram', 'discord'], notifyMinSeverity: 'watch', quietHours: '22:00-07:00', maxNotificationsPerSweep: 12, publicUrl: 'https://dash.example.test/crucix',
     allowedHosts: ['crucix.lan'], ntfy: { url: 'https://ntfy.example.test/topic', token: 'tk_example' }, webhook: { url: 'http://hooks.example.test:8080/in' }, maxActivePerRule: 200,
   });
   assert.deepEqual(warnings, []);

@@ -4032,7 +4032,8 @@
       "retainedNewsCount": 1,
       "newsIds": [
         "event-33333333333333333333333333333303"
-      ]
+      ],
+      "rawNewsCount": 1
     },
     "news": [
       {
