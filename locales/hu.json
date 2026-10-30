@@ -914,7 +914,14 @@
       "probabilityPct": "Piaci valószínűség (%)",
       "volume": "Kereskedett forgalom (Mana, játékpénz)",
       "closesAt": "A piac lezárul",
-      "platform": "Platform"
+      "platform": "Platform",
+      "kp": "Kp-index",
+      "solarWindSpeed": "Napszél sebesség",
+      "bz": "Mágneses tér (Bz)",
+      "xrayClass": "Röntgenflár osztály",
+      "rScale": "Rádió-elsötétülés (R-skála)",
+      "sScale": "Sugárzási vihar (S-skála)",
+      "gScale": "Geomágneses vihar (G-skála)"
     }
   },
   "lenses": {

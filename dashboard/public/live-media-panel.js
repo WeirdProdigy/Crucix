@@ -158,6 +158,19 @@
     return `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
   }
 
+  function getStatusLabel(status) {
+    switch (status) {
+      case 'verified-live': return 'Élő adás';
+      case 'verified': return 'Hitelesített';
+      case 'page-ok': return 'Oldal elérhető';
+      case 'delayed': return 'Késleltetett (60p)';
+      case 'archive': return 'Archívum';
+      case 'no-live-feed': return 'Nincs közvetítés';
+      case 'unverified': return 'Nem ellenőrzött';
+      default: return status || '';
+    }
+  }
+
   /**
    * Renders an individual stream card.
    */
@@ -173,7 +186,19 @@
 
     let mediaAreaHtml = '';
 
-    if (!isValidId || isError) {
+    if (stream.sourceType === 'link-only') {
+      const statusLabel = getStatusLabel(stream.status);
+      mediaAreaHtml = `
+        <div class="lm-placeholder-box lm-link-only-box">
+          <div class="lm-placeholder-icon">${stream.type === 'news' ? '📰' : '📷'}</div>
+          <div class="lm-placeholder-title">${esc(stream.provider)} <span class="lm-badge lm-badge-${esc(stream.status)}">${esc(statusLabel)}</span></div>
+          <div class="lm-placeholder-privacy">${esc(stream.notes || 'Közvetlen szolgáltatói elérés: Ez a közvetítés a szolgáltató hivatalos oldalán érhető el.')}</div>
+          <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">
+            Megnyitás a szolgáltató oldalán ↗
+          </a>
+        </div>
+      `;
+    } else if (!isValidId || isError) {
       const backoffSec = retryBackoff.get(stream.id) || 5;
       const watchUrl = isValidId ? buildSafeWatchUrl(stream.videoId) : null;
       mediaAreaHtml = `
@@ -184,17 +209,6 @@
             ${watchUrl ? `<a href="${esc(watchUrl)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">Megnyitás a forráson (YouTube) ↗</a>` : ''}
             <button type="button" class="lm-btn lm-btn-retry" onclick="window.CrucixLiveMedia?.retryStream('${esc(stream.id)}')">Újrapróbálás (${backoffSec}s)</button>
           </div>
-        </div>
-      `;
-    } else if (stream.sourceType === 'link-only') {
-      mediaAreaHtml = `
-        <div class="lm-placeholder-box lm-link-only-box">
-          <div class="lm-placeholder-icon">${stream.type === 'news' ? '📰' : '📷'}</div>
-          <div class="lm-placeholder-title">${esc(stream.provider)}</div>
-          <div class="lm-placeholder-privacy">Közvetlen szolgáltatói elérés: Ez a közvetítés nem beágyazható formátumú, a szolgáltató hivatalos weboldalán érhető el.</div>
-          <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">
-            Megnyitás a szolgáltató oldalán ↗
-          </a>
         </div>
       `;
     } else if (stream.status === 'unverified') {

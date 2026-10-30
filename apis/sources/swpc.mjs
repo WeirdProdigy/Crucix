@@ -1,4 +1,4 @@
-// Current NOAA space-weather scales only. Other keys contain past maxima or forecasts.
+// Current NOAA space-weather scales and enhanced telemetry.
 import { safeFetch } from '../utils/fetch.mjs';
 import { providerTime, freshResult, unavailableResult } from '../utils/freshness.mjs';
 
@@ -12,36 +12,374 @@ const SCALES = [
   ['S', 'solarRadiationStorms', 'solar radiation storms'],
   ['G', 'geomagneticStorms', 'geomagnetic storms'],
 ];
-const META = { url:SOURCE_URL, feedUrl:FEED_URL, attribution:'NOAA / NWS Space Weather Prediction Center' };
+const META = { url: SOURCE_URL, feedUrl: FEED_URL, attribution: 'NOAA / NWS Space Weather Prediction Center' };
 
+/**
+ * Normalizes input raw JSON into an array of objects.
+ * Handles:
+ * 1. Array of objects: [{ time_tag, Kp }, ...]
+ * 2. Array of arrays: [["time_tag", "Kp"], ["2026-10-30...", 1.67]]
+ * 3. Indexed object: {"0": {...}, "1": {...}}
+ */
+export function normalizeJsonTable(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    if (raw.length === 0) return [];
+    if (Array.isArray(raw[0])) {
+      const headers = raw[0].map(h => String(h).trim());
+      const rows = [];
+      for (let i = 1; i < raw.length; i++) {
+        const row = raw[i];
+        if (!Array.isArray(row)) continue;
+        const obj = {};
+        for (let j = 0; j < headers.length; j++) {
+          obj[headers[j]] = row[j];
+        }
+        rows.push(obj);
+      }
+      return rows;
+    }
+    if (typeof raw[0] === 'object' && raw[0] !== null) {
+      return raw;
+    }
+  }
+  if (typeof raw === 'object' && raw !== null) {
+    return Object.values(raw);
+  }
+  return [];
+}
+
+/**
+ * Parses planetary K-index from NOAA feed.
+ */
+export function parseKpIndex(raw) {
+  const rows = normalizeJsonTable(raw);
+  if (!rows.length) return null;
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i];
+    const kpVal = r.Kp ?? r.kp ?? r.KP;
+    if (kpVal !== undefined && kpVal !== null && !isNaN(Number(kpVal))) {
+      return {
+        kp: Math.round(Number(kpVal) * 100) / 100,
+        timeTag: r.time_tag || r.timeTag || null,
+        stationCount: Number(r.station_count) || null
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Parses real-time solar wind plasma and magnetic field.
+ * Respects active spacecraft and extracts speed, density, temperature, and Bz/Bt.
+ */
+export function parseSolarWind(windRaw, magRaw) {
+  const windRows = normalizeJsonTable(windRaw);
+  const magRows = normalizeJsonTable(magRaw);
+
+  let bestWind = null;
+  if (windRows.length) {
+    const active = windRows.filter(r => r.active === true);
+    bestWind = active.length ? active[active.length - 1] : windRows[windRows.length - 1];
+  }
+
+  let bestMag = null;
+  if (magRows.length) {
+    const active = magRows.filter(r => r.active === true);
+    bestMag = active.length ? active[active.length - 1] : magRows[magRows.length - 1];
+  }
+
+  const speed = Number(bestWind?.proton_speed ?? bestWind?.speed);
+  const density = Number(bestWind?.proton_density ?? bestWind?.density);
+  const temp = Number(bestWind?.proton_temperature ?? bestWind?.temperature);
+
+  const bz = Number(bestMag?.bz_gsm ?? bestMag?.bz_gse ?? bestMag?.bz);
+  const bt = Number(bestMag?.bt);
+
+  return {
+    speed: Number.isFinite(speed) ? Math.round(speed) : null,
+    density: Number.isFinite(density) ? Math.round(density * 10) / 10 : null,
+    temperature: Number.isFinite(temp) ? Math.round(temp) : null,
+    bz: Number.isFinite(bz) ? Math.round(bz * 10) / 10 : null,
+    bt: Number.isFinite(bt) ? Math.round(bt * 10) / 10 : null,
+    source: bestWind?.source || bestMag?.source || null,
+    timeTag: bestWind?.time_tag || bestMag?.time_tag || null
+  };
+}
+
+/**
+ * Calculates standard solar X-ray flare class from flux in W/m^2 (0.1-0.8 nm wavelength).
+ */
+export function calculateXrayClass(flux) {
+  if (!Number.isFinite(flux) || flux <= 0) return null;
+  if (flux < 1e-7) {
+    return `A${(flux / 1e-8).toFixed(1)}`;
+  }
+  if (flux < 1e-6) {
+    return `B${(flux / 1e-7).toFixed(1)}`;
+  }
+  if (flux < 1e-5) {
+    return `C${(flux / 1e-6).toFixed(1)}`;
+  }
+  if (flux < 1e-4) {
+    return `M${(flux / 1e-5).toFixed(1)}`;
+  }
+  return `X${(flux / 1e-4).toFixed(1)}`;
+}
+
+/**
+ * Parses GOES primary satellite X-ray flux.
+ */
+export function parseGoesXrays(raw) {
+  const rows = normalizeJsonTable(raw);
+  if (!rows.length) return null;
+  const longWave = rows.filter(r => (r.energy === '0.1-0.8nm' || r.energy === '0.1-0.8') && Number.isFinite(Number(r.flux)));
+  if (!longWave.length) return null;
+
+  const satellites = Array.from(new Set(longWave.map(r => Number(r.satellite)).filter(Number.isFinite)));
+  const primarySat = satellites.length ? Math.max(...satellites) : null;
+
+  const satRows = primarySat ? longWave.filter(r => Number(r.satellite) === primarySat) : longWave;
+  const latest = satRows[satRows.length - 1];
+
+  const flux = Number(latest.flux);
+  return {
+    flux,
+    xrayClass: calculateXrayClass(flux),
+    satellite: latest.satellite || primarySat,
+    timeTag: latest.time_tag
+  };
+}
+
+/**
+ * Parses NOAA space weather alerts and watches.
+ * Enforces high severity filtering (G3+, R3+, S2+).
+ */
+export function parseAlerts(raw, { now = Date.now(), maxAgeHours = 24 } = {}) {
+  const items = Array.isArray(raw) ? raw : (raw?.alerts || []);
+  const activeAlerts = [];
+  const highSeverityAlerts = [];
+
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue;
+    const msg = String(item.message || '');
+    const dt = item.issue_datetime ? item.issue_datetime.replace(' ', 'T') : null;
+    const issued = dt ? Date.parse(dt.endsWith('Z') ? dt : dt + 'Z') : null;
+    if (issued && !isNaN(issued) && (now - issued > maxAgeHours * 3600 * 1000)) {
+      continue;
+    }
+
+    const isWatch = /WATCH:/i.test(msg);
+    const isWarning = /WARNING:/i.test(msg);
+    const isAlert = /ALERT:/i.test(msg);
+
+    const gMatch = msg.match(/G([1-5])/);
+    const rMatch = msg.match(/R([1-5])/);
+    const sMatch = msg.match(/S([1-5])/);
+
+    const gLevel = gMatch ? Number(gMatch[1]) : 0;
+    const rLevel = rMatch ? Number(rMatch[1]) : 0;
+    const sLevel = sMatch ? Number(sMatch[1]) : 0;
+
+    const entry = {
+      productId: item.product_id,
+      issuedAt: item.issue_datetime,
+      type: isAlert ? 'alert' : (isWarning ? 'warning' : (isWatch ? 'watch' : 'info')),
+      gLevel,
+      rLevel,
+      sLevel,
+      messageSnippet: msg.split('\n')[0] || msg.slice(0, 100)
+    };
+
+    activeAlerts.push(entry);
+
+    if (gLevel >= 3 || rLevel >= 3 || sLevel >= 2) {
+      highSeverityAlerts.push(entry);
+    }
+  }
+
+  return {
+    activeCount: activeAlerts.length,
+    activeAlerts: activeAlerts.slice(0, 10),
+    highSeverityAlerts
+  };
+}
+
+/**
+ * Parses SWPC 3-day forecast text summary.
+ */
+export function parseForecast(text) {
+  if (typeof text !== 'string' || !text.trim()) return null;
+  const match = text.match(/The greatest expected 3 hr Kp for [^\n]+ is ([0-9.]+)\s*(?:\((NOAA Scale\s*(G[1-5]))\))?/i);
+  const issuedMatch = text.match(/:Issued:\s*([^\n]+)/i);
+  return {
+    maxExpectedKp: match ? Number(match[1]) : null,
+    maxExpectedGScale: match && match[3] ? match[3] : 'None',
+    issued: issuedMatch ? issuedMatch[1].trim() : null,
+    summary: match ? match[0].trim() : null
+  };
+}
+
+/**
+ * Baseline SWPC scales parser.
+ * Preserves strict backwards compatibility with existing scales fixture.
+ */
 export function parseSWPC(data, { now = Date.now() } = {}) {
+  if (data?.scales) {
+    return parseEnhancedSWPC(data, { now });
+  }
   const current = data?.['0'];
-  if (!current || typeof current !== 'object') return unavailableResult(SOURCE, 'Invalid NOAA scales: missing current conditions', {...META,metrics:{}}, now);
+  if (!current || typeof current !== 'object') return unavailableResult(SOURCE, 'Invalid NOAA scales: missing current conditions', { ...META, metrics: {} }, now);
   const observedAt = typeof current.DateStamp === 'string' && typeof current.TimeStamp === 'string'
-    ? providerTime(`${current.DateStamp}T${current.TimeStamp}`, {assumeUTC:true}) : null;
+    ? providerTime(`${current.DateStamp}T${current.TimeStamp}`, { assumeUTC: true }) : null;
   const metrics = {};
   const observations = [];
   for (const [code, key, title] of SCALES) {
     const raw = current[code]?.Scale;
     if (!(typeof raw === 'string' && /^[0-5]$/.test(raw)) && !(Number.isInteger(raw) && raw >= 0 && raw <= 5)) {
-      return unavailableResult(SOURCE, 'Invalid NOAA scale: expected a level from 0 to 5', {...META,metrics:{}}, now);
+      return unavailableResult(SOURCE, 'Invalid NOAA scale: expected a level from 0 to 5', { ...META, metrics: {} }, now);
     }
     const scale = Number(raw);
-    metrics[key] = { scale, label:LEVELS[scale] };
+    metrics[key] = { scale, label: LEVELS[scale] };
     if (scale > 0) observations.push({
-      kind:'space-weather', title:`NOAA ${code}${scale} ${title}`,
-      summary:`Current NOAA ${title} scale: ${code}${scale} (${LEVELS[scale]}). Global conditions; this feed does not identify a local impact site.`,
-      source:SOURCE, url:SOURCE_URL, providerId:`${code}${scale}`, observedAt, publishedAt:observedAt,
-      severity:SEVERITIES[scale], lat:null, lon:null, locationMethod:'global', locationPrecision:'unknown',
+      kind: 'space-weather', title: `NOAA ${code}${scale} ${title}`,
+      summary: `Current NOAA ${title} scale: ${code}${scale} (${LEVELS[scale]}). Global conditions; this feed does not identify a local impact site.`,
+      source: SOURCE, url: SOURCE_URL, providerId: `${code}${scale}`, observedAt, publishedAt: observedAt,
+      severity: SEVERITIES[scale], lat: null, lon: null, locationMethod: 'global', locationPrecision: 'unknown',
     });
   }
-  const summary = `Current NOAA scales: ${SCALES.map(([code,key,title])=>`${code}${metrics[key].scale} ${title} (${metrics[key].label})`).join('; ')}. These are current conditions, separate from NOAA forecasts.`;
-  const out = freshResult(SOURCE, observedAt, observations, {...META,metrics,summary}, now);
+  const summary = `Current NOAA scales: ${SCALES.map(([code, key, title]) => `${code}${metrics[key].scale} ${title} (${metrics[key].label})`).join('; ')}. These are current conditions, separate from NOAA forecasts.`;
+  const out = freshResult(SOURCE, observedAt, observations, { ...META, metrics, summary }, now);
   if (out.stale) { out.metrics = {}; out.summary = 'Current NOAA space-weather scales are unavailable within the one-hour freshness window.'; }
   return out;
 }
 
-export async function briefing({ now = Date.now() } = {}) {
-  const data = await safeFetch(FEED_URL, {timeout:10000,retries:0,maxBytes:2*1024*1024});
-  return data?.error ? unavailableResult(SOURCE, data.error, {...META,metrics:{}}, now) : parseSWPC(data,{now});
+/**
+ * Enhanced SWPC telemetry parser.
+ * Combines scales with Kp, solar wind, X-ray flux, active alerts, and 3-day forecast.
+ */
+export function parseEnhancedSWPC(data, { now = Date.now() } = {}) {
+  const baseResult = parseSWPC(data.scales || data, { now });
+  if (baseResult.status === 'error') return baseResult;
+
+  const parsedKp = data.kp ? parseKpIndex(data.kp) : null;
+  const parsedWind = (data.wind || data.mag) ? parseSolarWind(data.wind, data.mag) : null;
+  const parsedXrays = data.xrays ? parseGoesXrays(data.xrays) : null;
+  const parsedAlerts = data.alerts ? parseAlerts(data.alerts, { now }) : null;
+  const parsedForecast = data.forecast ? parseForecast(typeof data.forecast === 'string' ? data.forecast : data.forecast.rawText) : null;
+
+  const metrics = { ...baseResult.metrics };
+  if (parsedKp) metrics.kp = parsedKp.kp;
+  if (parsedWind?.speed != null) metrics.solarWindSpeed = parsedWind.speed;
+  if (parsedWind?.bz != null) metrics.bz = parsedWind.bz;
+  if (parsedXrays?.xrayClass) metrics.xrayClass = parsedXrays.xrayClass;
+  if (parsedAlerts?.activeCount != null) metrics.activeAlertsCount = parsedAlerts.activeCount;
+  if (parsedForecast?.maxExpectedKp != null) metrics.maxForecastKp = parsedForecast.maxExpectedKp;
+  if (parsedForecast?.maxExpectedGScale) metrics.maxForecastG = parsedForecast.maxExpectedGScale;
+
+  const facts = [];
+  if (parsedKp) facts.push({ label: 'kp', value: `${parsedKp.kp}` });
+  if (parsedWind?.speed != null) facts.push({ label: 'solarWindSpeed', value: `${parsedWind.speed} km/s` });
+  if (parsedWind?.bz != null) facts.push({ label: 'bz', value: `${parsedWind.bz} nT` });
+  if (parsedXrays?.xrayClass) facts.push({ label: 'xrayClass', value: parsedXrays.xrayClass });
+  if (metrics.radioBlackouts?.scale !== undefined) facts.push({ label: 'rScale', value: `R${metrics.radioBlackouts.scale}` });
+  if (metrics.solarRadiationStorms?.scale !== undefined) facts.push({ label: 'sScale', value: `S${metrics.solarRadiationStorms.scale}` });
+  if (metrics.geomagneticStorms?.scale !== undefined) facts.push({ label: 'gScale', value: `G${metrics.geomagneticStorms.scale}` });
+
+  const observations = [...baseResult.observations];
+
+  // High threshold enforcement: S2+ gets high severity
+  for (const obs of observations) {
+    if (obs.providerId === 'S2' && obs.severity !== 'high') {
+      obs.severity = 'high';
+    }
+  }
+
+  // Active high severity alerts (G3+, R3+, S2+)
+  if (parsedAlerts?.highSeverityAlerts?.length) {
+    for (const hAlert of parsedAlerts.highSeverityAlerts) {
+      const alertCode = hAlert.gLevel >= 3 ? `G${hAlert.gLevel}` : (hAlert.rLevel >= 3 ? `R${hAlert.rLevel}` : `S${hAlert.sLevel}`);
+      if (!observations.some(o => o.providerId === alertCode)) {
+        observations.push({
+          kind: 'space-weather',
+          title: `NOAA High Space Weather Alert ${alertCode}`,
+          summary: `Active SWPC alert: ${hAlert.messageSnippet}`,
+          source: SOURCE,
+          url: SOURCE_URL,
+          providerId: `alert-${alertCode}`,
+          observedAt: baseResult.observedAt,
+          publishedAt: baseResult.observedAt,
+          severity: 'high',
+          lat: null,
+          lon: null,
+          locationMethod: 'global',
+          locationPrecision: 'unknown'
+        });
+      }
+    }
+  }
+
+  const summaryParts = [baseResult.summary];
+  if (parsedKp) summaryParts.push(`Kp: ${parsedKp.kp}`);
+  if (parsedWind?.speed != null) summaryParts.push(`Solar wind: ${parsedWind.speed} km/s (Bz: ${parsedWind.bz ?? 0} nT)`);
+  if (parsedXrays?.xrayClass) summaryParts.push(`X-ray: ${parsedXrays.xrayClass}`);
+  if (parsedForecast?.maxExpectedKp != null) summaryParts.push(`Forecast max: Kp ${parsedForecast.maxExpectedKp} (${parsedForecast.maxExpectedGScale})`);
+
+  const summary = summaryParts.join(' | ');
+
+  const out = freshResult(SOURCE, baseResult.observedAt, observations, {
+    ...META,
+    metrics,
+    summary,
+    facts
+  }, now);
+
+  if (out.stale) {
+    out.metrics = {};
+    out.summary = 'Current NOAA space-weather telemetry is unavailable within the one-hour freshness window.';
+  }
+
+  return out;
+}
+
+/**
+ * Briefing entry point.
+ * By default (CRUCIX_ENABLE_SWPC !== 'true'), fetches scales only.
+ * When CRUCIX_ENABLE_SWPC === 'true', fetches enhanced feeds concurrently with 403/429 handling.
+ */
+export async function briefing({
+  now = Date.now(),
+  enableEnhanced = (process.env.CRUCIX_ENABLE_SWPC === 'true')
+} = {}) {
+  if (!enableEnhanced) {
+    const data = await safeFetch(FEED_URL, { timeout: 10000, retries: 0, maxBytes: 2 * 1024 * 1024 });
+    return data?.error ? unavailableResult(SOURCE, data.error, { ...META, metrics: {} }, now) : parseSWPC(data, { now });
+  }
+
+  const [scalesRes, kpRes, windRes, magRes, xraysRes, alertsRes, forecastRes] = await Promise.allSettled([
+    safeFetch(FEED_URL, { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024 }),
+    safeFetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024 }),
+    safeFetch('https://services.swpc.noaa.gov/products/summary/solar-wind-speed.json', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024 }),
+    safeFetch('https://services.swpc.noaa.gov/products/summary/solar-wind-mag-field.json', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024 }),
+    safeFetch('https://services.swpc.noaa.gov/json/goes/primary/xrays-1-day.json', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024 }),
+    safeFetch('https://services.swpc.noaa.gov/products/alerts.json', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024 }),
+    safeFetch('https://services.swpc.noaa.gov/text/3-day-forecast.txt', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024, format: 'text' })
+  ]);
+
+  const scales = scalesRes.status === 'fulfilled' ? scalesRes.value : { error: scalesRes.reason?.message };
+  if (scales?.error) {
+    const isBlocked = /403|429/i.test(scales.error);
+    const status = isBlocked ? 'disabled' : 'error';
+    return unavailableResult(SOURCE, scales.error, { ...META, metrics: {}, status }, now);
+  }
+
+  return parseEnhancedSWPC({
+    scales,
+    kp: kpRes.status === 'fulfilled' ? kpRes.value : null,
+    wind: windRes.status === 'fulfilled' ? windRes.value : null,
+    mag: magRes.status === 'fulfilled' ? magRes.value : null,
+    xrays: xraysRes.status === 'fulfilled' ? xraysRes.value : null,
+    alerts: alertsRes.status === 'fulfilled' ? alertsRes.value : null,
+    forecast: forecastRes.status === 'fulfilled' ? forecastRes.value : null
+  }, { now });
 }

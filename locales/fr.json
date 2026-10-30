@@ -914,7 +914,14 @@
       "probabilityPct": "Probabilité du marché (%)",
       "volume": "Volume échangé (Mana, monnaie fictive)",
       "closesAt": "Clôture du marché",
-      "platform": "Plateforme"
+      "platform": "Plateforme",
+      "kp": "Indice Kp",
+      "solarWindSpeed": "Vitesse du vent solaire",
+      "bz": "Champ magnétique (Bz)",
+      "xrayClass": "Classe d'éruption X",
+      "rScale": "Blackout radio (échelle R)",
+      "sScale": "Tempête de rayonnement (échelle S)",
+      "gScale": "Tempête géomagnétique (échelle G)"
     }
   },
   "lenses": {

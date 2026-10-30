@@ -914,7 +914,14 @@
       "probabilityPct": "Market probability (%)",
       "volume": "Traded volume (Mana, play money)",
       "closesAt": "Market closes",
-      "platform": "Platform"
+      "platform": "Platform",
+      "kp": "Kp index",
+      "solarWindSpeed": "Solar wind speed",
+      "bz": "Interplanetary magnetic field (Bz)",
+      "xrayClass": "X-ray flare class",
+      "rScale": "Radio blackout (R-scale)",
+      "sScale": "Solar radiation storm (S-scale)",
+      "gScale": "Geomagnetic storm (G-scale)"
     }
   },
   "lenses": {
