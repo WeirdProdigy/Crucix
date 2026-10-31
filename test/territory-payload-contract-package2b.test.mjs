@@ -221,7 +221,7 @@ test('9. Real-clock serving: freshLiveSnapshot with Date.now() retains Nébih ev
   assert.equal(nebihEvents.length, 4, 'All 4 Nébih events must survive serving under real clock');
 
   // 2. HAON fixture event must also be preserved
-  const haonEvents = served.events.filter(e => e.source?.name === 'HAON-Fixture');
+  const haonEvents = (served.views?.news || served.events).filter(e => e.source?.name === 'HAON-Fixture');
   assert.equal(haonEvents.length, 1, 'HAON fixture event must survive serving under real clock');
 
   // 3. Stale Meteoalarm events must NOT be in served.events

@@ -98,7 +98,7 @@ test('/api/data QA walkthrough: physical-only events, news in views.news, newsId
     const servedData = JSON.parse(bodyText);
 
     // Assert no news in events (only physical events or fixtures)
-    const hasNewsInEvents = servedData.events.some(e => isNewsEvent(e) && !e.isFixture);
+    const hasNewsInEvents = servedData.events.some(e => isNewsEvent(e));
     assert.equal(hasNewsInEvents, false, 'data.events must contain physical events only, zero news');
     assert.ok(servedData.views.news.length > 0, 'data.views.news must be populated');
 
