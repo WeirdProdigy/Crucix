@@ -12,14 +12,14 @@ export async function getAllFlights() {
 }
 
 // Get flights in a bounding box (lat/lon)
-export async function getFlightsInArea(lamin, lomin, lamax, lomax) {
+export async function getFlightsInArea(lamin, lomin, lamax, lomax, options = {}) {
   const params = new URLSearchParams({
     lamin: String(lamin),
     lomin: String(lomin),
     lamax: String(lamax),
     lomax: String(lomax),
   });
-  return safeFetch(`${BASE}/states/all?${params}`, { timeout: 5000 });
+  return safeFetch(`${BASE}/states/all?${params}`, { timeout: 5000, retries: 0, signal: options.signal });
 }
 
 // Get flights by specific aircraft (ICAO24 hex codes)
@@ -105,11 +105,14 @@ export async function briefing(options = {}) {
   const hotspotEntries = Object.entries(HOTSPOTS);
   const results = [];
   for (let i = 0; i < hotspotEntries.length; i++) {
+    if (options.signal?.aborted) {
+      throw new Error('OpenSky briefing aborted');
+    }
     const [key, box] = hotspotEntries[i];
     if (i > 0 && delayMs > 0) {
       await new Promise(r => setTimeout(r, delayMs));
     }
-    const data = await getFlightsInArea(box.lamin, box.lomin, box.lamax, box.lomax);
+    const data = await getFlightsInArea(box.lamin, box.lomin, box.lamax, box.lomax, { signal: options.signal });
     const error = data?.error || null;
     const states = data?.states || [];
     results.push({

@@ -91,12 +91,56 @@ test('2. OpenSky briefing: sequential execution, 2h TTL cache, and daily quota g
     const res2 = await openskyBriefing({ now: t0 + 60 * 60 * 1000, delayMs: 0 });
     assert.equal(fetchCount, 10, 'Must return cached result within 2h TTL (no new fetch calls)');
     assert.equal(res2.cached, true);
+    assert.equal(res2.timestamp, res1.timestamp, 'Cached OpenSky measurement must retain original timestamp, not receive new timestamp');
   } finally {
     globalThis.fetch = origFetch;
     _resetOpenSkyCache();
   }
 });
 
+
+test('2b. OpenSky runSource 60s timeout, retries=0, and abort signal propagation', async () => {
+  const { runSource } = await import('../apis/briefing.mjs');
+  const { getFlightsInArea } = await import('../apis/sources/opensky.mjs');
+
+  // 1. Verify runSource honors timeoutMs: 60_000
+  const mockFn = async (options) => {
+    return { status: 'ok', signal: options?.signal };
+  };
+
+  const res = await runSource('OpenSky', mockFn, { timeoutMs: 60_000 });
+  assert.equal(res.status, 'ok');
+  assert.ok(res.data?.signal instanceof AbortSignal, 'runSource must propagate AbortSignal to source options');
+
+  // 2. Verify retries: 0 (failed request does not retry and burn extra credits)
+  const origFetch = globalThis.fetch;
+  let flightFetchCalls = 0;
+  globalThis.fetch = async () => {
+    flightFetchCalls++;
+    return new Response('Internal Server Error', { status: 500 });
+  };
+
+  try {
+    const areaRes = await getFlightsInArea(10, 20, 30, 40);
+    assert.equal(flightFetchCalls, 1, 'getFlightsInArea must set retries: 0 (exactly 1 call on error)');
+    assert.ok(areaRes.error, 'Must report error without retry');
+
+    // 3. Verify abort signal propagation in briefing
+    _resetOpenSkyCache();
+    const controller = new AbortController();
+    controller.abort();
+    await assert.rejects(
+      async () => {
+        await openskyBriefing({ signal: controller.signal, delayMs: 0 });
+      },
+      /aborted/i,
+      'OpenSky briefing must immediately abort when signal is aborted'
+    );
+  } finally {
+    globalThis.fetch = origFetch;
+    _resetOpenSkyCache();
+  }
+});
 test('3. EPA briefing: 6h TTL cache and exponential backoff on error', async () => {
   _resetEpaCache();
   const origFetch = globalThis.fetch;
@@ -146,6 +190,7 @@ test('4. Space CelesTrak briefing: 6h TTL cache and exponential backoff on error
     const res2 = await spaceBriefing({ now: t0 + 2 * 3600 * 1000 });
     assert.equal(fetchCount, initialCalls, 'Must return cached space result within 6h TTL');
     assert.equal(res2.cached, true);
+    assert.equal(res2.timestamp, res1.timestamp, 'Cached OpenSky measurement must retain original timestamp, not receive new timestamp');
   } finally {
     globalThis.fetch = origFetch;
     _resetSpaceCache();

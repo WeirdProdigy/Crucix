@@ -32,11 +32,14 @@ export async function readBoundedText(response, maxBytes = 10 * 1024 * 1024) {
 
 export async function safeFetch(url, opts = {}) {
   const { timeout = 15000, retries = 1, headers = {}, maxBytes = 10 * 1024 * 1024,
-    format = 'json', method = 'GET', body, retryDelay = 2000, maxRetryDelay = 30000 } = opts;
+    format = 'json', method = 'GET', body, retryDelay = 2000, maxRetryDelay = 30000, signal } = opts;
   let lastError;
   let lastStatus;
   for (let attempt = 0; attempt <= retries; attempt++) {
+    if (signal?.aborted) throw new Error('Aborted');
     const controller = new AbortController();
+    const onAbort = () => controller.abort();
+    if (signal) signal.addEventListener('abort', onAbort, { once: true });
     const timer = setTimeout(() => controller.abort(), timeout);
     let waitMs = retryDelay * (attempt + 1);
     let retryable = true;
@@ -63,7 +66,10 @@ export async function safeFetch(url, opts = {}) {
       catch { return { error: 'Invalid JSON response', status: response.status }; }
     } catch (error) {
       lastError = controller.signal.aborted ? new Error(`Request timed out after ${timeout}ms`) : error;
-    } finally { clearTimeout(timer); }
+    } finally {
+      clearTimeout(timer);
+      if (signal) signal.removeEventListener('abort', onAbort);
+    }
     if (!retryable || attempt === retries) break;
     await new Promise(resolve => setTimeout(resolve, Math.min(maxRetryDelay, waitMs)));
   }
