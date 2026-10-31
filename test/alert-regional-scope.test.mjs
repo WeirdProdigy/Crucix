@@ -215,3 +215,82 @@ test('5. AlertNotifier respects regionalScope="domestic" for outbound dispatch',
   assert.ok(!sentMessages[0].includes('Philippines'));
   assert.equal(foreignQuake.regionalNotice, 'nem hazai, nem értesít');
 });
+test('6. Global threats bypass regional boundary suppression, but strictly respect severity, silent, and notify conditions', async () => {
+  const sentMessages = [];
+  const mockTelegram = {
+    isConfigured: true,
+    async sendMessage(text) {
+      sentMessages.push(text);
+      return { ok: true };
+    }
+  };
+
+  const notifierDomestic = new AlertNotifier({
+    telegram: mockTelegram,
+    notifyChannels: ['telegram'],
+    minSeverity: 'high',
+    regionalScope: 'domestic'
+  });
+
+  // 1. Low severity global threat (severity: 'watch' < minSeverity: 'high')
+  const lowSeverityGlobal = {
+    id: 'alert-global-low',
+    ruleId: 'space-weather-minor',
+    ruleName: 'Minor Space Weather',
+    severity: 'watch',
+    notify: true,
+    title: 'G1 Minor Geomagnetic Storm Alert',
+    summary: 'Minor space weather activity observed by SWPC.',
+    evidence: [{ kind: 'space-weather', source: 'NOAA-SWPC', title: 'G1 Watch' }]
+  };
+
+  // 2. Silent global threat (silent: true)
+  const silentGlobal = {
+    id: 'alert-global-silent',
+    ruleId: 'space-weather-silent',
+    ruleName: 'Baseline Space Weather',
+    severity: 'high',
+    notify: true,
+    silent: true,
+    title: 'Solar Flare Baseline Established',
+    summary: 'Initial baseline for solar monitoring.',
+    evidence: [{ kind: 'space-weather', source: 'NOAA-SWPC', title: 'Baseline' }]
+  };
+
+  // 3. Global threat with notify=false
+  const unnotifiedGlobal = {
+    id: 'alert-global-no-notify',
+    ruleId: 'space-weather-no-notify',
+    ruleName: 'Space Weather Muted Rule',
+    severity: 'critical',
+    notify: false,
+    title: 'Critical Solar Event Without Notification',
+    summary: 'Rule has notify=false.',
+    evidence: [{ kind: 'space-weather', source: 'NOAA-SWPC', title: 'Muted rule' }]
+  };
+
+  // 4. Critical global threat with notify=true (all conditions satisfied)
+  const criticalGlobal = {
+    id: 'alert-global-critical',
+    ruleId: 'space-weather-critical',
+    ruleName: 'Extreme Space Weather',
+    severity: 'critical',
+    notify: true,
+    title: 'Extreme G5 Geomagnetic Storm Alert',
+    summary: 'SWPC reports extreme storm.',
+    evidence: [{ kind: 'space-weather', source: 'NOAA-SWPC', title: 'G5 Storm' }]
+  };
+
+  const batch = {
+    created: [lowSeverityGlobal, silentGlobal, unnotifiedGlobal, criticalGlobal],
+    escalated: []
+  };
+
+  const outcome = await notifierDomestic.dispatch(batch);
+
+  // Assert: only criticalGlobal is delivered; low severity, silent, and notify=false are all rejected
+  assert.equal(outcome.sent.length, 1, 'Only the high/critical alert with notify=true is sent');
+  assert.equal(outcome.sent[0].alertId, 'alert-global-critical');
+  assert.equal(sentMessages.length, 1);
+  assert.ok(sentMessages[0].includes('Extreme G5 Geomagnetic Storm'));
+});
