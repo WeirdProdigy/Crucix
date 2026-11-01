@@ -596,6 +596,7 @@ test('11. Browser-side camera display: schema validation, synthetic click-to-loa
   let visibilityListener = null;
   const mockWindow = {
     innerWidth: 1280,
+    location: { hostname: 'localhost' },
     __CRUCIX_DATA__: {},
     setInterval: () => 101,
     clearInterval: () => {}
@@ -684,6 +685,43 @@ test('11. Browser-side camera display: schema validation, synthetic click-to-loa
   LiveMedia.stopAllStreams();
   assert.equal(LiveMedia.isCameraActive('mock-kossuth'), false);
 
+  // H. Loopback / LAN Guardrail: isPrivateOrLocalHost evaluator
+  assert.equal(LiveMedia.isPrivateOrLocalHost('localhost'), true, 'localhost must be allowed');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('127.0.0.1'), true, '127.0.0.1 must be allowed');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('::1'), true, '::1 must be allowed');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('[::1]'), true, '[::1] must be allowed');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('app.localhost'), true, '*.localhost must be allowed');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('192.168.1.81'), true, '192.168.1.81 (NAS LAN) must be allowed');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('192.168.0.1'), true, '192.168.0.1 must be allowed');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('10.0.1.5'), true, '10.0.0.0/8 must be allowed');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('172.16.0.1'), true, '172.16.0.1 (min 172.16) must be allowed');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('172.31.255.254'), true, '172.31.255.254 (max 172.31) must be allowed');
+
+  // Disallowed hosts (public IP, external domain, invalid subnets)
+  assert.equal(LiveMedia.isPrivateOrLocalHost('172.15.255.255'), false, '172.15.x is not private');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('172.32.0.1'), false, '172.32.x is not private');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('8.8.8.8'), false, 'Public IP must be rejected');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('example.com'), false, 'External domain must be rejected');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('crucix.mydomain.hu'), false, 'Public domain must be rejected');
+  assert.equal(LiveMedia.isPrivateOrLocalHost(''), false, 'Empty host must be rejected');
+  assert.equal(LiveMedia.isPrivateOrLocalHost(null), false, 'Null host must be rejected');
+
+  // I. Guardrail protection: when accessed from public origin, camera buttons are suppressed
+  mockWindow.location.hostname = 'crucix.public-domain.com';
+  const publicHtml = LiveMedia.panelHtml(syntheticSnapshot);
+  assert.ok(!publicHtml.includes('📷 Kamera betöltése'), 'Public origin must NOT render individual camera load button');
+  assert.ok(!publicHtml.includes('📷 Kamerák betöltése'), 'Public origin must NOT render batch camera load button');
+  assert.ok(!publicHtml.includes('<img'), 'Public origin must NOT render any img tag');
+  assert.ok(publicHtml.includes('A közvetlen kamerakép kizárólag privát helyi hálózatról'), 'Public origin must show restriction notice');
+  assert.ok(publicHtml.includes('Megnyitás a szolgáltató oldalán ↗'), 'Public origin must preserve link-only provider button');
+
+  // Attempt to call loadCamera on public origin: must be rejected as no-op
+  LiveMedia.loadCamera('mock-kossuth');
+  assert.equal(LiveMedia.isCameraActive('mock-kossuth'), false, 'loadCamera must be a no-op when origin is not private');
+
+  // Restore localhost
+  mockWindow.location.hostname = 'localhost';
+
   // 4. Server static audit: STRICT ZERO outbound server requests to Időkép
   const root = new URL('../', import.meta.url);
   const apisDir = new URL('apis/', root);
@@ -700,4 +738,18 @@ test('11. Browser-side camera display: schema validation, synthetic click-to-loa
   // Audit briefing sources: none may import or fetch Időkép
   const briefingMjs = readFileSync(new URL('apis/briefing.mjs', root), 'utf8');
   assert.ok(!briefingMjs.includes('idokep'), 'apis/briefing.mjs must contain zero references to idokep');
+
+  // 5. Documentation audit: verify correct Időkép ÁSZF section references and private use documentation
+  const readmeMd = readFileSync(new URL('README.md', root), 'utf8');
+  assert.ok(readmeMd.includes('ÁSZF 3. pont'), 'README must cite ÁSZF 3. pont for download, storage, and processing prohibition');
+  assert.ok(readmeMd.includes('Tilos a weboldalon megjelenő tartalmak vagy azok bármely részletének letöltése, elektronikus tárolása, feldolgozása és értékesítése'), 'README must quote verbatim prohibition from ÁSZF Section 3');
+  assert.ok(readmeMd.includes('ÁSZF 10. pont'), 'README must cite ÁSZF 10. pont for copyright');
+  assert.ok(readmeMd.includes('10. pont 2. bekezdés'), 'README must cite 10. pont 2. bekezdés');
+  assert.ok(readmeMd.includes('10. pont 6. bekezdés'), 'README must cite 10. pont 6. bekezdés');
+  assert.ok(readmeMd.includes('10. pont 7. bekezdés'), 'README must cite 10. pont 7. bekezdés');
+  assert.ok(readmeMd.includes('Szigorúan tilos továbbá ezeket a tartalmakat más médiacsatornán közzétenni'), 'README must quote verbatim prohibition of other media channels');
+  assert.ok(readmeMd.includes('adatvedelem@idokep.hu'), 'README must record official Idokep contact email');
+  assert.ok(readmeMd.includes('jogilag nem rendezett'), 'README must record that 1-minute auto refresh is legally unsettled under the ASZF');
+  assert.ok(readmeMd.includes('192.168.1.81:3117'), 'README must document private LAN environment');
+  assert.ok(readmeMd.includes('Loopback / LAN Guardrail'), 'README must document LAN guardrail');
 });

@@ -17,6 +17,20 @@
  * 5. Külső oldalon nézhető források elkülönítése: A nem beágyazható (link-only) kamerák és
  *    oldalak külön „Külső oldalon nézhető” csoportban jelennek meg, külön jelezve a
  *    forrásoldali elérhetőséget/élő állapotot és a beágyazhatóságot.
+ * 6. Szigorúan magáncélú, saját, egyfelhasználós használat (Időkép ÁSZF 3. és 10. pont):
+ *    - A Crucix futó példánya privát, nem nyilvános, harmadik fél nem éri el (kizárólag saját
+ *      helyi hálózaton LAN-on fut), és más médiacsatornán semmilyen formában nem teszi közzé a kamerákat.
+ *    - A Crucix szervere a kamerák képeit NEM tölti le, nem tárolja elektronikusan, nem proxyzza és
+ *      nem dolgozza fel (megfelelés az ÁSZF 3. pont 3. bekezdésének).
+ *    - A képmegjelenítés kizárólag a végfelhasználó saját böngészőjében fut közvetlen <img> lekérésként,
+ *      a felhasználó kifejezett kattintására (Click-to-Load), átmeneti memóriabeli megjelenítésként.
+ *    - Szigorúan tilos a tartalmak más médiacsatornán való közzététele (ÁSZF 10. pont 7. bekezdés).
+ *    - Jogilag nem rendezett státusz: Az automatizált periodikus (1 perces) böngészőoldali frissítés és a közvetlen
+ *      cam.idokep.hu mélyhivatkozás az ÁSZF alapján jogilag nem rendezett, ezért az Időkép kifejezett írásbeli
+ *      hozzájárulásától függ (nem állítható, hogy az ÁSZF ezt megengedi).
+ *    - Hálózati védelmi kapu (Guardrail): A közvetlen kamerakép-betöltő felület kizárólag privát helyi hálózatról
+ *      (localhost, 127.0.0.1, ::1, 192.168.*, 10.*, 172.16-31.*) érhető el; publikus elérés esetén a felület
+ *      csak külső szolgáltatói linket jelenít meg a magáncélú felhasználás védelmében.
  */
 
 (function (window, document) {
@@ -139,6 +153,73 @@
       refreshCameraDomImage(streamId, imageUrl);
     }, CAMERA_REFRESH_INTERVAL_MS);
     cameraTimers.set(streamId, timer);
+  }
+
+  /**
+   * Ellenőrzi, hogy a felület helyi loopbackről vagy szabványos RFC 1918 magánhálózatról fut-e.
+   * Kizárólag magánhálózaton engedélyezett a közvetlen böngészőoldali kamerabetöltés (Időkép ÁSZF
+   * 10. pont szerinti szigorúan magáncélú, saját, egyfelhasználós használat védelmében).
+   *
+   * Támogatott címek / tartományok:
+   * - Loopback: localhost, 127.0.0.1, ::1, [::1], *.localhost
+   * - Privát C osztály: 192.168.0.0/16
+   * - Privát A osztály: 10.0.0.0/8
+   * - Privát B osztály: 172.16.0.0/12 (172.16.0.0 - 172.31.255.255)
+   *
+   * @param {string} [hostname] - Opcionális hosztnév teszteléshez vagy felülbíráláshoz
+   * @returns {boolean}
+   */
+  function isPrivateOrLocalHost(hostname) {
+    let host = '';
+    if (hostname !== undefined) {
+      if (typeof hostname === 'string') {
+        host = hostname.trim().toLowerCase();
+      } else {
+        return false;
+      }
+    } else if (typeof window !== 'undefined' && window.location && typeof window.location.hostname === 'string') {
+      host = window.location.hostname.trim().toLowerCase();
+    }
+    if (!host) return false;
+
+    // Loopback
+    if (
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '::1' ||
+      host === '[::1]' ||
+      host.endsWith('.localhost')
+    ) {
+      return true;
+    }
+
+    // 192.168.0.0/16
+    const m192 = host.match(/^192\.168\.(\d{1,3})\.(\d{1,3})$/);
+    if (m192) {
+      const o3 = parseInt(m192[1], 10);
+      const o4 = parseInt(m192[2], 10);
+      if (o3 >= 0 && o3 <= 255 && o4 >= 0 && o4 <= 255) return true;
+    }
+
+    // 10.0.0.0/8
+    const m10 = host.match(/^10\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (m10) {
+      const o2 = parseInt(m10[1], 10);
+      const o3 = parseInt(m10[2], 10);
+      const o4 = parseInt(m10[3], 10);
+      if (o2 >= 0 && o2 <= 255 && o3 >= 0 && o3 <= 255 && o4 >= 0 && o4 <= 255) return true;
+    }
+
+    // 172.16.0.0/12 (172.16.0.0 - 172.31.255.255)
+    const m172 = host.match(/^172\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (m172) {
+      const o2 = parseInt(m172[1], 10);
+      const o3 = parseInt(m172[2], 10);
+      const o4 = parseInt(m172[3], 10);
+      if (o2 >= 16 && o2 <= 31 && o3 >= 0 && o3 <= 255 && o4 >= 0 && o4 <= 255) return true;
+    }
+
+    return false;
   }
 
   function isMobileViewport() {
@@ -347,6 +428,7 @@
   }
 
   function loadCamera(streamId) {
+    if (!isPrivateOrLocalHost()) return;
     if (typeof streamId !== 'string' || !streamId.trim()) return;
     cameraErrorStates.delete(streamId);
     activeCameraIds.add(streamId);
@@ -366,6 +448,7 @@
   }
 
   function loadAllCameras() {
+    if (!isPrivateOrLocalHost()) return;
     const rawStreams = resolveRawStreams();
     const filtered = rawStreams.filter(matchesFilters);
     for (const stream of filtered) {
@@ -607,7 +690,8 @@
     const embedInfo = getEmbedStatusInfo(stream);
 
     if (stream.sourceType === 'link-only' || embedInfo.code === 'external-only') {
-      const hasImage = Boolean(stream.imageUrl);
+      const isPrivateHost = isPrivateOrLocalHost();
+      const hasImage = Boolean(stream.imageUrl) && isPrivateHost;
       const isCameraActive = activeCameraIds.has(stream.id);
       const isCameraError = cameraErrorStates.has(stream.id);
 
@@ -662,6 +746,11 @@
         }
       } else {
         externalBodyHtml = `
+          ${stream.imageUrl && !isPrivateHost ? `
+            <div class="lm-camera-restricted-box">
+              <span class="lm-camera-restricted-text">ℹ A közvetlen kamerakép kizárólag privát helyi hálózatról (LAN / loopback) tölthető be (magáncélú felhasználás védelme).</span>
+            </div>
+          ` : ''}
           <div class="lm-external-actions">
             <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">
               Megnyitás a szolgáltató oldalán ↗
@@ -812,6 +901,7 @@
         </div>
       `;
 
+    const isPrivateHost = isPrivateOrLocalHost();
     const externalCams = externalFiltered.filter(s => Boolean(s.imageUrl));
     const anyCamActive = externalCams.some(s => activeCameraIds.has(s.id));
 
@@ -822,7 +912,7 @@
             <div class="lm-section-title-wrap">
               <span class="lm-section-title">Külső oldalon nézhető</span>
               <span class="lm-count-badge">${externalFiltered.length} forrás</span>
-              ${externalCams.length > 0 ? `
+              ${externalCams.length > 0 && isPrivateHost ? `
                 ${anyCamActive ? `
                   <button type="button" class="lm-btn lm-btn-stop" onclick="window.CrucixLiveMedia?.unloadAllCameras()" title="Minden aktív intézményi kamera bezárása">
                     ✕ Kamerák bezárása
@@ -1158,6 +1248,7 @@
     retryCamera,
     isCameraActive,
     getCameraError,
+    isPrivateOrLocalHost,
     setAllowBackgroundPlayback,
     getAllowBackgroundPlayback,
     onChange,

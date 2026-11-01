@@ -893,6 +893,24 @@
   color: var(--dim, #6a8a82);
 }
 
+.lm-camera-restricted-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(20, 24, 32, 0.6);
+  border: 1px dashed rgba(255, 180, 50, 0.35);
+  border-radius: 3px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+
+.lm-camera-restricted-text {
+  font-family: var(--sans, sans-serif);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--dim, #c0a060);
+}
+
 .lm-btn-load-cam {
   background: rgba(100, 240, 200, 0.16);
   border: 1px solid var(--accent, #64f0c8);

@@ -806,6 +806,19 @@ AGPL-3.0
 
 ### Böngészőoldali Külső Kameramegjelenítés és Jogi Tájékoztató (Időkép)
 
-- **Magáncélú, közvetlen böngészőoldali kapcsolat:** A Crucix „Élő” paneljében elérhető intézményi webkamerák (pl. debreceni és hajdúszoboszlói panorámakamerák) képmegjelenítése kizárólag a felhasználó saját felelősségére, magáncélú otthoni monitorozásra szolgál.
-- **Szerveroldali proxyzás és tárolás tilalma:** A Crucix szervere a kamerák képeit semmilyen módon nem kéri le, nem tárolja, nem proxyzza, és nem dolgozza fel. A képek kizárólag a felhasználó böngészője által, közvetlenül a külső szolgáltató (`cam.idokep.hu`) szerveréről töltődnek be, a felhasználó kifejezett kattintására (Click-to-Load).
-- **Időkép ÁSZF megfelelőség:** A forrásfelhasználási feltételekről és szerzői jogi korlátozásokról részletes tájékoztatás az Időkép Általános Szerződési Feltételeiben olvasható: [Időkép ÁSZF 10. pont](https://www.idokep.hu/aszf).
+- **Kizárólag magáncélú, saját, egyfelhasználós használat:** A Crucix „Élő” paneljében elérhető intézményi webkamerák (pl. debreceni és hajdúszoboszlói panorámakamerák) képmegjelenítése szigorúan magáncélú, saját, egyfelhasználós otthoni tájékozódásra szolgál.
+  - A Crucix futó példánya zárt, nem nyilvános rendszer: kizárólag a felhasználó saját privát helyi hálózatán (LAN: `192.168.1.81:3117` vagy loopback) érhető el.
+  - Harmadik fél számára nem hozzáférhető, és más médiacsatornán semmilyen formában nem teszi közzé a kamerák tartalmát.
+- **Szerveroldali letöltés, tárolás és proxyzás teljes tilalma (ÁSZF 3. pont):** Az Időkép Általános Szerződési Feltételei (ÁSZF) 3. pontjának 3. bekezdése értelmében:
+  > *„Szolgáltató fenntart magának minden jogot a weboldal, annak bármely részlete és az azon megjelenő tartalmak, valamint a weboldal terjesztésének tekintetében. Tilos a weboldalon megjelenő tartalmak vagy azok bármely részletének letöltése, elektronikus tárolása, feldolgozása és értékesítése a Szolgáltató írásos hozzájárulása nélkül.”*
+  
+  Ennek maradéktalanul eleget téve a Crucix szervere a kamerák képeit semmilyen módon nem kéri le, nem tölti le, nem tárolja elektronikusan, nem proxyzza, és semmilyen adatfeldolgozást nem végez rajtuk. A lekérés kizárólag a végfelhasználó saját böngészőjében, a felhasználó kifejezett kattintására (Click-to-Load elv) fut le.
+- **Szerzői jogi védelem és magáncélú felhasználás (ÁSZF 10. pont):** Az Időkép ÁSZF 10. pontja rendelkezik a szellemi alkotások védelméről és a megengedett felhasználási keretekről:
+  - **10. pont 2. bekezdés:** *„A Weboldal egészének vagy egyes részeinek magáncélú felhasználáson túli valamennyi felhasználása formája kizárólag a Szolgáltató előzetes írásbeli engedélyével lehetséges.”*
+  - **10. pont 6. bekezdés:** *„A Weboldal rendeltetésszerű használatával járó megjelenítésen, az ehhez szükséges ideiglenes többszörözésen és a magáncélú másolatkészítésen túl e szellemi alkotások a Szolgáltató előzetes írásbeli engedélye nélkül semmilyen egyéb formában nem használhatók fel vagy hasznosíthatók.”*
+  - **10. pont 7. bekezdés:** *„Szigorúan tilos továbbá ezeket a tartalmakat más médiacsatornán közzétenni, valamint bármely tartalmat saját munkaként feltüntetni.”*
+- **Jogilag nem rendezett státusz (1 perces böngészőoldali frissítés és közvetlen kép-hivatkozás):**
+  - Bár a közvetlen böngészőoldali megjelenítés a felhasználó privát monitorozását szolgálja és átmeneti memóriabeli megjelenítésként fut, az automatizált periodikus (1 perces) böngészőoldali lekérés és a közvetlen `cam.idokep.hu/{id}/thumbnail.jpg` mélyhivatkozás az ÁSZF szövege alapján **jogilag nem rendezett**.
+  - A Crucix dokumentációja kifejezetten rögzíti, hogy az ÁSZF szövege **nem** engedélyezi kifejezetten ezt az automatizmust; a tartós, jogszerű használat az Időkép (Időkép Üzleti Szolgáltatások Kft., székhely: 2600 Vác, Hattyú utca 47/A 3. em. 2. ajtó, kapcsolat: `adatvedelem@idokep.hu`) kifejezett előzetes írásbeli hozzájárulásától és engedélyétől függ.
+- **Hálózati védelmi kapu (Loopback / LAN Guardrail):** A panel kliensoldali ellenőrzést alkalmaz (`isPrivateOrLocalHost`): amennyiben a felület nem szabványos privát helyi hálózatról (`localhost`, `127.0.0.1`, `::1`, `192.168.*`, `10.*`, `172.16-31.*`) fut, a közvetlen kamerabetöltő gombok nem jelennek meg, és a felület kizárólag a külső szolgáltatói oldalra mutató linket biztosít a szigorúan magáncélú felhasználási keret biztosítása érdekében.
+- **Hivatalos forrás:** [Időkép Általános Szerződési Feltételek (ÁSZF)](https://www.idokep.hu/aszf).
