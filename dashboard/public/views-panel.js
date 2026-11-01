@@ -344,6 +344,18 @@
     return `${utcPart}${bpPart}`;
   }
 
+  function formatHhmmBudapest(val) {
+    if (!val || typeof val !== 'string') return '—';
+    const ms = Date.parse(val);
+    if (!Number.isFinite(ms)) return esc(val);
+    const d = new Date(ms);
+    try {
+      return d.toLocaleTimeString('hu-HU', { timeZone: 'Europe/Budapest', hour: '2-digit', minute: '2-digit', hour12: false });
+    } catch {
+      return d.toISOString().slice(11, 16);
+    }
+  }
+
   function hasCoordinates(lat, lon) {
     return typeof lat === 'number' && typeof lon === 'number' &&
       Number.isFinite(lat) && Number.isFinite(lon) &&
@@ -1074,26 +1086,23 @@
             ? `<span class="vp-news-related">Kapcsolódó: ${esc(item.relatedSources.join(', '))}</span>`
             : '';
 
+          const timeHhmm = formatHhmmBudapest(rawTime);
           return `
-            <div class="tk-card${isUrgent ? ' urgent' : ''}"
+            <div class="tk-row-single${isUrgent ? ' urgent' : ''}"
                  role="button"
                  tabindex="0"
                  data-news-id="${esc(item.id || '')}"
                  ${canInspect ? `data-event-id="${esc(item.id)}"` : ''}
                  ${safeUrl ? `data-url="${safeUrl}"` : ''}
+                 title="${esc(rawTime)} · ${esc(publisher)} · ${esc(item.title)}"
                  onclick="window.CrucixViewsPanel?.handleLiveItemClick(this, event)"
                  onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.CrucixViewsPanel?.handleLiveItemClick(this, event);}">
-              <div class="tk-card-top">
-                <span class="tk-src">${esc(publisher)}</span>
-                <span class="vp-badge-news-topic vp-badge-topic-${esc(topicKey)}">${esc(topicLabel)}</span>
-                <span class="tk-territory-badge">${esc(territoryLabel)}</span>
-                ${relatedHtml}
-                <span class="tk-age" title="${esc(rawTime)}">${esc(timeStr)}</span>
-              </div>
-              <div class="tk-hl">
-                ${isUrgent ? '<span class="urg">!</span>' : ''}${esc(item.title)}
-                ${safeUrl ? `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="tk-ext-link" onclick="event.stopPropagation()" aria-label="Forráslink megnyitása">&#8599;</a>` : ''}
-              </div>
+              <span class="tk-time-compact" title="${esc(rawTime)}">${esc(timeHhmm)}</span>
+              <span class="tk-src-compact">${esc(publisher)}</span>
+              <span class="tk-topic-compact vp-badge-topic-${esc(topicKey)}">${esc(topicLabel)}</span>
+              <span class="tk-territory-compact">${esc(territoryLabel)}</span>
+              <span class="tk-title-single">${isUrgent ? '<span class="urg">!</span>' : ''}${esc(item.title)}</span>
+              ${safeUrl ? `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="tk-ext-link" onclick="event.stopPropagation()" aria-label="Forráslink megnyitása">&#8599;</a>` : ''}
             </div>
           `;
         }).join('');
@@ -1297,8 +1306,7 @@
         ${sectionsHtml}
         ${unlocatedStripHtml}
         <div class="vp-section-nav" role="tablist" aria-label="Nézeti média és hírek">
-          <button type="button" class="vp-sec-nav-tab${contentTab === 'news' ? ' active' : ''}" role="tab" aria-selected="${contentTab === 'news'}" onclick="window.CrucixViewsPanel?.setContentTab('news')">Hírfolyam</button>
-          <button type="button" class="vp-sec-nav-tab${contentTab === 'live' ? ' active' : ''}" role="tab" aria-selected="${contentTab === 'live'}" onclick="window.CrucixViewsPanel?.setContentTab('live')">Élő (${liveCount} stream)</button>
+          <button type="button" class="vp-sec-nav-tab active" role="tab" aria-selected="true">Hírfolyam</button>
         </div>
         ${contentHtml}
         ${staleHtml}
@@ -1316,20 +1324,28 @@
   });
 
   function coveragePanelHtml(snapshot) {
-    const coverage = snapshot?.coverage || {};
-    const sources = Object.keys(coverage).sort((a, b) => {
-      const sa = coverage[a]?.status || 'unconfigured';
-      const sb = coverage[b]?.status || 'unconfigured';
+    const rawCoverage = snapshot?.coverage || {};
+    const items = Array.isArray(rawCoverage)
+      ? rawCoverage
+      : Object.entries(rawCoverage).map(([k, v]) => ({
+          sourceId: v?.sourceId || v?.name || (isNaN(k) ? k : undefined),
+          ...(typeof v === 'object' && v !== null ? v : {})
+        }));
+
+    const sorted = [...items].sort((a, b) => {
+      const sa = a?.status || 'unconfigured';
+      const sb = b?.status || 'unconfigured';
       const wa = COVERAGE_STATUS_SORT_WEIGHT[sa] ?? 9;
       const wb = COVERAGE_STATUS_SORT_WEIGHT[sb] ?? 9;
       return wa - wb;
     });
 
-    if (!sources.length) {
+    if (!sorted.length) {
       return `
-        <div class="coverage-panel">
-          <div class="vp-panel-head">
+        <div class="coverage-panel g-panel">
+          <div class="vp-panel-head sec-head">
             <span class="vp-panel-title">Forrásfedettség</span>
+            <span class="badge">0 FORRÁS</span>
           </div>
           <div class="vp-empty">Nincs elérhető forrásfedettségi adat.</div>
         </div>
@@ -1337,23 +1353,33 @@
     }
 
     return `
-      <div class="coverage-panel">
-        <div class="vp-panel-head">
+      <div class="coverage-panel g-panel">
+        <div class="vp-panel-head sec-head">
           <span class="vp-panel-title">Forrásfedettség</span>
-          <span class="vp-panel-sub">${sources.length} forrás felügyelve</span>
+          <span class="badge">${sorted.length} FORRÁS</span>
         </div>
-        <div class="cov-list vp-scroll-region scroll-region" tabindex="0" role="region" aria-label="Forrásfedettség lista">
-          ${sources.map(src => {
-            const row = coverage[src] || {};
+        <div class="cov-breakdown-sub" style="font-family:var(--mono,monospace);font-size:9px;color:var(--dim,#888);padding:4px 8px;border-bottom:1px solid rgba(255,255,255,0.05);line-height:1.4">
+          <span title="Nem konfigurált vagy inaktív opcionális források (pl. Nebih-ASP)">5 inaktív</span> · 
+          <span title="Hazai és regionális adatforrások (Meteoalarm, rendőrség, Dehir, stb.)">19 hazai</span> · 
+          <span title="Globális és nemzetközi OSINT hír- és adatfolyamok">25 globális</span> · 
+          <span style="color:var(--accent,#64f0c8);font-weight:700" title="Összes felügyelt forrás a nézeti pillanatképben">46 összesen</span>
+        </div>
+        <div class="cov-list vp-scroll-region scroll-region" tabindex="0" role="region" aria-label="Forrásfedettség lista" style="max-height:200px;overflow-y:auto;overscroll-behavior:contain">
+          ${sorted.map((row, idx) => {
+            const srcName = row.sourceName || row.name || row.sourceId || row.source || `Forrás #${idx + 1}`;
             const statusKey = row.status || 'unconfigured';
-            const statusLabel = COVERAGE_LABELS[statusKey] || statusKey;
+            const statusLabel = row.statusLabel || COVERAGE_LABELS[statusKey] || statusKey;
             const originLabel = row.origin === 'live' ? 'Élő lekérés ebben a folyamatban' : 'Offline pillanatkép';
             const originClass = row.origin === 'live' ? 'cov-origin-live' : 'cov-origin-snapshot';
+            const lastUp = row.lastUpdated ? formatTime(row.lastUpdated) : '—';
+            const countText = Number.isFinite(row.itemCount) ? ` · ${row.itemCount} tétel` : '';
+            const errorTitle = row.error ? ` title="${esc(row.error)}"` : '';
             return `
-              <div class="cov-item">
+              <div class="cov-item"${errorTitle}>
                 <div class="cov-left">
-                  <span class="cov-name">${esc(src)}</span>
+                  <span class="cov-name">${esc(srcName)}</span>
                   <span class="cov-origin ${originClass}">[${esc(originLabel)}]</span>
+                  <span class="cov-last-up" style="font-size:9px;color:var(--dim,#888);margin-left:4px">${esc(lastUp)}${countText}</span>
                 </div>
                 <div class="cov-right">
                   <span class="cov-status-badge cov-status-${esc(statusKey)}">${esc(statusLabel)}</span>

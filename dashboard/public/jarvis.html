@@ -278,7 +278,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .sd.err{background:var(--danger);box-shadow:0 0 4px rgba(255,95,99,0.4)}
 
 /* RIGHT: OSINT FEED */
-.feed{flex:1;padding-right:3px}.source-health-list.scroll-region{max-height:220px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px}.health-alerts-list.scroll-region,.supp-health-list.scroll-region{max-height:255px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px}.osint-list.scroll-region{max-height:245px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px;border:1px solid rgba(100,240,200,0.08);background:rgba(0,0,0,0.15)}.delta-list.scroll-region{max-height:165px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px}
+.feed{flex:1;padding-right:3px}.source-health-list.scroll-region{max-height:220px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px}.health-alerts-list.scroll-region,.supp-health-list.scroll-region{max-height:255px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px}.osint-list.scroll-region{max-height:245px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px;border:1px solid rgba(100,240,200,0.08);background:rgba(0,0,0,0.15)}.delta-list.scroll-region{max-height:165px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px}.ideas-list.scroll-region,.signals-list.scroll-region,.signal-core-list.scroll-region,.ioda-list.scroll-region,.nuclear-list.scroll-region,.risk-gauges-list.scroll-region{max-height:220px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px}
 .feed::-webkit-scrollbar{width:3px}
 .feed::-webkit-scrollbar-thumb{background:rgba(100,240,200,0.2);border-radius:2px}
 .ic{padding:10px;border:1px solid rgba(255,255,255,0.05);border-left:2px solid rgba(68,204,255,0.4);background:rgba(255,255,255,0.02);margin-bottom:6px}
@@ -1007,6 +1007,7 @@ function renderTopbar(){
     </div>
     ${mobile && showRegionControls ? `<div class="top-center">${getRegionControlsMarkup()}</div>` : ''}
     <div class="top-right">
+      <button class="guide-btn tb-btn-live-media" id="liveMediaTrigger" onclick="window.CrucixViewsPanel?.setContentTab('live')" title="Élő közvetítések, webkamerák és térképek megnyitása a központi munkaterületen" style="border-color:var(--accent,#64f0c8);color:var(--accent,#64f0c8);font-weight:700">ÉLŐ KÖZVETÍTÉSEK</button>
       <button class="meta-pill perf-pill" onclick="togglePerfMode()" title="Reduce visual effects and start mobile in flat mode">${t('dashboard.visuals','VISUALS')} <span class="v" id="perfStatus">${lowPerfMode?t('dashboard.visualsLite','LITE'):t('dashboard.visualsFull','FULL')}</span></button>
       <span class="meta-pill">${t('dashboard.sweep','SWEEP')} <span class="v">${(D.meta.totalDurationMs/1000).toFixed(1)}s</span></span>
       <span class="meta-pill">${d} <span class="v">${timeStr}</span></span>
@@ -1081,10 +1082,10 @@ function buildNuclearWatchPanel(){
   const live=D.nuke.filter(s=>s.n>0);
   const allNormal=live.length>0&&live.every(s=>!s.anom);
   const nukeHtml=D.nuke.map(s=>`<div class="site-row"><span>${esc(s.site)}</span><span class="site-val">${s.n>0?(s.cpm?.toFixed(1)||'--')+' CPM'+(s.last?' · '+esc(getAge(s.last)):''):'No data'}</span></div>`).join('');
-  return `<div class="g-panel">
-    <div class="sec-head"><h3>${t('panels.nuclearWatch','Nuclear Watch')}</h3><span class="badge">${t('badges.radiation','RADIATION')}</span></div>
+  return `<div class="g-panel lp-nuclear">
+    <div class="sec-head"><h3>${t('panels.nuclearWatch','Nuclear Watch')}</h3><span class="badge">${D.nuke.length} ${t('badges.radiation','SITES')}</span></div>
     <div class="nuke-ok">${!live.length?t('status.noNuclear','No radiation readings in this snapshot'):allNormal?'&#9679; '+t('nuclear.allSitesNormal','ALL SITES NORMAL'):'&#9888; '+t('nuclear.anomalyDetected','ANOMALY DETECTED')}</div>
-    ${nukeHtml}
+    <div class="nuclear-list scroll-region" tabindex="0" role="region" aria-label="${esc(t('panels.nuclearWatch','Nuclear Watch'))}">${nukeHtml}</div>
   </div>`;
 }
 
@@ -1095,16 +1096,16 @@ function buildRiskGaugesPanel(){
   const m2=D.fred.find(f=>f.id==='M2SL');
   const mort=D.fred.find(f=>f.id==='MORTGAGE30US');
   const claims=D.fred.find(f=>f.id==='ICSA');
-  return `<div class="g-panel">
-    <div class="sec-head"><h3>${t('panels.riskGauges','Risk Gauges')}</h3><span class="badge">${t('badges.stress','STRESS')}</span></div>
-    <div class="econ-row"><span class="elabel">${t('metrics.vix','VIX')} (Fear)</span><span class="eval" style="color:${vix?.value>20?'var(--warn)':'var(--accent)'}">${vix?.value||'--'}</span></div>
-    <div class="econ-row"><span class="elabel">${t('metrics.hySpread','HY Spread')}</span><span class="eval">${hy?.value||'--'}</span></div>
-    <div class="econ-row"><span class="elabel">${t('metrics.usdIndex','USD Index')}</span><span class="eval">${usd?.value?.toFixed(1)||'--'}</span></div>
-    <div class="econ-row"><span class="elabel">${t('metrics.joblessClaims','Jobless Claims')}</span><span class="eval">${claims?.value?.toLocaleString()||'--'}</span></div>
-    <div class="econ-row"><span class="elabel">${t('metrics.mortgage30y','30Y Mortgage')}</span><span class="eval">${mort?.value||'--'}%</span></div>
-    <div class="econ-row"><span class="elabel">${t('metrics.m2Supply','M2 Supply')}</span><span class="eval">$${(m2?.value/1000)?.toFixed(1)||'--'}T</span></div>
-    <div class="econ-row"><span class="elabel">${t('metrics.natDebt','Nat. Debt')}</span><span class="eval">${Number.isFinite(parseFloat(D.treasury.totalDebt))?'$'+(parseFloat(D.treasury.totalDebt)/1e12).toFixed(2)+'T':'--'}</span></div>
-  </div>`;
+  return `<div class="g-panel lp-risk-gauges">
+    <div class="sec-head"><h3>${t('panels.riskGauges','Risk Gauges')}</h3><span class="badge">7 ${t('badges.stress','GAUGES')}</span></div>
+    <div class="risk-gauges-list scroll-region" tabindex="0" role="region" aria-label="${esc(t('panels.riskGauges','Risk Gauges'))}">
+      <div class="econ-row"><span class="elabel">${t('metrics.vix','VIX')} (Fear)</span><span class="eval" style="color:${vix?.value>20?'var(--warn)':'var(--accent)'}">${vix?.value||'--'}</span></div>
+      <div class="econ-row"><span class="elabel">${t('metrics.hySpread','HY Spread')}</span><span class="eval">${hy?.value||'--'}</span></div>
+      <div class="econ-row"><span class="elabel">${t('metrics.usdIndex','USD Index')}</span><span class="eval">${usd?.value?.toFixed(1)||'--'}</span></div>
+      <div class="econ-row"><span class="elabel">${t('metrics.joblessClaims','Jobless Claims')}</span><span class="eval">${claims?.value?.toLocaleString()||'--'}</span></div>
+      <div class="econ-row"><span class="elabel">${t('metrics.mortgage30y','30Y Mortgage')}</span><span class="eval">${mort?.value||'--'}%</span></div>
+      <div class="econ-row"><span class="elabel">${t('metrics.m2Supply','M2 Supply')}</span><span class="eval">${(m2?.value/1000)?.toFixed(1)||'--'}T</span></div>
+      <div class="econ-row"><span class="elabel">${t('metrics.natDebt','Nat. Debt')}</span><span class="eval">${Number.isFinite(parseFloat(D.treasury.totalDebt))?'`;
 }
 
 function buildSpaceWatchPanel(){
@@ -1241,12 +1242,12 @@ function buildTradeIdeasPanel(){
   const ideasHtml = hasIdeas ? (D.ideas||[]).map(idea=>`<div class="idea-card"><span class="idea-type ${ideaTypeClass(idea.type)}">${esc((idea.type||'').toUpperCase())}</span>${idea.ticker ? `<span class="idea-horizon">${esc(idea.ticker)}</span>` : ''}${idea.horizon ? `<span class="idea-horizon">${esc(idea.horizon)}</span>` : ''}<span class="idea-conf">${esc(idea.confidence)} confidence</span><div class="idea-title">${esc(idea.title)}</div><div class="idea-text">${esc(idea.text||idea.rationale||'')}</div>${idea.risk ? `<div class="idea-text" style="color:var(--warn);margin-top:3px">Risk: ${esc(idea.risk)}</div>` : ''}</div>`).join('') : `<div style="padding:20px;text-align:center;color:var(--dim);font-family:var(--mono);font-size:11px"><div style="font-size:24px;margin-bottom:8px;opacity:0.3">&#9888;</div><div>LLM NOT CONFIGURED</div><div style="font-size:9px;margin-top:6px;opacity:0.6">Set LLM_PROVIDER + credentials in .env to enable AI-powered trade ideas</div></div>`;
   const sourceLabel=D.ideasSource==='llm'?t('ideas.aiEnhanced','AI ENHANCED'):D.ideasSource==='rules'?t('ideas.rules','RULES'):D.ideasSource==='disabled'?t('ideas.llmOff','LLM OFF'):t('ideas.pending','PENDING');
   const emptyHtml=D.ideasSource==='rules'?`<div class="empty-state">${t('ideas.noRuleSignals','No qualifying rule signals in this sweep')}</div>`:ideasHtml;
-  return `<div class="g-panel lp-ideas"><div class="sec-head"><h3>${t('panels.tradeIdeas','Leverageable Ideas')}</h3><span class="ideas-src ${D.ideasSource==='llm'?'llm':'static'}">${sourceLabel}</span></div>${D.ideasGeneratedAt?`<div class="ideas-age">${esc(D.ideasCached?t('ideas.cached','Preserved from an earlier sweep'):t('ideas.generated','Generated'))} · ${esc(getAge(D.ideasGeneratedAt))}</div>`:''}${hasIdeas?ideasHtml:emptyHtml}<div class="disclosure">FOR INFORMATIONAL PURPOSES ONLY. This is not financial advice, a recommendation to buy or sell any security, or a solicitation of any kind. All signal-based observations are derived from publicly available OSINT data and should not be relied upon for investment decisions. Consult a licensed financial advisor before making any investment. Past performance does not guarantee future results.</div></div>`;
+  return `<div class="g-panel lp-ideas"><div class="sec-head"><h3>${t('panels.tradeIdeas','Leverageable Ideas')}</h3><span class="ideas-src ${D.ideasSource==='llm'?'llm':'static'}">${sourceLabel}</span></div>${D.ideasGeneratedAt?`<div class="ideas-age">${esc(D.ideasCached?t('ideas.cached','Preserved from an earlier sweep'):t('ideas.generated','Generated'))} · ${esc(getAge(D.ideasGeneratedAt))}</div>`:''}<div class="ideas-list scroll-region" tabindex="0" role="region" aria-label="${esc(t('panels.tradeIdeas','Trade Ideas'))}">${hasIdeas?ideasHtml:emptyHtml}</div><div class="disclosure">FOR INFORMATIONAL PURPOSES ONLY. This is not financial advice, a recommendation to buy or sell any security, or a solicitation of any kind. All signal-based observations are derived from publicly available OSINT data and should not be relied upon for investment decisions. Consult a licensed financial advisor before making any investment. Past performance does not guarantee future results.</div></div>`;
 }
 
 function buildCrossSourceSignalsPanel(){
   const signals=D.tSignals.slice(0,6).map((s,i)=>`<div class="signal-row"><strong>Signal ${i+1}</strong><p>${esc(s)}</p></div>`).join('');
-  return `<div class="g-panel right-signals"><div class="sec-head"><h3>${t('panels.crossSourceSignals','Cross-Source Signals')}</h3><span class="badge">${t('badges.worldview','WORLDVIEW')}</span></div>${signals}</div>`;
+  return `<div class="g-panel right-signals"><div class="sec-head"><h3>${t('panels.crossSourceSignals','Cross-Source Signals')}</h3><span class="badge">${D.tSignals.length} ${t('badges.signals','SIGNALS')}</span></div><div class="signals-list scroll-region" tabindex="0" role="region" aria-label="${esc(t('panels.crossSourceSignals','Cross-Source Signals'))}">${signals||'<div class="empty-state">No cross-source signals</div>'}</div></div>`;
 }
 
 function buildSignalCorePanel(){
@@ -1260,7 +1261,7 @@ function buildSignalCorePanel(){
     {l:'WHO Alerts',v:D.who.length,p:40},
     {l:'Supp Health',v:(D.supplementalHealth||[]).length,p:36}
   ];
-  return `<div class="g-panel right-core"><div class="sec-head"><h3>${t('panels.signalCore','Signal Core')}</h3><span class="badge">${t('badges.hotMetrics','HOT METRICS')}</span></div>${signalMetrics.map(s=>`<div class="sm"><span class="sml">${s.l}</span><div class="smb"><span style="width:${s.p}%"></span></div><span class="smv">${s.v}</span></div>`).join('')}</div>`;
+  return `<div class="g-panel right-core"><div class="sec-head"><h3>${t('panels.signalCore','Signal Core')}</h3><span class="badge">${signalMetrics.length} ${t('badges.metrics','METRICS')}</span></div><div class="signal-core-list scroll-region" tabindex="0" role="region" aria-label="${esc(t('panels.signalCore','Signal Core'))}">${signalMetrics.map(s=>`<div class="sm"><span class="sml">${s.l}</span><div class="smb"><span style="width:${s.p}%"></span></div><span class="smv">${s.v}</span></div>`).join('')}</div></div>`;
 }
 
 function buildInternetOutagesPanel(){
@@ -1270,7 +1271,7 @@ function buildInternetOutagesPanel(){
     const stateLabel=country.activeCount>0?t('ioda.active','ACTIVE'):'RECENT';
     return `<div class="signal-row"><strong>#${i+1} <span style="color:${stateColor}">${stateLabel}</span> ${country.countryCode?`· ${esc(country.countryCode)}`:''}</strong><p>${cleanText(country.country||'')}</p><div style="display:flex;justify-content:space-between;gap:8px;font-family:var(--mono);font-size:9px;color:var(--dim);margin-top:5px"><span>${t('ioda.events','Events')}: ${country.eventCount}</span><span>${t('ioda.score','Score')}: ${Math.round(country.overallScore)}</span></div><div style="margin-top:4px;font-family:var(--mono);font-size:9px;color:var(--dim)">${t('ioda.topDatasource','Top datasource')}: ${cleanText(country.topDatasource||'overall')} ${country.lastStart?`· ${t('ioda.lastStart','Last start')}: ${getAge(country.lastStart)}`:''}</div></div>`;
   }).join('') || `<div style="padding:12px;text-align:center;color:var(--dim);font-family:var(--mono);font-size:10px">${t('ioda.noData','No recent IODA country outages')}</div>`;
-  return `<div class="g-panel right-ioda"><div class="sec-head"><h3>${t('panels.internetOutages','Internet Outages')}</h3><span class="badge">IODA ${D.ioda?.activeEvents||0} ${t('ioda.active','ACTIVE')}</span></div>${(D.ioda?.countries?.length||0)?`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;font-family:var(--mono);font-size:10px"><span style="color:var(--dim)">${t('ioda.countries','Countries')}: <span style="color:var(--accent2)">${D.ioda?.countries?.length||0}</span></span><span style="color:var(--dim)">${t('ioda.events','Events')}: <span style="color:var(--accent)">${D.ioda?.totalEvents||0}</span></span></div>`:''}${iodaRows}</div>`;
+  return `<div class="g-panel right-ioda"><div class="sec-head"><h3>${t('panels.internetOutages','Internet Outages')}</h3><span class="badge">IODA ${D.ioda?.activeEvents||0} ${t('ioda.active','ACTIVE')}</span></div>${(D.ioda?.countries?.length||0)?`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;font-family:var(--mono);font-size:10px"><span style="color:var(--dim)">${t('ioda.countries','Countries')}: <span style="color:var(--accent2)">${D.ioda?.countries?.length||0}</span></span><span style="color:var(--dim)">${t('ioda.events','Events')}: <span style="color:var(--accent)">${D.ioda?.totalEvents||0}</span></span></div>`:''}<div class="ioda-list scroll-region" tabindex="0" role="region" aria-label="${esc(t('panels.internetOutages','Internet Outages'))}">${iodaRows}</div></div>`;
 }
 
 function buildHealthAlertsPanel(){

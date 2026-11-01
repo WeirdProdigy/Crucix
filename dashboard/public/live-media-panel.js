@@ -605,7 +605,7 @@
     const typeButtons = [
       { id: 'all', label: 'Mind' },
       { id: 'news', label: 'Híradók' },
-      { id: 'webcam', label: 'Kamerák' },
+      { id: 'webcam', label: 'Webkamerák' },
       { id: 'directory', label: 'Katalógusok' }
     ].map(b => `
       <button type="button" class="lm-filter-btn${typeFilter === b.id ? ' active' : ''}" onclick="window.CrucixLiveMedia?.setTypeFilter('${b.id}')">

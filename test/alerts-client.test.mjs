@@ -459,14 +459,15 @@ test('controller: an old alert moving up into summary.top is not new',()=>{
   assert.equal(byId('alertToasts').innerHTML,'','the sixth alert, first seen two hours ago, does not toast');
 });
 
-test('controller: at most three toasts, the oldest leaves first and hands its focus to the bell',()=>{
+test('controller: at most two toasts, the oldest leaves first and hands its focus to the bell',()=>{
   const {A,byId,document}=dom();
   A.mount({getSummary:()=>summaryOf([]),t,now:()=>now});
   const stack=byId('alertToasts'),fresh=n=>alert({title:'Fresh '+n,firstSeenAt:now+n,lastSeenAt:now+n});
   A.update(summaryOf([fresh(1)],{generatedAt:now+1}));
   document.activeElement=stack.kids[0].inner;
   A.update(summaryOf([fresh(2),fresh(3),fresh(4)],{generatedAt:now+5}));
-  assert.equal(stack.kids.length,3); assert(!stack.innerHTML.includes('Fresh 1')&&stack.innerHTML.includes('Fresh 4'),'the oldest toast left');
+  const regular = stack.kids.filter(k=>!k.html.includes('al-toast-summary'));
+  assert.equal(regular.length,2); assert(!stack.innerHTML.includes('Fresh 1')&&stack.innerHTML.includes('Fresh 4'),'the oldest toast left');
   assert.equal(byId('alertBell').focused,1,'its focus went to the bell');
 });
 

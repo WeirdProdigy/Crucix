@@ -167,7 +167,7 @@
   // non-modal #alertTray and the #alertToasts stack (body children). The summary comes from snapshots and SSE (update), the
   // tray's list from GET /api/alerts. File pages and the offline shell are read-only: summary only, no request, no actions.
   // Every entry point catches its own errors: an alert failure never stops the dashboard.
-  const ALERT_ID=/^alert-[0-9a-f]{32}$/,EVENT_ID=/^event-[0-9a-f]{32}$/,TAB_IDS=TABS.map(([id])=>id),MAX_TOASTS=3,SCROLLERS=['.at-panel','.at-drivers'];
+  const ALERT_ID=/^alert-[0-9a-f]{32}$/,EVENT_ID=/^event-[0-9a-f]{32}$/,TAB_IDS=TABS.map(([id])=>id),MAX_TOASTS=2,SCROLLERS=['.at-panel','.at-drivers'];
   // A summary this much older than the one shown means the server clock went back (not a late, stale answer).
   const CLOCK_RESET_MS=5*60000;
   // Refusals of the origin check (http-security.mjs): the page is open at an address the server does not take changes from.
@@ -254,15 +254,57 @@
   // Toasts: firing critical/high alerts not seen in this session that were first seen after the summary shown before
   // (`since`). summary.top holds only five alerts, so an old alert that moves up into it (another one was acknowledged, a
   // snooze ran out) is not new. Whatever fires at the first summary (or at a clock reset: since Infinity) counts as seen. At
-  // most three, the oldest leaves first.
+  // most two individual toasts visible, excess aggregated (+N more), auto-dismissing after 9s (with hover pause).
+  const TOAST_TIMEOUT_MS = 9000;
+  const toastTimers = new WeakMap();
+
+  function startToastTimer(node){
+    if(!node||typeof setTimeout!=='function')return;
+    cancelToastTimer(node);
+    const id = setTimeout(()=>{
+      removeToast(node);
+      const regular=[...toasts.querySelectorAll('.al-toast')].filter(n=>!n.html?.includes('al-toast-summary')&&!n.classList?.contains?.('al-toast-summary'));
+      if(regular.length===0){
+        for(const pill of toasts.querySelectorAll('.al-toast-summary'))removeToast(pill);
+      }
+    }, TOAST_TIMEOUT_MS);
+    toastTimers.set(node, id);
+  }
+
+  function cancelToastTimer(node){
+    if(toastTimers.has(node)){
+      clearTimeout(toastTimers.get(node));
+      toastTimers.delete(node);
+    }
+  }
+
   function toast(since){
     const after=Number.isFinite(since)||since===Infinity?since:-Infinity;
     const fresh=primed?newAlertToasts(summary,seen).filter(alert=>Number.isFinite(alert.firstSeenAt)&&alert.firstSeenAt>after):[];
     for(const alert of list(summary.top))if(text(alert.id))seen.add(alert.id);
     primed=true;
     for(const alert of fresh)toasts.insertAdjacentHTML('beforeend',renderToast(alert,opts.t));
-    const stack=[...toasts.querySelectorAll('.al-toast')];
-    stack.slice(0,Math.max(0,stack.length-MAX_TOASTS)).forEach(removeToast);
+    const stack=[...toasts.querySelectorAll('.al-toast')].filter(n=>!n.html?.includes('al-toast-summary')&&!n.classList?.contains?.('al-toast-summary'));
+    const overflow=Math.max(0,stack.length-MAX_TOASTS);
+    if(overflow>0){
+      stack.slice(0,overflow).forEach(removeToast);
+      for(const pill of toasts.querySelectorAll('.al-toast-summary'))removeToast(pill);
+      const tx=translator(opts.t);
+      const pillHtml=`<div class="al-toast al-toast-summary" role="status" data-alert-id="summary"><div class="al-toast-body"><p class="al-toast-title"><span class="al-more">+${overflow} ${tx('alerts.more','more alerts')}</span></p><div class="al-toast-actions"><button type="button" class="al-btn" data-alert-action="threat" aria-controls="alertTray">${tx('alerts.open','Open')}</button></div></div><button type="button" class="ri-icon al-toast-close" data-alert-action="dismiss" data-alert-id="summary" aria-label="${tx('alerts.close','Close')}"><span aria-hidden="true">✕</span></button></div>`;
+      toasts.insertAdjacentHTML('beforeend',pillHtml);
+    }
+    for(const node of stack.slice(-MAX_TOASTS)){
+      if(!node.__timerBound){
+        node.__timerBound=true;
+        startToastTimer(node);
+        if(typeof node.addEventListener==='function'){
+          node.addEventListener('mouseenter',()=>cancelToastTimer(node));
+          node.addEventListener('mouseleave',()=>startToastTimer(node));
+          node.addEventListener('focusin',()=>cancelToastTimer(node));
+          node.addEventListener('focusout',()=>startToastTimer(node));
+        }
+      }
+    }
   }
   // A toast that leaves with the focus in it hands the focus to the bell.
   function removeToast(node){

@@ -116,7 +116,7 @@
     if(!data)main=`<p class="rk-calm" data-risk-state="unavailable">${esc(say('unavailable'))}</p>`;
     else{
       const summary=data.scored!==null&&data.high!==null?`<p class="rk-sum">${esc(say('summary',{scored:data.scored,high:data.high}))}</p>`:'';
-      const list=data.top.length?`<ol class="rk-list" aria-label="${esc(say('rankLabel'))}">${data.top.map((item,index)=>rowHtml(item,index,replay)).join('')}</ol>`:`<p class="rk-calm" data-risk-state="empty">${esc(say('empty'))}</p>`;
+      const list=data.top.length?`<ol class="rk-list scroll-region" tabindex="0" role="region" aria-label="${esc(say('rankLabel'))}">${data.top.map((item,index)=>rowHtml(item,index,replay)).join('')}</ol>`:`<p class="rk-calm" data-risk-state="empty">${esc(say('empty'))}</p>`;
       main=`<p class="rk-intro">${esc(say('intro'))}</p>${summary}${list}${track(data.calibration)}`;
     }
     return `<div class="g-panel risk-panel" id="countryRiskPanel" role="region" aria-labelledby="countryRiskTitle"${replay?' data-replay="true"':''}>${head}${note}${main}</div>`;
