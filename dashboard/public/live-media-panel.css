@@ -607,7 +607,8 @@
   border-color: rgba(68, 204, 255, 0.3);
 }
 
-.lm-badge-delayed {
+.lm-badge-delayed,
+.lm-badge-unverified-live {
   background: rgba(255, 184, 76, 0.15);
   color: #ffb84c;
   border-color: rgba(255, 184, 76, 0.35);

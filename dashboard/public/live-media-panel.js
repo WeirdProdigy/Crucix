@@ -328,6 +328,7 @@
   function getPageStatusLabel(status) {
     switch (status) {
       case 'verified-live': return 'Élő adás';
+      case 'unverified-live': return 'Nem igazolt élő';
       case 'verified': return 'Hitelesített';
       case 'page-ok': return 'Oldal elérhető';
       case 'delayed': return 'Késleltetett (60p)';
