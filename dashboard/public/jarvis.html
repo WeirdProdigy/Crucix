@@ -278,7 +278,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .sd.err{background:var(--danger);box-shadow:0 0 4px rgba(255,95,99,0.4)}
 
 /* RIGHT: OSINT FEED */
-.feed{flex:1;overflow-y:auto;max-height:calc(100vh - 160px);padding-right:3px}
+.feed{flex:1;padding-right:3px}.source-health-list.scroll-region{max-height:220px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px}.health-alerts-list.scroll-region,.supp-health-list.scroll-region{max-height:255px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px}.osint-list.scroll-region{max-height:245px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px;border:1px solid rgba(100,240,200,0.08);background:rgba(0,0,0,0.15)}.delta-list.scroll-region{max-height:165px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px}
 .feed::-webkit-scrollbar{width:3px}
 .feed::-webkit-scrollbar-thumb{background:rgba(100,240,200,0.2);border-radius:2px}
 .ic{padding:10px;border:1px solid rgba(255,255,255,0.05);border-left:2px solid rgba(68,204,255,0.4);background:rgba(255,255,255,0.02);margin-bottom:6px}
@@ -878,7 +878,10 @@ const regionPOV = {
   europe: { lat: 50, lng: 15, altitude: 1.0 },
   middleEast: { lat: 28, lng: 45, altitude: 1.1 },
   asiaPacific: { lat: 25, lng: 110, altitude: 1.2 },
-  africa: { lat: 5, lng: 20, altitude: 1.2 }
+  africa: { lat: 5, lng: 20, altitude: 1.2 },
+  hungary: { lat: 47.16, lng: 19.50, altitude: 0.25 },
+  hajduBihar: { lat: 47.42, lng: 21.52, altitude: 0.12 },
+  local: { lat: 47.22, lng: 21.37, altitude: 0.08 }
 };
 
 if(lowPerfMode) document.body.classList.add('low-perf');
@@ -969,8 +972,11 @@ function rerenderDashboard(forceMapRefresh=false){
 
 // === TOPBAR ===
 function getRegionControlsMarkup(){
-  return ['world','americas','europe','middleEast','asiaPacific','africa'].map(r=>
-    `<button class="region-btn ${r===currentRegion?'active':''}" data-region="${r}" onclick="setRegion('${r}')">${r==='middleEast'?'MIDDLE EAST':r==='asiaPacific'?'ASIA PACIFIC':r.toUpperCase()}</button>`
+  return ['world','americas','europe','hungary','hajduBihar','middleEast','asiaPacific','africa'].map(r=>`<button class="region-btn ${r===currentRegion?'active':''}" data-region="${r}" onclick="setRegion('${r}')">${r==='middleEast'?'MIDDLE EAST':r==='asiaPacific'?'ASIA PACIFIC':r==='hungary'?'MAGYARORSZÁG':r==='hajduBihar'?'HAJDÚ-BIHAR':r==='local'?'HELYI':r.toUpperCase()}</button>`
+  /*
+  */
+
+
   ).join('');
 }
 
@@ -1033,12 +1039,12 @@ function sourceState(source){
 }
 // The active domain lens (lens.js) narrows the source-health rows: the badge then says how many of all are shown.
 function buildSourceHealthPanel(){
-  const shown=D.health.filter(source=>lensMatchesSource(source.n||source.name));
+  const stateRank={error:0,stale:1,ok:2,disabled:3};const shown=D.health.filter(source=>lensMatchesSource(source.n||source.name)).map((source,idx)=>({source,idx,rank:stateRank[sourceState(source)]??9})).sort((a,b)=>a.rank-b.rank||a.idx-b.idx).map(item=>item.source);
   const rows=shown.map(source=>{
     const state=sourceState(source);const label=t('status.'+state,{ok:'Available',error:'Failed',stale:'Stale / cached',disabled:'Not configured'}[state]);
     return `<div class="source-row" data-source-state="${state}"><div>${esc(source.n||source.name||'Source')}${source.message||source.error?`<small>${esc(source.message||source.error)}</small>`:''}${source.timestamp?`<small>${esc(getAge(source.timestamp))}</small>`:''}</div><span class="source-state ${state}">${esc(label)}</span></div>`;
   }).join('');
-  return `<div class="g-panel source-health-panel"><div class="sec-head"><h3>${t('panels.sourceHealth','Source health')}</h3>${window.CrucixHealthMatrix?.button?.()||''}<span class="badge">${shown.length===D.health.length?D.health.length:shown.length+'/'+D.health.length}</span></div>${rows||`<div class="empty-state">${D.health.length?t('lenses.noSources','No source of this domain reported in this sweep.'):t('status.noHealth','Source status is not available yet')}</div>`}</div>`;
+  return `<div class="g-panel source-health-panel"><div class="sec-head"><h3>${t('panels.sourceHealth','Source health')}</h3>${window.CrucixHealthMatrix?.button?.()||''}<span class="badge">${shown.length===D.health.length?D.health.length:shown.length+'/'+D.health.length}</span></div>${rows?`<div class="source-health-list scroll-region" tabindex="0" role="region" aria-label="${esc(t('panels.sourceHealth','Source health'))}">${rows}</div>`:`<div class="empty-state">${D.health.length?t('lenses.noSources','No source of this domain reported in this sweep.'):t('status.noHealth','Source status is not available yet')}</div>`}</div>`;
 }
 
 // === DASHBOARD PANELS ===
@@ -1116,7 +1122,7 @@ function buildSpaceWatchPanel(){
   </div>`;
 }
 
-function buildNewsTickerPanel(){
+function buildNewsTickerPanel(){if(window.CrucixViewsPanel?.liveStreamHtml){const sn=currentSnapshot(),tab=window.CrucixViewsPanel.getLiveStreamTab?.()||'important',items=window.CrucixViewsPanel.getLiveStreamItems?.(sn,tab)||[];return `<div class="g-panel lp-ticker" style="display:flex;flex-direction:column"><div class="sec-head"><h3>${t('panels.newsTicker','Élő hírfolyam')}</h3><span class="badge">${items.length} ${t('badges.items','ITEMS')}</span></div>${window.CrucixViewsPanel.liveStreamHtml(sn)}</div>`;}
   const feed = (D.newsFeed || []).slice(0, 20);
   const srcClass = s => {
     if (!s) return 'other';
@@ -1152,7 +1158,7 @@ function buildNewsTickerPanel(){
   return `<div class="g-panel lp-ticker" style="display:flex;flex-direction:column">
     <div class="sec-head"><h3>${t('panels.newsTicker','Live News Ticker')}</h3><span class="badge">${feed.length} ${t('badges.items','ITEMS')}</span></div>
     <div class="ticker-wrap" style="--ticker-duration:${tickerDuration}s">
-      <div class="ticker-track">${tickerCards||`<div class="empty-state">${t('status.noNews','No headlines available in this snapshot')}</div>`}${lowPerfMode || reducedMotion ? '' : tickerCards}</div>
+      <div class="osint-list scroll-region" tabindex="0" role="region" aria-label="${esc(t('panels.newsTicker','Live News Ticker'))}">${tickerCards||`<div class="empty-state">${t('status.noNews','No headlines available in this snapshot')}</div>`}</div>
     </div>
   </div>`;
 }
@@ -1274,7 +1280,7 @@ function buildHealthAlertsPanel(){
     const link=safeExternalUrl(w.url);
     return `<div class="signal-row"><strong>#${i+1} <span style="color:${sevColor}">${esc(sev)}</span> ${w.region?`· ${esc(w.region)}`:''}</strong><p>${cleanText(w.title||'')}</p><div style="display:flex;justify-content:space-between;gap:8px;font-family:var(--mono);font-size:9px;color:var(--dim);margin-top:5px"><span>${getAge(w.date)}</span><span>score ${w.score||0}</span>${link?`<a href="${esc(link)}" target="_blank" rel="noopener noreferrer" style="color:var(--accent2);text-decoration:none">WHO</a>`:''}</div>${(w.emergencyEvent||w.whoRegionCode)?`<div style="margin-top:4px;font-family:var(--mono);font-size:9px;color:var(--dim)">${cleanText([w.emergencyEvent,w.whoRegionCode].filter(Boolean).join(' · '))}</div>`:''}</div>`;
   }).join('') || `<div style="padding:12px;text-align:center;color:var(--dim);font-family:var(--mono);font-size:10px">No active WHO alerts</div>`;
-  return `<div class="g-panel right-health"><div class="sec-head"><h3>${t('panels.healthAlerts','Health Alerts')}</h3><span class="badge">WHO TOP ${Math.min((D.who||[]).length,10)}</span></div>${whoRows}</div>`;
+  return `<div class="g-panel right-health"><div class="sec-head"><h3>${t('panels.healthAlerts','Health Alerts')}</h3><span class="badge">WHO TOP ${Math.min((D.who||[]).length,10)}</span></div><div class="health-alerts-list scroll-region" tabindex="0" role="region" aria-label="${esc(t('panels.healthAlerts','Health Alerts'))}">${whoRows}</div></div>`;
 }
 
 function buildSupplementalHealthPanel(){
@@ -1284,7 +1290,7 @@ function buildSupplementalHealthPanel(){
     const link=safeExternalUrl(w.url);
     return `<div class="signal-row"><strong>#${i+1} <span style="color:${sevColor}">${esc(sev)}</span> ${w.region?`· ${esc(w.region)}`:''}</strong><p>${cleanText(w.title||'')}</p><div style="display:flex;justify-content:space-between;gap:8px;font-family:var(--mono);font-size:9px;color:var(--dim);margin-top:5px"><span>${getAge(w.date)}</span><span>score ${w.score||0}</span>${link?`<a href="${esc(link)}" target="_blank" rel="noopener noreferrer" style="color:var(--accent2);text-decoration:none">OPEN</a>`:''}</div>${w.source?`<div style="margin-top:4px;font-family:var(--mono);font-size:9px;color:var(--dim)">${cleanText(w.source)}</div>`:''}</div>`;
   }).join('') || `<div style="padding:12px;text-align:center;color:var(--dim);font-family:var(--mono);font-size:10px">No supplemental health alerts</div>`;
-  return `<div class="g-panel right-health-supp"><div class="sec-head"><h3>Supplemental Health</h3><span class="badge">RELIEFWEB/HDX ${Math.min((D.supplementalHealth||[]).length,10)}</span></div>${supplementalRows}</div>`;
+  return `<div class="g-panel right-health-supp"><div class="sec-head"><h3>Supplemental Health</h3><span class="badge">RELIEFWEB/HDX ${Math.min((D.supplementalHealth||[]).length,10)}</span></div><div class="supp-health-list scroll-region" tabindex="0" role="region" aria-label="Supplemental Health">${supplementalRows}</div></div>`;
 }
 
 function buildSweepDeltaPanel(){
@@ -1308,7 +1314,7 @@ function buildSweepDeltaPanel(){
     deltaRows.push(`<div class="delta-row"><span class="delta-badge down">&#9660;</span><span class="delta-label">${esc(s.label||s.key)}</span><span class="delta-val">${esc(s.from)}→${esc(s.to)} (${val})</span></div>`);
   }
   const deltaHtml = hasDelta ? deltaRows.join('') : `<div style="padding:12px;text-align:center;color:var(--dim);font-family:var(--mono);font-size:10px">${t('delta.noChanges','No changes since last sweep')}</div>`;
-  return `<div class="g-panel right-delta"><div class="sec-head"><h3>${t('panels.sweepDelta','Sweep Delta')}</h3><span class="badge ${dirClass}">${dirEmoji} ${ds.direction?t('delta.'+ds.direction,ds.direction.toUpperCase()):t('delta.baseline','BASELINE')}</span></div>${hasDelta?`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;font-family:var(--mono);font-size:10px"><span style="color:var(--dim)">${t('delta.changes','Changes')}: <span style="color:var(--accent)">${ds.totalChanges}</span></span><span style="color:var(--dim)">${t('delta.critical','Critical')}: <span style="color:${ds.criticalChanges>0?'var(--warn)':'var(--dim)'}">${ds.criticalChanges||0}</span></span>${ds.signalBreakdown?`<span style="color:var(--dim)">${t('delta.new','New')}: <span style="color:#4dd0e1">${ds.signalBreakdown.new}</span> &#8593;${ds.signalBreakdown.escalated} &#8595;${ds.signalBreakdown.deescalated}</span>`:''}</div>`:''}<div class="delta-list">${deltaHtml}</div></div>`;
+  return `<div class="g-panel right-delta"><div class="sec-head"><h3>${t('panels.sweepDelta','Sweep Delta')}</h3><span class="badge ${dirClass}">${dirEmoji} ${ds.direction?t('delta.'+ds.direction,ds.direction.toUpperCase()):t('delta.baseline','BASELINE')}</span></div>${hasDelta?`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;font-family:var(--mono);font-size:10px"><span style="color:var(--dim)">${t('delta.changes','Changes')}: <span style="color:var(--accent)">${ds.totalChanges}</span></span><span style="color:var(--dim)">${t('delta.critical','Critical')}: <span style="color:${ds.criticalChanges>0?'var(--warn)':'var(--dim)'}">${ds.criticalChanges||0}</span></span>${ds.signalBreakdown?`<span style="color:var(--dim)">${t('delta.new','New')}: <span style="color:#4dd0e1">${ds.signalBreakdown.new}</span> &#8593;${ds.signalBreakdown.escalated} &#8595;${ds.signalBreakdown.deescalated}</span>`:''}</div>`:''}<div class="delta-list scroll-region" tabindex="0" role="region" aria-label="${esc(t('panels.sweepDelta','Sweep Delta'))}">${deltaHtml}</div></div>`;
 }
 
 function buildPanelHtml(panelId, zone){
@@ -1619,7 +1625,7 @@ function plotMarkers(){
   });
 
   // === News markers (light blue) ===
-  (D.news||[]).forEach(n=>{
+  mapNewsMarkers().forEach(n=>{
     if(isGroupedNews(n))return;
     points.push({
       lat:n.lat, lng:n.lon, size:0.2, alt:0.008,
@@ -1827,6 +1833,7 @@ let groupNews=readPreference('crucix.newsGrouping.v1')==='true';
 function visibleEventClusters(){return D.eventClusters.filter(c=>hasCoordinates(c.lat,c.lon)&&Array.isArray(c.eventIds)&&c.eventIds.length>1);}
 function isGroupedNews(item){const event=findEvent(item);return groupNews&&event&&visibleEventClusters().some(c=>c.eventIds.includes(event.id));}
 function toggleNewsGrouping(){groupNews=!groupNews;writePreference('crucix.newsGrouping.v1',String(groupNews));reinit();if(flatG)plotFlatMarkers();}
+function mapNewsMarkers(){const out=[],seen=new Set(),vp=window.CrucixViewsPanel;for(const n of (Array.isArray(D.views?.news)?D.views.news:[])){const lat=n?.lat??n?.location?.lat,lon=n?.lon??n?.location?.lon;if(!hasCoordinates(lat,lon))continue;if(vp?.isImportantNews?!vp.isImportantNews(n):false)continue;const k=String(n.id||n.title||'').toLowerCase();if(k&&seen.has(k))continue;if(k)seen.add(k);out.push({lat,lon,source:n.source?.name||n.source||'NEWS',region:n.territory==='local'?'Helyi':n.territory==='county'?'Hajdú-Bihar':n.territory==='national'?'Magyarország':(n.region||'Global'),date:n.publishedAt||n.observedAt||n.date,title:n.title||n.headline||'',url:n.source?.url||n.url,id:n.id,raw:n});}for(const n of (Array.isArray(D.news)?D.news:[])){if(!hasCoordinates(n?.lat,n?.lon))continue;if(vp?.isNonCriticalNews&&vp.isNonCriticalNews(n))continue;if(vp?.isImportantNews&&n.territory&&!vp.isImportantNews(n))continue;const k=String(n.id||n.title||'').toLowerCase();if(k&&seen.has(k))continue;if(k)seen.add(k);out.push({lat:n.lat,lon:n.lon,source:n.source?.name||n.source||'NEWS',region:n.region||'Global',date:n.date||n.publishedAt,title:n.title||'',url:n.url,id:n.id,raw:n});}return out;}
 function showPopup(event,head,text,meta,lat,lng,alt){
   const popup=document.getElementById('mapPopup');
   const container=document.getElementById('mapContainer');
@@ -1868,7 +1875,7 @@ function toggleFlights(){setMapLayer('air',!mapLayers.air);}
 // === FLAT/GLOBE TOGGLE ===
 const flatRegionBounds = {
   world:[[-180,-60],[180,80]], americas:[[-130,10],[-60,55]], europe:[[-12,34],[45,72]],
-  middleEast:[[24,10],[65,45]], asiaPacific:[[60,-12],[180,55]], africa:[[-20,-36],[55,38]]
+  middleEast:[[24,10],[65,45]], asiaPacific:[[60,-12],[180,55]], africa:[[-20,-36],[55,38]], hungary:[[16.1,45.7],[22.9,48.6]], hajduBihar:[[20.8,46.9],[22.2,47.9]], local:[[21.1,47.05],[21.65,47.4]]
 };
 
 function toggleMapMode(){
@@ -2020,7 +2027,7 @@ function plotFlatMarkers(){
   (D.ioda?.countries||[]).forEach(c=>{if(c.lat==null||c.lon==null)return;addPt(c.lat,c.lon,3.2+Math.min((c.overallScore||0)/2500,2.2)+(c.activeCount>0?0.8:0),'rgba(77,208,225,0.72)','rgba(77,208,225,0.26)',ev=>showPopup(ev,`${c.country} · ${t('map.internetOutage','Internet Outage')}`,`${t('ioda.events','Events')}: ${c.eventCount}<br>${t('ioda.active','ACTIVE')}: ${c.activeCount}<br>${t('ioda.score','Score')}: ${Math.round(c.overallScore)}`,`IODA · ${c.topDatasource||'overall'}`),2)});
   // News
   flatMarkerType='news';
-  (D.news||[]).forEach(n=>{if(!isGroupedNews(n))addPt(n.lat,n.lon,3,'rgba(129,212,250,0.6)','rgba(129,212,250,0.2)',ev=>showPopup(ev,n.source+' NEWS',cleanText(n.title),n.region),3)});
+  mapNewsMarkers().forEach(n=>{if(!isGroupedNews(n))addPt(n.lat,n.lon,3,'rgba(129,212,250,0.6)','rgba(129,212,250,0.2)',ev=>showPopup(ev,n.source+' NEWS',cleanText(n.title),n.region),3)});
   if(groupNews)for(const cluster of visibleEventClusters()){
     const marker=addPt(cluster.lat,cluster.lon,8,'rgba(129,212,250,0.85)','rgba(129,212,250,0.4)',()=>CrucixIntelligence.openCluster(cluster),1);
     if(marker){marker.attr('data-cluster-id',cluster.id).attr('role','button').attr('tabindex',0).attr('aria-label',t('intelligence.cluster','Grouped reports')+' '+cluster.count).on('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();CrucixIntelligence.openCluster(cluster);}});marker.append('text').attr('text-anchor','middle').attr('dy','.35em').attr('fill','#020408').attr('font-size','9px').text(cluster.count);}
@@ -2096,15 +2103,15 @@ function setRegion(r){
   closePopup();
   if(isFlat && flatSvg && flatZoom){
     if(r==='world'){flatSvg.transition().duration(750).call(flatZoom.transform,d3.zoomIdentity);return;}
-    const bounds=flatRegionBounds[r];
+    const cfgBounds=D?.territoryConfig?.mapBounds?.[r]?.bounds||window.CrucixViewsPanel?.getTerritoryBounds?.(r,D)?.bounds;const bounds=cfgBounds||flatRegionBounds[r];if(!bounds)return;
     const p0=flatProjection(bounds[0]),p1=flatProjection(bounds[1]);if(!p0||!p1)return;
     const dx=Math.abs(p1[0]-p0[0]),dy=Math.abs(p1[1]-p0[1]);
     const cx=(p0[0]+p1[0])/2,cy=(p0[1]+p1[1])/2;
     const scale=Math.min(flatW/dx,flatH/dy)*0.85;
     flatSvg.transition().duration(750).call(flatZoom.transform,d3.zoomIdentity.translate(flatW/2-scale*cx,flatH/2-scale*cy).scale(scale));
   } else {
-    const pov=regionPOV[r]||regionPOV.world;
-    globe.pointOfView(pov,1000);
+    const cfgPov=D?.territoryConfig?.mapBounds?.[r]?.pov||window.CrucixViewsPanel?.getTerritoryBounds?.(r,D)?.pov;const pov=cfgPov||regionPOV[r]||regionPOV.world;if(globe&&typeof globe.pointOfView==='function')globe.pointOfView(pov,1000);
+
   }
 }
 
@@ -2217,9 +2224,9 @@ function buildOsintPanel(panelClass='', maxHeight=260){
   }).join('');
   const osintDuration=Math.max(25,osintItems.length*3);
   return `<div class="g-panel ${panelClass}" style="display:flex;flex-direction:column">
-      <div class="sec-head"><h3>${t('panels.osintStream','OSINT Stream')}</h3><span class="badge">${D.tg.urgent.length} ${t('badges.urgent','URGENT')}</span></div>
+      <div class="sec-head"><h3>${t('panels.osintStream','OSINT Stream')}</h3><span class="badge">${osintItems.length} · ${D.tg.urgent.length} ${t('badges.urgent','URGENT')}</span></div>
       <div class="ticker-wrap" style="--ticker-duration:${osintDuration}s;max-height:${maxHeight}px">
-        <div class="ticker-track">${osintCards||`<div class="empty-state">${t('status.noOsint','No OSINT posts available in this snapshot')}</div>`}${lowPerfMode || reducedMotion ? '' : osintCards}</div>
+        <div class="osint-list scroll-region" tabindex="0" role="region" aria-label="${esc(t('panels.osintStream','OSINT Stream'))}" style="max-height:${maxHeight}px">${osintCards||`<div class="empty-state">${t('status.noOsint','No OSINT posts available in this snapshot')}</div>`}</div>
       </div>
     </div>`;
 }

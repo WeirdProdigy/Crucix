@@ -936,6 +936,7 @@ export async function synthesize(data, options = {}) {
   V2.events = buildEvents(V2, { now: options.now ?? Date.now() });
 
   const territoryConfig = config.territory || DEFAULT_TERRITORY_CONFIG;
+  V2.territoryConfig = territoryConfig;
   const isOffline = Boolean(options.isOfflineSnapshot || !config.enableSweeps || options.isSnapshot);
   for (const event of V2.events) {
     if (!event.views) {

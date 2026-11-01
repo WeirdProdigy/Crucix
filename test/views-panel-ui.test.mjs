@@ -1029,3 +1029,230 @@ test('27. Eseményszámlálók és plafon változatlansága duplikátum-összevo
   const panelHtml = api.panelHtml(mockSnapshot);
   assert.ok(panelHtml.includes('0 db'), 'A fizikai eseményszámlálók nem szennyeződhetnek hírrel');
 });
+
+test('28. Egységes Élő hírfolyam: fülek (Fontos / Helyi / Hajdú-Bihar / Magyarország / Világ / Mind) és sport/kultúra kizárása a Fontos fülről', () => {
+  const { api } = createHarness();
+  const mockSnapshot = {
+    views: {
+      local: { uniqueEvents: 1, newsCount: 1, newsIds: ['n-local-1'] },
+      county: { uniqueEvents: 0, newsCount: 4, newsIds: ['n-local-1', 'n-county-hazard', 'n-county-police', 'n-county-sport'] },
+      national: { uniqueEvents: 2, newsCount: 6, newsIds: ['n-local-1', 'n-county-hazard', 'n-county-police', 'n-county-sport', 'n-nat-hazard', 'n-nat-culture'] },
+      global: { uniqueEvents: 5, newsCount: 6, newsIds: ['n-local-1', 'n-county-hazard', 'n-county-police', 'n-county-sport', 'n-nat-hazard', 'n-nat-culture'] },
+      news: [
+        {
+          id: 'n-local-1',
+          kind: 'news',
+          title: 'Bihartordán áramszünet és közműkarbantartás várható',
+          source: { name: 'RSS-HAON' },
+          territory: 'local',
+          facts: { topic: 'news_local' },
+          link: 'https://haon.hu/bihartorda-aram',
+          publishedAt: '2026-10-31T10:00:00Z'
+        },
+        {
+          id: 'n-county-hazard',
+          kind: 'news',
+          title: 'Tűzoltói beavatkozás és riasztás Debrecen határában',
+          source: { name: 'Katasztrófavédelem' },
+          territory: 'county',
+          facts: { topic: 'news_hazard' },
+          link: 'https://katasztrofavedelem.hu/debrecen-tuz',
+          publishedAt: '2026-10-31T10:05:00Z'
+        },
+        {
+          id: 'n-county-police',
+          kind: 'news',
+          title: 'Rendőrségi fokozott ellenőrzés Hajdúszoboszlón',
+          source: { name: 'Police-Hajdu' },
+          territory: 'county',
+          facts: { topic: 'news_regional' },
+          link: 'https://police.hu/hajduszoboszlo',
+          publishedAt: '2026-10-31T10:10:00Z'
+        },
+        {
+          id: 'n-county-sport',
+          kind: 'news',
+          title: 'DVSC–Ferencváros bajnoki labdarúgó mérkőzés összefoglaló',
+          source: { name: 'RSS-Dehir' },
+          territory: 'county',
+          facts: { topic: 'news_regional' },
+          link: 'https://dehir.hu/sport/dvsc-fradi',
+          publishedAt: '2026-10-31T10:15:00Z'
+        },
+        {
+          id: 'n-nat-hazard',
+          kind: 'news',
+          title: 'Másodfokú viharriasztás a Dunántúlon',
+          source: { name: 'RSS-Telex' },
+          territory: 'national',
+          facts: { topic: 'news_hazard' },
+          link: 'https://telex.hu/vihar-dunantul',
+          publishedAt: '2026-10-31T10:20:00Z'
+        },
+        {
+          id: 'n-nat-culture',
+          kind: 'news',
+          title: 'Színházi fesztivál és koncert hétvége Budapesten',
+          source: { name: 'RSS-Telex' },
+          territory: 'national',
+          facts: { topic: 'news_national' },
+          link: 'https://telex.hu/kultura/fesztival',
+          publishedAt: '2026-10-31T10:25:00Z'
+        }
+      ]
+    },
+    newsFeed: [
+      {
+        id: 'legacy-intl-1',
+        headline: 'Global maritime trade corridor update in Red Sea',
+        source: 'BBC World',
+        timestamp: '2026-10-31T09:50:00Z',
+        url: 'https://bbc.co.uk/news/world-1'
+      }
+    ]
+  };
+
+  // Non-critical & importance unit checks
+  const sportItem = mockSnapshot.views.news.find(n => n.id === 'n-county-sport');
+  const cultureItem = mockSnapshot.views.news.find(n => n.id === 'n-nat-culture');
+  const localItem = mockSnapshot.views.news.find(n => n.id === 'n-local-1');
+  const hazardItem = mockSnapshot.views.news.find(n => n.id === 'n-county-hazard');
+  const policeItem = mockSnapshot.views.news.find(n => n.id === 'n-county-police');
+
+  assert.equal(api.isNonCriticalNews(sportItem), true, 'DVSC labdarúgó mérkőzés sporttételként nem kritikus');
+  assert.equal(api.isNonCriticalNews(cultureItem), true, 'Színházi fesztivál és koncert kultúratételként nem kritikus');
+  assert.equal(api.isImportantNews(sportItem), false, 'Sporttétel nem kerülhet a Fontos fülre még megyei címkével sem');
+  assert.equal(api.isImportantNews(cultureItem), false, 'Kultúratétel nem kerülhet a Fontos fülre');
+  assert.equal(api.isImportantNews(localItem), true, 'Helyi (Bihartorda) hír fontos');
+  assert.equal(api.isImportantNews(hazardItem), true, 'Katasztrófavédelmi veszélyhelyzeti hír fontos');
+  assert.equal(api.isImportantNews(policeItem), true, 'Police-Hajdu rendőrségi hír fontos');
+
+  // Check Fontos tab
+  api.setLiveStreamTab('important', false);
+  const importantHtml = api.liveStreamHtml(mockSnapshot);
+  assert.ok(importantHtml.includes('Sajtó- és hatósági hírek; nem igazolt veszélyesemények'), 'Kötelező figyelmeztető szöveg az Élő hírfolyamban');
+  assert.ok(importantHtml.includes('role="tablist"'), 'Fülek tablist szerepkörrel');
+  assert.ok(importantHtml.includes('Fontos'), 'Fontos fül');
+  assert.ok(importantHtml.includes('Helyi'), 'Helyi fül');
+  assert.ok(importantHtml.includes('Hajdú-Bihar'), 'Hajdú-Bihar fül');
+  assert.ok(importantHtml.includes('Magyarország'), 'Magyarország fül');
+  assert.ok(importantHtml.includes('Világ'), 'Világ fül');
+  assert.ok(importantHtml.includes('Mind'), 'Mind fül');
+  assert.ok(importantHtml.includes('Bihartordán áramszünet'));
+  assert.ok(importantHtml.includes('Tűzoltói beavatkozás'));
+  assert.ok(importantHtml.includes('Rendőrségi fokozott ellenőrzés'));
+  assert.ok(importantHtml.includes('Másodfokú viharriasztás'));
+  assert.ok(!importantHtml.includes('DVSC–Ferencváros'), 'Sport hír NEM szerepelhet a Fontos fülön');
+  assert.ok(!importantHtml.includes('Színházi fesztivál'), 'Kultúra hír NEM szerepelhet a Fontos fülön');
+  assert.ok(!importantHtml.includes('Global maritime trade'), 'Régi nemzetközi hír NEM szerepelhet a Fontos fülön');
+
+  // Check Világ tab contains legacy international news
+  api.setLiveStreamTab('global', false);
+  const globalHtml = api.liveStreamHtml(mockSnapshot);
+  assert.ok(globalHtml.includes('Global maritime trade corridor update in Red Sea'), 'Régi nemzetközi hír a Világ fülre kerül');
+
+  // Check Mind tab contains everything
+  api.setLiveStreamTab('all', false);
+  const allHtml = api.liveStreamHtml(mockSnapshot);
+  assert.ok(allHtml.includes('DVSC–Ferencváros'), 'Mind fülön a sporthír is megjelenik');
+  assert.ok(allHtml.includes('Global maritime trade corridor update in Red Sea'), 'Mind fülön a nemzetközi hír is megjelenik');
+});
+
+test('29. Területi gombok: két számláló (események | hírek), tooltip, és térképi fókusz / preset szinkron', () => {
+  const { win, api } = createHarness();
+  const focusedRegions = [];
+  win.setRegion = (r) => focusedRegions.push(r);
+
+  const mockSnapshot = {
+    territoryConfig: {
+      mapBounds: {
+        local: { regionKey: 'local', bounds: [[21.1, 47.05], [21.65, 47.4]], pov: { lat: 47.2186, lng: 21.3547, altitude: 0.08 } },
+        hajduBihar: { regionKey: 'hajduBihar', bounds: [[20.8, 46.9], [22.2, 47.9]], pov: { lat: 47.42, lng: 21.52, altitude: 0.12 } },
+        hungary: { regionKey: 'hungary', bounds: [[16.1, 45.7], [22.9, 48.6]], pov: { lat: 47.16, lng: 19.50, altitude: 0.25 } },
+        world: { regionKey: 'world', bounds: [[-180, -60], [180, 80]], pov: { lat: 20, lng: 20, altitude: 1.8 } }
+      }
+    },
+    views: {
+      local: { uniqueEvents: 1, newsCount: 4, newsIds: ['n1', 'n2', 'n3', 'n4'] },
+      county: { uniqueEvents: 0, newsCount: 42, newsIds: [] },
+      national: { uniqueEvents: 3, newsCount: 118, newsIds: [] },
+      global: { uniqueEvents: 9, newsCount: 250, newsIds: [] }
+    }
+  };
+
+  const mockContainer = { innerHTML: '', querySelectorAll() { return []; } };
+  api.mountSelector(mockContainer, { getSnapshot: () => mockSnapshot });
+
+  // Verify dual counts: események | hírek
+  assert.ok(mockContainer.innerHTML.includes('<span class="vp-count-ev">0</span><span class="vp-count-sep"> | </span><span class="vp-count-news">42</span>'), 'Hajdú-Bihar 0 | 42 formátumú kettős számláló');
+  assert.ok(mockContainer.innerHTML.includes('<span class="vp-count-ev">1</span><span class="vp-count-sep"> | </span><span class="vp-count-news">4</span>'), 'Helyi 1 | 4 formátumú kettős számláló');
+  assert.ok(mockContainer.innerHTML.includes('fizikai esemény |'), 'Tooltip magyarázza a két szám jelentését');
+
+  // Verify clicking / activating territory buttons triggers map focus and syncs liveStreamTab + activeView + newsScope
+  api.setNewsScope('all');
+  api.setView('county', true);
+  assert.equal(focusedRegions.at(-1), 'hajduBihar', 'Hajdú-Bihar gomb a hajduBihar térképi régióra fókuszál');
+  assert.equal(api.getLiveStreamTab(), 'county', 'Élő hírfolyam fül szinkronban: county');
+  assert.equal(api.getActiveView(), 'county', 'Aktív területi nézet szinkronban: county');
+  assert.equal(api.getNewsScope(), 'view', 'Hírfolyam hatókör visszaáll a kiválasztott területi nézetre (view)');
+  assert.deepEqual(api.getTerritoryBounds('county', mockSnapshot).bounds, [[20.8, 46.9], [22.2, 47.9]], 'Bounding box a konfigurációból jön');
+
+  api.setView('local', true);
+  assert.equal(focusedRegions.at(-1), 'local', 'Helyi gomb a local térképi régióra fókuszál');
+  assert.equal(api.getLiveStreamTab(), 'local');
+
+  api.setView('national', true);
+  assert.equal(focusedRegions.at(-1), 'hungary', 'Magyarország gomb a hungary térképi régióra fókuszál');
+  assert.equal(api.getLiveStreamTab(), 'national');
+
+  api.setView('global', true);
+  assert.equal(focusedRegions.at(-1), 'world', 'Világ gomb a world térképi régióra fókuszál');
+  assert.equal(api.getLiveStreamTab(), 'global');
+});
+
+test('30. Kompakt görgethető panelminta és térképi hírjelölő szűrés ellenőrzése', () => {
+  const { api } = createHarness();
+  const jarvisHtml = readFileSync(resolve(ROOT, 'dashboard/public/jarvis.html'), 'utf8');
+
+  // 1. Verify region preset buttons in jarvis.html include MAGYARORSZÁG and HAJDÚ-BIHAR
+  assert.ok(jarvisHtml.includes("'hungary','hajduBihar'"), 'A térképi régióválasztó tartalmazza a hungary és hajduBihar gombokat');
+  assert.ok(jarvisHtml.includes('MAGYARORSZÁG') && jarvisHtml.includes('HAJDÚ-BIHAR'), 'A régiógombok magyar feliratai szerepelnek');
+
+  // 2. Verify mapNewsMarkers in jarvis.html filters out non-critical sport/culture news and keeps hazard/local/county
+  const fnMatch = jarvisHtml.match(/function mapNewsMarkers\(\)\{[^\n]*\}/);
+  assert.ok(fnMatch, 'mapNewsMarkers függvény definiálva van a jarvis.html-ben');
+  const mapCtx = vm.createContext({
+    window: { CrucixViewsPanel: api },
+    hasCoordinates: (lat, lon) => typeof lat === 'number' && typeof lon === 'number',
+    D: {
+      views: {
+        news: [
+          { id: 'loc-1', title: 'Bihartordai tűzeset', territory: 'local', facts: { topic: 'news_hazard' }, location: { lat: 47.22, lon: 21.35 } },
+          { id: 'cnt-sport', title: 'DVSC labdarúgó bajnoki mérkőzés', territory: 'county', facts: { topic: 'news_regional' }, location: { lat: 47.53, lon: 21.62 } },
+          { id: 'cnt-pol', title: 'Rendőrségi körözés Debrecenben', source: { name: 'Police-Hajdu' }, territory: 'county', facts: { topic: 'news_regional' }, location: { lat: 47.53, lon: 21.62 } },
+          { id: 'nat-gen', title: 'Általános gazdasági elemzés Budapesten', territory: 'national', facts: { topic: 'news_national' }, location: { lat: 47.49, lon: 19.04 } }
+        ]
+      },
+      news: []
+    }
+  });
+  vm.runInContext(fnMatch[0], mapCtx);
+  const markers = mapCtx.mapNewsMarkers();
+  const markerIds = markers.map(m => m.id);
+  assert.ok(markerIds.includes('loc-1'), 'Helyi veszélyhelyzeti hír kap térképi jelölőt');
+  assert.ok(markerIds.includes('cnt-pol'), 'Megyei rendőrségi hír kap térképi jelölőt');
+  assert.ok(!markerIds.includes('cnt-sport'), 'Sporthír NEM kaphat térképi jelölőt');
+  assert.ok(!markerIds.includes('nat-gen'), 'Nem veszélyhelyzeti országos hír alapértelmezetten nem kap térképi jelölőt');
+
+  // 3. Verify compact scrollable regions have tabindex="0", role="region", aria-label
+  const streamHtml = api.liveStreamHtml({ views: { news: [{ id: '1', title: 'Helyi hír', territory: 'local', publishedAt: '2026-10-31T10:00:00Z' }] } });
+  assert.ok(streamHtml.includes('class="tk-stream-list vp-scroll-region scroll-region"'));
+  assert.ok(streamHtml.includes('tabindex="0"') && streamHtml.includes('role="region"') && streamHtml.includes('aria-label="Élő hírfolyam'));
+
+  const feedHtml = api.newsFeedHtml({ views: { local: { newsCount: 1, newsIds: ['1'] }, news: [{ id: '1', title: 'Helyi hír', territory: 'local' }] } });
+  assert.ok(feedHtml.includes('class="vp-news-items vp-scroll-region scroll-region" tabindex="0" role="region" aria-label="Hírfolyam lista"'));
+
+  const covHtml = api.coveragePanelHtml({ coverage: { HAON: { status: 'ok_data', origin: 'live' }, Dehir: { status: 'stale_error', origin: 'live' } } });
+  assert.ok(covHtml.includes('class="cov-list vp-scroll-region scroll-region" tabindex="0" role="region" aria-label="Forrásfedettség lista"'));
+  assert.ok(covHtml.indexOf('Dehir') < covHtml.indexOf('HAON'), 'Hibás/elavult forrás (stale_error) kerül előre a Forrásfedettség panelen');
+});

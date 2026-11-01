@@ -593,7 +593,7 @@
     `).join('');
 
     const embeddableContent = embeddableFiltered.length > 0
-      ? `<div class="lm-selector-grid">${embeddableFiltered.map(renderStreamCard).join('')}</div>`
+      ? `<div class="lm-selector-grid scroll-region" tabindex="0" role="region" aria-label="Élő adások listája">${embeddableFiltered.map(renderStreamCard).join('')}</div>`
       : `
         <div class="lm-empty-state lm-empty-compact">
           <div class="lm-empty-icon">📡</div>
@@ -611,7 +611,7 @@
             </div>
             <span class="lm-section-sub">A szolgáltató hivatalos külső beágyazást nem biztosít (pl. X-Frame-Options korlátozás); a kamerák és adások közvetlenül a forrásoldalon érhetők el.</span>
           </div>
-          <div class="lm-external-grid">
+          <div class="lm-external-grid scroll-region" tabindex="0" role="region" aria-label="Külső oldalon nézhető adások listája">
             ${externalFiltered.map(renderStreamCard).join('')}
           </div>
         </div>

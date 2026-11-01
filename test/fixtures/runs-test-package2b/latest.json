@@ -967,7 +967,142 @@
     ],
     "watchedRegions": [
       "HU32"
-    ]
+    ],
+    "mapBounds": {
+      "local": {
+        "regionKey": "local",
+        "label": "Bihartorda és térsége",
+        "bounds": [
+          [
+            20.95,
+            47.05
+          ],
+          [
+            21.75,
+            47.65
+          ]
+        ],
+        "pov": {
+          "lat": 47.25,
+          "lng": 21.37,
+          "altitude": 0.12
+        }
+      },
+      "county": {
+        "regionKey": "hajduBihar",
+        "label": "Hajdú-Bihar vármegye",
+        "bounds": [
+          [
+            20.8,
+            46.95
+          ],
+          [
+            22.15,
+            47.95
+          ]
+        ],
+        "pov": {
+          "lat": 47.47,
+          "lng": 21.55,
+          "altitude": 0.22
+        }
+      },
+      "hajduBihar": {
+        "regionKey": "hajduBihar",
+        "label": "Hajdú-Bihar vármegye",
+        "bounds": [
+          [
+            20.8,
+            46.95
+          ],
+          [
+            22.15,
+            47.95
+          ]
+        ],
+        "pov": {
+          "lat": 47.47,
+          "lng": 21.55,
+          "altitude": 0.22
+        }
+      },
+      "national": {
+        "regionKey": "hungary",
+        "label": "Magyarország",
+        "bounds": [
+          [
+            16.1,
+            45.7
+          ],
+          [
+            22.9,
+            48.6
+          ]
+        ],
+        "pov": {
+          "lat": 47.16,
+          "lng": 19.5,
+          "altitude": 0.42
+        }
+      },
+      "hungary": {
+        "regionKey": "hungary",
+        "label": "Magyarország",
+        "bounds": [
+          [
+            16.1,
+            45.7
+          ],
+          [
+            22.9,
+            48.6
+          ]
+        ],
+        "pov": {
+          "lat": 47.16,
+          "lng": 19.5,
+          "altitude": 0.42
+        }
+      },
+      "global": {
+        "regionKey": "world",
+        "label": "Világ",
+        "bounds": [
+          [
+            -180,
+            -60
+          ],
+          [
+            180,
+            80
+          ]
+        ],
+        "pov": {
+          "lat": 20,
+          "lng": 20,
+          "altitude": 1.8
+        }
+      },
+      "world": {
+        "regionKey": "world",
+        "label": "Világ",
+        "bounds": [
+          [
+            -180,
+            -60
+          ],
+          [
+            180,
+            80
+          ]
+        ],
+        "pov": {
+          "lat": 20,
+          "lng": 20,
+          "altitude": 1.8
+        }
+      }
+    }
   },
   "liveSources": [
     {

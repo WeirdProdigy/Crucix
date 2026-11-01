@@ -331,6 +331,17 @@
   font-family: var(--font-mono, monospace);
   color: #94a3b8;
   text-transform: uppercase;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.vp-unlocated-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 145px; /* max ~5 rows */
 }
 
 .vp-unlocated-item {
@@ -927,4 +938,147 @@
 .vp-btn-back-news:hover {
   background: var(--accent, #64f0c8);
   color: #040c14;
+}
+
+/* --- Shared Compact Scrollable Panel Pattern (max 5 visible rows) --- */
+.scroll-region,
+.vp-scroll-region {
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56, 189, 248, 0.45) rgba(15, 23, 42, 0.5);
+  padding-right: 4px;
+  position: relative;
+}
+
+.scroll-region:focus-visible,
+.vp-scroll-region:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.scroll-region::-webkit-scrollbar,
+.vp-scroll-region::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scroll-region::-webkit-scrollbar-track,
+.vp-scroll-region::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.55);
+  border-radius: 3px;
+}
+
+.scroll-region::-webkit-scrollbar-thumb,
+.vp-scroll-region::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.45);
+  border-radius: 3px;
+}
+
+.scroll-region::-webkit-scrollbar-thumb:hover,
+.vp-scroll-region::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, 0.75);
+}
+
+.vp-news-items.vp-scroll-region {
+  max-height: 340px; /* max 5 news cards */
+}
+
+.cov-list.vp-scroll-region {
+  max-height: 195px; /* max 5 coverage rows */
+}
+
+/* --- Unified Live News Stream (Élő hírfolyam) --- */
+.tk-unified-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tk-disclaimer {
+  margin-bottom: 2px;
+  font-size: 10px;
+  padding: 4px 8px;
+}
+
+.tk-tablist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.45);
+}
+
+.tk-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  font-weight: 600;
+  color: #94a3b8;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(51, 65, 85, 0.5);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tk-tab:hover {
+  color: #e2e8f0;
+  border-color: rgba(56, 189, 248, 0.5);
+}
+
+.tk-tab.active,
+.tk-tab[aria-selected="true"] {
+  color: #38bdf8;
+  background: rgba(14, 116, 144, 0.28);
+  border-color: #0284c7;
+}
+
+.tk-tab-count {
+  font-size: 9px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+}
+
+.tk-stream-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 290px; /* max 5 live news cards */
+}
+
+.tk-card-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 4px;
+}
+
+.tk-territory-badge {
+  font-size: 9px;
+  font-family: var(--font-mono, monospace);
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(16, 185, 129, 0.16);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.tk-ext-link {
+  color: #38bdf8;
+  text-decoration: none;
+  margin-left: 6px;
+  font-weight: 700;
+}
+
+.tk-ext-link:hover {
+  color: #7dd3fc;
+  text-decoration: underline;
 }

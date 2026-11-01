@@ -125,7 +125,7 @@
   // One list: the first SHOW rows, or all of them once the section's button was used (a section with nothing more to show has no button).
   const section=(name,id,title,figureHtml,list,render,cap,open)=>{
     const more=list.length>SHOW[name]?`<button type="button" class="ch-more" data-changes-more="${name}" aria-expanded="${open}" aria-controls="${id}List">${esc(open?say('showFewer'):say('showAll',{count:list.length}))}</button>`:'';
-    return `<section class="ch-sec" data-changes-section="${name}" aria-labelledby="${id}"><h4 id="${id}">${esc(title)} <span class="ch-n">${figureHtml}</span></h4><ul class="ch-list" id="${id}List">${list.slice(0,open?list.length:SHOW[name]).map(render).join('')}</ul>${cap||more?`<div class="ch-foot">${cap?`<p class="ch-cap">${esc(cap)}</p>`:''}${more}</div>`:''}</section>`;
+    return `<section class="ch-sec" data-changes-section="${name}" aria-labelledby="${id}"><h4 id="${id}">${esc(title)} <span class="ch-n">${figureHtml}</span></h4><ul class="ch-list scroll-region" id="${id}List" tabindex="0" role="region" aria-label="${esc(title)}">${list.slice(0,open?list.length:SHOW[name]).map(render).join('')}</ul>${cap||more?`<div class="ch-foot">${cap?`<p class="ch-cap">${esc(cap)}</p>`:''}${more}</div>`:''}</section>`;
   };
   function domainChips(data,lens,exact){
     const list=domainIds().filter(id=>(lens==='all'||id===lens)&&domainCount(data.domains,id)>0);

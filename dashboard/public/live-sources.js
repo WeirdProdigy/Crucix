@@ -106,26 +106,50 @@
     }
     return summary;
   }
+  const expandedSources=new Set();
+  function isSourceExpanded(name){return expandedSources.has(String(name||''))}
+  function toggleSource(name,open){
+    const key=String(name||'');
+    if(!key)return false;
+    const next=typeof open==='boolean'?open:!expandedSources.has(key);
+    if(next)expandedSources.add(key);else expandedSources.delete(key);
+    return next;
+  }
   function renderPanel(sources,t,events,now=nowMs()){
     const R=window.CrucixRecords,tr=(key,fallback)=>esc(t('liveSources.'+key,fallback));
     const providers=(Array.isArray(sources)?sources:[]).slice(0,limit()).filter(source=>source&&Object.hasOwn(policies,source.source));
     const cards=providers.map(source=>{
       const status=state(source,now),rows=observations([source],now),url=safeUrl(source.url);
+      const isExpanded=isSourceExpanded(source.source);
       const partialForecast=source.source==='MET-Norway'&&rows.length!==(source.observations||[]).length;
       const recs=R?R.toRecords(rows,source.source):[],count=R?recs.length:rows.length;
       const detail=status==='ok'?(partialForecast?'':localizeSummary(source.source,source.summary)||metricText(source.metrics))||(count?'':t('liveSources.noRecords','No current records in the watched scope')):'';
       const content=status==='ok'?(detail?`<p class="live-summary">${esc(detail)}</p>`:''):`<p class="live-summary">${status==='error'?tr('unavailable','Source unavailable'):tr('expired','Provider data expired or its timestamp is unknown. Live records are hidden.')}</p>`;
-      const top=R?R.sortRecords(recs,'severity').slice(0,3).map(rec=>`<li>${esc(rec.title)}</li>`).join(''):'';
-      const overview=count?`<div class="live-meta"><span>${count} ${tr('records','current records')}</span>${R?badges(R,recs,t):''}</div>${top?`<ul class="live-top" aria-label="${tr('topRecords','Top records')}">${top}</ul>`:''}`:'';
+      const itemLimit=isExpanded?25:3;
+      const top=R?R.sortRecords(recs,'severity').slice(0,itemLimit).map(rec=>`<li>${esc(rec.title)}</li>`).join(''):'';
+      const overview=count?`<div class="live-meta"><span>${count} ${tr('records','current records')}</span>${R?badges(R,recs,t):''}</div>${top?`<ul class="live-top scroll-region" tabindex="0" role="region" aria-label="${tr('topRecords','Top records')}">${top}</ul>`:''}`:'';
       const open=status==='ok'?`<button type="button" class="live-open" data-open-records="${esc(source.source)}" aria-controls="record-inspector">${tr('openRecords','Open records')}</button>`:'';
       const licenseUrl=safeUrl(source.licenseUrl);
-      return {source:source.source,state:status,count,levels:R?R.countByLevel(recs):{},html:`<article class="live-source" data-live-source="${esc(source.source)}" data-live-state="${status}"${R?.store.get().source===source.source?' data-selected="true"':''}><div class="live-source-head"><h4>${url?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(source.source)} ↗</a>`:esc(source.source)}</h4><span class="source-state ${status}">${tr(status,status==='ok'?'Current':status==='error'?'Unavailable':'Expired')}</span></div><small>${tr('providerTime','Provider time')}: ${esc(stamp(source.observedAt))}</small>${content}${overview}${open}${source.attribution||source.rights?`<small class="live-attribution">${esc(source.attribution)} ${esc(source.rights)}</small>`:''}${source.license?`<small>${licenseUrl?'<a href="'+esc(licenseUrl)+'" target="_blank" rel="noopener noreferrer">'+esc(source.license)+'</a>':esc(source.license)}</small>`:''}</article>`};
+      const toggleBtn=`<button type="button" class="live-source-toggle" data-live-source-toggle="${esc(source.source)}" aria-expanded="${isExpanded}" title="${esc(source.source)}">${isExpanded?'▾':'▸'} ${count}</button>`;
+      return {source:source.source,state:status,count,levels:R?R.countByLevel(recs):{},html:`<article class="live-source" data-live-source="${esc(source.source)}" data-live-state="${status}"${R?.store.get().source===source.source?' data-selected="true"':''}><div class="live-source-head"><h4>${url?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(source.source)} ↗</a>`:esc(source.source)}</h4><div class="live-source-head-right">${toggleBtn}<span class="source-state ${status}">${tr(status,status==='ok'?'Current':status==='error'?'Unavailable':'Expired')}</span></div></div><div class="live-source-body" data-source-collapsed="${!isExpanded}"><small>${tr('providerTime','Provider time')}: ${esc(stamp(source.observedAt))}</small>${content}${overview}${open}${source.attribution||source.rights?`<small class="live-attribution">${esc(source.attribution)} ${esc(source.rights)}</small>`:''}${source.license?`<small>${licenseUrl?'<a href="'+esc(licenseUrl)+'" target="_blank" rel="noopener noreferrer">'+esc(source.license)+'</a>':esc(source.license)}</small>`:''}</div></article>`};
     });
     const list=cards.length?grouped(cards,t,tr)??cards.map(card=>card.html).join(''):'<div class="empty-state">'+tr('waiting','Waiting for the first collection')+'</div>';
     // The badge counts the cards the panel shows: under a domain lens only that domain's (current / shown), like the source-health badge.
     const core=window.CrucixLensCore,lens=window.CrucixLens,active=core&&window.CrucixDomains?core.normalize(lens&&typeof lens.get==='function'?lens.get():'all'):'all';
     const shown=active==='all'?cards:cards.filter(card=>core.matchesSource(active,card.source));
-    return `<div class="g-panel live-sources-panel"><div class="sec-head"><h3>${tr('title','Current public data')}</h3><span class="badge">${shown.filter(card=>card.state==='ok').length}/${shown.length}</span></div><p class="live-help">${tr('help','Only records within each provider’s freshness window are shown. Forecasts and model estimates are labelled.')}</p><div class="live-source-list">${list}</div></div>`;
+    return `<div class="g-panel live-sources-panel"><div class="sec-head"><h3>${tr('title','Current public data')}</h3><span class="badge">${shown.filter(card=>card.state==='ok').length}/${shown.length}</span></div><p class="live-help">${tr('help','Only records within each provider’s freshness window are shown. Forecasts and model estimates are labelled.')}</p><div class="live-source-list scroll-region" tabindex="0" role="region" aria-label="${tr('title','Current public data')}">${list}</div></div>`;
   }
-  window.CrucixLiveSources={policies,state,observations,markerRows,renderPanel};
+  if(window.document&&typeof window.document.addEventListener==='function'){
+    window.document.addEventListener('click',ev=>{
+      const btn=ev?.target?.closest?.('button[data-live-source-toggle]');
+      if(!btn)return;
+      const name=btn.getAttribute('data-live-source-toggle');
+      const next=toggleSource(name);
+      btn.setAttribute('aria-expanded',String(next));
+      const article=btn.closest?.('.live-source');
+      const body=article?.querySelector?.('.live-source-body');
+      if(body)body.setAttribute('data-source-collapsed',String(!next));
+    });
+  }
+  window.CrucixLiveSources={policies,state,observations,markerRows,renderPanel,toggleSource,isSourceExpanded};
 })(window);

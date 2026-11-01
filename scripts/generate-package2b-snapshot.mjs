@@ -176,6 +176,24 @@ export function generatePackage2bSnapshot({
   // Resolve CAP warning chains for Meteoalarm
   const resolvedMeteoObs = resolveWarningChains(allMeteoObs, { now: atMs });
 
+  if (mode === 'rich' || mode === 'browser') {
+    const extraMeteo = Array.from({ length: 6 }, (_, i) => ({
+      providerId: `HU.EDGE.EXTRA.${i + 1}`,
+      kind: 'weather',
+      title: `[TESZTADAT] Meteoalarm másodfokú időjárási figyelmeztetés #${i + 1}`,
+      summary: `[TESZTADAT] Szimulált területi meteorológiai előrejelzés #${i + 1}`,
+      severity: i % 2 === 0 ? 'moderate' : 'minor',
+      observedAt: new Date(atMs - (15 + i * 3) * 60000).toISOString(),
+      publishedAt: new Date(atMs - (15 + i * 3) * 60000).toISOString(),
+      startsAt: new Date(atMs - (15 + i * 3) * 60000).toISOString(),
+      validUntil: new Date(atMs + 4 * 3600000).toISOString(),
+      country: 'Hungary',
+      sourceRegion: 'Hajdú-Bihar',
+      location: { country: 'Hungary', label: 'Hajdú-Bihar', lat: 47.53, lon: 21.62 }
+    }));
+    resolvedMeteoObs.push(...extraMeteo);
+  }
+
   // 4. Normalize Meteoalarm through normalizeLiveSources
   const rawSources = {
     Meteoalarm: {
@@ -328,6 +346,220 @@ export function generatePackage2bSnapshot({
         views: { local: { inView: true, category: 'regionalAdvisories' } }
       }
     ];
+
+    const syntheticNewsEvents = [
+      {
+        id: 'event-news-local-00000000000000000001',
+        title: '[TESZTADAT] Bihartordán tervezett ivóvíz- és áramszünet karbantartás',
+        summary: '[TESZTADAT] Helyi közműkarbantartási tájékoztató Bihartordán.',
+        source: { name: 'RSS-HAON', url: 'https://example.test/bihartorda-kozmu', status: 'ok' },
+        link: 'https://example.test/bihartorda-kozmu',
+        kind: 'news',
+        newsCategory: 'news_local',
+        severity: 'info',
+        territory: { settlementId: 'bihartorda', settlementName: 'Bihartorda', countyCode: '09', countyName: 'Hajdú-Bihar', territoryLevel: 'settlement', inScope: true, identityStatus: 'resolved', watchScope: 'primary' },
+        location: { country: 'Hungary', settlement: 'Bihartorda', lat: 47.2186, lon: 21.3547 },
+        observedAt: new Date(atMs - 5 * 60000).toISOString(),
+        publishedAt: new Date(atMs - 5 * 60000).toISOString(),
+        collectedAt: isoTime,
+        lifecycle: 'active',
+        isCancelled: false,
+        isFixture: true
+      },
+      {
+        id: 'event-news-local-00000000000000000002',
+        title: '[TESZTADAT] Bihartordai belvízvédelmi csatornatisztítási munkák (koordináta nélkül)',
+        summary: '[TESZTADAT] Helyi belvízvédelmi munkálatok Bihartorda határában.',
+        source: { name: 'RSS-Dehir', url: 'https://example.test/bihartorda-belviz', status: 'ok' },
+        link: 'https://example.test/bihartorda-belviz',
+        kind: 'news',
+        newsCategory: 'news_local',
+        severity: 'info',
+        territory: { settlementId: 'bihartorda', settlementName: 'Bihartorda', countyCode: '09', countyName: 'Hajdú-Bihar', territoryLevel: 'settlement', inScope: true, identityStatus: 'resolved', watchScope: 'primary' },
+        observedAt: new Date(atMs - 10 * 60000).toISOString(),
+        publishedAt: new Date(atMs - 10 * 60000).toISOString(),
+        collectedAt: isoTime,
+        lifecycle: 'active',
+        isCancelled: false,
+        isFixture: true
+      },
+      {
+        id: 'event-news-local-00000000000000000003',
+        title: '[TESZTADAT] Sárréti közlekedési ellenőrzés Bihartorda és Nagyrábé között (koordináta nélkül)',
+        summary: '[TESZTADAT] Rendőrségi sebességellenőrzés a mellékúton.',
+        source: { name: 'Police-Hajdu', url: 'https://police.hu/teszt/bihartorda-ellenorzes', status: 'ok' },
+        link: 'https://police.hu/teszt/bihartorda-ellenorzes',
+        kind: 'news',
+        newsCategory: 'news_local',
+        severity: 'info',
+        territory: { settlementId: 'bihartorda', settlementName: 'Bihartorda', countyCode: '09', countyName: 'Hajdú-Bihar', territoryLevel: 'settlement', inScope: true, identityStatus: 'resolved', watchScope: 'primary' },
+        observedAt: new Date(atMs - 15 * 60000).toISOString(),
+        publishedAt: new Date(atMs - 15 * 60000).toISOString(),
+        collectedAt: isoTime,
+        lifecycle: 'active',
+        isCancelled: false,
+        isFixture: true
+      },
+      {
+        id: 'event-news-local-00000000000000000004',
+        title: '[TESZTADAT] Derecskei járási katasztrófavédelmi gyakorlat (koordináta nélkül)',
+        summary: '[TESZTADAT] Tűzoltósági gyakorlat a járásban.',
+        source: { name: 'Katasztrófavédelem', url: 'https://katasztrofavedelem.hu/teszt/derecske', status: 'ok' },
+        link: 'https://katasztrofavedelem.hu/teszt/derecske',
+        kind: 'news',
+        newsCategory: 'news_hazard',
+        severity: 'moderate',
+        territory: { settlementId: 'derecske', settlementName: 'Derecske', countyCode: '09', countyName: 'Hajdú-Bihar', territoryLevel: 'settlement', inScope: true, identityStatus: 'resolved', watchScope: 'secondary' },
+        observedAt: new Date(atMs - 20 * 60000).toISOString(),
+        publishedAt: new Date(atMs - 20 * 60000).toISOString(),
+        collectedAt: isoTime,
+        lifecycle: 'active',
+        isCancelled: false,
+        isFixture: true
+      },
+      {
+        id: 'event-news-local-00000000000000000005',
+        title: '[TESZTADAT] Püspökladányi vasúti felsővezeték-karbantartás (koordináta nélkül)',
+        summary: '[TESZTADAT] Menetrendi változás a 100-as vasútvonalon.',
+        source: { name: 'RSS-HAON', url: 'https://example.test/puspokladany-mav', status: 'ok' },
+        link: 'https://example.test/puspokladany-mav',
+        kind: 'news',
+        newsCategory: 'news_local',
+        severity: 'info',
+        territory: { settlementId: 'puspokladany', settlementName: 'Püspökladány', countyCode: '09', countyName: 'Hajdú-Bihar', territoryLevel: 'settlement', inScope: true, identityStatus: 'resolved', watchScope: 'secondary' },
+        observedAt: new Date(atMs - 25 * 60000).toISOString(),
+        publishedAt: new Date(atMs - 25 * 60000).toISOString(),
+        collectedAt: isoTime,
+        lifecycle: 'active',
+        isCancelled: false,
+        isFixture: true
+      },
+      {
+        id: 'event-news-local-00000000000000000006',
+        title: '[TESZTADAT] Berettyóújfalui kórházi ügyeleti rend frissítése (koordináta nélkül)',
+        summary: '[TESZTADAT] Hétvégi orvosi ügyeleti tájékoztató.',
+        source: { name: 'RSS-Dehir', url: 'https://example.test/berettyoujfalu-ugyelet', status: 'ok' },
+        link: 'https://example.test/berettyoujfalu-ugyelet',
+        kind: 'news',
+        newsCategory: 'news_local',
+        severity: 'info',
+        territory: { settlementId: 'berettyoujfalu', settlementName: 'Berettyóújfalu', countyCode: '09', countyName: 'Hajdú-Bihar', territoryLevel: 'settlement', inScope: true, identityStatus: 'resolved', watchScope: 'secondary' },
+        observedAt: new Date(atMs - 30 * 60000).toISOString(),
+        publishedAt: new Date(atMs - 30 * 60000).toISOString(),
+        collectedAt: isoTime,
+        lifecycle: 'active',
+        isCancelled: false,
+        isFixture: true
+      },
+      {
+        id: 'event-news-local-00000000000000000007',
+        title: '[TESZTADAT] Kaba térségi agrár-időjárási összefoglaló (koordináta nélkül)',
+        summary: '[TESZTADAT] Csapadék- és talajnedvesség-jelentés.',
+        source: { name: 'RSS-Portfolio', url: 'https://example.test/kaba-agrar', status: 'ok' },
+        link: 'https://example.test/kaba-agrar',
+        kind: 'news',
+        newsCategory: 'news_agriculture',
+        severity: 'info',
+        territory: { settlementId: 'kaba', settlementName: 'Kaba', countyCode: '09', countyName: 'Hajdú-Bihar', territoryLevel: 'settlement', inScope: true, identityStatus: 'resolved', watchScope: 'secondary' },
+        observedAt: new Date(atMs - 35 * 60000).toISOString(),
+        publishedAt: new Date(atMs - 35 * 60000).toISOString(),
+        collectedAt: isoTime,
+        lifecycle: 'active',
+        isCancelled: false,
+        isFixture: true
+      },
+      {
+        id: 'event-news-county-0000000000000000001',
+        title: '[TESZTADAT] Tűzoltói riasztás és műszaki mentés a 4-es főúton Debrecen közelében',
+        summary: '[TESZTADAT] Baleset és forgalomkorlátozás Hajdú-Bihar vármegyében.',
+        source: { name: 'Katasztrófavédelem', url: 'https://katasztrofavedelem.hu/teszt/debrecen-4es', status: 'ok' },
+        link: 'https://katasztrofavedelem.hu/teszt/debrecen-4es',
+        kind: 'news',
+        newsCategory: 'news_hazard',
+        severity: 'high',
+        territory: { countyCode: '09', countyName: 'Hajdú-Bihar', territoryLevel: 'county', inScope: true, identityStatus: 'resolved' },
+        location: { country: 'Hungary', settlement: 'Debrecen', lat: 47.5316, lon: 21.6273 },
+        observedAt: new Date(atMs - 40 * 60000).toISOString(),
+        publishedAt: new Date(atMs - 40 * 60000).toISOString(),
+        collectedAt: isoTime,
+        lifecycle: 'active',
+        isCancelled: false,
+        isFixture: true
+      },
+      {
+        id: 'event-news-county-0000000000000000002',
+        title: '[TESZTADAT] Rendőrségi körözés és fokozott ellenőrzés Hajdúböszörményben',
+        summary: '[TESZTADAT] A Hajdú-Bihar Vármegyei Rendőr-főkapitányság közleménye.',
+        source: { name: 'Police-Hajdu', url: 'https://police.hu/teszt/hajduboszormeny', status: 'ok' },
+        link: 'https://police.hu/teszt/hajduboszormeny',
+        kind: 'news',
+        newsCategory: 'news_regional',
+        severity: 'info',
+        territory: { countyCode: '09', countyName: 'Hajdú-Bihar', territoryLevel: 'county', inScope: true, identityStatus: 'resolved' },
+        location: { country: 'Hungary', settlement: 'Hajdúböszörmény', lat: 47.6719, lon: 21.5094 },
+        observedAt: new Date(atMs - 45 * 60000).toISOString(),
+        publishedAt: new Date(atMs - 45 * 60000).toISOString(),
+        collectedAt: isoTime,
+        lifecycle: 'active',
+        isCancelled: false,
+        isFixture: true
+      },
+      {
+        id: 'event-news-county-sport-000000000001',
+        title: '[TESZTADAT] DVSC–Ferencváros labdarúgó bajnoki mérkőzés összefoglaló Debrecenben',
+        summary: '[TESZTADAT] NB I-es futballmérkőzés a Nagyerdei Stadionban.',
+        source: { name: 'RSS-Dehir', url: 'https://dehir.hu/sport/dvsc-fradi-teszt', status: 'ok' },
+        link: 'https://dehir.hu/sport/dvsc-fradi-teszt',
+        kind: 'news',
+        newsCategory: 'news_regional',
+        severity: 'info',
+        territory: { countyCode: '09', countyName: 'Hajdú-Bihar', territoryLevel: 'county', inScope: true, identityStatus: 'resolved' },
+        location: { country: 'Hungary', settlement: 'Debrecen', lat: 47.5542, lon: 21.6331 },
+        observedAt: new Date(atMs - 50 * 60000).toISOString(),
+        publishedAt: new Date(atMs - 50 * 60000).toISOString(),
+        collectedAt: isoTime,
+        lifecycle: 'active',
+        isCancelled: false,
+        isFixture: true
+      },
+      {
+        id: 'event-news-national-0000000000000001',
+        title: '[TESZTADAT] Másodfokú viharriasztás és árvízvédelmi készültség a Dunántúlon',
+        summary: '[TESZTADAT] Országos meteorológiai és vízügyi tájékoztató.',
+        source: { name: 'RSS-Telex', url: 'https://telex.hu/teszt/vihar-dunantul', status: 'ok' },
+        link: 'https://telex.hu/teszt/vihar-dunantul',
+        kind: 'news',
+        newsCategory: 'news_hazard',
+        severity: 'high',
+        territory: { nuts0: 'HU', iso3: 'HUN', countryCode: 'HU', territoryLevel: 'country', inScope: true, identityStatus: 'resolved' },
+        location: { country: 'Hungary', settlement: 'Győr', lat: 47.6875, lon: 17.6504 },
+        observedAt: new Date(atMs - 55 * 60000).toISOString(),
+        publishedAt: new Date(atMs - 55 * 60000).toISOString(),
+        collectedAt: isoTime,
+        lifecycle: 'active',
+        isCancelled: false,
+        isFixture: true
+      },
+      {
+        id: 'event-news-national-culture-00000001',
+        title: '[TESZTADAT] Őszi színházi fesztivál és komolyzenei koncertsorozat Budapesten',
+        summary: '[TESZTADAT] Kulturális programajánló a fővárosban.',
+        source: { name: 'RSS-444', url: 'https://444.hu/kultura/fesztival-teszt', status: 'ok' },
+        link: 'https://444.hu/kultura/fesztival-teszt',
+        kind: 'news',
+        newsCategory: 'news_national',
+        severity: 'info',
+        territory: { nuts0: 'HU', iso3: 'HUN', countryCode: 'HU', territoryLevel: 'country', inScope: true, identityStatus: 'resolved' },
+        location: { country: 'Hungary', settlement: 'Budapest', lat: 47.4979, lon: 19.0402 },
+        observedAt: new Date(atMs - 60 * 60000).toISOString(),
+        publishedAt: new Date(atMs - 60 * 60000).toISOString(),
+        collectedAt: isoTime,
+        lifecycle: 'active',
+        isCancelled: false,
+        isFixture: true
+      }
+    ];
+    events.push(...syntheticNewsEvents);
   }
 
   // Enrich each event with computed views and lifecycle
@@ -343,7 +575,14 @@ export function generatePackage2bSnapshot({
   const coverageSources = [
     { id: 'Meteoalarm', name: 'Meteoalarm', domain: 'hazards', enabled: true, status: 'ok', isSnapshot: true, origin: 'snapshot' },
     { id: 'Nebih-ASP', name: 'Nebih-ASP', domain: 'health', enabled: false, status: 'disabled', isSnapshot: true, origin: 'snapshot' },
-    { id: 'HAON', name: 'HAON', domain: 'general', enabled: true, status: COVERAGE_STATES.UNCONFIGURED, unconfigured: true, isSnapshot: true, origin: 'snapshot' }
+    { id: 'HAON', name: 'HAON', domain: 'general', enabled: true, status: COVERAGE_STATES.UNCONFIGURED, unconfigured: true, isSnapshot: true, origin: 'snapshot' },
+    ...((mode === 'rich' || mode === 'browser') ? [
+      { id: 'RSS-Dehir', name: 'RSS-Dehir', domain: 'general', enabled: true, status: 'error', error: 'HTTP timeout', isSnapshot: true, origin: 'snapshot' },
+      { id: 'Police-Hajdu', name: 'Police-Hajdu', domain: 'general', enabled: true, status: 'ok', isSnapshot: true, origin: 'snapshot' },
+      { id: 'RSS-Telex', name: 'RSS-Telex', domain: 'general', enabled: true, status: 'ok', isSnapshot: true, origin: 'snapshot' },
+      { id: 'RSS-Portfolio', name: 'RSS-Portfolio', domain: 'general', enabled: true, status: 'ok', isSnapshot: true, origin: 'snapshot' },
+      { id: 'Google-News', name: 'Google-News', domain: 'general', enabled: true, status: 'ok', isSnapshot: true, origin: 'snapshot' }
+    ] : [])
   ];
 
   const coverage = evaluateSourceCoverage(coverageSources, liveSources, { isOfflineSnapshot: true, now: atMs });
@@ -408,9 +647,87 @@ export function generatePackage2bSnapshot({
           source: 'HAON-Fixture',
           timestamp: isoTime,
           url: 'https://example.test/tesztadat/debrecen-unlocated'
+        },
+        {
+          id: 'news-test-global-1',
+          title: '[TESZTADAT] Globális tengeri szállítási lánc jelentés a Vörös-tengerről',
+          headline: '[TESZTADAT] Globális tengeri szállítási lánc jelentés a Vörös-tengerről',
+          source: 'BBC World',
+          timestamp: isoTime,
+          url: 'https://example.test/tesztadat/global-1'
         }
       ] : [])
     ],
+    ...((mode === 'rich' || mode === 'browser') ? {
+      health: [
+        { n: 'RSS-Dehir', status: 'error', err: true, message: 'HTTP timeout', timestamp: isoTime },
+        { n: 'OpenSky', status: 'stale', stale: true, message: 'Cached snapshot', timestamp: isoTime },
+        { n: 'Meteoalarm', status: 'ok', timestamp: isoTime },
+        { n: 'Police-Hajdu', status: 'ok', timestamp: isoTime },
+        { n: 'RSS-HAON', status: 'ok', timestamp: isoTime },
+        { n: 'RSS-Telex', status: 'ok', timestamp: isoTime },
+        { n: 'RSS-Portfolio', status: 'ok', timestamp: isoTime },
+        { n: 'USGS', status: 'ok', timestamp: isoTime },
+        { n: 'WHO', status: 'ok', timestamp: isoTime },
+        { n: 'Nebih-ASP', status: 'disabled', disabled: true, timestamp: isoTime }
+      ],
+      who: Array.from({ length: 8 }, (_, i) => ({
+        title: `[TESZTADAT] WHO nemzetközi járványügyi közlemény #${i + 1}`,
+        severity: i === 0 ? 'high' : 'monitor',
+        region: 'Europe',
+        date: isoTime,
+        score: 50 - i * 3,
+        url: `https://example.test/who/${i + 1}`
+      })),
+      supplementalHealth: Array.from({ length: 8 }, (_, i) => ({
+        title: `[TESZTADAT] ReliefWeb egészségügyi helyzetjelentés #${i + 1}`,
+        severity: i === 0 ? 'elevated' : 'monitor',
+        region: 'Central Europe',
+        source: 'ReliefWeb',
+        date: isoTime,
+        score: 40 - i * 2,
+        url: `https://example.test/reliefweb/${i + 1}`
+      })),
+      tg: {
+        posts: 10,
+        urgent: Array.from({ length: 4 }, (_, i) => ({
+          channel: `OSINT-TEST-${i + 1}`,
+          text: `[TESZTADAT] Sürgős OSINT csatorna figyelmeztetés és helyszíni beszámoló #${i + 1}`,
+          date: isoTime,
+          views: 4200,
+          urgentFlags: ['URGENT']
+        })),
+        topPosts: Array.from({ length: 6 }, (_, i) => ({
+          channel: `OSINT-FEED-${i + 1}`,
+          text: `[TESZTADAT] Rendszeres OSINT összefoglaló bejegyzés #${i + 1}`,
+          date: isoTime,
+          views: 1800
+        }))
+      },
+      delta: {
+        summary: { direction: 'mixed', totalChanges: 8, criticalChanges: 1, signalBreakdown: { new: 3, escalated: 3, deescalated: 2 } },
+        signals: {
+          new: Array.from({ length: 3 }, (_, i) => ({ key: `sig-new-${i + 1}`, label: `[TESZTADAT] Új jelzés #${i + 1}`, reason: `[TESZTADAT] Új detektált változás #${i + 1}` })),
+          escalated: Array.from({ length: 4 }, (_, i) => ({ key: `sig-esc-${i + 1}`, label: `[TESZTADAT] Erősödő indikátor #${i + 1}`, from: 10, to: 18, pctChange: 80, severity: i === 0 ? 'critical' : 'high' })),
+          deescalated: Array.from({ length: 3 }, (_, i) => ({ key: `sig-deesc-${i + 1}`, label: `[TESZTADAT] Enyhülő indikátor #${i + 1}`, from: 15, to: 9, pctChange: -40 }))
+        }
+      },
+      changes: {
+        baseline: false,
+        since: new Date(atMs - 900000).toISOString(),
+        newTotal: 8,
+        newRecords: Array.from({ length: 8 }, (_, i) => ({
+          id: `event-3333333333333333333333333333330${(i % 4) + 1}`,
+          title: `[TESZTADAT] Újonnan felvett megfigyelési rekord #${i + 1}`,
+          source: 'Meteoalarm',
+          domain: 'weather',
+          severity: i === 0 ? 'high' : 'moderate',
+          observedAt: isoTime
+        })),
+        sourceTransitions: [],
+        signals: []
+      }
+    } : {}),
     air: [],
     thermal: [],
     tSignals: [],

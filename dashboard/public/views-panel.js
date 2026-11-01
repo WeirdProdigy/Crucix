@@ -2,6 +2,7 @@
   'use strict';
 
   const STORAGE_KEY = 'crucix_territory_view_v1';
+  const LIVE_TAB_STORAGE_KEY = 'crucix_live_news_tab_v1';
   const VIEWS = Object.freeze({
     LOCAL: 'local',
     COUNTY: 'county',
@@ -17,6 +18,92 @@
     [VIEWS.NATIONAL]: 'Magyarország',
     [VIEWS.GLOBAL]: 'Világ',
     all: 'Összes hír'
+  });
+
+  const LIVE_STREAM_TABS = Object.freeze({
+    IMPORTANT: 'important',
+    LOCAL: 'local',
+    COUNTY: 'county',
+    NATIONAL: 'national',
+    GLOBAL: 'global',
+    ALL: 'all'
+  });
+
+  const LIVE_STREAM_TAB_ORDER = [
+    LIVE_STREAM_TABS.IMPORTANT,
+    LIVE_STREAM_TABS.LOCAL,
+    LIVE_STREAM_TABS.COUNTY,
+    LIVE_STREAM_TABS.NATIONAL,
+    LIVE_STREAM_TABS.GLOBAL,
+    LIVE_STREAM_TABS.ALL
+  ];
+
+  const LIVE_STREAM_TAB_LABELS = Object.freeze({
+    [LIVE_STREAM_TABS.IMPORTANT]: 'Fontos',
+    [LIVE_STREAM_TABS.LOCAL]: 'Helyi',
+    [LIVE_STREAM_TABS.COUNTY]: 'Hajdú-Bihar',
+    [LIVE_STREAM_TABS.NATIONAL]: 'Magyarország',
+    [LIVE_STREAM_TABS.GLOBAL]: 'Világ',
+    [LIVE_STREAM_TABS.ALL]: 'Mind'
+  });
+
+  const VIEW_TO_MAP_REGION = Object.freeze({
+    [VIEWS.LOCAL]: 'local',
+    [VIEWS.COUNTY]: 'hajduBihar',
+    [VIEWS.NATIONAL]: 'hungary',
+    [VIEWS.GLOBAL]: 'world'
+  });
+
+  const DEFAULT_TERRITORY_MAP_BOUNDS = Object.freeze({
+    local: Object.freeze({
+      regionKey: 'local',
+      label: 'Helyi (Bihartorda és 35 km-es körzete)',
+      center: Object.freeze({ lat: 47.2186, lon: 21.3547 }),
+      bounds: Object.freeze([[20.85, 46.90], [21.85, 47.55]]),
+      pov: Object.freeze({ lat: 47.2186, lng: 21.3547, altitude: 0.35 })
+    }),
+    county: Object.freeze({
+      regionKey: 'hajduBihar',
+      label: 'Hajdú-Bihar vármegye',
+      center: Object.freeze({ lat: 47.4, lon: 21.5 }),
+      bounds: Object.freeze([[20.8, 46.9], [22.2, 47.95]]),
+      pov: Object.freeze({ lat: 47.4, lng: 21.5, altitude: 0.5 })
+    }),
+    hajduBihar: Object.freeze({
+      regionKey: 'hajduBihar',
+      label: 'Hajdú-Bihar vármegye',
+      center: Object.freeze({ lat: 47.4, lon: 21.5 }),
+      bounds: Object.freeze([[20.8, 46.9], [22.2, 47.95]]),
+      pov: Object.freeze({ lat: 47.4, lng: 21.5, altitude: 0.5 })
+    }),
+    national: Object.freeze({
+      regionKey: 'hungary',
+      label: 'Magyarország',
+      center: Object.freeze({ lat: 47.16, lon: 19.50 }),
+      bounds: Object.freeze([[16.1, 45.7], [22.9, 48.6]]),
+      pov: Object.freeze({ lat: 47.16, lng: 19.50, altitude: 0.75 })
+    }),
+    hungary: Object.freeze({
+      regionKey: 'hungary',
+      label: 'Magyarország',
+      center: Object.freeze({ lat: 47.16, lon: 19.50 }),
+      bounds: Object.freeze([[16.1, 45.7], [22.9, 48.6]]),
+      pov: Object.freeze({ lat: 47.16, lng: 19.50, altitude: 0.75 })
+    }),
+    global: Object.freeze({
+      regionKey: 'world',
+      label: 'Világ',
+      center: Object.freeze({ lat: 25.0, lon: 20.0 }),
+      bounds: null,
+      pov: Object.freeze({ lat: 25.0, lng: 20.0, altitude: 2.0 })
+    }),
+    world: Object.freeze({
+      regionKey: 'world',
+      label: 'Világ',
+      center: Object.freeze({ lat: 25.0, lon: 20.0 }),
+      bounds: null,
+      pov: Object.freeze({ lat: 25.0, lng: 20.0, altitude: 2.0 })
+    })
   });
 
   const CATEGORY_LABELS = Object.freeze({
@@ -116,7 +203,9 @@
   }
 
   let activeView = readSavedView();
+  let liveStreamTab = readSavedLiveTab();
   let changeListeners = [];
+  let selectorOptions = {};
 
   function readSavedView() {
     try {
@@ -130,6 +219,80 @@
     try {
       window.localStorage?.setItem(STORAGE_KEY, view);
     } catch {}
+  }
+
+  function readSavedLiveTab() {
+    try {
+      const t = window.localStorage?.getItem(LIVE_TAB_STORAGE_KEY);
+      if (t && Object.values(LIVE_STREAM_TABS).includes(t)) return t;
+    } catch {}
+    return LIVE_STREAM_TABS.IMPORTANT;
+  }
+
+  function saveLiveTab(tab) {
+    try {
+      window.localStorage?.setItem(LIVE_TAB_STORAGE_KEY, tab);
+    } catch {}
+  }
+
+  function getLiveStreamTab() {
+    return liveStreamTab;
+  }
+
+  function setLiveStreamTab(tab, notify = true) {
+    if (!Object.values(LIVE_STREAM_TABS).includes(tab)) return;
+    liveStreamTab = tab;
+    saveLiveTab(tab);
+    if (notify) {
+      for (const fn of changeListeners) {
+        try { fn(activeView); } catch (e) { console.error('[ViewsPanel]', e); }
+      }
+    }
+  }
+
+  function getTerritoryMapRegion(view = activeView) {
+    return VIEW_TO_MAP_REGION[view] || 'world';
+  }
+
+  function getTerritoryBounds(viewOrRegion = activeView, snapshot = null) {
+    const snap = snapshot || (typeof window !== 'undefined' ? window.D : null) || {};
+    const cfgBounds = snap?.territoryConfig?.mapBounds || {};
+    const regionKey = VIEW_TO_MAP_REGION[viewOrRegion] || viewOrRegion;
+    return cfgBounds[viewOrRegion] || cfgBounds[regionKey] || DEFAULT_TERRITORY_MAP_BOUNDS[viewOrRegion] || DEFAULT_TERRITORY_MAP_BOUNDS[regionKey] || DEFAULT_TERRITORY_MAP_BOUNDS.world;
+  }
+
+  const NON_CRITICAL_NEWS_PATTERNS = [
+    /\b(labdarúg\w*|foci\w*|futball\w*|bajnokság\w*|mérkőzés\w*|meccs\w*|edző\w*|gól\w*|nb\s*i\b|nb1\b|dvsc|loki|kézilabda\w*|kosárlabda\w*|vízilabda\w*|úszás\w*|olimpia\w*|sport\w*|bajnok\w*|kupadöntő\w*|stadion\w*|szurkoló\w*)\b/i,
+    /\b(koncert\w*|fesztivál\w*|színház\w*|kiállítás\w*|múzeum\w*|kultúr\w*|kulturális|zene\w*|zenekar\w*|előadás\w*|mozi\w*|film\w*|irodalom\w*|irodalmi|könyvhét\w*|galéria\w*|opera\w*|balett\w*)\b/i,
+    /\b(horoszkóp\w*|recept\w*|gasztro\w*|divat\w*|bulvár\w*|celeb\w*|sztár\w*|kvíz\w*)\b/i
+  ];
+
+  function isNonCriticalNews(item) {
+    if (!item || typeof item !== 'object') return false;
+    if (item.newsCategory === 'news_sport' || item.newsCategory === 'news_culture') return true;
+    const text = `${item.title || ''} ${item.summary || ''} ${item.category || ''}`;
+    if (/\b(baleset\w*|tűz\w*|robbanás\w*|riasztás\w*|rendőrség\w*|katasztrófa\w*|halálos\w*|sérült\w*|mentő\w*|árvíz\w*|vihar\w*|evakuál\w*)\b/i.test(text)) {
+      return false;
+    }
+    return NON_CRITICAL_NEWS_PATTERNS.some(re => re.test(text));
+  }
+
+  function isImportantNews(item) {
+    if (!item || typeof item !== 'object') return false;
+    if (item.isPublisherPromo === true) return false;
+    if (isNonCriticalNews(item)) return false;
+
+    const srcName = item.source?.name || (typeof item.source === 'string' ? item.source : '') || '';
+    const pubName = item.source?.publisher || item.facts?.sourcePublisher || '';
+    const cat = item.newsCategory || item.facts?.newsCategory || item.facts?.topic || item.topic || '';
+    const level = typeof item.territory === 'string' ? item.territory : (item.territory?.level || item.territory?.territoryLevel || '');
+    const inLocal = Boolean(item.views?.local?.inView || level === 'local' || level === 'settlement' || level === 'district' || item.territory?.settlementId);
+    const inCounty = Boolean(item.views?.county?.inView || level === 'county' || item.territory?.countyCode === 'HB' || item.territory?.countyCode === '09');
+    const isPoliceOrAuth = srcName === 'Police-Hajdu' || /police|rendőrség|katasztrófavédelem/i.test(`${srcName} ${pubName}`);
+    const isHazard = cat === 'news_hazard' || item.urgent === true || item.severity === 'critical' || item.severity === 'high' || item.severity === 'elevated' || /\b(baleset\w*|tűz\w*|robbanás\w*|riasztás\w*|katasztrófa\w*|árvíz\w*|vihar\w*|evakuál\w*)\b/i.test(item.title || item.headline || '');
+    const isLocalOrCountyCat = cat === 'news_local' || cat === 'news_regional';
+
+    return Boolean(isHazard || isPoliceOrAuth || inLocal || inCounty || isLocalOrCountyCat);
   }
 
   function esc(value) {
@@ -191,15 +354,30 @@
     return activeView;
   }
 
-  function setActiveView(view, notify = true) {
+  function setActiveView(view, notify = true, opts = {}) {
     if (!Object.values(VIEWS).includes(view)) return;
     if (contentTab === 'live') {
       try { window.CrucixLiveMedia?.stopAllStreams?.() || window.CrucixLiveMedia?.stopStream?.(); } catch {}
     }
     activeView = view;
     saveView(view);
+    newsScope = 'view';
+    if (opts.syncLiveStream !== false && Object.values(LIVE_STREAM_TABS).includes(view)) {
+      liveStreamTab = view;
+      saveLiveTab(view);
+    }
     updateSelectorUI();
     if (notify) {
+      const mapRegion = getTerritoryMapRegion(view);
+      try {
+        if (typeof selectorOptions?.onSelectRegion === 'function') {
+          selectorOptions.onSelectRegion(mapRegion, view, getTerritoryBounds(view));
+        } else if (typeof window.setRegion === 'function') {
+          window.setRegion(mapRegion);
+        }
+      } catch (e) {
+        console.error('[ViewsPanel:setRegion]', e);
+      }
       for (const fn of changeListeners) {
         try { fn(activeView); } catch (e) { console.error('[ViewsPanel]', e); }
       }
@@ -221,6 +399,7 @@
 
   function mountSelector(container, options = {}) {
     if (!container) return;
+    selectorOptions = options || {};
     const snapshot = options.getSnapshot ? options.getSnapshot() : (window.D || {});
     const counts = snapshot?.views || {};
 
@@ -229,18 +408,24 @@
         <span class="vp-tab-label" aria-hidden="true">Nézet:</span>
         ${VIEW_ORDER.map(view => {
           const isSelected = view === activeView;
-          const count = counts[view]?.uniqueEvents ?? counts[view]?.totalEvents ?? '';
+          const viewMeta = counts[view] || {};
+          const hasCounts = viewMeta.uniqueEvents !== undefined || viewMeta.totalEvents !== undefined || viewMeta.retainedNewsCount !== undefined || viewMeta.newsCount !== undefined || Array.isArray(viewMeta.newsIds);
+          const evCount = viewMeta.uniqueEvents ?? viewMeta.totalEvents ?? 0;
+          const newsCount = viewMeta.retainedNewsCount ?? viewMeta.newsCount ?? (Array.isArray(viewMeta.newsIds) ? viewMeta.newsIds.length : getViewNews(snapshot, view).length);
+          const tooltipText = `${VIEW_LABELS[view]}: ${evCount} fizikai esemény | ${newsCount} sajtó-/hatósági hír (Első szám: megerősített fizikai események; Második szám: hírek. Kattintásra a térkép és a hírfolyam erre a területre vált.)`;
           return `
             <button type="button"
                     class="vp-tab"
                     role="tab"
                     id="vp-tab-${view}"
                     data-view="${view}"
+                    data-map-region="${esc(getTerritoryMapRegion(view))}"
+                    title="${esc(tooltipText)}"
                     aria-selected="${isSelected}"
                     aria-controls="panel-territoryViews"
                     tabindex="${isSelected ? '0' : '-1'}">
               <span>${esc(VIEW_LABELS[view])}</span>
-              ${count !== '' ? `<span class="vp-count-badge">${count}</span>` : ''}
+              ${hasCounts ? `<span class="vp-count-badge" title="${esc(`Események: ${evCount} | Hírek: ${newsCount}`)}"><span class="vp-count-ev">${evCount}</span><span class="vp-count-sep"> | </span><span class="vp-count-news">${newsCount}</span></span>` : ''}
             </button>
           `;
         }).join('')}
@@ -703,7 +888,7 @@
     if (filtered.length === 0) {
       cardsContent = `<div class="vp-empty">Van hír (${nonPromoNews.length} db), de a szűrés után nincs találat.</div>`;
     } else {
-      cardsContent = `<div class="vp-news-items">${filtered.map(item => renderNewsCard(item)).join('')}</div>`;
+      cardsContent = `<div class="vp-news-items vp-scroll-region scroll-region" tabindex="0" role="region" aria-label="Hírfolyam lista">${filtered.map(item => renderNewsCard(item)).join('')}</div>`;
     }
 
     let headBadgeText = `${retainedCount} db`;
@@ -746,6 +931,204 @@
     if (!partition?.newsIds || !Array.isArray(newsList)) return [];
     const idSet = new Set(partition.newsIds);
     return newsList.filter(item => idSet.has(item.id));
+  }
+
+  function getNewsTerritoryLabel(item) {
+    if (!item || typeof item !== 'object') return 'Világ';
+    const settlement = item.territory?.settlementName || item.facts?.settlement;
+    if (settlement) return `Helyi (${settlement})`;
+    const level = typeof item.territory === 'string' ? item.territory : (item.territory?.level || item.territory?.territoryLevel || '');
+    if (item.views?.local?.inView || level === 'local' || level === 'settlement' || level === 'district') return 'Helyi';
+    if (item.views?.county?.inView || level === 'county' || item.territory?.countyCode === 'HB' || item.territory?.countyCode === '09') return 'Hajdú-Bihar';
+    if (item.views?.national?.inView || level === 'national' || level === 'country' || item.territory?.countryCode === 'HU') return 'Magyarország';
+    return 'Világ';
+  }
+
+  function normalizeLegacyNewsList(snapshot, existingViewsNews) {
+    const rawLegacy = Array.isArray(snapshot?.newsFeed)
+      ? snapshot.newsFeed
+      : (Array.isArray(snapshot?.news) ? snapshot.news : []);
+    if (!rawLegacy.length) return [];
+
+    const existingIds = new Set();
+    const existingUrls = new Set();
+    const existingNormTitles = new Set();
+    for (const item of existingViewsNews) {
+      if (!item) continue;
+      if (item.id) existingIds.add(item.id);
+      const u = item.link || item.url;
+      if (u) existingUrls.add(u);
+      const nt = normalizeNewsTitle(item.title, item);
+      if (nt) existingNormTitles.add(nt);
+    }
+
+    const legacyOut = [];
+    rawLegacy.forEach((raw, idx) => {
+      if (!raw || typeof raw !== 'object') return;
+      if (raw.id && existingIds.has(raw.id)) return;
+      const rawTitle = raw.title || raw.headline || '';
+      if (!rawTitle) return;
+      const u = raw.url || raw.link || '';
+      if (u && existingUrls.has(u)) return;
+      const nt = normalizeNewsTitle(rawTitle, raw);
+      if (nt && existingNormTitles.has(nt)) return;
+
+      legacyOut.push({
+        id: raw.id || `legacy-global-${idx}`,
+        kind: 'news',
+        isLegacyGlobal: true,
+        title: rawTitle,
+        source: typeof raw.source === 'object' ? raw.source : { name: raw.source || 'OSINT' },
+        publishedAt: raw.timestamp || raw.publishedAt || raw.observedAt || '',
+        observedAt: raw.timestamp || raw.observedAt || '',
+        url: u,
+        link: u,
+        urgent: Boolean(raw.urgent),
+        newsCategory: raw.newsCategory || (raw.urgent ? 'news_hazard' : 'news_global'),
+        territory: raw.territory || { level: 'global', countryCode: null },
+        views: {
+          local: { inView: false },
+          county: { inView: false },
+          national: { inView: false },
+          global: { inView: true, category: 'globalEvent' }
+        }
+      });
+    });
+    return legacyOut;
+  }
+
+  function getLiveStreamItems(snapshot, tab = liveStreamTab) {
+    const snap = snapshot || (typeof window !== 'undefined' ? window.D : null) || {};
+    const viewsNewsRaw = Array.isArray(snap?.views?.news)
+      ? snap.views.news.filter(n => n && n.isPublisherPromo !== true)
+      : [];
+    const legacyGlobal = normalizeLegacyNewsList(snap, viewsNewsRaw);
+
+    let pool = [];
+    if (tab === LIVE_STREAM_TABS.IMPORTANT) {
+      pool = viewsNewsRaw.filter(item => isImportantNews(item));
+    } else if (tab === LIVE_STREAM_TABS.LOCAL) {
+      pool = getViewNews(snap, VIEWS.LOCAL).filter(n => n && n.isPublisherPromo !== true);
+    } else if (tab === LIVE_STREAM_TABS.COUNTY) {
+      pool = getViewNews(snap, VIEWS.COUNTY).filter(n => n && n.isPublisherPromo !== true);
+    } else if (tab === LIVE_STREAM_TABS.NATIONAL) {
+      pool = getViewNews(snap, VIEWS.NATIONAL).filter(n => n && n.isPublisherPromo !== true);
+    } else if (tab === LIVE_STREAM_TABS.GLOBAL) {
+      const globalViewsNews = getViewNews(snap, VIEWS.GLOBAL).filter(n => n && n.isPublisherPromo !== true && !n.views?.national?.inView && !n.views?.county?.inView && !n.views?.local?.inView);
+      const fallbackGlobal = globalViewsNews.length > 0 ? globalViewsNews : viewsNewsRaw.filter(n => n.newsCategory === 'news_global' || (!n.views?.national?.inView && !n.views?.county?.inView && !n.views?.local?.inView));
+      pool = [...fallbackGlobal, ...legacyGlobal];
+    } else {
+      // 'all'
+      pool = [...viewsNewsRaw, ...legacyGlobal];
+    }
+
+    const deduped = deduplicateNewsItems(pool);
+    return deduped.sort((a, b) => {
+      const ta = Date.parse(a.publishedAt || a.observedAt || '') || 0;
+      const tb = Date.parse(b.publishedAt || b.observedAt || '') || 0;
+      return tb - ta;
+    });
+  }
+
+  function liveStreamHtml(snapshot, options = {}) {
+    const snap = snapshot || (typeof window !== 'undefined' ? window.D : null) || {};
+    const currentTab = options.tab && Object.values(LIVE_STREAM_TABS).includes(options.tab)
+      ? options.tab
+      : liveStreamTab;
+
+    const tabCounts = {};
+    for (const t of LIVE_STREAM_TAB_ORDER) {
+      tabCounts[t] = getLiveStreamItems(snap, t).length;
+    }
+
+    const items = getLiveStreamItems(snap, currentTab);
+
+    const tabsMarkup = LIVE_STREAM_TAB_ORDER.map(t => {
+      const active = t === currentTab;
+      return `
+        <button type="button"
+                class="tk-tab${active ? ' active' : ''}"
+                role="tab"
+                data-live-tab="${esc(t)}"
+                aria-selected="${active}"
+                onclick="window.CrucixViewsPanel?.setLiveStreamTab('${esc(t)}')">
+          <span>${esc(LIVE_STREAM_TAB_LABELS[t])}</span>
+          <span class="tk-tab-count">${tabCounts[t]}</span>
+        </button>
+      `;
+    }).join('');
+
+    const cardsMarkup = items.length === 0
+      ? `<div class="vp-empty tk-empty">Nincs megjeleníthető hír a kiválasztott („${esc(LIVE_STREAM_TAB_LABELS[currentTab])}”) fülön.</div>`
+      : items.map(item => {
+          const safeUrl = escSafeUrl(item.link || item.url);
+          const publisher = getPublisherName(item);
+          const rawTime = item.publishedAt || item.observedAt || '';
+          const timeStr = formatTime(rawTime) || 'friss';
+          const topicKey = item.newsCategory || 'news_other';
+          const topicLabel = NEWS_TOPIC_LABELS[topicKey] || 'Hír';
+          const territoryLabel = getNewsTerritoryLabel(item);
+          const isUrgent = item.newsCategory === 'news_hazard' || item.urgent === true;
+          const canInspect = Boolean(item.id && !item.isLegacyGlobal);
+          const relatedHtml = Array.isArray(item.relatedSources) && item.relatedSources.length > 0
+            ? `<span class="vp-news-related">Kapcsolódó: ${esc(item.relatedSources.join(', '))}</span>`
+            : '';
+
+          return `
+            <div class="tk-card${isUrgent ? ' urgent' : ''}"
+                 role="button"
+                 tabindex="0"
+                 data-news-id="${esc(item.id || '')}"
+                 ${canInspect ? `data-event-id="${esc(item.id)}"` : ''}
+                 ${safeUrl ? `data-url="${safeUrl}"` : ''}
+                 onclick="window.CrucixViewsPanel?.handleLiveItemClick(this, event)"
+                 onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.CrucixViewsPanel?.handleLiveItemClick(this, event);}">
+              <div class="tk-card-top">
+                <span class="tk-src">${esc(publisher)}</span>
+                <span class="vp-badge-news-topic vp-badge-topic-${esc(topicKey)}">${esc(topicLabel)}</span>
+                <span class="tk-territory-badge">${esc(territoryLabel)}</span>
+                ${relatedHtml}
+                <span class="tk-age" title="${esc(rawTime)}">${esc(timeStr)}</span>
+              </div>
+              <div class="tk-hl">
+                ${isUrgent ? '<span class="urg">!</span>' : ''}${esc(item.title)}
+                ${safeUrl ? `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="tk-ext-link" onclick="event.stopPropagation()" aria-label="Forráslink megnyitása">&#8599;</a>` : ''}
+              </div>
+            </div>
+          `;
+        }).join('');
+
+    return `
+      <div class="tk-unified-panel" data-active-live-tab="${esc(currentTab)}">
+        <div class="vp-newsfeed-disclaimer tk-disclaimer" role="note">
+          <strong>Figyelem:</strong> Sajtó- és hatósági hírek; nem igazolt veszélyesemények.
+        </div>
+        <div class="tk-tablist" role="tablist" aria-label="Élő hírfolyam szűrőfülek">
+          ${tabsMarkup}
+        </div>
+        <div class="tk-stream-list vp-scroll-region scroll-region"
+             tabindex="0"
+             role="region"
+             aria-label="Élő hírfolyam (${esc(LIVE_STREAM_TAB_LABELS[currentTab])})">
+          ${cardsMarkup}
+        </div>
+      </div>
+    `;
+  }
+
+  function handleLiveItemClick(el, ev) {
+    if (!el) return;
+    const eventId = el.getAttribute('data-event-id');
+    const url = el.getAttribute('data-url');
+    if (eventId && typeof window.CrucixIntelligence?.openEvent === 'function') {
+      window.CrucixIntelligence.openEvent(eventId);
+      return;
+    }
+    if (url && /^https?:\/\//i.test(url)) {
+      try {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } catch {}
+    }
   }
 
   function panelHtml(snapshot) {
@@ -825,25 +1208,30 @@
     if (dedupedUnlocated.length > 0) {
       unlocatedStripHtml = `
         <div class="vp-unlocated-strip">
-          <div class="vp-unlocated-head">Koordináta nélküli hírek (térképi jelölő nélkül)</div>
-          ${dedupedUnlocated.map(n => {
-            let relSuffix = '';
-            if (Array.isArray(n.relatedSources) && n.relatedSources.length > 0) {
-              relSuffix = ` · Kapcsolódó: ${esc(n.relatedSources.join(', '))}`;
-            } else if (Array.isArray(n.relatedCandidateSources) && n.relatedCandidateSources.length > 0) {
-              relSuffix = ` · (Kapcsolódó jelölt: ${esc(n.relatedCandidateSources.join(', '))})`;
-            }
-            return `
-            <div class="vp-unlocated-item"
-                 role="button"
-                 tabindex="0"
-                 onclick="window.CrucixIntelligence?.openEvent?.('${esc(n.id)}')"
-                 onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.CrucixIntelligence?.openEvent?.('${esc(n.id)}');}">
-              <span>${esc(n.title)}</span>
-              <span style="color:#64748b">${esc(getPublisherName(n) || n.source?.name || '')}${relSuffix}</span>
-            </div>
-            `;
-          }).join('')}
+          <div class="vp-unlocated-head">
+            <span>Koordináta nélküli hírek (térképi jelölő nélkül)</span>
+            <span class="vp-sec-badge">${dedupedUnlocated.length} db</span>
+          </div>
+          <div class="vp-unlocated-list vp-scroll-region scroll-region" tabindex="0" role="region" aria-label="Koordináta nélküli hírek">
+            ${dedupedUnlocated.map(n => {
+              let relSuffix = '';
+              if (Array.isArray(n.relatedSources) && n.relatedSources.length > 0) {
+                relSuffix = ` · Kapcsolódó: ${esc(n.relatedSources.join(', '))}`;
+              } else if (Array.isArray(n.relatedCandidateSources) && n.relatedCandidateSources.length > 0) {
+                relSuffix = ` · (Kapcsolódó jelölt: ${esc(n.relatedCandidateSources.join(', '))})`;
+              }
+              return `
+              <div class="vp-unlocated-item"
+                   role="button"
+                   tabindex="0"
+                   onclick="window.CrucixIntelligence?.openEvent?.('${esc(n.id)}')"
+                   onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.CrucixIntelligence?.openEvent?.('${esc(n.id)}');}">
+                <span>${esc(n.title)}</span>
+                <span style="color:#64748b">${esc(getPublisherName(n) || n.source?.name || '')}${relSuffix}</span>
+              </div>
+              `;
+            }).join('')}
+          </div>
         </div>
       `;
     }
@@ -918,9 +1306,24 @@
     `;
   }
 
+  const COVERAGE_STATUS_SORT_WEIGHT = Object.freeze({
+    stale_error: 0,
+    unconfigured: 1,
+    disabled: 2,
+    ok_empty: 3,
+    offline_snapshot: 4,
+    ok_data: 5
+  });
+
   function coveragePanelHtml(snapshot) {
     const coverage = snapshot?.coverage || {};
-    const sources = Object.keys(coverage);
+    const sources = Object.keys(coverage).sort((a, b) => {
+      const sa = coverage[a]?.status || 'unconfigured';
+      const sb = coverage[b]?.status || 'unconfigured';
+      const wa = COVERAGE_STATUS_SORT_WEIGHT[sa] ?? 9;
+      const wb = COVERAGE_STATUS_SORT_WEIGHT[sb] ?? 9;
+      return wa - wb;
+    });
 
     if (!sources.length) {
       return `
@@ -939,7 +1342,7 @@
           <span class="vp-panel-title">Forrásfedettség</span>
           <span class="vp-panel-sub">${sources.length} forrás felügyelve</span>
         </div>
-        <div class="cov-list">
+        <div class="cov-list vp-scroll-region scroll-region" tabindex="0" role="region" aria-label="Forrásfedettség lista">
           ${sources.map(src => {
             const row = coverage[src] || {};
             const statusKey = row.status || 'unconfigured';
@@ -966,6 +1369,8 @@
   window.CrucixViewsPanel = Object.freeze({
     VIEWS,
     VIEW_LABELS,
+    LIVE_STREAM_TABS,
+    LIVE_STREAM_TAB_LABELS,
     CATEGORY_LABELS,
     COVERAGE_LABELS,
     NEWS_TOPIC_LABELS,
@@ -987,6 +1392,15 @@
     resetNewsScope,
     setContentTab,
     getContentTab,
+    getLiveStreamTab,
+    setLiveStreamTab,
+    getLiveStreamItems,
+    liveStreamHtml,
+    handleLiveItemClick,
+    isNonCriticalNews,
+    isImportantNews,
+    getTerritoryMapRegion,
+    getTerritoryBounds,
     deduplicateNewsItems,
     normalizeNewsTitle
   });
