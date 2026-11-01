@@ -697,12 +697,43 @@ test('11. Browser-side camera display: schema validation, synthetic click-to-loa
   assert.equal(LiveMedia.isPrivateOrLocalHost('172.16.0.1'), true, '172.16.0.1 (min 172.16) must be allowed');
   assert.equal(LiveMedia.isPrivateOrLocalHost('172.31.255.254'), true, '172.31.255.254 (max 172.31) must be allowed');
 
+  // .local mDNS names
+  assert.equal(LiveMedia.isPrivateOrLocalHost('crucix.local'), true, 'crucix.local must be allowed');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('nas.local'), true, 'nas.local must be allowed');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('local'), true, 'local domain must be allowed');
+
+  // 100.64.0.0/10 (CGNAT / Tailscale)
+  assert.equal(LiveMedia.isPrivateOrLocalHost('100.64.0.1'), true, '100.64.0.1 (min 100.64) must be allowed');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('100.100.50.2'), true, '100.100.50.2 (Tailscale) must be allowed');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('100.127.255.254'), true, '100.127.255.254 (max 100.127) must be allowed');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('100.63.255.255'), false, '100.63.x is outside 100.64.0.0/10');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('100.128.0.1'), false, '100.128.x is outside 100.64.0.0/10');
+
+  // IPv6 ULA (fc00::/7)
+  assert.equal(LiveMedia.isPrivateOrLocalHost('fc00::1'), true, 'fc00::1 must be allowed');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('[fc00::1]'), true, '[fc00::1] must be allowed');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('fd12:3456:789a::1'), true, 'fd12:... must be allowed');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('[fdff:ffff::1]'), true, '[fdff:ffff::1] must be allowed');
+
+  // IPv6 Link-Local (fe80::/10)
+  assert.equal(LiveMedia.isPrivateOrLocalHost('fe80::1'), true, 'fe80::1 must be allowed');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('[fe80::1]'), true, '[fe80::1] must be allowed');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('[febf::ffff]'), true, '[febf::ffff] must be allowed');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('[fec0::1]'), false, 'fec0::1 is site-local, not link-local /10');
+
+  // CRUCIX_PRIVATE_HOSTS allowlist
+  assert.equal(LiveMedia.isPrivateOrLocalHost('crucix.home', 'crucix.home, my-nas.lan'), true, 'explicit custom host string must be allowed');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('my-nas.lan', ['crucix.home', 'my-nas.lan']), true, 'explicit custom host array must be allowed');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('unregistered.lan', 'crucix.home'), false, 'unregistered host outside custom list must be rejected');
+
   // Disallowed hosts (public IP, external domain, invalid subnets)
   assert.equal(LiveMedia.isPrivateOrLocalHost('172.15.255.255'), false, '172.15.x is not private');
   assert.equal(LiveMedia.isPrivateOrLocalHost('172.32.0.1'), false, '172.32.x is not private');
   assert.equal(LiveMedia.isPrivateOrLocalHost('8.8.8.8'), false, 'Public IP must be rejected');
   assert.equal(LiveMedia.isPrivateOrLocalHost('example.com'), false, 'External domain must be rejected');
   assert.equal(LiveMedia.isPrivateOrLocalHost('crucix.mydomain.hu'), false, 'Public domain must be rejected');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('public-crucix.example.com'), false, 'Public subdomain must be rejected');
+  assert.equal(LiveMedia.isPrivateOrLocalHost('2001:db8::1'), false, 'Public IPv6 must be rejected');
   assert.equal(LiveMedia.isPrivateOrLocalHost(''), false, 'Empty host must be rejected');
   assert.equal(LiveMedia.isPrivateOrLocalHost(null), false, 'Null host must be rejected');
 
@@ -744,12 +775,18 @@ test('11. Browser-side camera display: schema validation, synthetic click-to-loa
   assert.ok(readmeMd.includes('ÁSZF 3. pont'), 'README must cite ÁSZF 3. pont for download, storage, and processing prohibition');
   assert.ok(readmeMd.includes('Tilos a weboldalon megjelenő tartalmak vagy azok bármely részletének letöltése, elektronikus tárolása, feldolgozása és értékesítése'), 'README must quote verbatim prohibition from ÁSZF Section 3');
   assert.ok(readmeMd.includes('ÁSZF 10. pont'), 'README must cite ÁSZF 10. pont for copyright');
-  assert.ok(readmeMd.includes('10. pont 2. bekezdés'), 'README must cite 10. pont 2. bekezdés');
-  assert.ok(readmeMd.includes('10. pont 6. bekezdés'), 'README must cite 10. pont 6. bekezdés');
-  assert.ok(readmeMd.includes('10. pont 7. bekezdés'), 'README must cite 10. pont 7. bekezdés');
-  assert.ok(readmeMd.includes('Szigorúan tilos továbbá ezeket a tartalmakat más médiacsatornán közzétenni'), 'README must quote verbatim prohibition of other media channels');
+  assert.ok(readmeMd.includes('A Weboldal egészének vagy egyes részeinek magáncélú felhasználáson túli valamennyi felhasználása formája kizárólag a Szolgáltató előzetes írásbeli engedélyével lehetséges'), 'README must quote verbatim private use limit without paragraph numbers');
+  assert.ok(readmeMd.includes('A Weboldal rendeltetésszerű használatával járó megjelenítésen, az ehhez szükséges ideiglenes többszörözésen és a magáncélú másolatkészítésen túl'), 'README must quote verbatim intended use limit without paragraph numbers');
+  assert.ok(readmeMd.includes('Szigorúan tilos továbbá ezeket a tartalmakat más médiacsatornán közzétenni'), 'README must quote verbatim prohibition of other media channels without paragraph numbers');
+  assert.ok(!readmeMd.includes('10. pont 2. bekezdés'), 'README must not use paragraph number notation');
+  assert.ok(!readmeMd.includes('10. pont 6. bekezdés'), 'README must not use paragraph number notation');
+  assert.ok(!readmeMd.includes('10. pont 7. bekezdés'), 'README must not use paragraph number notation');
+  assert.ok(readmeMd.includes('Hatályos 2021.03.17') || readmeMd.includes('2021. március 17'), 'README must record effective date of ASZF');
+  assert.ok(readmeMd.includes('módosítás') || readmeMd.includes('módosíthatja'), 'README must record that Idokep may modify ASZF');
+  assert.ok(readmeMd.includes('Elvihető tartalmak'), 'README must document Elvihető tartalmak exception does not apply to webcams');
   assert.ok(readmeMd.includes('adatvedelem@idokep.hu'), 'README must record official Idokep contact email');
   assert.ok(readmeMd.includes('jogilag nem rendezett'), 'README must record that 1-minute auto refresh is legally unsettled under the ASZF');
   assert.ok(readmeMd.includes('192.168.1.81:3117'), 'README must document private LAN environment');
   assert.ok(readmeMd.includes('Loopback / LAN Guardrail'), 'README must document LAN guardrail');
+  assert.ok(readmeMd.includes('CRUCIX_PRIVATE_HOSTS'), 'README must document CRUCIX_PRIVATE_HOSTS');
 });

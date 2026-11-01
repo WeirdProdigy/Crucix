@@ -19,18 +19,26 @@
  *    forrásoldali elérhetőséget/élő állapotot és a beágyazhatóságot.
  * 6. Szigorúan magáncélú, saját, egyfelhasználós használat (Időkép ÁSZF 3. és 10. pont):
  *    - A Crucix futó példánya privát, nem nyilvános, harmadik fél nem éri el (kizárólag saját
- *      helyi hálózaton LAN-on fut), és más médiacsatornán semmilyen formában nem teszi közzé a kamerákat.
+ *      helyi hálózatán LAN-on fut), és más médiacsatornán semmilyen formában nem teszi közzé a kamerákat.
  *    - A Crucix szervere a kamerák képeit NEM tölti le, nem tárolja elektronikusan, nem proxyzza és
- *      nem dolgozza fel (megfelelés az ÁSZF 3. pont 3. bekezdésének).
+ *      nem dolgozza fel (megfelelés az ÁSZF 3. pontjának: „Tilos a weboldalon megjelenő tartalmak vagy azok
+ *      bármely részletének letöltése, elektronikus tárolása, feldolgozása és értékesítése...”).
  *    - A képmegjelenítés kizárólag a végfelhasználó saját böngészőjében fut közvetlen <img> lekérésként,
  *      a felhasználó kifejezett kattintására (Click-to-Load), átmeneti memóriabeli megjelenítésként.
- *    - Szigorúan tilos a tartalmak más médiacsatornán való közzététele (ÁSZF 10. pont 7. bekezdés).
+ *    - Szigorúan tilos a tartalmak más médiacsatornán való közzététele (ÁSZF 10. pont: „Szigorúan tilos továbbá
+ *      ezeket a tartalmakat más médiacsatornán közzétenni...”).
+ *    - Az ÁSZF 10. pontja szerinti „Elvihető tartalmak” kivétel kizárólag az adott aloldal térképeire/elemeire
+ *      vonatkozik forrásmegjelöléssel és linkkel; a webkamerák képeire ez a kivétel nem terjed ki.
+ *    - Hatályosság: A vizsgált ÁSZF az oldalon megjelölt állapot szerint 2021. március 17-től hatályos
+ *      („Hatályos 2021.03.17”); az Időkép fenntartja a jogot a feltételek egyoldalú módosítására.
  *    - Jogilag nem rendezett státusz: Az automatizált periodikus (1 perces) böngészőoldali frissítés és a közvetlen
  *      cam.idokep.hu mélyhivatkozás az ÁSZF alapján jogilag nem rendezett, ezért az Időkép kifejezett írásbeli
  *      hozzájárulásától függ (nem állítható, hogy az ÁSZF ezt megengedi).
- *    - Hálózati védelmi kapu (Guardrail): A közvetlen kamerakép-betöltő felület kizárólag privát helyi hálózatról
- *      (localhost, 127.0.0.1, ::1, 192.168.*, 10.*, 172.16-31.*) érhető el; publikus elérés esetén a felület
- *      csak külső szolgáltatói linket jelenít meg a magáncélú felhasználás védelmében.
+ *    - Hálózati védelmi kapu (Guardrail): A közvetlen kamerakép-betöltő felület kizárólag privát hálózatról
+ *      (localhost, 127.0.0.1, ::1, 192.168.*, 10.*, 172.16-31.*, 100.64.0.0/10, *.local, IPv6 ULA fc00::/7,
+ *      IPv6 link-local fe80::/10, valamint az opcionális CRUCIX_PRIVATE_HOSTS lista) érhető el; egyéb hosztnév
+ *      esetén a felület rejtve tartja a kamerákat és csak külső szolgáltatói linket jelenít meg a magáncélú
+ *      használat védelmében.
  */
 
 (function (window, document) {
@@ -156,20 +164,28 @@
   }
 
   /**
-   * Ellenőrzi, hogy a felület helyi loopbackről vagy szabványos RFC 1918 magánhálózatról fut-e.
+   * Ellenőrzi, hogy a felület helyi loopbackről vagy szabványos privát hálózatról fut-e.
    * Kizárólag magánhálózaton engedélyezett a közvetlen böngészőoldali kamerabetöltés (Időkép ÁSZF
    * 10. pont szerinti szigorúan magáncélú, saját, egyfelhasználós használat védelmében).
    *
    * Támogatott címek / tartományok:
    * - Loopback: localhost, 127.0.0.1, ::1, [::1], *.localhost
-   * - Privát C osztály: 192.168.0.0/16
-   * - Privát A osztály: 10.0.0.0/8
-   * - Privát B osztály: 172.16.0.0/12 (172.16.0.0 - 172.31.255.255)
+   * - mDNS / helyi tartomány: *.local, local
+   * - Privát C osztály (RFC 1918): 192.168.0.0/16
+   * - Privát A osztály (RFC 1918): 10.0.0.0/8
+   * - Privát B osztály (RFC 1918): 172.16.0.0/12 (172.16.0.0 - 172.31.255.255)
+   * - Shared Address / CGNAT / Tailscale (RFC 6598): 100.64.0.0/10 (100.64.0.0 - 100.127.255.255)
+   * - IPv6 ULA (RFC 4193): fc00::/7 (fc00: - fdff:)
+   * - IPv6 Link-Local (RFC 4291): fe80::/10 (fe80: - febf:)
+   * - Opcionális CRUCIX_PRIVATE_HOSTS lista (vesszővel elválasztott egyedi engedélyezett nevek)
+   *
+   * Alapértelmezetten szigorú: bármely ismeretlen vagy nyilvános cím esetén false értéket ad.
    *
    * @param {string} [hostname] - Opcionális hosztnév teszteléshez vagy felülbíráláshoz
+   * @param {string|string[]} [customAllowedHosts] - Opcionális extra engedélyezett privát hosztnevek
    * @returns {boolean}
    */
-  function isPrivateOrLocalHost(hostname) {
+  function isPrivateOrLocalHost(hostname, customAllowedHosts) {
     let host = '';
     if (hostname !== undefined) {
       if (typeof hostname === 'string') {
@@ -182,27 +198,34 @@
     }
     if (!host) return false;
 
-    // Loopback
+    // Outer brackets eltávolítása (IPv6 esetén, pl. [::1] -> ::1)
+    const cleanHost = host.replace(/^\[|\]$/g, '');
+
+    // 1. Loopback
     if (
-      host === 'localhost' ||
-      host === '127.0.0.1' ||
-      host === '::1' ||
-      host === '[::1]' ||
-      host.endsWith('.localhost')
+      cleanHost === 'localhost' ||
+      cleanHost === '127.0.0.1' ||
+      cleanHost === '::1' ||
+      cleanHost.endsWith('.localhost')
     ) {
       return true;
     }
 
-    // 192.168.0.0/16
-    const m192 = host.match(/^192\.168\.(\d{1,3})\.(\d{1,3})$/);
+    // 2. .local mDNS tartomány
+    if (cleanHost === 'local' || cleanHost.endsWith('.local')) {
+      return true;
+    }
+
+    // 3. IPv4 RFC 1918 C osztály: 192.168.0.0/16
+    const m192 = cleanHost.match(/^192\.168\.(\d{1,3})\.(\d{1,3})$/);
     if (m192) {
       const o3 = parseInt(m192[1], 10);
       const o4 = parseInt(m192[2], 10);
       if (o3 >= 0 && o3 <= 255 && o4 >= 0 && o4 <= 255) return true;
     }
 
-    // 10.0.0.0/8
-    const m10 = host.match(/^10\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    // 4. IPv4 RFC 1918 A osztály: 10.0.0.0/8
+    const m10 = cleanHost.match(/^10\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
     if (m10) {
       const o2 = parseInt(m10[1], 10);
       const o3 = parseInt(m10[2], 10);
@@ -210,8 +233,8 @@
       if (o2 >= 0 && o2 <= 255 && o3 >= 0 && o3 <= 255 && o4 >= 0 && o4 <= 255) return true;
     }
 
-    // 172.16.0.0/12 (172.16.0.0 - 172.31.255.255)
-    const m172 = host.match(/^172\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    // 5. IPv4 RFC 1918 B osztály: 172.16.0.0/12 (172.16.0.0 - 172.31.255.255)
+    const m172 = cleanHost.match(/^172\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
     if (m172) {
       const o2 = parseInt(m172[1], 10);
       const o3 = parseInt(m172[2], 10);
@@ -219,6 +242,63 @@
       if (o2 >= 16 && o2 <= 31 && o3 >= 0 && o3 <= 255 && o4 >= 0 && o4 <= 255) return true;
     }
 
+    // 6. IPv4 RFC 6598 Shared Address / CGNAT / Tailscale: 100.64.0.0/10 (100.64.0.0 - 100.127.255.255)
+    const m100 = cleanHost.match(/^100\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (m100) {
+      const o2 = parseInt(m100[1], 10);
+      const o3 = parseInt(m100[2], 10);
+      const o4 = parseInt(m100[3], 10);
+      if (o2 >= 64 && o2 <= 127 && o3 >= 0 && o3 <= 255 && o4 >= 0 && o4 <= 255) return true;
+    }
+
+    // 7. IPv6 ULA (fc00::/7) és Link-Local (fe80::/10)
+    if (cleanHost.includes(':')) {
+      const firstHextet = cleanHost.split(':')[0];
+      if (/^[0-9a-f]{1,4}$/i.test(firstHextet)) {
+        const val = parseInt(firstHextet, 16);
+        // fc00::/7 (0xfc00 - 0xfdff): (val >> 9) === 0x7e
+        if ((val >> 9) === 0x7e) return true;
+        // fe80::/10 (0xfe80 - 0xfebf): (val >> 6) === 0x3fa
+        if ((val >> 6) === 0x3fa) return true;
+      }
+    }
+
+    // 8. Opcionális CRUCIX_PRIVATE_HOSTS lista (vesszővel elválasztva vagy tömbként)
+    const extraHosts = [];
+    function appendRawHosts(raw) {
+      if (typeof raw === 'string') {
+        for (const part of raw.split(',')) {
+          const item = part.trim().toLowerCase();
+          if (item && !extraHosts.includes(item)) extraHosts.push(item);
+        }
+      } else if (Array.isArray(raw)) {
+        for (const part of raw) {
+          if (typeof part === 'string') {
+            const item = part.trim().toLowerCase();
+            if (item && !extraHosts.includes(item)) extraHosts.push(item);
+          }
+        }
+      }
+    }
+
+    if (customAllowedHosts !== undefined) {
+      appendRawHosts(customAllowedHosts);
+    }
+    if (typeof window !== 'undefined') {
+      appendRawHosts(window.CRUCIX_PRIVATE_HOSTS);
+      appendRawHosts(window.__CRUCIX_PRIVATE_HOSTS__);
+      appendRawHosts(window.__CRUCIX_DATA__?.privateHosts);
+      appendRawHosts(window.__CRUCIX_CONFIG__?.privateHosts);
+    }
+    if (typeof process !== 'undefined' && process.env && process.env.CRUCIX_PRIVATE_HOSTS) {
+      appendRawHosts(process.env.CRUCIX_PRIVATE_HOSTS);
+    }
+
+    if (extraHosts.includes(cleanHost)) {
+      return true;
+    }
+
+    // Alapértelmezett szigorú lezárás: ismeretlen hosztnév
     return false;
   }
 
