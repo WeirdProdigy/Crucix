@@ -20,6 +20,8 @@ import { normalizeLiveSources } from '../lib/intelligence/live-sources.mjs';
 import { partitionEventsByView, evaluateSourceCoverage, evaluateEventTerritoryViews, isNewsEvent, COVERAGE_STATES } from '../lib/intelligence/views.mjs';
 import { DEFAULT_TERRITORY_CONFIG } from '../lib/intelligence/territory.mjs';
 import { domainOfSource } from '../lib/domains.mjs';
+import { synthesizeSpaceWeather } from '../lib/intelligence/space-weather.mjs';
+import { synthesizeWeather } from '../lib/intelligence/weather.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -909,8 +911,12 @@ export async function synthesize(data, options = {}) {
   const allNews = options.news ?? await fetchAllNews();
   const news = allNews.filter(n => Number.isFinite(n.lat) && Number.isFinite(n.lon));
 
+  const spaceWeather = synthesizeSpaceWeather(data.sources?.['NOAA-SWPC'], data.sources?.['GFZ-Potsdam'], { now: options.now ?? Date.now() });
+  const weather = synthesizeWeather(data.sources?.['Weather-Service'], { now: options.now ?? Date.now() });
+
   const V2 = {
     meta: data.crucix, air, thermal, tSignals, chokepoints, nuke, nukeSignals, liveSources,
+    spaceWeather, weather,
     airMeta: {
       fallback: Boolean(airFallback),
       liveTotal: sumAirHotspots(liveAirHotspots),

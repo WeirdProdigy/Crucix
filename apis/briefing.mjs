@@ -53,6 +53,8 @@ import { briefing as usgs } from './sources/usgs.mjs';
 import { briefing as meteoalarm } from './sources/meteoalarm.mjs';
 import { briefing as gdacs } from './sources/gdacs.mjs';
 import { briefing as swpc } from './sources/swpc.mjs';
+import { briefing as gfzPotsdam } from './sources/gfz-potsdam.mjs';
+import { briefing as weatherService } from './sources/weather-service.mjs';
 import { briefing as ecb } from './sources/ecb.mjs';
 import { briefing as eonet } from './sources/eonet.mjs';
 import { briefing as ripestat } from './sources/ripestat.mjs';
@@ -194,6 +196,8 @@ export async function fullBriefing() {
     runSource('Google-News', googleNews, { territoryConfig: config.territory, timeoutMs: 75_000 }),
     runSource('GDACS', gdacs),
     runSource('NOAA-SWPC', swpc),
+    runSource('GFZ-Potsdam', gfzPotsdam),
+    runSource('Weather-Service', weatherService),
     runSource('ECB', ecb),
     runSource('NASA-EONET', eonet),
     runSource('RIPEstat', ripestat, { resources: config.publicSources.routingASNs }),

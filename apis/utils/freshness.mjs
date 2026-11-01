@@ -40,12 +40,18 @@ export const FEED_POLICIES = Object.freeze({
   'GNews-HAON': { maxAgeMs: 6 * HOUR, observationMaxAgeMs: 48 * HOUR }
 });
 
+export const SPECIAL_POLICIES = Object.freeze({
+  'GFZ-Potsdam': { maxAgeMs: 6 * HOUR, observationMaxAgeMs: 48 * HOUR },
+  'Weather-Service': { maxAgeMs: 3 * HOUR, observationMaxAgeMs: 48 * HOUR }
+});
+
 export const POLICE_HAJDU_POLICY = FEED_POLICIES['Police-Hajdu'];
 
 // Unified map of all active source freshness policies
 export const ALL_POLICIES = Object.freeze({
   ...POLICIES,
-  ...FEED_POLICIES
+  ...FEED_POLICIES,
+  ...SPECIAL_POLICIES
 });
 
 // Never use collection time as a replacement for a missing provider date.
