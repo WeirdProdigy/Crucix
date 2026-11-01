@@ -417,7 +417,7 @@ test('computeDelta output is unchanged', () => {
         { key: 'conflict_events', label: 'Conflict Events', from: 10, to: 16, change: 6, direction: 'up', pctChange: 60, severity: 'moderate' },
       ],
       deescalated: [
-        { key: 'sources_ok', label: 'Sources OK', from: 30, to: 28, change: -2, direction: 'down', pctChange: -6.7, severity: 'high' },
+        { key: 'sources_ok', label: 'Sources OK', from: 30, to: 28, change: -2, direction: 'down', pctChange: -6.7, severity: 'info' },
       ],
       unchanged: ['gold', 'fed_funds', 'urgent_posts', 'thermal_total', 'air_total', 'conflict_fatalities', 'sdr_online', 'news_count'],
     },
