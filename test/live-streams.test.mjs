@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, unlinkSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import express from 'express';
@@ -65,6 +65,9 @@ test('1. Registry schema validation: valid entries pass, invalid schemas throw',
 
   // Bad date
   assert.throws(() => validateLiveStreamEntry({ ...validEntry, checkedAt: '29-10-2026' }), /Invalid 'checkedAt'/);
+
+  // Bad embedStatus
+  assert.throws(() => validateLiveStreamEntry({ ...validEntry, embedStatus: 'scraped-hls' }), /Invalid 'embedStatus'/);
 });
 
 test('2. Registry file loading: parses repository registry and detects duplicates', () => {
@@ -122,23 +125,18 @@ test('4. Security: YouTube nocookie URL builder strictly validates video IDs and
   assert.equal(buildSafeYouTubeEmbedUrl(undefined), null);
 });
 
-test('5. Frontend LiveMedia component: Click-to-load, single player concurrency, error handling, and XSS escaping', async () => {
-  // Read component source and evaluate in a clean DOM-like sandbox
+test('5. Frontend LiveMedia component: Click-to-load, single & 2x2 grid concurrency, non-destructive filtering, external separation, privacy notice, and XSS escaping', async () => {
   const code = readFileSync(new URL('../dashboard/public/live-media-panel.js', import.meta.url), 'utf8');
 
-  let visibilityListener = null;
   const mockWindow = {
-    innerWidth: 1024,
+    innerWidth: 1280,
     __CRUCIX_DATA__: {}
   };
   const mockDocument = {
     hidden: false,
-    addEventListener: (event, fn) => {
-      if (event === 'visibilitychange') visibilityListener = fn;
-    }
+    addEventListener: () => {}
   };
 
-  // Run the module in context
   const runModule = new Function('window', 'document', code);
   runModule(mockWindow, mockDocument);
 
@@ -156,60 +154,168 @@ test('5. Frontend LiveMedia component: Click-to-load, single player concurrency,
         sourceType: 'youtube',
         videoId: 'wE8szk8MvWw',
         language: 'hu',
+        status: 'verified-live',
+        embedStatus: 'embeddable',
         checkedAt: '2026-10-29',
         notes: 'Helyi kamera & teszt.'
       },
       {
-        id: 's-news',
-        name: 'HírTV Élő',
+        id: 's-news-1',
+        name: 'DW News',
         type: 'news',
-        region: 'national',
-        provider: 'HírTV',
+        region: 'global',
+        provider: 'Deutsche Welle',
         sourceType: 'youtube',
-        videoId: 'qWf_H1_hP8k',
-        language: 'hu',
+        videoId: 'LuKwFajn37U',
+        language: 'en',
+        status: 'verified-live',
+        embedStatus: 'embeddable',
         checkedAt: '2026-10-29',
         notes: '24/7 hírfolyam.'
+      },
+      {
+        id: 's-news-2',
+        name: 'Al Jazeera',
+        type: 'news',
+        region: 'global',
+        provider: 'Al Jazeera English',
+        sourceType: 'youtube',
+        videoId: 'gCNeDWCI0vo',
+        language: 'en',
+        status: 'verified-live',
+        embedStatus: 'embeddable',
+        checkedAt: '2026-10-29',
+        notes: '24/7 hírfolyam.'
+      },
+      {
+        id: 's-news-3',
+        name: 'Euronews',
+        type: 'news',
+        region: 'global',
+        provider: 'Euronews',
+        sourceType: 'youtube',
+        videoId: 'pykpO5kQJ98',
+        language: 'en',
+        status: 'verified-live',
+        embedStatus: 'embeddable',
+        checkedAt: '2026-10-29',
+        notes: '24/7 hírfolyam.'
+      },
+      {
+        id: 's-news-4',
+        name: 'France 24',
+        type: 'news',
+        region: 'global',
+        provider: 'France 24',
+        sourceType: 'youtube',
+        videoId: 'HvZt-nh9sGg',
+        language: 'en',
+        status: 'verified-live',
+        embedStatus: 'embeddable',
+        checkedAt: '2026-10-29',
+        notes: '24/7 hírfolyam.'
+      },
+      {
+        id: 's-ext-cam',
+        name: 'Debrecen – Kossuth tér (Időkép)',
+        type: 'webcam',
+        region: 'local',
+        provider: 'Debrecen MJV Önkormányzata / Időkép',
+        sourceType: 'link-only',
+        url: 'https://www.idokep.hu/webkamera/dmjvcam',
+        language: 'hu',
+        status: 'verified-live',
+        embedStatus: 'external-only',
+        checkedAt: '2026-10-29',
+        notes: 'Külső kamera.'
       }
     ]
   };
 
-  // A. Click-to-load contract: initial HTML contains NO iframes!
+  // A. Click-to-load contract & exact privacy notice: initial HTML contains NO iframes and NO external preview images!
   const initialHtml = LiveMedia.panelHtml(testSnapshot);
   assert.ok(!initialHtml.includes('<iframe'), 'Initially zero iframes must be rendered (Click-to-Load)');
+  assert.ok(!initialHtml.includes('<img'), 'Zero external thumbnail/preview images before click');
   assert.ok(initialHtml.includes('Közvetítés indítása'), 'Play button must be rendered');
-  assert.ok(initialHtml.includes('Adatvédelmi mód: Kattintásra töltődik be'), 'Privacy notice must be rendered');
+  assert.ok(
+    initialHtml.includes('A közvetítés indítása kapcsolatot létesít a videószolgáltatóval.'),
+    'Exact required privacy text must be displayed before loading'
+  );
+  assert.ok(!initialHtml.includes('Harmadik fél felé telemetria nincs'), 'Must NOT falsely claim zero telemetry');
+  assert.ok(!initialHtml.includes('nyomkövetés és telemetria nélkül'), 'Must NOT falsely claim complete tracking-free operation');
   assert.ok(initialHtml.includes('&lt;Nagytemplom&gt;'), 'HTML tags in stream name must be escaped');
   assert.ok(initialHtml.includes('&quot;Önkormányzat&quot;'), 'Quotes in provider must be escaped');
 
-  // B. Single player activation
+  // A2. Separate "Külső oldalon nézhető" section & dual status badges
+  assert.ok(initialHtml.includes('Külső oldalon nézhető'), 'External-only group heading must be rendered');
+  assert.ok(initialHtml.includes('Forrásoldalon: Élő adás'), 'Page live status must be shown separately');
+  assert.ok(initialHtml.includes('Beágyazhatóság: Csak külső oldalon nézhető'), 'Embeddability status must be shown separately');
+  assert.ok(initialHtml.includes('Megnyitás a szolgáltató oldalán ↗'), 'External link button must be rendered');
+
+  // B. Single player activation (max 1 in single mode)
   LiveMedia.playStream('s-local');
   assert.equal(LiveMedia.getActiveStreamId(), 's-local');
+  assert.deepEqual(LiveMedia.getActiveStreamIds(), ['s-local']);
   const playingHtml = LiveMedia.panelHtml(testSnapshot);
   assert.ok(playingHtml.includes('<iframe'), 'Active stream must render iframe');
   assert.ok(playingHtml.includes('https://www.youtube-nocookie.com/embed/wE8szk8MvWw'), 'Iframe src must use youtube-nocookie.com');
   assert.ok(playingHtml.includes('■ Leállítás'), 'Stop button must be rendered for playing stream');
 
-  // C. Concurrency: switching to second stream tears down the first
-  LiveMedia.playStream('s-news');
-  assert.equal(LiveMedia.getActiveStreamId(), 's-news');
+  // C. Concurrency in single mode: switching to second stream replaces the first (max 1)
+  LiveMedia.playStream('s-news-1');
+  assert.equal(LiveMedia.getActiveStreamId(), 's-news-1');
+  assert.deepEqual(LiveMedia.getActiveStreamIds(), ['s-news-1']);
   const switchedHtml = LiveMedia.panelHtml(testSnapshot);
-  assert.ok(switchedHtml.includes('https://www.youtube-nocookie.com/embed/qWf_H1_hP8k'), 'Second stream iframe rendered');
-  assert.ok(!switchedHtml.includes('https://www.youtube-nocookie.com/embed/wE8szk8MvWw'), 'First stream iframe must be destroyed');
+  assert.ok(switchedHtml.includes('https://www.youtube-nocookie.com/embed/LuKwFajn37U'), 'Second stream iframe rendered');
+  assert.ok(!switchedHtml.includes('https://www.youtube-nocookie.com/embed/wE8szk8MvWw'), 'First stream iframe must be destroyed in single mode');
 
-  // D. Stop stream tears down all iframes
-  LiveMedia.stopStream();
-  assert.equal(LiveMedia.getActiveStreamId(), null);
-  const stoppedHtml = LiveMedia.panelHtml(testSnapshot);
-  assert.ok(!stoppedHtml.includes('<iframe'), 'No iframes after stopStream');
+  // C2. Filtering or searching MUST NOT stop an already playing stream!
+  LiveMedia.setTypeFilter('webcam');
+  LiveMedia.setRegionFilter('local');
+  LiveMedia.setSearchQuery('Kossuth');
+  assert.equal(LiveMedia.getActiveStreamId(), 's-news-1', 'Filtering must NOT stop the active stream');
+  const filteredWhilePlayingHtml = LiveMedia.panelHtml(testSnapshot);
+  assert.ok(
+    filteredWhilePlayingHtml.includes('https://www.youtube-nocookie.com/embed/LuKwFajn37U'),
+    'Active player in stage must stay alive even when source selector is filtered to another category/region'
+  );
+  LiveMedia.setTypeFilter('all');
+  LiveMedia.setRegionFilter('all');
+  LiveMedia.setSearchQuery('');
 
-  // E. Visibility change: backgrounding tab stops player
+  // C3. 2x2 Grid mode: allows up to 4 simultaneous user-started players
+  LiveMedia.setViewMode('grid');
+  assert.equal(LiveMedia.getViewMode(), 'grid');
+  LiveMedia.playStream('s-news-2');
+  LiveMedia.playStream('s-news-3');
+  LiveMedia.playStream('s-news-4');
+  assert.deepEqual(LiveMedia.getActiveStreamIds(), ['s-news-1', 's-news-2', 's-news-3', 's-news-4']);
+  const grid4Html = LiveMedia.panelHtml(testSnapshot);
+  assert.equal((grid4Html.match(/<iframe/g) || []).length, 4, '2x2 grid must render 4 simultaneous iframes');
+
+  // Starting a 5th stream in 2x2 grid keeps max 4 active players
   LiveMedia.playStream('s-local');
-  assert.equal(LiveMedia.getActiveStreamId(), 's-local');
-  mockDocument.hidden = true;
-  if (visibilityListener) visibilityListener();
-  assert.equal(LiveMedia.getActiveStreamId(), null, 'Hidden document must trigger stopStream');
-  mockDocument.hidden = false;
+  assert.equal(LiveMedia.getActiveStreamIds().length, 4, '2x2 grid must cap at max 4 active players');
+  assert.ok(LiveMedia.getActiveStreamIds().includes('s-local'));
+
+  // Switching back to single mode trims active players to 1
+  LiveMedia.setViewMode('single');
+  assert.equal(LiveMedia.getActiveStreamIds().length, 1, 'Switching to single mode enforces max 1 active player');
+
+  // C4. Audio / Volume controls
+  LiveMedia.playStream('s-news-1');
+  assert.deepEqual(LiveMedia.getStreamAudioState('s-news-1'), { muted: false, volume: 80 });
+  LiveMedia.toggleMuteStream('s-news-1');
+  assert.equal(LiveMedia.getStreamAudioState('s-news-1').muted, true);
+  LiveMedia.setStreamVolume('s-news-1', 45);
+  assert.deepEqual(LiveMedia.getStreamAudioState('s-news-1'), { muted: false, volume: 45 });
+
+  // D. Stop stream & stopAllStreams tears down all iframes
+  LiveMedia.stopAllStreams();
+  assert.equal(LiveMedia.getActiveStreamId(), null);
+  assert.deepEqual(LiveMedia.getActiveStreamIds(), []);
+  const stoppedHtml = LiveMedia.panelHtml(testSnapshot);
+  assert.ok(!stoppedHtml.includes('<iframe'), 'No iframes after stopAllStreams');
 
   // F. Error state & retry backoff
   LiveMedia.markStreamError('s-local');
@@ -223,18 +329,19 @@ test('5. Frontend LiveMedia component: Click-to-load, single player concurrency,
   LiveMedia.stopStream();
 
   // G. Mobile viewport forces single-view mode
-  mockWindow.innerWidth = 500;
-  assert.equal(LiveMedia.getViewMode(), 'single', 'Mobile width must enforce single view mode');
+  mockWindow.innerWidth = 375;
+  assert.equal(LiveMedia.getViewMode(), 'single', 'Mobile width (375px) must enforce single view mode');
   LiveMedia.setViewMode('grid');
   assert.equal(LiveMedia.getViewMode(), 'single', 'Mobile width ignores grid mode switch');
-  mockWindow.innerWidth = 1024;
+  mockWindow.innerWidth = 1280;
   assert.equal(LiveMedia.getViewMode(), 'grid', 'Desktop width allows grid mode');
+  LiveMedia.setViewMode('single');
 
   // H. Backwards compatibility with empty or legacy snapshot
   assert.doesNotThrow(() => LiveMedia.panelHtml(null));
   assert.doesNotThrow(() => LiveMedia.panelHtml({}));
   assert.doesNotThrow(() => LiveMedia.panelHtml({ liveStreams: null }));
-  const emptyHtml = LiveMedia.panelHtml({});
+  const emptyHtml = LiveMedia.panelHtml({ liveStreams: [] });
   assert.ok(emptyHtml.includes('Nincs a kiválasztott szűrőknek megfelelő élő közvetítés'), 'Empty state handled gracefully');
 });
 
@@ -254,12 +361,13 @@ test('6. HTTP Security: Content-Security-Policy header permits youtube-nocookie 
   assert.ok(csp.includes("frame-src 'self' https://www.youtube-nocookie.com;"), 'CSP must allow youtube-nocookie frame-src');
 });
 
-test('7. Registry schema validation: channelId, provenance, and unverified status handling', () => {
+test('7. Registry schema validation: channelId, provenance, embedStatus, and unverified status handling', () => {
   // Valid entry with channelId and provenance
   const withChannel = {
     ...validEntry,
     channelId: 'UCknLrEdhRCp1WdBgk977Ntw',
     status: 'verified',
+    embedStatus: 'embeddable',
     provenance: 'koala73/worldmonitor (AGPL-3.0)'
   };
   assert.equal(validateLiveStreamEntry(withChannel), true);
@@ -279,6 +387,7 @@ test('7. Registry schema validation: channelId, provenance, and unverified statu
     videoId: null,
     language: 'hu',
     status: 'unverified',
+    embedStatus: 'unverified',
     checkedAt: null,
     notes: 'Kamera felderítés alatt.'
   };
@@ -304,10 +413,14 @@ test('7. Registry schema validation: channelId, provenance, and unverified statu
     url: 'https://hirtv.origo.hu/adas',
     language: 'hu',
     status: 'verified',
+    embedStatus: 'external-only',
     checkedAt: '2026-10-30',
     notes: 'Közvetlen webes adás.'
   };
   assert.equal(validateLiveStreamEntry(validLinkOnly), true);
+
+  // Link-only stream claiming embeddable must throw
+  assert.throws(() => validateLiveStreamEntry({ ...validLinkOnly, embedStatus: 'embeddable' }), /link-only stream cannot have embedStatus "embeddable"/);
 
   // Link-only stream missing url or non-https must throw
   assert.throws(() => validateLiveStreamEntry({ ...validLinkOnly, url: 'http://insecure.hu' }), /Invalid or missing 'url'/);
@@ -336,7 +449,6 @@ test('8. Dashboard iframe audit: proof that frame-src permits all dashboard ifra
     try {
       const content = readFileSync(new URL(`dashboard/public/${file}`, root), 'utf8');
       if (content.includes('<iframe') || content.includes('createElement(\'iframe\')')) {
-        // Extract src attributes or domains used
         const srcMatches = [...content.matchAll(/src=["']([^"']+)["']/g)].map(m => m[1]);
         const domainMatches = [...content.matchAll(/https:\/\/[a-zA-Z0-9.-]+/g)].map(m => m[0]);
         foundIframeSources.push({ file, srcMatches, domainMatches });
@@ -360,31 +472,35 @@ test('8. Dashboard iframe audit: proof that frame-src permits all dashboard ifra
   );
 });
 
-test('9. Institutional operator audit: verified-live webcams must have strictly institutional legal entities, zero private individual names', () => {
+test('9. Institutional operator audit: verified-live webcams must have strictly institutional legal entities, zero private individual names, and honest external-only embedStatus', () => {
   const streams = loadLiveStreams();
   const verifiedWebcams = streams.filter(s => s.type === 'webcam' && s.status === 'verified-live');
 
   assert.ok(verifiedWebcams.length >= 4, 'Must have at least 4 verified-live webcams');
 
-  // Verify that deb / hajduszoboszlo webcams are present
+  // Verify that deb / hajduszoboszlo webcams are present and marked external-only
   const kossuth = verifiedWebcams.find(s => s.id === 'debrecen-kossuth-ter-webcam');
   assert.ok(kossuth, 'Kossuth tér webcam must be registered and verified-live');
   assert.equal(kossuth.url, 'https://www.idokep.hu/webkamera/dmjvcam');
+  assert.equal(kossuth.embedStatus, 'external-only');
   assert.ok(kossuth.provider.includes('Önkormányzata'), 'Provider must be municipality');
 
   const bekas = verifiedWebcams.find(s => s.id === 'debrecen-bekas-to-webcam');
   assert.ok(bekas, 'Békás tó webcam must be registered and verified-live');
   assert.equal(bekas.url, 'https://www.idokep.hu/webkamera/dmjvcam3');
+  assert.equal(bekas.embedStatus, 'external-only');
   assert.ok(bekas.provider.includes('Önkormányzata'), 'Provider must be municipality');
 
   const egyetem = verifiedWebcams.find(s => s.id === 'debrecen-egyetem-ter-webcam');
   assert.ok(egyetem, 'Egyetem tér webcam must be registered and verified-live');
   assert.equal(egyetem.url, 'https://www.idokep.hu/webkamera/deegyetemter');
+  assert.equal(egyetem.embedStatus, 'external-only');
   assert.ok(egyetem.provider.includes('Debreceni Egyetem'), 'Provider must be university');
 
   const aeroclub = verifiedWebcams.find(s => s.id === 'hajduszoboszlo-aeroclub-webcam');
   assert.ok(aeroclub, 'Hajdúszoboszló Aero Club webcam must be registered and verified-live');
   assert.equal(aeroclub.url, 'https://www.idokep.hu/webkamera/lhho2');
+  assert.equal(aeroclub.embedStatus, 'external-only');
   assert.ok(aeroclub.provider.includes('Aero Club'), 'Provider must be Aero Club');
 
   // Disallowed private individual checks across the entire registry

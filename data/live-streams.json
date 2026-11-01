@@ -10,9 +10,10 @@
     "channelId": "UCknLrEdhRCp1WdBgk977Ntw",
     "language": "en",
     "status": "verified-live",
-    "checkedAt": "2026-10-30",
+    "embedStatus": "embeddable",
+    "checkedAt": "2026-11-01",
     "provenance": "koala73/worldmonitor (AGPL-3.0)",
-    "notes": "Német közszolgálati 24/7 nemzetközi hírcsatorna. Ellenőrzött élő adás és érvényes oEmbed beágyazás."
+    "notes": "Német közszolgálati 24/7 nemzetközi hírcsatorna. Ellenőrzött élő adás és érvényes YouTube beágyazás."
   },
   {
     "id": "france24-en",
@@ -21,13 +22,14 @@
     "region": "global",
     "provider": "France Médias Monde",
     "sourceType": "youtube",
-    "videoId": "Ap-UM1O9RBU",
+    "videoId": "HvZt-nh9sGg",
     "channelId": "UCQfwfsi5VrQ8yKZ-UWmAEFg",
     "language": "en",
     "status": "verified-live",
-    "checkedAt": "2026-10-30",
+    "embedStatus": "embeddable",
+    "checkedAt": "2026-11-01",
     "provenance": "koala73/worldmonitor (AGPL-3.0)",
-    "notes": "Francia nemzetközi 24/7 hírcsatorna. Ellenőrzött élő adás és érvényes oEmbed beágyazás."
+    "notes": "Francia nemzetközi 24/7 hírcsatorna. A korábbi Ap-UM1O9RBU azonosító lejárt; a frissített HvZt-nh9sGg élő adás ellenőrizve és beágyazható."
   },
   {
     "id": "euronews-en",
@@ -40,9 +42,10 @@
     "channelId": "UCSrZ3UV4jOidv8ppoVuvW9Q",
     "language": "en",
     "status": "verified-live",
-    "checkedAt": "2026-10-30",
+    "embedStatus": "embeddable",
+    "checkedAt": "2026-11-01",
     "provenance": "koala73/worldmonitor (AGPL-3.0)",
-    "notes": "Páneurópai 24/7 hírfolyam. Ellenőrzött élő adás és érvényes oEmbed beágyazás."
+    "notes": "Páneurópai 24/7 hírfolyam. Ellenőrzött élő adás és érvényes YouTube beágyazás."
   },
   {
     "id": "sky-news-en",
@@ -51,13 +54,14 @@
     "region": "global",
     "provider": "Sky News",
     "sourceType": "youtube",
-    "videoId": "3lUGOR0SRFg",
+    "videoId": "umLWFz4izTM",
     "channelId": "UCoMdktPbSTixAyNGwb-UYkQ",
     "language": "en",
     "status": "verified-live",
-    "checkedAt": "2026-10-30",
+    "embedStatus": "embeddable",
+    "checkedAt": "2026-11-01",
     "provenance": "koala73/worldmonitor (AGPL-3.0)",
-    "notes": "Egyesült Királyság 24/7 hírtelevíziója. A korábbi YDvsBbKfLPA videó privátra váltott; a frissített 3lUGOR0SRFg élő közvetítés ellenőrizve és beágyazható."
+    "notes": "Egyesült Királyság 24/7 hírtelevíziója. A korábbi 3lUGOR0SRFg közvetítés lezárult; a frissített umLWFz4izTM élő közvetítés ellenőrizve és beágyazható."
   },
   {
     "id": "aljazeera-en",
@@ -70,9 +74,10 @@
     "channelId": "UCNye-wNBqNL5ZzHSJj3l8Bg",
     "language": "en",
     "status": "verified-live",
-    "checkedAt": "2026-10-30",
+    "embedStatus": "embeddable",
+    "checkedAt": "2026-11-01",
     "provenance": "koala73/worldmonitor (AGPL-3.0)",
-    "notes": "Közel-keleti és nemzetközi 24/7 hírfolyam. Ellenőrzött élő adás és érvényes oEmbed beágyazás."
+    "notes": "Közel-keleti és nemzetközi 24/7 hírfolyam. Ellenőrzött élő adás és érvényes YouTube beágyazás."
   },
   {
     "id": "nasa-earth-from-space",
@@ -81,13 +86,14 @@
     "region": "global",
     "provider": "NASA",
     "sourceType": "youtube",
-    "videoId": "21X5lGlDOfg",
+    "videoId": "ROboUHfPUrU",
     "channelId": "UCLA_DiR1FfKNvjuUpBHmylQ",
     "language": "en",
     "status": "verified-live",
-    "checkedAt": "2026-10-30",
+    "embedStatus": "embeddable",
+    "checkedAt": "2026-11-01",
     "provenance": "Hivatalos szolgáltatói oldal (NASA)",
-    "notes": "Hivatalos élő tudományos Föld-megfigyelő közvetítés. Ellenőrzött élő adás és érvényes oEmbed beágyazás."
+    "notes": "Hivatalos élő tudományos Föld-megfigyelő közvetítés (ISS). A korábbi 21X5lGlDOfg stream lezárult; a frissített ROboUHfPUrU élő adás ellenőrizve és beágyazható."
   },
   {
     "id": "earthcam-times-square",
@@ -96,13 +102,14 @@
     "region": "global",
     "provider": "EarthCam",
     "sourceType": "youtube",
-    "videoId": "4qyZLflp-sI",
+    "videoId": "TPGY7UYzbKw",
     "channelId": "UC6kJ4jK0t4E1M_t5_5xZ7-Q",
     "language": "en",
     "status": "verified-live",
-    "checkedAt": "2026-10-30",
+    "embedStatus": "embeddable",
+    "checkedAt": "2026-11-01",
     "provenance": "koala73/worldmonitor (AGPL-3.0)",
-    "notes": "Hivatalos turisztikai panorámakamera a Times Square-ről. Ellenőrzött élő közvetítés és érvényes oEmbed beágyazás."
+    "notes": "Hivatalos turisztikai panorámakamera. A korábbi 4qyZLflp-sI azonosító lejárt; a frissített TPGY7UYzbKw élő közvetítés ellenőrizve és beágyazható."
   },
   {
     "id": "debrecen-kossuth-ter-webcam",
@@ -114,9 +121,10 @@
     "url": "https://www.idokep.hu/webkamera/dmjvcam",
     "language": "hu",
     "status": "verified-live",
-    "checkedAt": "2026-10-30",
+    "embedStatus": "external-only",
+    "checkedAt": "2026-11-01",
     "provenance": "Időkép webkamera oldal (idokep.hu/webkamera/dmjvcam)",
-    "notes": "Debrecen MJV Önkormányzata által üzemeltetett panorámakamera az Időkép felületén. Látott időbélyeg (Utolsó képkocka): T1 (09:32): 2026.10.30 09:32, T2 (13:40): 2026.10.30 13:40."
+    "notes": "Debrecen MJV Önkormányzata által üzemeltetett panorámakamera az Időkép felületén. Hivatalos külső beágyazási kód nem érhető el (X-Frame-Options: sameorigin); a közvetítés a szolgáltató oldalán élőben nézhető."
   },
   {
     "id": "debrecen-bekas-to-webcam",
@@ -128,9 +136,10 @@
     "url": "https://www.idokep.hu/webkamera/dmjvcam3",
     "language": "hu",
     "status": "verified-live",
-    "checkedAt": "2026-10-30",
+    "embedStatus": "external-only",
+    "checkedAt": "2026-11-01",
     "provenance": "Időkép webkamera oldal (idokep.hu/webkamera/dmjvcam3)",
-    "notes": "Debrecen MJV Önkormányzata által üzemeltetett élő videó stream az Időkép felületén. Látott élő adás állapot: T1 (09:33): Élő adás (folyamatos HLS videó), T2 (13:41): Élő adás (folyamatos HLS videó)."
+    "notes": "Debrecen MJV Önkormányzata által üzemeltetett élő videó stream az Időkép felületén. Hivatalos külső beágyazási kód nem érhető el (X-Frame-Options: sameorigin); a közvetítés a szolgáltató oldalán élőben nézhető."
   },
   {
     "id": "debrecen-egyetem-ter-webcam",
@@ -142,9 +151,10 @@
     "url": "https://www.idokep.hu/webkamera/deegyetemter",
     "language": "hu",
     "status": "verified-live",
-    "checkedAt": "2026-10-30",
+    "embedStatus": "external-only",
+    "checkedAt": "2026-11-01",
     "provenance": "Időkép webkamera oldal (idokep.hu/webkamera/deegyetemter)",
-    "notes": "Debreceni Egyetem által üzemeltetett webkamera az Időkép felületén. Látott időbélyeg (Utolsó képkocka): T1 (09:32): 2026.10.30 09:32, T2 (13:41): 2026.10.30 13:41."
+    "notes": "Debreceni Egyetem által üzemeltetett webkamera az Időkép felületén. Hivatalos külső beágyazási kód nem érhető el (X-Frame-Options: sameorigin); a közvetítés a szolgáltató oldalán élőben nézhető."
   },
   {
     "id": "hajduszoboszlo-aeroclub-webcam",
@@ -156,9 +166,10 @@
     "url": "https://www.idokep.hu/webkamera/lhho2",
     "language": "hu",
     "status": "verified-live",
-    "checkedAt": "2026-10-30",
+    "embedStatus": "external-only",
+    "checkedAt": "2026-11-01",
     "provenance": "Időkép webkamera oldal (idokep.hu/webkamera/lhho2)",
-    "notes": "Hajdúszoboszlói Aero Club sportegyesület által üzemeltetett repülőtéri webkamera az Időkép felületén. Látott időbélyeg (Utolsó képkocka): T1 (09:33): 2026.10.30 09:33, T2 (13:41): 2026.10.30 13:41."
+    "notes": "Hajdúszoboszlói Aero Club sportegyesület által üzemeltetett repülőtéri webkamera az Időkép felületén. Hivatalos külső beágyazási kód nem érhető el (X-Frame-Options: sameorigin); a közvetítés a szolgáltató oldalán élőben nézhető."
   },
   {
     "id": "hortobagy-puszta-webcam",
@@ -170,9 +181,10 @@
     "url": "https://www.idokep.hu/webkamera/hortobagy",
     "language": "hu",
     "status": "no-live-feed",
-    "checkedAt": "2026-10-30",
+    "embedStatus": "external-only",
+    "checkedAt": "2026-11-01",
     "provenance": "Hivatalos szolgáltatói oldal (idokep.hu/webkamera/hortobagy)",
-    "notes": "Az Időkép hortobágyi oldala létezik, de az utolsó képkocka 2010-10-22 dátumú (nem élő archívum)."
+    "notes": "Az Időkép hortobágyi oldala létezik, de az utolsó képkocka 2010-10-22 dátumú (nem élő archívum, nem beágyazható)."
   },
   {
     "id": "hajduszoboszlo-strand-webcam",
@@ -184,7 +196,8 @@
     "url": "https://hungarospa.hu/webkamera/",
     "language": "hu",
     "status": "archive",
-    "checkedAt": "2026-10-30",
+    "embedStatus": "external-only",
+    "checkedAt": "2026-11-01",
     "provenance": "Hivatalos szolgáltatói oldal (hungarospa.hu/webkamera)",
     "notes": "A Hungarospa oldalán 16 másodperces promóciós videóklipekből álló lejátszási lista található, nem élő közvetítés."
   },
@@ -198,9 +211,10 @@
     "url": "https://hirtv.origo.hu/adas",
     "language": "hu",
     "status": "delayed",
-    "checkedAt": "2026-10-30",
+    "embedStatus": "external-only",
+    "checkedAt": "2026-11-01",
     "provenance": "Hivatalos szolgáltatói oldal (hirtv.origo.hu/adas)",
-    "notes": "A HírTV hivatalos lejátszója működik, de a szolgáltató 60 perccel késleltetett adást közvetít."
+    "notes": "A HírTV hivatalos lejátszója a szolgáltató weboldalán érhető el (60 perccel késleltetett adás, nem beágyazható)."
   },
   {
     "id": "atv-magyarorszag-stream",
@@ -212,7 +226,8 @@
     "url": "https://www.atv.hu/videok/",
     "language": "hu",
     "status": "archive",
-    "checkedAt": "2026-10-30",
+    "embedStatus": "external-only",
+    "checkedAt": "2026-11-01",
     "provenance": "Hivatalos szolgáltatói oldal (atv.hu/videok)",
     "notes": "Az oldal az ATV Összes videó archívumát és műsortárát tartalmazza, nem lineáris élő adást."
   },
@@ -226,9 +241,10 @@
     "url": "https://hu.euronews.com/live",
     "language": "hu",
     "status": "verified-live",
-    "checkedAt": "2026-10-30",
+    "embedStatus": "external-only",
+    "checkedAt": "2026-11-01",
     "provenance": "Hivatalos szolgáltatói oldal (hu.euronews.com/live)",
-    "notes": "Az Euronews hivatalos magyar nyelvű élő Dailymotion közvetítése a szolgáltató weboldalán."
+    "notes": "Az Euronews hivatalos magyar nyelvű élő közvetítése a szolgáltató weboldalán nézhető (külső oldali lejátszó)."
   },
   {
     "id": "kekesteto-panorama-webcam",
@@ -240,7 +256,8 @@
     "url": "https://www.idokep.hu/webkamera/kekesteto",
     "language": "hu",
     "status": "no-live-feed",
-    "checkedAt": "2026-10-30",
+    "embedStatus": "external-only",
+    "checkedAt": "2026-11-01",
     "provenance": "Hivatalos szolgáltatói oldal (idokep.hu/webkamera/kekesteto)",
     "notes": "Az Időkép kékestetői oldala létezik, de adásszünetet jelez; az utolsó képkocka 2023-11-14 dátumú."
   },
@@ -254,7 +271,8 @@
     "url": "https://www.idokep.hu/webkamera/budapest_duna",
     "language": "hu",
     "status": "no-live-feed",
-    "checkedAt": "2026-10-30",
+    "embedStatus": "external-only",
+    "checkedAt": "2026-11-01",
     "provenance": "Hivatalos szolgáltatói oldal (idokep.hu)",
     "notes": "Az Időkép budapesti duna-korzói oldala létezik, de adásszünetet és 'Még soha nem közvetített' állapotot jelez."
   },
@@ -268,7 +286,8 @@
     "url": "https://www.solarham.com/",
     "language": "en",
     "status": "page-ok",
-    "checkedAt": "2026-10-30",
+    "embedStatus": "external-only",
+    "checkedAt": "2026-11-01",
     "provenance": "Hivatalos szolgáltatói portál (solarham.com)",
     "notes": "Amatőr rádiós űridőjárás gyűjtőportál a NOAA SWPC telemetria hivatkozásával. Link-only kártya, szövegkaparás nélkül."
   }

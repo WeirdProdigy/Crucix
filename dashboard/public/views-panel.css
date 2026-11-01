@@ -877,3 +877,54 @@
   border-color: var(--accent, #64f0c8);
   color: var(--accent, #64f0c8);
 }
+
+
+/* Live Companion in Left Rail */
+.vp-live-companion {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(10, 20, 32, 0.7);
+  border: 1px dashed rgba(100, 240, 200, 0.3);
+  border-radius: 4px;
+  margin-top: 10px;
+}
+
+.vp-live-companion-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent, #64f0c8);
+  font-family: var(--sans, sans-serif);
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.vp-live-companion-desc {
+  font-family: var(--sans, sans-serif);
+  font-size: 11px;
+  color: var(--dim, #6a8a82);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.vp-btn-back-news {
+  background: rgba(100, 240, 200, 0.12);
+  border: 1px solid var(--accent, #64f0c8);
+  color: var(--accent, #64f0c8);
+  font-family: var(--sans, sans-serif);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.vp-btn-back-news:hover {
+  background: var(--accent, #64f0c8);
+  color: #040c14;
+}

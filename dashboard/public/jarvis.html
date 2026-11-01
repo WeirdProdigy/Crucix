@@ -463,6 +463,7 @@ body.low-perf .ticker-wrap::-webkit-scrollbar-thumb{background:rgba(100,240,200,
           <div class="map-popup" id="mapPopup"><button class="pp-close" onclick="closePopup()">&times;</button><div class="pp-head"></div><div class="pp-text"></div><div class="pp-meta"></div></div>
         </div>
       </div>
+      <div class="live-workspace-stack" id="liveWorkspaceStack" style="display:none;"></div>
       <div class="lower" id="lowerGrid"></div>
     </div>
     <div class="col" id="rightRail"></div>
@@ -920,10 +921,30 @@ function togglePerfMode(){
 }
 
 function renderMapVisibility(){
+  const isLiveActive = window.CrucixViewsPanel?.getContentTab() === 'live';
+  const liveStack = document.getElementById('liveWorkspaceStack');
   const mapStack = document.getElementById('mapStack');
   const mapRegionBar = document.getElementById('mapRegionBar');
+
+  if(liveStack){
+    liveStack.style.display = isLiveActive ? 'block' : 'none';
+    if(isLiveActive){
+      window.CrucixLiveMedia?.mountWorkspace(liveStack, currentSnapshot());
+    }
+  }
+
+  if(isLiveActive){
+    if(mapStack) mapStack.style.display = 'none';
+    if(mapRegionBar) mapRegionBar.style.display = 'none';
+    closePopup();
+    return;
+  }
+
   const showMap = isFixedModuleVisible('map');
-  if(mapStack) mapStack.classList.toggle('hidden', !showMap);
+  if(mapStack){
+    mapStack.style.display = showMap ? 'block' : 'none';
+    mapStack.classList.toggle('hidden', !showMap);
+  }
   if(mapRegionBar && (!showMap || !isFixedModuleVisible('mapRegions'))){
     mapRegionBar.innerHTML = '';
     mapRegionBar.style.display = 'none';
@@ -2595,6 +2616,12 @@ document.addEventListener('DOMContentLoaded',()=>{
   window.CrucixLens?.mount(document.getElementById('lensBar'),{t});window.CrucixLens?.onChange(applyLens);
   window.CrucixViewsPanel?.mountSelector(document.getElementById('viewsBar'),{getSnapshot:currentSnapshot});
   window.CrucixViewsPanel?.onChange(()=>rerenderDashboard(true));
+  window.CrucixLiveMedia?.onChange(()=>{
+    const liveStack = document.getElementById('liveWorkspaceStack');
+    if(liveStack && window.CrucixViewsPanel?.getContentTab() === 'live'){
+      window.CrucixLiveMedia?.mountWorkspace(liveStack, currentSnapshot());
+    }
+  });
   // "What changed" (panel and header chip) reads the snapshot's own changes; the longer windows and the matrix rows need the archive, so
   // like the replay they are left out on file pages and in the offline shell. The window chosen lives in memory only.
   const archiveApi=location.protocol!=='file:'&&!window.__CRUCIX_OFFLINE_SHELL__;

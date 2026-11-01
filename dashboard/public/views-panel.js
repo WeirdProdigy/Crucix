@@ -102,7 +102,7 @@
   function setContentTab(tab) {
     if (tab === 'news' || tab === 'live') {
       if (contentTab === 'live' && tab !== 'live') {
-        try { window.CrucixLiveMedia?.stopStream(); } catch {}
+        try { window.CrucixLiveMedia?.stopAllStreams?.() || window.CrucixLiveMedia?.stopStream?.(); } catch {}
       }
       contentTab = tab;
       for (const fn of changeListeners) {
@@ -194,7 +194,7 @@
   function setActiveView(view, notify = true) {
     if (!Object.values(VIEWS).includes(view)) return;
     if (contentTab === 'live') {
-      try { window.CrucixLiveMedia?.stopStream(); } catch {}
+      try { window.CrucixLiveMedia?.stopAllStreams?.() || window.CrucixLiveMedia?.stopStream?.(); } catch {}
     }
     activeView = view;
     saveView(view);
@@ -884,7 +884,20 @@
     const liveCount = liveStreams.length;
 
     const contentHtml = contentTab === 'live'
-      ? (window.CrucixLiveMedia?.panelHtml(snapshot) || '<div class="lm-empty-state"><div class="lm-empty-text">Élő modul nem elérhető</div></div>')
+      ? `
+        <div class="vp-live-companion">
+          <div class="vp-live-companion-head">
+            <span class="vp-live-companion-icon">📡</span>
+            <span class="vp-live-companion-title">Élő videómód aktív</span>
+          </div>
+          <p class="vp-live-companion-desc">
+            A 16:9 méretű élő adások és a kompakt forrásválasztó a középső munkaterületen látható.
+          </p>
+          <button type="button" class="vp-btn-back-news" onclick="window.CrucixViewsPanel?.setContentTab('news')">
+            ← Vissza a hírfolyamhoz
+          </button>
+        </div>
+      `
       : newsFeedHtml(snapshot);
 
     return `

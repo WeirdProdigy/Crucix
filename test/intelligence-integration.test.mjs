@@ -22,10 +22,10 @@ test('synthesis retains source IDs, times and honest geolocation provenance', as
 
 test('ticker preserves full title, source link, coordinates and separate provider time', () => {
   const title = 'Hungary ' + 'original source context '.repeat(10);
-  const rss = { title, source: 'Feed', date: '2026-10-01T10:00:00Z', url: 'https://example.org/item', lat: 47.5, lon: 19.1, locationMethod: 'headline-keyword', locationPrecision: 'approximate' };
+  const rss = { title, source: 'Feed', date: new Date(Date.now() - 3600_000).toISOString(), url: 'https://example.org/item', lat: 47.5, lon: 19.1, locationMethod: 'headline-keyword', locationPrecision: 'approximate' };
   const [item] = buildNewsFeed([rss], {}, [], []);
   assert.equal(item.headline, title);
-  assert.equal(item.publishedAt, '2026-10-01T10:00:00.000Z');
+  assert.equal(item.publishedAt, rss.date);
   assert.equal(item.locationMethod, 'headline-keyword');
   assert.equal(item.lat, 47.5);
   assert.equal(item.observedAt ?? null, null);
