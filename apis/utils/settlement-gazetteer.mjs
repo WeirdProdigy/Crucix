@@ -134,6 +134,16 @@ function buildInflectionRegex(name) {
 }
 
 /**
+ * Foreign locations, international bodies, and world affairs keywords.
+ */
+export const FOREIGN_LOCATIONS_REGEX = /(?<![\p{L}\p{N}])(?:külföld|világ|nemzetközi|genf|békecsúcs|egyesült államok|kína|oroszország|ukrajna|közel-kelet|nato|brüsszel|brüsszeli|eu|európai unió|fehér ház|kreml|washington|varsó|kijev|moszkva|london|párizs|berlin|róma|teherán|tel-aviv|gáza|irán|izrael|tajvan|trump|putyin|zelenszkij|biden)(?:[a-záéíóöőúüű]+)?(?![\\p{L}\\p{N}])/ui;
+
+/**
+ * Major non-Hajdú-Bihar Hungarian cities and other counties.
+ */
+export const OTHER_HUNGARIAN_REGIONS_REGEX = /(?<![\p{L}\p{N}])(?:budapest|szeged|miskolc|pécs|győr|székesfehérvár|kecskemét|nyíregyháza|szolnok|tatabánya|kaposvár|békéscsaba|veszprém|zalaegerszeg|eger|salgótarján|szombathely|szekszárd|borsod|szabolcs|békés|csongrád|bács-kiskun|pest megye|pest vármegye|fejér|komárom|győr-moson|vas megye|vas vármegye|veszprém megye|veszprém vármegye|zala megye|zala vármegye|somogy|tolna|baranya|heves|nógrád|jász-nagykun)(?:[a-záéíóöőúüű]+)?(?![\\p{L}\\p{N}])/ui;
+
+/**
  * Checks whether the text has explicit county context (e.g. Hajdú-Bihar, Hajdú, Bihar, Debrecen).
  */
 export function hasCountyContext(text) {
@@ -164,6 +174,9 @@ export function detectSettlementMention(title, territoryConfig = DEFAULT_TERRITO
   const iso3 = primary.iso3 || 'HUN';
 
   const explicitCountyPresent = hasCountyContext(rawTitle);
+  const isForeign = FOREIGN_LOCATIONS_REGEX.test(rawTitle) || /kulfold|nagyvilag|vilag|global/i.test(options.section || '');
+  const isOtherRegion = OTHER_HUNGARIAN_REGIONS_REGEX.test(rawTitle);
+  const hasCountyContradiction = isForeign || isOtherRegion;
 
   // 1. Process ambiguous settlement names with strict disambiguation rules
   for (const amb of AMBIGUOUS_SETTLEMENT_NAMES) {
@@ -236,10 +249,10 @@ export function detectSettlementMention(title, territoryConfig = DEFAULT_TERRITO
         territoryLevel: 'unknown',
         settlementId: null,
         settlementName: null,
-        countyCode,
-        countyName,
-        nuts3,
-        nuts2,
+        countyCode: (options.implicitCountyContext === false || hasCountyContradiction) ? null : countyCode,
+        countyName: (options.implicitCountyContext === false || hasCountyContradiction) ? null : countyName,
+        nuts3: (options.implicitCountyContext === false || hasCountyContradiction) ? null : nuts3,
+        nuts2: (options.implicitCountyContext === false || hasCountyContradiction) ? null : nuts2,
         nuts0,
         iso3,
         matchState: 'ambiguous',
@@ -299,7 +312,39 @@ export function detectSettlementMention(title, territoryConfig = DEFAULT_TERRITO
     }
   }
 
-  // Default to county level Hajdú-Bihar
+  // If explicitly non-local (implicitCountyContext === false) OR there is an explicit contradiction:
+  if (options.implicitCountyContext === false || hasCountyContradiction) {
+    if (isForeign) {
+      return {
+        territoryLevel: 'country',
+        countyCode: null,
+        countyName: null,
+        nuts3: null,
+        nuts2: null,
+        nuts0: null,
+        iso3: null,
+        matchState: 'no_match',
+        localRelevanceReason: null,
+        needsLocalReview: false,
+        isConfirmedLocal: false
+      };
+    }
+    return {
+      territoryLevel: ADMINISTRATIVE_LEVELS.COUNTRY,
+      countyCode: null,
+      countyName: null,
+      nuts3: null,
+      nuts2: null,
+      nuts0,
+      iso3,
+      matchState: 'no_match',
+      localRelevanceReason: null,
+      needsLocalReview: false,
+      isConfirmedLocal: false
+    };
+  }
+
+  // Default to county level (local feeds or uncontradicted county context)
   return {
     territoryLevel: ADMINISTRATIVE_LEVELS.COUNTY,
     countyCode,

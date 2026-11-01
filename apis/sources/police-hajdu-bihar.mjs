@@ -273,7 +273,7 @@ export function parsePoliceRss(xml, options = {}) {
     seenKeys.add(dedupeKey);
 
     const section = extractSection(link);
-    const territory = detectSettlementMention(title, territoryConfig);
+    const territory = detectSettlementMention(title, territoryConfig, { implicitCountyContext: true, section });
     const routeNumber = extractRouteNumber(title);
     const eventType = extractEventType(title, section);
     const settlement = territory.settlementName || null;

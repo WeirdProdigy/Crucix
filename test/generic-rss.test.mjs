@@ -1268,3 +1268,46 @@ test('32. Shared 100 ceiling exceeded: all newsIds resolvable, partitions.news <
   assert.equal(partitioned[VIEWS.GLOBAL].newsCount, 100, 'Global view matched 100 global items');
   assert.equal(partitioned.all.newsCount, 150, 'All view matched all 150 items');
 });
+
+test('33. Territorial classification: HVG national and international items never get Hajdú-Bihar county label, local portals default only without contradiction', () => {
+  // 1. HVG national & international items without implicit county context
+  const orbanItem = detectSettlementMention('Orbán elítélte a brüsszeli döntést', undefined, { implicitCountyContext: false });
+  assert.equal(orbanItem.countyCode, null, 'National political headline in HVG must NOT receive Hajdú-Bihar countyCode');
+  assert.equal(orbanItem.countyName, null, 'National political headline in HVG must NOT receive Hajdú-Bihar countyName');
+  assert.notEqual(orbanItem.territoryLevel, 'county', 'Territory level must NOT be county');
+
+  const varsoItem = detectSettlementMention('Alkotmányos válság Varsóban: újabb feszültség a kormánypártok között', undefined, { implicitCountyContext: false });
+  assert.equal(varsoItem.countyCode, null, 'International headline in HVG must NOT receive Hajdú-Bihar countyCode');
+  assert.equal(varsoItem.countyName, null, 'International headline in HVG must NOT receive Hajdú-Bihar countyName');
+  assert.notEqual(varsoItem.territoryLevel, 'county', 'Territory level must NOT be county');
+
+  const adocsomagItem = detectSettlementMention('Új adócsomagot fogadott el a parlament a tavaszi ülésszakban', undefined, { implicitCountyContext: false });
+  assert.equal(adocsomagItem.countyCode, null, 'Domestic general headline in HVG must NOT receive Hajdú-Bihar countyCode');
+  assert.equal(adocsomagItem.countyName, null, 'Domestic general headline in HVG must NOT receive Hajdú-Bihar countyName');
+  assert.equal(adocsomagItem.territoryLevel, 'country', 'Domestic general headline must be country level');
+
+  // 2. HVG item explicitly naming a Hajdú-Bihar settlement DOES match
+  const debrecenInHvg = detectSettlementMention('Útlezárás Debrecen belvárosában felújítás miatt', undefined, { implicitCountyContext: false });
+  assert.equal(debrecenInHvg.territoryLevel, 'settlement');
+  assert.equal(debrecenInHvg.settlementName, 'Debrecen');
+  assert.equal(debrecenInHvg.countyCode, '09');
+  assert.equal(debrecenInHvg.countyName, 'Hajdú-Bihar');
+
+  // 3. Local portal with implicit county context defaults to county ONLY when uncontradicted
+  const dehirLocal = detectSettlementMention('Új játszótér épül a lakótelepen', undefined, { implicitCountyContext: true });
+  assert.equal(dehirLocal.territoryLevel, 'county');
+  assert.equal(dehirLocal.countyCode, '09');
+  assert.equal(dehirLocal.countyName, 'Hajdú-Bihar');
+
+  // 4. Local portal with foreign contradiction does NOT get county
+  const dehirForeign = detectSettlementMention('Alkotmányos válság Varsóban', undefined, { implicitCountyContext: true });
+  assert.equal(dehirForeign.countyCode, null, 'Foreign headline in local portal must NOT default to county');
+  assert.equal(dehirForeign.countyName, null);
+  assert.notEqual(dehirForeign.territoryLevel, 'county');
+
+  // 5. Local portal with other Hungarian region contradiction does NOT get county
+  const dehirOtherRegion = detectSettlementMention('Baleset az M1-esen Győrnél', undefined, { implicitCountyContext: true });
+  assert.equal(dehirOtherRegion.countyCode, null, 'Headline naming another region must NOT default to county');
+  assert.equal(dehirOtherRegion.countyName, null);
+  assert.notEqual(dehirOtherRegion.territoryLevel, 'county');
+});

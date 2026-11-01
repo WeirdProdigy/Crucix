@@ -46,7 +46,12 @@ export async function verifyAllStreams(options = {}) {
     if (stream.sourceType === 'youtube' && stream.videoId) {
       const check = await checkOEmbed(stream.videoId);
       const isExpectedOk = stream.embedStatus === 'embeddable';
-      const isConsistent = check.ok === isExpectedOk;
+      const actualAuthor = check.data?.author_name || null;
+      const actualTitle = check.data?.title || null;
+      const authorMatch = !stream.provider || !actualAuthor ||
+        actualAuthor.toLowerCase().includes(stream.provider.toLowerCase()) ||
+        stream.provider.toLowerCase().includes(actualAuthor.toLowerCase());
+      const isConsistent = check.ok === isExpectedOk && authorMatch;
       results.push({
         id: stream.id,
         name: stream.name,
@@ -55,11 +60,12 @@ export async function verifyAllStreams(options = {}) {
         status: stream.status,
         httpStatus: check.status,
         isConsistent,
-        title: check.data?.title || null,
-        author: check.data?.author_name || null
+        authorMatch,
+        title: actualTitle,
+        author: actualAuthor
       });
-      const icon = check.ok ? '✔' : '⚠';
-      console.log(`  ${icon} [${stream.id}] videoId=${stream.videoId} -> HTTP ${check.status} (${check.data?.title || 'Unavailable'})`);
+      const icon = isConsistent ? '✔' : '⚠';
+      console.log(`  ${icon} [${stream.id}] videoId=${stream.videoId} -> HTTP ${check.status} | Author: "${actualAuthor || '—'}" | Title: "${actualTitle || 'Unavailable'}"`);
     } else {
       results.push({
         id: stream.id,

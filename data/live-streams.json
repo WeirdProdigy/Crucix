@@ -96,8 +96,8 @@
     "notes": "Hivatalos élő tudományos Föld-megfigyelő közvetítés (ISS). A korábbi 21X5lGlDOfg stream lezárult; a frissített ROboUHfPUrU élő adás ellenőrizve és beágyazható."
   },
   {
-    "id": "earthcam-times-square",
-    "name": "EarthCam: New York – Times Square",
+    "id": "earthcam-snowman-cam",
+    "name": "EarthCam: Snowman Cam (Gaylord, Michigan)",
     "type": "webcam",
     "region": "global",
     "provider": "EarthCam",
@@ -108,8 +108,8 @@
     "status": "verified-live",
     "embedStatus": "embeddable",
     "checkedAt": "2026-11-01",
-    "provenance": "koala73/worldmonitor (AGPL-3.0)",
-    "notes": "Hivatalos turisztikai panorámakamera. A korábbi 4qyZLflp-sI azonosító lejárt; a frissített TPGY7UYzbKw élő közvetítés ellenőrizve és beágyazható."
+    "provenance": "Hivatalos szolgáltatói YouTube közvetítés (EarthCam)",
+    "notes": "Hivatalos turisztikai webkamera az EarthCam közvetítésével (Gaylord, Michigan - Snowman Cam). Az oEmbed cím szerint: Snowman Cam - Animals and Wildlife."
   },
   {
     "id": "debrecen-kossuth-ter-webcam",
@@ -124,7 +124,7 @@
     "embedStatus": "external-only",
     "checkedAt": "2026-11-01",
     "provenance": "Időkép webkamera oldal (idokep.hu/webkamera/dmjvcam)",
-    "notes": "Debrecen MJV Önkormányzata által üzemeltetett panorámakamera az Időkép felületén. Hivatalos külső beágyazási kód nem érhető el (X-Frame-Options: sameorigin); a közvetítés a szolgáltató oldalán élőben nézhető."
+    "notes": "Debrecen MJV Önkormányzata által üzemeltetett panorámakamera az Időkép felületén. Hivatalos külső beágyazási kód nem érhető el (X-Frame-Options: sameorigin); élő mozgókép és friss időbélyeg nem volt automatikusan igazolva, ezért unverified-live státuszra visszaléptetve."
   },
   {
     "id": "debrecen-bekas-to-webcam",
@@ -139,7 +139,7 @@
     "embedStatus": "external-only",
     "checkedAt": "2026-11-01",
     "provenance": "Időkép webkamera oldal (idokep.hu/webkamera/dmjvcam3)",
-    "notes": "Debrecen MJV Önkormányzata által üzemeltetett élő videó stream az Időkép felületén. Hivatalos külső beágyazási kód nem érhető el (X-Frame-Options: sameorigin); a közvetítés a szolgáltató oldalán élőben nézhető."
+    "notes": "Debrecen MJV Önkormányzata által üzemeltetett webkamera az Időkép felületén. Hivatalos külső beágyazási kód nem érhető el (X-Frame-Options: sameorigin); élő mozgókép és friss időbélyeg nem volt automatikusan igazolva, ezért unverified-live státuszra visszaléptetve."
   },
   {
     "id": "debrecen-egyetem-ter-webcam",
@@ -154,7 +154,7 @@
     "embedStatus": "external-only",
     "checkedAt": "2026-11-01",
     "provenance": "Időkép webkamera oldal (idokep.hu/webkamera/deegyetemter)",
-    "notes": "Debreceni Egyetem által üzemeltetett webkamera az Időkép felületén. Hivatalos külső beágyazási kód nem érhető el (X-Frame-Options: sameorigin); a közvetítés a szolgáltató oldalán élőben nézhető."
+    "notes": "Debreceni Egyetem által üzemeltetett webkamera az Időkép felületén. Hivatalos külső beágyazási kód nem érhető el (X-Frame-Options: sameorigin); élő mozgókép és friss időbélyeg nem volt automatikusan igazolva, ezért unverified-live státuszra visszaléptetve."
   },
   {
     "id": "hajduszoboszlo-aeroclub-webcam",
@@ -169,7 +169,7 @@
     "embedStatus": "external-only",
     "checkedAt": "2026-11-01",
     "provenance": "Időkép webkamera oldal (idokep.hu/webkamera/lhho2)",
-    "notes": "Hajdúszoboszlói Aero Club sportegyesület által üzemeltetett repülőtéri webkamera az Időkép felületén. Hivatalos külső beágyazási kód nem érhető el (X-Frame-Options: sameorigin); a közvetítés a szolgáltató oldalán élőben nézhető."
+    "notes": "Hajdúszoboszlói Aero Club sportegyesület által üzemeltetett repülőtéri webkamera az Időkép felületén. Hivatalos külső beágyazási kód nem érhető el (X-Frame-Options: sameorigin); élő mozgókép és friss időbélyeg nem volt automatikusan igazolva, ezért unverified-live státuszra visszaléptetve."
   },
   {
     "id": "hortobagy-puszta-webcam",

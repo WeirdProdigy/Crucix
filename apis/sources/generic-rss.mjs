@@ -502,17 +502,18 @@ export function parseGenericRss(xml, sourceConfig, options = {}) {
       }
     }
 
-    // Territory detection
-    const territory = detectSettlementMention(rawTitle, territoryConfig, {
-      implicitCountyContext: sourceConfig.implicitCountyContext
-    });
-
     // Section & news category
     const section = extractSection(canonicalLink, categories);
     const isPublisherPromo = section === 'kozlemeny' || categories.some(c => /közlemény/i.test(c));
     if (isPublisherPromo) {
       publisherPromoCount++;
     }
+
+    // Territory detection
+    const territory = detectSettlementMention(rawTitle, territoryConfig, {
+      implicitCountyContext: Boolean(sourceConfig.implicitCountyContext),
+      section
+    });
     const newsCategory = classifyNewsCategory(rawTitle, section, territory, sourceConfig.defaultCategory);
 
     // Deterministic GUID hash
