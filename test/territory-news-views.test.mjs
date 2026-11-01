@@ -7,7 +7,12 @@ import {
   getViewNews,
   VIEWS
 } from '../lib/intelligence/views.mjs';
-import { DEFAULT_TERRITORY_CONFIG } from '../lib/intelligence/territory.mjs';
+import {
+  DEFAULT_TERRITORY_CONFIG,
+  createTerritoryConfig,
+  calculateLocalMapBounds,
+  BIHARTORDA_PROFILE
+} from '../lib/intelligence/territory.mjs';
 import { normalizeLiveSources } from '../lib/intelligence/live-sources.mjs';
 import { buildEvents } from '../lib/intelligence/events.mjs';
 
@@ -667,4 +672,45 @@ test('9. Portfolio territorial audit: company names alone (BMW, CATL) do NOT gra
   assert.ok(!countyNews.some(n => n.id === 'portfolio-corp-only'), 'Cégnév (BMW, CATL) önmagában NEM kerülhet a megyei nézetbe');
   assert.ok(nationalNews.some(n => n.id === 'portfolio-corp-only'), 'A területi kapcsolat nélküli Portfolio hír az országos nézetbe kerül');
   assert.ok(countyNews.some(n => n.id === 'portfolio-debrecen-bmw'), 'Debrecen településnévvel bíró Portfolio hír bekerül a megyei nézetbe');
+});
+
+test('10. calculateLocalMapBounds: dynamic center and radius calculation from settlement profile', () => {
+  // Case A: Bihartorda default profile (47.1658, 21.3650, 35 km)
+  const bihartordaBounds = calculateLocalMapBounds(BIHARTORDA_PROFILE, 35);
+  assert.equal(bihartordaBounds.regionKey, 'local');
+  assert.equal(bihartordaBounds.label, 'Bihartorda és térsége');
+  assert.equal(bihartordaBounds.pov.lat, 47.1658);
+  assert.equal(bihartordaBounds.pov.lng, 21.3650);
+  // Verify bounding box symmetry around center
+  const [[minLonA, minLatA], [maxLonA, maxLatA]] = bihartordaBounds.bounds;
+  assert.ok(minLonA < 21.3650 && maxLonA > 21.3650, 'Lon range contains Bihartorda center');
+  assert.ok(minLatA < 47.1658 && maxLatA > 47.1658, 'Lat range contains Bihartorda center');
+  assert.equal(Number(((minLatA + maxLatA) / 2).toFixed(4)), 47.1658, 'Lat range is centered exactly on Bihartorda');
+  assert.equal(Number(((minLonA + maxLonA) / 2).toFixed(4)), 21.3650, 'Lon range is centered exactly on Bihartorda');
+
+  // Case B: Debrecen profile with custom radius (47.5316, 21.6273, 25 km)
+  const debrecenProfile = {
+    id: 'debrecen',
+    name: 'Debrecen',
+    radiusKm: 25,
+    coordinates: { lat: 47.5316, lon: 21.6273 }
+  };
+  const debrecenBounds = calculateLocalMapBounds(debrecenProfile);
+  assert.equal(debrecenBounds.regionKey, 'local');
+  assert.equal(debrecenBounds.label, 'Debrecen és térsége');
+  assert.equal(debrecenBounds.pov.lat, 47.5316);
+  assert.equal(debrecenBounds.pov.lng, 21.6273);
+  const [[minLonB, minLatB], [maxLonB, maxLatB]] = debrecenBounds.bounds;
+  assert.equal(Number(((minLatB + maxLatB) / 2).toFixed(4)), 47.5316, 'Lat range is centered on Debrecen');
+  assert.equal(Number(((minLonB + maxLonB) / 2).toFixed(4)), 21.6273, 'Lon range is centered on Debrecen');
+
+  // Case C: createTerritoryConfig integrates calculated bounds dynamically
+  const debConfig = createTerritoryConfig({ primary: debrecenProfile });
+  assert.equal(debConfig.mapBounds.local.label, 'Debrecen és térsége');
+  assert.equal(debConfig.mapBounds.local.pov.lat, 47.5316);
+  assert.deepEqual(debConfig.mapBounds.local.bounds, debrecenBounds.bounds);
+
+  const defaultCfg = createTerritoryConfig();
+  assert.equal(defaultCfg.mapBounds.local.label, 'Bihartorda és térsége');
+  assert.equal(defaultCfg.mapBounds.local.pov.lat, 47.1658);
 });
