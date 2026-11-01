@@ -34,8 +34,40 @@
 
   const TYPE_LABELS = Object.freeze({
     news: 'Híradó',
-    webcam: 'Kamera'
+    webcam: 'Kamera',
+    directory: 'Katalógus'
   });
+
+  const BACKGROUND_PLAYBACK_PREF_KEY = 'crucix.liveMedia.background.v1';
+
+  function readBackgroundPlaybackPreference() {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        return window.localStorage.getItem(BACKGROUND_PLAYBACK_PREF_KEY) === 'true';
+      }
+    } catch {}
+    return false;
+  }
+
+  function saveBackgroundPlaybackPreference(val) {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(BACKGROUND_PLAYBACK_PREF_KEY, val ? 'true' : 'false');
+      }
+    } catch {}
+  }
+
+  let allowBackgroundPlayback = readBackgroundPlaybackPreference();
+
+  function setAllowBackgroundPlayback(val) {
+    allowBackgroundPlayback = Boolean(val);
+    saveBackgroundPlaybackPreference(allowBackgroundPlayback);
+    notifyChange();
+  }
+
+  function getAllowBackgroundPlayback() {
+    return allowBackgroundPlayback;
+  }
 
   function esc(s) {
     if (s === undefined || s === null) return '';
@@ -48,7 +80,7 @@
   }
 
   // --- State ---
-  let typeFilter = 'all';         // 'all' | 'news' | 'webcam'
+  let typeFilter = 'all';         // 'all' | 'news' | 'webcam' | 'directory'
   let regionFilter = 'all';       // 'all' | 'local' | 'county' | 'national' | 'global'
   let searchQuery = '';           // source name filter
   let viewMode = 'single';        // 'single' | 'grid'
@@ -79,7 +111,7 @@
   }
 
   function setTypeFilter(type) {
-    if (type === 'all' || type === 'news' || type === 'webcam') {
+    if (type === 'all' || type === 'news' || type === 'webcam' || type === 'directory') {
       typeFilter = type;
       notifyChange();
     }
@@ -573,7 +605,8 @@
     const typeButtons = [
       { id: 'all', label: 'Mind' },
       { id: 'news', label: 'Híradók' },
-      { id: 'webcam', label: 'Kamerák' }
+      { id: 'webcam', label: 'Kamerák' },
+      { id: 'directory', label: 'Katalógusok' }
     ].map(b => `
       <button type="button" class="lm-filter-btn${typeFilter === b.id ? ' active' : ''}" onclick="window.CrucixLiveMedia?.setTypeFilter('${b.id}')">
         ${esc(b.label)}
@@ -691,6 +724,10 @@
         </span>
       </div>
       <div class="lm-head-actions">
+        <label class="lm-bg-toggle-wrap" title="Ha be van kapcsolva, a videó lejátszása nem áll le a lap elhagyásakor vagy minimalizálásakor">
+          <input type="checkbox" id="lm-bg-playback-toggle" class="lm-bg-checkbox"${allowBackgroundPlayback ? ' checked' : ''} onchange="window.CrucixLiveMedia?.setAllowBackgroundPlayback(this.checked)" />
+          <span class="lm-bg-label">Háttérben is fusson</span>
+        </label>
         <button type="button" class="lm-btn lm-btn-exit-live" onclick="window.CrucixViewsPanel?.setContentTab('news')" title="Kilépés az Élő nézetből (minden lejátszó leáll)">
           ← Térkép / Hírfolyam
         </button>
@@ -854,6 +891,34 @@
     }
   }
 
+  // --- Global Event Listeners ---
+  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && !allowBackgroundPlayback) {
+        stopAllStreams();
+      }
+    });
+  }
+
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('message', (event) => {
+      if (typeof event.data === 'string' && event.data.includes('infoDelivery') && event.data.includes('onError')) {
+        try {
+          const parsed = JSON.parse(event.data);
+          if (parsed?.event === 'infoDelivery' && parsed?.info?.errorCode !== undefined) {
+            for (const sid of activeStreamIds) {
+              const iframe = document.getElementById(`lm-stage-iframe-${sid}`);
+              if (iframe && iframe.contentWindow === event.source) {
+                markStreamError(sid);
+                break;
+              }
+            }
+          }
+        } catch {}
+      }
+    });
+  }
+
   // --- Export on Window ---
   window.CrucixLiveMedia = Object.freeze({
     panelHtml,
@@ -877,6 +942,8 @@
     stopAllStreams,
     markStreamError,
     retryStream,
+    setAllowBackgroundPlayback,
+    getAllowBackgroundPlayback,
     onChange,
     PRIVACY_NOTICE_TEXT
   });

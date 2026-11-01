@@ -45,6 +45,7 @@ test('1. Registry schema validation: valid entries pass, invalid schemas throw',
 
   // Bad type
   assert.throws(() => validateLiveStreamEntry({ ...validEntry, type: 'podcast' }), /Invalid 'type'/);
+  assert.equal(validateLiveStreamEntry({ ...validEntry, type: 'directory' }), true);
 
   // Bad region
   assert.throws(() => validateLiveStreamEntry({ ...validEntry, region: 'interplanetary' }), /Invalid 'region'/);
@@ -342,6 +343,17 @@ test('5. Frontend LiveMedia component: Click-to-load, single & 2x2 grid concurre
   assert.doesNotThrow(() => LiveMedia.panelHtml({}));
   assert.doesNotThrow(() => LiveMedia.panelHtml({ liveStreams: null }));
   const emptyHtml = LiveMedia.panelHtml({ liveStreams: [] });
+
+  // I. Background playback preference toggle and directory filter
+  assert.equal(LiveMedia.getAllowBackgroundPlayback(), false, 'Background playback is disabled by default');
+  LiveMedia.setAllowBackgroundPlayback(true);
+  assert.equal(LiveMedia.getAllowBackgroundPlayback(), true, 'Background playback toggle turns true');
+  LiveMedia.setAllowBackgroundPlayback(false);
+  assert.equal(LiveMedia.getAllowBackgroundPlayback(), false, 'Background playback toggle resets to false');
+
+  LiveMedia.setTypeFilter('directory');
+  assert.equal(LiveMedia.getTypeFilter(), 'directory', 'Directory type filter can be selected');
+  LiveMedia.setTypeFilter('all');
   assert.ok(emptyHtml.includes('Nincs a kiválasztott szűrőknek megfelelő élő közvetítés'), 'Empty state handled gracefully');
 });
 
@@ -512,4 +524,25 @@ test('9. Institutional operator audit: verified-live webcams must have strictly 
       assert.ok(!s.name.includes(disallowed), `Name must not contain private name or unverified operator '${disallowed}'`);
     }
   }
+});
+
+test('10. Directory stream type: SolarHam, Windy, and Útinform entries in registry', () => {
+  const streams = loadLiveStreams();
+  const directories = streams.filter(s => s.type === 'directory');
+  assert.ok(directories.length >= 3, 'Must have at least 3 directory catalog entries');
+
+  const solarham = directories.find(s => s.id === 'solarham-space-weather');
+  assert.ok(solarham, 'SolarHam must be registered with type=directory');
+  assert.equal(solarham.status, 'page-ok');
+  assert.equal(solarham.embedStatus, 'external-only');
+
+  const windy = directories.find(s => s.id === 'windy-global-webcams');
+  assert.ok(windy, 'Windy must be registered with type=directory');
+  assert.equal(windy.status, 'page-ok');
+  assert.equal(windy.embedStatus, 'external-only');
+
+  const utinform = directories.find(s => s.id === 'utinform-hu-cam-map');
+  assert.ok(utinform, 'Útinform must be registered with type=directory');
+  assert.equal(utinform.status, 'page-ok');
+  assert.equal(utinform.embedStatus, 'external-only');
 });

@@ -279,7 +279,7 @@
   {
     "id": "solarham-space-weather",
     "name": "SolarHam – Space Weather Update",
-    "type": "news",
+    "type": "directory",
     "region": "global",
     "provider": "SolarHam",
     "sourceType": "link-only",
@@ -289,6 +289,36 @@
     "embedStatus": "external-only",
     "checkedAt": "2026-11-01",
     "provenance": "Hivatalos szolgáltatói portál (solarham.com)",
-    "notes": "Amatőr rádiós űridőjárás gyűjtőportál a NOAA SWPC telemetria hivatkozásával. Link-only kártya, szövegkaparás nélkül."
+    "notes": "Amatőr rádiós űridőjárás gyűjtőportál a NOAA SWPC telemetria hivatkozásával. Katalógus/információs oldal, nem egyedi élő videó közvetítés."
+  },
+  {
+    "id": "windy-global-webcams",
+    "name": "Windy – Globális Webkamera és Időjárás Katalógus",
+    "type": "directory",
+    "region": "global",
+    "provider": "Windy.com",
+    "sourceType": "link-only",
+    "url": "https://www.windy.com/-Webcams/webcams",
+    "language": "en",
+    "status": "page-ok",
+    "embedStatus": "external-only",
+    "checkedAt": "2026-11-01",
+    "provenance": "Hivatalos szolgáltatói portál (windy.com/-Webcams/webcams)",
+    "notes": "Globális interaktív időjárási és webkamera-térkép katalógus. Oldal elérhető (page-ok), külső interaktív felület."
+  },
+  {
+    "id": "utinform-hu-cam-map",
+    "name": "Útinform – Magyarországi Közúti Kamera és Forgalomtérkép",
+    "type": "directory",
+    "region": "national",
+    "provider": "Magyar Közút Nonprofit Zrt. / Útinform",
+    "sourceType": "link-only",
+    "url": "https://www.utinform.hu/terkep",
+    "language": "hu",
+    "status": "page-ok",
+    "embedStatus": "external-only",
+    "checkedAt": "2026-11-01",
+    "provenance": "Hivatalos szolgáltatói portál (utinform.hu/terkep)",
+    "notes": "Magyarországi autópálya- és főút-kamerák interaktív térképes katalógusa. Hivatalos szolgáltatói térkép és képarchívum (page-ok)."
   }
 ]

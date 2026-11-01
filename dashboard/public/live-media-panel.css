@@ -522,6 +522,38 @@
   border: 1px solid rgba(100, 240, 200, 0.3);
 }
 
+.lm-type-directory {
+  background: rgba(255, 184, 76, 0.18);
+  color: #ffb84c;
+  border: 1px solid rgba(255, 184, 76, 0.3);
+}
+
+.lm-bg-toggle-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  color: var(--dim, #6a8a82);
+  padding: 4px 8px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 20, 32, 0.5);
+  transition: all 0.15s ease;
+}
+
+.lm-bg-toggle-wrap:hover {
+  border-color: var(--accent, #64f0c8);
+  color: var(--text, #e8f4f0);
+}
+
+.lm-bg-checkbox {
+  cursor: pointer;
+  accent-color: var(--accent, #64f0c8);
+}
+
 .lm-card-region-badge,
 .lm-card-lang-badge,
 .lm-card-status-badge {
