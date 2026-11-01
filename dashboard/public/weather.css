@@ -1,0 +1,341 @@
+/* Crucix Weather & Biometeorology Window (Időjárás és Orvosmeteorológia) */
+
+.weather-panel-root {
+  display: flex;
+  flex-direction: column;
+}
+
+.wp-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+  background: rgba(15, 25, 40, 0.4);
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(40, 60, 85, 0.3);
+}
+
+.wp-region-tabs, .wp-mode-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.wp-region-tabs::-webkit-scrollbar, .wp-mode-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.wp-reg-btn, .wp-mode-btn {
+  background: rgba(25, 38, 55, 0.5);
+  border: 1px solid rgba(50, 75, 105, 0.4);
+  color: var(--dim, #8ba2b5);
+  font-family: var(--mono, monospace);
+  font-size: 9.5px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.wp-reg-btn:hover, .wp-mode-btn:hover {
+  background: rgba(40, 60, 85, 0.6);
+  color: var(--text, #e6f0fa);
+}
+
+.wp-reg-btn.active {
+  background: rgba(68, 204, 255, 0.18);
+  border-color: var(--accent2, #44ccff);
+  color: #fff;
+  font-weight: 600;
+}
+
+.wp-mode-btn.active {
+  background: rgba(100, 240, 200, 0.18);
+  border-color: #64f0c8;
+  color: #fff;
+  font-weight: 600;
+}
+
+.weather-list.scroll-region {
+  max-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 4px;
+}
+
+.weather-list.scroll-region:focus {
+  outline: 1px solid rgba(100, 240, 200, 0.3);
+}
+
+.wp-location-card {
+  background: rgba(14, 22, 35, 0.6);
+  border: 1px solid rgba(35, 55, 80, 0.4);
+  border-radius: 3px;
+  padding: 6px 8px;
+}
+
+.wp-location-card.error {
+  border-color: rgba(255, 95, 99, 0.3);
+}
+
+.wp-loc-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 11px;
+  color: var(--text, #e6f0fa);
+}
+
+.wp-temp {
+  font-family: var(--mono, monospace);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent, #64f0c8);
+}
+
+.wp-loc-sub {
+  font-size: 10px;
+  color: var(--dim, #8ba2b5);
+  margin-top: 1px;
+  display: flex;
+  gap: 6px;
+}
+
+.wp-err-pill {
+  font-size: 9px;
+  font-family: var(--mono, monospace);
+  color: #ff5f63;
+  background: rgba(255, 95, 99, 0.15);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+.wp-metrics-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-top: 5px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(40, 60, 85, 0.25);
+}
+
+.wp-metric-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.wp-ml {
+  font-size: 8.5px;
+  font-family: var(--mono, monospace);
+  color: var(--dim, #8ba2b5);
+}
+
+.wp-mv {
+  font-size: 10.5px;
+  font-family: var(--mono, monospace);
+  font-weight: 600;
+  color: var(--text, #e6f0fa);
+}
+
+.wp-ms {
+  font-size: 7.5px;
+  font-family: var(--mono, monospace);
+  color: #ffb84c;
+}
+
+.wp-forecast-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.wp-forecast-day {
+  background: rgba(10, 18, 30, 0.5);
+  border: 1px solid rgba(35, 55, 80, 0.3);
+  border-radius: 2px;
+  padding: 4px 2px;
+  text-align: center;
+}
+
+.wp-f-date {
+  font-family: var(--mono, monospace);
+  font-size: 9px;
+  color: var(--dim, #8ba2b5);
+}
+
+.wp-f-temp {
+  font-family: var(--mono, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  margin: 2px 0;
+}
+
+.wp-f-max {
+  color: #ffb84c;
+}
+
+.wp-f-min {
+  color: var(--accent2, #44ccff);
+}
+
+.wp-f-desc {
+  font-size: 8.5px;
+  color: var(--text, #e6f0fa);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.wp-f-precip {
+  font-family: var(--mono, monospace);
+  font-size: 8px;
+  color: #64f0c8;
+  margin-top: 2px;
+}
+
+/* Biometeorology styling */
+.wp-biomet-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wp-biomet-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.wp-biomet-badge {
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.wp-biomet-updated {
+  font-family: var(--mono, monospace);
+  font-size: 9px;
+  color: var(--dim, #8ba2b5);
+}
+
+.wp-biomet-tendency {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 0;
+}
+
+.wp-biomet-formula-box {
+  background: rgba(12, 20, 32, 0.6);
+  border: 1px solid rgba(40, 65, 95, 0.35);
+  border-radius: 3px;
+  padding: 6px 8px;
+}
+
+.wp-formula-title {
+  font-size: 9.5px;
+  color: var(--dim, #8ba2b5);
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+
+.wp-formula-math {
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent2, #44ccff);
+  background: rgba(0, 0, 0, 0.3);
+  padding: 2px 6px;
+  border-radius: 2px;
+  display: inline-block;
+  margin-bottom: 4px;
+}
+
+.wp-formula-vals {
+  display: flex;
+  gap: 12px;
+  font-size: 10px;
+  font-family: var(--mono, monospace);
+  color: var(--text, #e6f0fa);
+  margin-bottom: 4px;
+}
+
+.wp-formula-disclaimer {
+  font-size: 9px;
+  color: #ffb84c;
+  background: rgba(255, 184, 76, 0.08);
+  border: 1px solid rgba(255, 184, 76, 0.2);
+  padding: 3px 6px;
+  border-radius: 2px;
+  line-height: 1.3;
+}
+
+.wp-official-box {
+  background: rgba(12, 22, 35, 0.5);
+  border: 1px solid rgba(68, 204, 255, 0.2);
+  border-radius: 3px;
+  padding: 6px 8px;
+}
+
+.wp-official-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--accent2, #44ccff);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.wp-official-source {
+  font-family: var(--mono, monospace);
+  font-size: 8.5px;
+  color: var(--dim, #8ba2b5);
+}
+
+.wp-official-body {
+  font-size: 10.5px;
+  color: var(--text, #e6f0fa);
+  line-height: 1.35;
+  margin-bottom: 6px;
+}
+
+.wp-official-link {
+  display: flex;
+}
+
+.wp-link-btn {
+  display: inline-block;
+  padding: 3px 8px;
+  font-size: 9.5px;
+  font-family: var(--mono, monospace);
+  color: var(--accent2, #44ccff);
+  background: rgba(68, 204, 255, 0.1);
+  border: 1px solid rgba(68, 204, 255, 0.3);
+  border-radius: 3px;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.wp-link-btn:hover {
+  background: rgba(68, 204, 255, 0.25);
+  color: #fff;
+}
+
+.wp-footer-attribution {
+  font-family: var(--mono, monospace);
+  font-size: 8.5px;
+  color: var(--dim, #8ba2b5);
+  opacity: 0.7;
+  padding-top: 6px;
+  border-top: 1px solid rgba(40, 60, 85, 0.2);
+  margin-top: 6px;
+}
