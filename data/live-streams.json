@@ -289,7 +289,7 @@
     "embedStatus": "external-only",
     "checkedAt": "2026-11-01",
     "provenance": "Hivatalos szolgáltatói portál (solarham.com)",
-    "notes": "Amatőr rádiós űridőjárás gyűjtőportál a NOAA SWPC telemetria hivatkozásával. Katalógus/információs oldal, nem egyedi élő videó közvetítés."
+    "notes": "Amatőr rádiós űridőjárás gyűjtőportál a NOAA SWPC telemetria hivatkozásával. Link-only kártya és katalógus/információs oldal, szövegkaparás nélkül."
   },
   {
     "id": "windy-global-webcams",
