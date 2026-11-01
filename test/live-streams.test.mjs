@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, unlinkSync, readdirSync, statSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import express from 'express';
@@ -69,6 +70,12 @@ test('1. Registry schema validation: valid entries pass, invalid schemas throw',
 
   // Bad embedStatus
   assert.throws(() => validateLiveStreamEntry({ ...validEntry, embedStatus: 'scraped-hls' }), /Invalid 'embedStatus'/);
+
+  // Bad embedUrl
+  assert.throws(() => validateLiveStreamEntry({ ...validEntry, embedUrl: 'http://embed.windy.com/embed.html' }), /Invalid 'embedUrl'/);
+  assert.throws(() => validateLiveStreamEntry({ ...validEntry, embedUrl: 'https://evil.com/embed.html' }), /Invalid 'embedUrl'/);
+  assert.throws(() => validateLiveStreamEntry({ ...validEntry, embedUrl: 12345 }), /Invalid 'embedUrl'/);
+  assert.equal(validateLiveStreamEntry({ ...validEntry, embedUrl: 'https://embed.windy.com/embed.html?type=map' }), true);
 });
 
 test('2. Registry file loading: parses repository registry and detects duplicates', () => {
@@ -370,9 +377,15 @@ test('6. HTTP Security: Content-Security-Policy header permits youtube-nocookie 
   assert.equal(res.status, 200);
   const csp = res.headers.get('content-security-policy');
   assert.ok(csp, 'Content-Security-Policy header must be present');
-  assert.ok(csp.includes("frame-src 'self' https://www.youtube-nocookie.com;"), 'CSP must allow youtube-nocookie frame-src');
+  assert.ok(csp.includes("frame-src 'self' https://www.youtube-nocookie.com https://embed.windy.com;"), 'CSP must allow youtube-nocookie and embed.windy.com frame-src');
   assert.ok(csp.includes("img-src 'self' data: https://cam.idokep.hu https://odp.met.hu;"), 'CSP must allow cam.idokep.hu and odp.met.hu img-src');
   assert.ok(!csp.includes('*'), 'CSP must strictly disallow wildcard * origins');
+
+  // Exact frame-src match: frame-src contains exactly the allowed three sources
+  const frameSrcMatch = csp.match(/frame-src\s+([^;]+);/);
+  assert.ok(frameSrcMatch, 'frame-src directive must be present');
+  const frameSources = frameSrcMatch[1].trim().split(/\s+/);
+  assert.deepEqual(frameSources.sort(), ["'self'", "https://embed.windy.com", "https://www.youtube-nocookie.com"].sort(), 'frame-src must contain exactly the three allowed sources');
 });
 
 test('7. Registry schema validation: channelId, provenance, embedStatus, and unverified status handling', () => {
@@ -481,7 +494,7 @@ test('8. Dashboard iframe audit: proof that frame-src permits all dashboard ifra
   // HTTP Security CSP header explicitly allows 'self' and https://www.youtube-nocookie.com
   const httpSecCode = readFileSync(new URL('lib/http-security.mjs', root), 'utf8');
   assert.ok(
-    httpSecCode.includes("'Content-Security-Policy': \"frame-src 'self' https://www.youtube-nocookie.com; img-src 'self' data: https://cam.idokep.hu https://odp.met.hu;\""),
+    httpSecCode.includes("'Content-Security-Policy': \"frame-src 'self' https://www.youtube-nocookie.com https://embed.windy.com; img-src 'self' data: https://cam.idokep.hu https://odp.met.hu;\""),
     'CSP frame-src and img-src rules explicitly whitelisted'
   );
 });
@@ -789,4 +802,166 @@ test('11. Browser-side camera display: schema validation, synthetic click-to-loa
   assert.ok(readmeMd.includes('192.168.1.81:3117'), 'README must document private LAN environment');
   assert.ok(readmeMd.includes('Loopback / LAN Guardrail'), 'README must document LAN guardrail');
   assert.ok(readmeMd.includes('CRUCIX_PRIVATE_HOSTS'), 'README must document CRUCIX_PRIVATE_HOSTS');
+});
+
+test('12. Windy embed widget: schema, click-to-load lifecycle, private host guardrail, and zero server-side requests', async () => {
+  const streams = loadLiveStreams();
+  const windyRadar = streams.find(s => s.id === 'windy-radar-embed');
+  assert.ok(windyRadar, 'windy-radar-embed must be present in data/live-streams.json');
+  assert.equal(windyRadar.provider, 'Windy.com');
+  assert.equal(windyRadar.attribution, 'Forrás: Windy.com');
+  assert.ok(windyRadar.embedUrl.startsWith('https://embed.windy.com/'), 'embedUrl must start with https://embed.windy.com/');
+  assert.ok(windyRadar.embedUrl.includes('lat=47.214') && windyRadar.embedUrl.includes('lon=21.353'), 'embedUrl must target lat=47.214, lon=21.353 (Berettyóújfalu / Bihartorda)');
+  assert.ok(windyRadar.embedUrl.includes('overlay=radar'), 'embedUrl must set overlay=radar');
+  assert.ok(windyRadar.url.includes('windy.com'), 'external url must link to windy.com coordinate view');
+
+  // 1. Schema tests: only embed.windy.com URL accepted, http:// and foreign domain rejected
+  assert.throws(() => validateLiveStreamEntry({ ...windyRadar, embedUrl: 'http://embed.windy.com/embed.html' }), /Invalid 'embedUrl'/);
+  assert.throws(() => validateLiveStreamEntry({ ...windyRadar, embedUrl: 'https://other-domain.com/embed.html' }), /Invalid 'embedUrl'/);
+  assert.throws(() => validateLiveStreamEntry({ ...windyRadar, embedUrl: 'https://windy.com/embed' }), /Invalid 'embedUrl'/);
+
+  // 2. Component click-to-load test: default 0 iframes, click -> 1 iframe, close -> 0 iframes
+  const root = new URL('../', import.meta.url);
+  const jsCode = readFileSync(new URL('dashboard/public/live-media-panel.js', root), 'utf8');
+
+  // Construct fake DOM environment
+  const domElements = new Map();
+  function makeElement(tag, id = null) {
+    const el = {
+      tagName: tag.toUpperCase(),
+      id: id || '',
+      attributes: new Map(),
+      children: [],
+      src: '',
+      setAttribute(k, v) { this.attributes.set(k, v); if (k === 'src') this.src = v; },
+      getAttribute(k) { return this.attributes.get(k); },
+      removeAttribute(k) { this.attributes.delete(k); if (k === 'src') this.src = ''; },
+      appendChild(child) { this.children.push(child); },
+      removeChild(child) {
+        const idx = this.children.indexOf(child);
+        if (idx !== -1) this.children.splice(idx, 1);
+      },
+      remove() {
+        if (this.id) domElements.delete(this.id);
+        this.src = '';
+      }
+    };
+    if (id) domElements.set(id, el);
+    return el;
+  }
+
+  const fakeDocument = {
+    activeElement: null,
+    getElementById(id) { return domElements.get(id) || null; },
+    querySelector() { return null; },
+    querySelectorAll() { return []; },
+    createElement(tag) { return makeElement(tag); },
+    addEventListener() {}
+  };
+
+  const fakeWindow = {
+    location: { hostname: '192.168.1.81' },
+    __CRUCIX_DATA__: { liveStreams: [windyRadar] },
+    localStorage: { getItem() { return null; }, setItem() {} }
+  };
+
+  const fn = new Function('window', 'document', jsCode);
+  fn(fakeWindow, fakeDocument);
+
+  const lm = fakeWindow.CrucixLiveMedia;
+  assert.ok(lm, 'CrucixLiveMedia component must be mounted on window');
+
+  // Initial state: 0 iframes, not active
+  assert.equal(lm.isEmbedActive('windy-radar-embed'), false, 'Embed widget must be inactive initially');
+  const initialCard = lm.renderStreamCard(windyRadar);
+  assert.ok(!initialCard.includes('<iframe'), 'Initial render must contain 0 iframes (Click-to-Load)');
+  assert.ok(initialCard.includes('🗺 Windy radar betöltése'), 'Initial render must display load button');
+  assert.ok(initialCard.includes('A betöltés kapcsolatot létesít a Windy.com szervereivel'), 'Must show privacy notice before load');
+
+  // Click / loadEmbed -> exactly 1 iframe created
+  const loaded = lm.loadEmbed('windy-radar-embed');
+  assert.equal(loaded, true, 'loadEmbed must succeed on private host');
+  assert.equal(lm.isEmbedActive('windy-radar-embed'), true, 'Widget must be active after loadEmbed');
+
+  const activeCard = lm.renderStreamCard(windyRadar);
+  assert.ok(activeCard.includes('<iframe'), 'Active render must contain iframe');
+  assert.ok(activeCard.includes('id="lm-embed-frame-windy-radar-embed"'), 'iframe must have id');
+  assert.ok(activeCard.includes('sandbox="allow-scripts allow-same-origin allow-popups"'), 'iframe must specify strict minimal sandbox');
+  assert.ok(activeCard.includes('referrerpolicy="no-referrer"'), 'iframe must have no-referrer');
+  assert.ok(activeCard.includes('loading="lazy"'), 'iframe must have loading="lazy"');
+  assert.ok(activeCard.includes('Nem hivatalos előrejelzés; hivatalos forrás: HungaroMet'), 'Must display required disclaimer');
+  assert.ok(activeCard.includes('✕ Bezárás'), 'Must display close button');
+
+  // Register synthetic iframe element in fakeDocument to simulate DOM mount
+  const syntheticIframe = makeElement('iframe', 'lm-embed-frame-windy-radar-embed');
+  syntheticIframe.src = windyRadar.embedUrl;
+
+  // Click close / unloadEmbed -> iframe removed, 0 iframes
+  lm.unloadEmbed('windy-radar-embed');
+  assert.equal(lm.isEmbedActive('windy-radar-embed'), false, 'Widget must be inactive after unloadEmbed');
+  assert.ok(syntheticIframe.src === 'about:blank' || syntheticIframe.src === '', 'iframe src must be cleared on unload');
+  assert.equal(domElements.has('lm-embed-frame-windy-radar-embed'), false, 'iframe element must be removed on unload');
+
+  const unloadedCard = lm.renderStreamCard(windyRadar);
+  assert.ok(!unloadedCard.includes('<iframe'), 'Card after close must contain 0 iframes');
+  assert.ok(unloadedCard.includes('🗺 Windy radar betöltése'), 'Load button must return after close');
+
+  // 3. Non-private host guardrail test: button absent and loadEmbed is no-op
+  const publicWindow = {
+    location: { hostname: 'public-crucix.example.com' },
+    __CRUCIX_DATA__: { liveStreams: [windyRadar] },
+    localStorage: { getItem() { return null; }, setItem() {} }
+  };
+  fn(publicWindow, fakeDocument);
+  const publicLm = publicWindow.CrucixLiveMedia;
+
+  const publicCard = publicLm.renderStreamCard(windyRadar);
+  assert.ok(!publicCard.includes('🗺 Windy radar betöltése'), 'Load button must be hidden on non-private hosts');
+  assert.ok(!publicCard.includes('<iframe'), '0 iframes on non-private hosts');
+  assert.ok(publicCard.includes('Megnyitás a szolgáltató oldalán ↗'), 'External link must be available on non-private hosts');
+
+  const publicLoadResult = publicLm.loadEmbed('windy-radar-embed');
+  assert.equal(publicLoadResult, false, 'loadEmbed must be a no-op returning false on non-private hosts');
+  assert.equal(publicLm.isEmbedActive('windy-radar-embed'), false, 'Widget must remain inactive on non-private hosts');
+
+  // 4. Server-side static audit: apis/, lib/, server.mjs must contain zero requests to Windy
+  const serverMjs = readFileSync(new URL('server.mjs', root), 'utf8');
+  assert.ok(!serverMjs.includes('windy.com'), 'server.mjs must contain zero references to windy.com');
+
+  const apisDir = fileURLToPath(new URL('apis', root));
+  const apiFiles = readdirSync(apisDir);
+  for (const file of apiFiles) {
+    if (file.endsWith('.mjs') || file.endsWith('.js')) {
+      const code = readFileSync(join(apisDir, file), 'utf8');
+      assert.ok(!code.includes('windy.com'), `apis/${file} must contain zero references to windy.com`);
+    }
+  }
+
+  const libDir = fileURLToPath(new URL('lib', root));
+  function scanDir(dir) {
+    for (const f of readdirSync(dir)) {
+      const p = join(dir, f);
+      if (statSync(p).isDirectory()) {
+        scanDir(p);
+      } else if (f.endsWith('.mjs') || f.endsWith('.js')) {
+        const code = readFileSync(p, 'utf8');
+        // http-security.mjs contains CSP frame-src whitelist, and live-streams.mjs contains embedUrl schema check
+        if (f !== 'http-security.mjs' && f !== 'live-streams.mjs') {
+          assert.ok(!code.includes('windy.com'), `lib/${f} must contain zero references to windy.com`);
+        }
+      }
+    }
+  }
+  scanDir(libDir);
+
+  // 5. README documentation audit for Windy
+  const readme = readFileSync(new URL('README.md', root), 'utf8');
+  assert.ok(readme.includes('Windy Embed Widget'), 'README must have Windy Embed Widget section');
+  assert.ok(readme.includes('Windyty, SE'), 'README must mention provider Windyty, SE');
+  assert.ok(readme.includes('2023. szeptember 1'), 'README must record effective date 2023. szeptember 1');
+  assert.ok(readme.includes('Embeddable widgets are intended for media use and are available at windy.com/widgets'), 'README must quote embed widget terms verbatim');
+  assert.ok(readme.includes('Free Services are intended to be used by private persons only'), 'README must quote private use terms verbatim');
+  assert.ok(readme.includes('Map Forecast API') && readme.includes('Webcams API'), 'README must document APIs not in use');
+  assert.ok(readme.includes('https://embed.windy.com'), 'README must record CSP frame-src change');
+  assert.ok(readme.includes('Nem hivatalos előrejelzés; hivatalos forrás: HungaroMet'), 'README must document non-official forecast disclaimer');
 });

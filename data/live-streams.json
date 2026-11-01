@@ -312,5 +312,22 @@
     "checkedAt": "2026-11-01",
     "provenance": "Hivatalos szolgáltatói portál (utinform.hu/terkep)",
     "notes": "Magyarországi autópálya- és főút-kamerák interaktív térképes katalógusa. Hivatalos szolgáltatói térkép és képarchívum (page-ok)."
+  },
+  {
+    "id": "windy-radar-embed",
+    "name": "Windy radar (Berettyóújfalu / Bihartorda)",
+    "type": "directory",
+    "region": "county",
+    "provider": "Windy.com",
+    "sourceType": "link-only",
+    "url": "https://www.windy.com/?radar,surface,47.214,21.353,8",
+    "embedUrl": "https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=default&metricTemp=default&metricWind=default&zoom=8&overlay=radar&product=radar&level=surface&lat=47.214&lon=21.353",
+    "attribution": "Forrás: Windy.com",
+    "language": "hu",
+    "status": "page-ok",
+    "embedStatus": "external-only",
+    "checkedAt": "2026-11-01",
+    "provenance": "Hivatalos embed modul (embed.windy.com)",
+    "notes": "Windy hivatalos interaktív időjárási radar embed widget (Berettyóújfalu / Bihartorda). Kattintásra induló böngészőoldali iframe privát LAN-on, szerveroldali tárolás és proxyzás nélkül."
   }
 ]

@@ -75,7 +75,7 @@ test('2. startQaServer spawns isolated server, verifies sweeps-disabled confirma
   const liveJson = await liveRes.json();
   assert.ok(Array.isArray(liveJson.liveStreams));
   assert.ok(liveJson.liveStreams.length >= 10);
-  assert.ok(liveRes.headers.get('content-security-policy').includes("frame-src 'self' https://www.youtube-nocookie.com;"));
+  assert.ok(liveRes.headers.get('content-security-policy').includes("frame-src 'self' https://www.youtube-nocookie.com https://embed.windy.com;"));
 
   // Stop specifically by PID
   const exitCode = await handle.stop();

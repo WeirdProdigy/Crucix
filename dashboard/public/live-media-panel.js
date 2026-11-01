@@ -39,6 +39,24 @@
  *      IPv6 link-local fe80::/10, valamint az opcionális CRUCIX_PRIVATE_HOSTS lista) érhető el; egyéb hosztnév
  *      esetén a felület rejtve tartja a kamerákat és csak külső szolgáltatói linket jelenít meg a magáncélú
  *      használat védelmében.
+ * 7. Windy Embed Widget (Időjárásradar) és használati feltételek (Windyty, SE):
+ *    - Hivatalos forrás: Windyty, SE (Praha, Csehország) – General Terms of Use of Windy Services
+ *      (Hatályos: 2020. december 17., legutóbbi frissítés: 2023. szeptember 1.).
+ *    - „Windy and Webcam embeddable widget” rendelkezés: „Embeddable widgets are intended for media use and are
+ *      available at windy.com/widgets and via the webcam detail and Share button. The Windy logo must be present
+ *      and clickable (leading to the Windy Website), and they are not allowed to be used by weather apps and other
+ *      commercial websites.”
+ *    - „Free and Paid Services” rendelkezés: „Free Services are intended to be used by private persons only. All other
+ *      institutions are demanded to use the Paid Services.”
+ *    - Megfelelés a Crucixban: Privát magánszemély személyes otthoni felülete zárt LAN környezetben (192.168.1.81:3117);
+ *      nem nyilvános és nem kereskedelmi időjárási app. Kizárólag a hivatalos embed.windy.com generált iframe-et használja,
+ *      API-kulcsos szolgáltatás (Map Forecast API, Webcams API) nincs használatban. A Windy logó és forráslink megmarad és
+ *      kattintható.
+ *    - Click-to-Load elv: Alapállapotban 0 iframe és 0 hálózati kérés. Az iframe kizárólag a „🗺 Windy radar betöltése”
+ *      gombra kattintva jön létre a böngésző memóriájában.
+ *    - Bezárás gomb: Teljes leállítás és iframe-eltávolítás src nélkül. Lapelhagyáskor nem indul újratöltés.
+ *    - Hálózati védelmi kapu: Nem privát hoszton a betöltő gomb rejtett és a betöltés no-op; csak a külső link látható.
+ *    - Vizuális kiegészítő disclaimer: „Nem hivatalos előrejelzés; hivatalos forrás: HungaroMet”.
  */
 
 (function (window, document) {
@@ -49,6 +67,8 @@
   const CAMERA_PRIVACY_NOTICE_TEXT = 'A kép betöltése kapcsolatot létesít az Időképpel; a Crucix nem tárolja.';
   const CAMERA_REFRESH_INTERVAL_MS = 60000;
   const CAMERA_ERROR_BACKOFF_MS = 300000;
+  const WINDY_PRIVACY_NOTICE_TEXT = 'A betöltés kapcsolatot létesít a Windy.com szervereivel, és a Windy a böngésző helyi tárolóját használhatja; a Crucix nem tárolja az adatot.';
+  const WINDY_DISCLAIMER_TEXT = 'Nem hivatalos előrejelzés; hivatalos forrás: HungaroMet';
 
   const REGION_LABELS = Object.freeze({
     local: 'Helyi',
@@ -118,6 +138,7 @@
   let activeCameraIds = new Set();
   let cameraErrorStates = new Map();
   let cameraTimers = new Map();
+  let activeEmbedIds = new Set();
 
   function clearCameraTimer(streamId) {
     if (cameraTimers.has(streamId)) {
@@ -504,7 +525,42 @@
     }
     clearAllCameraTimers();
     activeCameraIds.clear();
+    for (const embedId of activeEmbedIds) {
+      const frame = document.getElementById(`lm-embed-frame-${embedId}`);
+      if (frame) {
+        try { frame.src = 'about:blank'; } catch {}
+        try { frame.remove(); } catch {}
+      }
+    }
+    activeEmbedIds.clear();
     notifyChange();
+  }
+
+  function loadEmbed(streamId) {
+    if (!isPrivateOrLocalHost()) return false;
+    if (typeof streamId !== 'string' || !streamId.trim()) return false;
+    const rawStreams = resolveRawStreams();
+    const stream = rawStreams.find(s => s.id === streamId);
+    if (!stream || !stream.embedUrl) return false;
+    activeEmbedIds.add(streamId);
+    notifyChange();
+    return true;
+  }
+
+  function unloadEmbed(streamId) {
+    if (activeEmbedIds.has(streamId)) {
+      const frame = document.getElementById(`lm-embed-frame-${streamId}`);
+      if (frame) {
+        try { frame.src = 'about:blank'; } catch {}
+        try { frame.remove(); } catch {}
+      }
+      activeEmbedIds.delete(streamId);
+      notifyChange();
+    }
+  }
+
+  function isEmbedActive(streamId) {
+    return activeEmbedIds.has(streamId);
   }
 
   function loadCamera(streamId) {
@@ -774,9 +830,60 @@
       const hasImage = Boolean(stream.imageUrl) && isPrivateHost;
       const isCameraActive = activeCameraIds.has(stream.id);
       const isCameraError = cameraErrorStates.has(stream.id);
+      const isEmbedActive = activeEmbedIds.has(stream.id);
 
       let externalBodyHtml = '';
-      if (hasImage) {
+      if (stream.embedUrl) {
+        if (isPrivateHost) {
+          if (isEmbedActive) {
+            externalBodyHtml = `
+              <div class="lm-embed-view-wrap">
+                <iframe
+                  id="lm-embed-frame-${esc(stream.id)}"
+                  class="lm-embed-frame"
+                  src="${esc(stream.embedUrl)}"
+                  title="${esc(stream.name)}"
+                  loading="lazy"
+                  referrerpolicy="no-referrer"
+                  sandbox="allow-scripts allow-same-origin allow-popups">
+                </iframe>
+                <div class="lm-embed-meta-bar">
+                  <span class="lm-embed-disclaimer">${esc(WINDY_DISCLAIMER_TEXT)}</span>
+                  <button type="button" class="lm-btn-embed-close" title="Radar bezárása" onclick="window.CrucixLiveMedia?.unloadEmbed('${esc(stream.id)}')">✕ Bezárás</button>
+                </div>
+              </div>
+              <div class="lm-embed-attribution">
+                ${esc(stream.attribution || 'Forrás: Windy.com')} — <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-link-external">Megnyitás a forráson ↗</a>
+              </div>
+            `;
+          } else {
+            externalBodyHtml = `
+              <div class="lm-embed-privacy-box">
+                <span class="lm-embed-privacy-text">${esc(WINDY_PRIVACY_NOTICE_TEXT)}</span>
+              </div>
+              <div class="lm-external-actions">
+                <button type="button" class="lm-btn lm-btn-load-embed" onclick="window.CrucixLiveMedia?.loadEmbed('${esc(stream.id)}')">
+                  🗺 Windy radar betöltése
+                </button>
+                <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">
+                  Megnyitás a szolgáltató oldalán ↗
+                </a>
+              </div>
+            `;
+          }
+        } else {
+          externalBodyHtml = `
+            <div class="lm-embed-restricted-box">
+              <span class="lm-embed-restricted-text">ℹ A közvetlen radar widget kizárólag privát helyi hálózatról (LAN / loopback) tölthető be (magáncélú felhasználás védelme).</span>
+            </div>
+            <div class="lm-external-actions">
+              <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">
+                Megnyitás a szolgáltató oldalán ↗
+              </a>
+            </div>
+          `;
+        }
+      } else if (hasImage) {
         if (isCameraError) {
           externalBodyHtml = `
             <div class="lm-camera-fallback-box" role="alert">
@@ -840,7 +947,7 @@
       }
 
       return `
-        <article class="lm-card lm-card-external${isCameraActive ? ' camera-active' : ''}${isCameraError ? ' camera-error' : ''}" id="lm-card-${esc(stream.id)}" data-stream-id="${esc(stream.id)}" data-embed-status="external-only">
+        <article class="lm-card lm-card-external${isCameraActive ? ' camera-active' : ''}${isCameraError ? ' camera-error' : ''}${isEmbedActive ? ' embed-active' : ''}" id="lm-card-${esc(stream.id)}" data-stream-id="${esc(stream.id)}" data-embed-status="external-only">
           <div class="lm-card-head">
             <div class="lm-card-title-row">
               <span class="lm-card-type-badge lm-type-${esc(stream.type)}">${esc(typeLabel)}</span>
@@ -1328,12 +1435,17 @@
     retryCamera,
     isCameraActive,
     getCameraError,
+    loadEmbed,
+    unloadEmbed,
+    isEmbedActive,
     isPrivateOrLocalHost,
     setAllowBackgroundPlayback,
     getAllowBackgroundPlayback,
     onChange,
     PRIVACY_NOTICE_TEXT,
-    CAMERA_PRIVACY_NOTICE_TEXT
+    CAMERA_PRIVACY_NOTICE_TEXT,
+    WINDY_PRIVACY_NOTICE_TEXT,
+    WINDY_DISCLAIMER_TEXT
   });
 
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});
