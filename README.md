@@ -561,6 +561,49 @@ Both are free and key-less, every request is bounded to 10 s and 2 MiB, and the 
 | VIEWS-Forecast | Predicted probability of at least 25 battle-related deaths in state-based armed conflict, and predicted fatalities, per country for the three months after the newest run's data month; a forecast, not observed events | `api.viewsforecasting.org` (run list, then `/<run>/cm/sb`) | Run list 24 h; data per run id; last good payload 45 days, shown as stale | "VIEWS (Uppsala University and PRIO)" and the run id; the provider states no data licence (its code repositories are CC BY-NC) |
 | INFORM-Risk | INFORM Risk Index, 0-10 per country (higher is worse), newest published release; a yearly baseline | `drmkc.jrc.ec.europa.eu/inform-index/API/InformAPI` (release list, then scores) | Release list 24 h; scores 7 days; last good result 45 days, shown as stale | "INFORM Risk Index, European Commission Joint Research Centre (DRMKC) / INFORM partnership, <release>"; the provider says only "INFORM is open-source" |
 
+### Tier 9: Space Weather & Weather Intelligence (2)
+
+Strictly opt-in modules disabled by default, protecting external API quotas and network resources.
+
+| Source | What it tracks | Endpoint | Cache | Attribution and licence |
+| --- | --- | --- | --- | --- |
+| GFZ-Potsdam | Planetary Kp index nowcast + forecast, Hp30 and Hp60 high-resolution geomagnetic activity indices | `kp.gfz.de/app/json/` | 30 min | GFZ German Research Centre for Geosciences (CC BY 4.0) |
+| Weather-Service | 14 territorial stations across local, county, national and Central European scopes; biometeorological change indicator; HungaroMet ODP text bulletin | `api.open-meteo.com/v1/dwd-icon`, `odp.met.hu` | 30 min | Open-Meteo.com (CC BY 4.0) · HungaroMet Nonprofit Zrt. (Meteorológiai Adattár) |
+
+#### Space Weather Scales and Thresholds
+- **Opt-in variable:** `CRUCIX_ENABLE_GFZ=true` (default: `false`).
+- **NOAA Scales (G, R, S) Hungarian naming:**
+  - 1: Kisebb
+  - 2: Mérsékelt
+  - 3: Erős
+  - 4: Súlyos
+  - 5: Szélsőséges
+- **Warning vs Danger thresholds:**
+  - Level 3 (*Erős*, Kp=7) is a dashboard watch-level status (`severity: 'moderate'`); the red `VESZÉLYES` badge is strictly withheld.
+  - Level 4+ (*Súlyos* / *Szélsőséges*, Kp >= 8) triggers the red `VESZÉLYES AKTIVITÁS` pill.
+- **Configurable alert dispatch separation:**
+  - Dashboard: G3, R3, S2 (`severity: 'moderate'`, rendered in UI).
+  - Telegram notifications: G4, R4, S3 (`severity: 'high'`), configurable via `CRUCIX_SWPC_NOTIFY_MIN=G4,R4,S3`.
+- **Schumann geophysics link-card:** Grounded strictly in geophysics (7.83 Hz fundamental frequency, harmonics at 14.3, 20.8, 27.3, 33.8 Hz) linking directly to official Tomsk observing portals (`sosrff.tsu.ru`, `sos70.ru`) with zero pseudoscientific medical or health claims.
+
+#### Weather & Transparent Biometeorological Model
+- **Opt-in variable:** `CRUCIX_ENABLE_WEATHER=true` (default: `false`).
+- **Territorial coverage (14 stations):**
+  - *Helyi:* Bihartorda, Debrecen
+  - *Hajdú-Bihar:* Hajdúszoboszló, Berettyóújfalu
+  - *Magyarország:* Budapest, Szeged, Pécs, Győr, Miskolc
+  - *Közép-Európa:* Bécs, Pozsony, Prága, Varsó, Zágráb
+- **Quota & Caching:** Open-Meteo free non-commercial tier allows up to 10,000 calls/day. With Crucix's 30-minute in-memory cache TTL, 14 stations consume 672 calls/day (6.72% of daily quota).
+- **Transparent Biometeorological Formula (24-hour baseline):**
+  $\text{Score} = \frac{|\Delta P|}{3.0} + \frac{|\Delta T|}{2.0}$
+  where $\Delta P$ is the 24-hour surface pressure change (hPa) and $\Delta T$ is the 24-hour 2m temperature change (°C).
+- **Thresholds & Neutral Terminology (non-medical):**
+  - $\text{Score} < 1.8$: *csekély légköri változás* (zöld, alacsony terhelés)
+  - $1.8 \le \text{Score} < 3.5$: *mérsékelt légköri változás* (sárga, melegedési vagy hűlési tendencia)
+  - $\text{Score} \ge 3.5$: *jelentős légköri változás* (piros, kifejezett légnyomás- és hőmérséklet-ingadozás)
+- **Disclaimer & Attribution:** Explicitly labeled *„Modellszámítás, nem orvosi tanács”* with direct link to HungaroMet (`https://www.met.hu/idojaras/orvosmeteorologia/`).
+- **HungaroMet ODP Radar Reflectivity:** Composite 2D reflectivity PNG maps (`https://odp.met.hu/weather/radar/composite/png/refl2D/`) and MSG satellite images can be embedded on demand with mandatory attribution: *„Adatbázis: Meteorológiai Adattár, HungaroMet Nonprofit Zrt.”*.
+
 ## npm Scripts
 
 | Script | Command | Description |
