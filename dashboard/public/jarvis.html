@@ -1105,7 +1105,9 @@ function buildRiskGaugesPanel(){
       <div class="econ-row"><span class="elabel">${t('metrics.joblessClaims','Jobless Claims')}</span><span class="eval">${claims?.value?.toLocaleString()||'--'}</span></div>
       <div class="econ-row"><span class="elabel">${t('metrics.mortgage30y','30Y Mortgage')}</span><span class="eval">${mort?.value||'--'}%</span></div>
       <div class="econ-row"><span class="elabel">${t('metrics.m2Supply','M2 Supply')}</span><span class="eval">${(m2?.value/1000)?.toFixed(1)||'--'}T</span></div>
-      <div class="econ-row"><span class="elabel">${t('metrics.natDebt','Nat. Debt')}</span><span class="eval">${Number.isFinite(parseFloat(D.treasury.totalDebt))?'`;
+      <div class="econ-row"><span class="elabel">${t('metrics.natDebt','Nat. Debt')}</span><span class="eval">${Number.isFinite(parseFloat(D.treasury.totalDebt))?'$'+(parseFloat(D.treasury.totalDebt)/1e12).toFixed(2)+'T':'--'}</span></div>
+    </div>
+  </div>`;
 }
 
 function buildSpaceWatchPanel(){
