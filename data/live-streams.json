@@ -4,7 +4,7 @@
     "name": "DW News (English)",
     "type": "news",
     "region": "global",
-    "provider": "Deutsche Welle",
+    "provider": "DW News",
     "sourceType": "youtube",
     "videoId": "LuKwFajn37U",
     "channelId": "UCknLrEdhRCp1WdBgk977Ntw",
@@ -20,7 +20,7 @@
     "name": "France 24 (English)",
     "type": "news",
     "region": "global",
-    "provider": "France Médias Monde",
+    "provider": "FRANCE 24",
     "sourceType": "youtube",
     "videoId": "HvZt-nh9sGg",
     "channelId": "UCQfwfsi5VrQ8yKZ-UWmAEFg",
@@ -96,22 +96,6 @@
     "notes": "Hivatalos élő tudományos Föld-megfigyelő közvetítés (ISS). A korábbi 21X5lGlDOfg stream lezárult; a frissített ROboUHfPUrU élő adás ellenőrizve és beágyazható."
   },
   {
-    "id": "earthcam-snowman-cam",
-    "name": "EarthCam: Snowman Cam (Gaylord, Michigan)",
-    "type": "webcam",
-    "region": "global",
-    "provider": "EarthCam",
-    "sourceType": "youtube",
-    "videoId": "TPGY7UYzbKw",
-    "channelId": "UC6kJ4jK0t4E1M_t5_5xZ7-Q",
-    "language": "en",
-    "status": "verified-live",
-    "embedStatus": "embeddable",
-    "checkedAt": "2026-11-01",
-    "provenance": "Hivatalos szolgáltatói YouTube közvetítés (EarthCam)",
-    "notes": "Hivatalos turisztikai webkamera az EarthCam közvetítésével (Gaylord, Michigan - Snowman Cam). Az oEmbed cím szerint: Snowman Cam - Animals and Wildlife."
-  },
-  {
     "id": "debrecen-kossuth-ter-webcam",
     "name": "Debrecen – Kossuth tér és Nagytemplom",
     "type": "webcam",
@@ -135,11 +119,11 @@
     "sourceType": "link-only",
     "url": "https://www.idokep.hu/webkamera/dmjvcam3",
     "language": "hu",
-    "status": "verified-live",
+    "status": "page-ok",
     "embedStatus": "external-only",
     "checkedAt": "2026-11-01",
     "provenance": "Időkép webkamera oldal (idokep.hu/webkamera/dmjvcam3)",
-    "notes": "Debrecen MJV Önkormányzata által üzemeltetett webkamera az Időkép felületén. Hivatalos külső beágyazási kód nem érhető el (X-Frame-Options: sameorigin); élő mozgókép és friss időbélyeg nem volt automatikusan igazolva, ezért unverified-live státuszra visszaléptetve."
+    "notes": "Debrecen MJV Önkormányzata által üzemeltetett webkamera az Időkép felületén. Hivatalos külső beágyazási kód nem érhető el (X-Frame-Options: sameorigin); élő mozgókép és friss időbélyeg nem volt automatikusan igazolva, ezért page-ok státuszban nyilvántartva (elérhető weboldal, élő kép időbélyeg-eltéréssel nem igazolt)."
   },
   {
     "id": "debrecen-egyetem-ter-webcam",
@@ -150,11 +134,11 @@
     "sourceType": "link-only",
     "url": "https://www.idokep.hu/webkamera/deegyetemter",
     "language": "hu",
-    "status": "verified-live",
+    "status": "page-ok",
     "embedStatus": "external-only",
     "checkedAt": "2026-11-01",
     "provenance": "Időkép webkamera oldal (idokep.hu/webkamera/deegyetemter)",
-    "notes": "Debreceni Egyetem által üzemeltetett webkamera az Időkép felületén. Hivatalos külső beágyazási kód nem érhető el (X-Frame-Options: sameorigin); élő mozgókép és friss időbélyeg nem volt automatikusan igazolva, ezért unverified-live státuszra visszaléptetve."
+    "notes": "Debreceni Egyetem által üzemeltetett webkamera az Időkép felületén. Hivatalos külső beágyazási kód nem érhető el (X-Frame-Options: sameorigin); élő mozgókép és friss időbélyeg nem volt automatikusan igazolva, ezért page-ok státuszban nyilvántartva (elérhető weboldal, élő kép időbélyeg-eltéréssel nem igazolt)."
   },
   {
     "id": "hajduszoboszlo-aeroclub-webcam",
@@ -165,11 +149,11 @@
     "sourceType": "link-only",
     "url": "https://www.idokep.hu/webkamera/lhho2",
     "language": "hu",
-    "status": "verified-live",
+    "status": "page-ok",
     "embedStatus": "external-only",
     "checkedAt": "2026-11-01",
     "provenance": "Időkép webkamera oldal (idokep.hu/webkamera/lhho2)",
-    "notes": "Hajdúszoboszlói Aero Club sportegyesület által üzemeltetett repülőtéri webkamera az Időkép felületén. Hivatalos külső beágyazási kód nem érhető el (X-Frame-Options: sameorigin); élő mozgókép és friss időbélyeg nem volt automatikusan igazolva, ezért unverified-live státuszra visszaléptetve."
+    "notes": "Hajdúszoboszlói Aero Club sportegyesület által üzemeltetett repülőtéri webkamera az Időkép felületén. Hivatalos külső beágyazási kód nem érhető el (X-Frame-Options: sameorigin); élő mozgókép és friss időbélyeg nem volt automatikusan igazolva, ezért page-ok státuszban nyilvántartva (elérhető weboldal, élő kép időbélyeg-eltéréssel nem igazolt)."
   },
   {
     "id": "hortobagy-puszta-webcam",

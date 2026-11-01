@@ -484,35 +484,38 @@ test('8. Dashboard iframe audit: proof that frame-src permits all dashboard ifra
   );
 });
 
-test('9. Institutional operator audit: verified-live webcams must have strictly institutional legal entities, zero private individual names, and honest external-only embedStatus', () => {
+test('9. Institutional operator audit: institutional webcams must have strictly institutional legal entities, zero private individual names, and honest external-only embedStatus', () => {
   const streams = loadLiveStreams();
-  const verifiedWebcams = streams.filter(s => s.type === 'webcam' && s.status === 'verified-live');
+  const institutionalWebcams = streams.filter(s => s.type === 'webcam');
 
-  assert.ok(verifiedWebcams.length >= 4, 'Must have at least 4 verified-live webcams');
+  assert.ok(institutionalWebcams.length >= 4, 'Must have at least 4 registered webcams');
 
   // Verify that deb / hajduszoboszlo webcams are present and marked external-only
-  const kossuth = verifiedWebcams.find(s => s.id === 'debrecen-kossuth-ter-webcam');
-  assert.ok(kossuth, 'Kossuth tér webcam must be registered and verified-live');
+  const kossuth = institutionalWebcams.find(s => s.id === 'debrecen-kossuth-ter-webcam');
+  assert.ok(kossuth, 'Kossuth tér webcam must be registered');
   assert.equal(kossuth.url, 'https://www.idokep.hu/webkamera/dmjvcam');
   assert.equal(kossuth.embedStatus, 'external-only');
   assert.ok(kossuth.provider.includes('Önkormányzata'), 'Provider must be municipality');
 
-  const bekas = verifiedWebcams.find(s => s.id === 'debrecen-bekas-to-webcam');
-  assert.ok(bekas, 'Békás tó webcam must be registered and verified-live');
+  const bekas = institutionalWebcams.find(s => s.id === 'debrecen-bekas-to-webcam');
+  assert.ok(bekas, 'Békás tó webcam must be registered');
   assert.equal(bekas.url, 'https://www.idokep.hu/webkamera/dmjvcam3');
   assert.equal(bekas.embedStatus, 'external-only');
+  assert.equal(bekas.status, 'page-ok', 'Status follows actual evidence: page-ok when unverified live motion');
   assert.ok(bekas.provider.includes('Önkormányzata'), 'Provider must be municipality');
 
-  const egyetem = verifiedWebcams.find(s => s.id === 'debrecen-egyetem-ter-webcam');
-  assert.ok(egyetem, 'Egyetem tér webcam must be registered and verified-live');
+  const egyetem = institutionalWebcams.find(s => s.id === 'debrecen-egyetem-ter-webcam');
+  assert.ok(egyetem, 'Egyetem tér webcam must be registered');
   assert.equal(egyetem.url, 'https://www.idokep.hu/webkamera/deegyetemter');
   assert.equal(egyetem.embedStatus, 'external-only');
+  assert.equal(egyetem.status, 'page-ok', 'Status follows actual evidence: page-ok when unverified live motion');
   assert.ok(egyetem.provider.includes('Debreceni Egyetem'), 'Provider must be university');
 
-  const aeroclub = verifiedWebcams.find(s => s.id === 'hajduszoboszlo-aeroclub-webcam');
-  assert.ok(aeroclub, 'Hajdúszoboszló Aero Club webcam must be registered and verified-live');
+  const aeroclub = institutionalWebcams.find(s => s.id === 'hajduszoboszlo-aeroclub-webcam');
+  assert.ok(aeroclub, 'Hajdúszoboszló Aero Club webcam must be registered');
   assert.equal(aeroclub.url, 'https://www.idokep.hu/webkamera/lhho2');
   assert.equal(aeroclub.embedStatus, 'external-only');
+  assert.equal(aeroclub.status, 'page-ok', 'Status follows actual evidence: page-ok when unverified live motion');
   assert.ok(aeroclub.provider.includes('Aero Club'), 'Provider must be Aero Club');
 
   // Disallowed private individual checks across the entire registry

@@ -1337,8 +1337,18 @@
       const sb = b?.status || 'unconfigured';
       const wa = COVERAGE_STATUS_SORT_WEIGHT[sa] ?? 9;
       const wb = COVERAGE_STATUS_SORT_WEIGHT[sb] ?? 9;
-      return wa - wb;
+      if (wa !== wb) return wa - wb;
+      const na = String(a?.sourceName || a?.name || a?.sourceId || '');
+      const nb = String(b?.sourceName || b?.name || b?.sourceId || '');
+      return na.localeCompare(nb, 'hu');
     });
+
+    const staleOrErrorCount = sorted.filter(r => r.status === 'stale_error' || r.status === 'error' || r.status === 'stale').length;
+    const okDataCount = sorted.filter(r => r.status === 'ok_data' || r.status === 'ok').length;
+    const okEmptyCount = sorted.filter(r => r.status === 'ok_empty').length;
+    const unconfiguredCount = sorted.filter(r => r.status === 'unconfigured').length;
+    const disabledCount = sorted.filter(r => r.status === 'disabled').length;
+    const offlineCount = sorted.filter(r => r.status === 'offline_snapshot').length;
 
     if (!sorted.length) {
       return `
@@ -1359,10 +1369,13 @@
           <span class="badge">${sorted.length} FORRÁS</span>
         </div>
         <div class="cov-breakdown-sub" style="font-family:var(--mono,monospace);font-size:9px;color:var(--dim,#888);padding:4px 8px;border-bottom:1px solid rgba(255,255,255,0.05);line-height:1.4">
-          <span title="Nem konfigurált vagy inaktív opcionális források (pl. Nebih-ASP)">5 inaktív</span> · 
-          <span title="Hazai és regionális adatforrások (Meteoalarm, rendőrség, Dehir, stb.)">19 hazai</span> · 
-          <span title="Globális és nemzetközi OSINT hír- és adatfolyamok">25 globális</span> · 
-          <span style="color:var(--accent,#64f0c8);font-weight:700" title="Összes felügyelt forrás a nézeti pillanatképben">46 összesen</span>
+          ${staleOrErrorCount > 0 ? `<span style="color:var(--warn,#f5a623);font-weight:600" title="Elavult vagy hibás források">${staleOrErrorCount} hibás/elavult</span> · ` : ''}
+          ${okDataCount > 0 ? `<span style="color:var(--accent,#64f0c8)" title="Aktív adattal rendelkező források">${okDataCount} aktív</span> · ` : ''}
+          ${okEmptyCount > 0 ? `<span title="Eseménytelen források">${okEmptyCount} eseménytelen</span> · ` : ''}
+          ${unconfiguredCount > 0 ? `<span title="Nincs forrás konfigurálva">${unconfiguredCount} konfigurálatlan</span> · ` : ''}
+          ${disabledCount > 0 ? `<span title="Letiltott források">${disabledCount} letiltva</span> · ` : ''}
+          ${offlineCount > 0 ? `<span title="Offline pillanatkép">${offlineCount} pillanatkép</span> · ` : ''}
+          <span style="color:var(--accent,#64f0c8);font-weight:700" title="Összes felügyelt forrás">${sorted.length} összesen</span>
         </div>
         <div class="cov-list vp-scroll-region scroll-region" tabindex="0" role="region" aria-label="Forrásfedettség lista" style="max-height:200px;overflow-y:auto;overscroll-behavior:contain">
           ${sorted.map((row, idx) => {

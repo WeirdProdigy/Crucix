@@ -88,3 +88,14 @@ test('dashboard controls never open links while ticker cards remain clickable', 
   assert.deepEqual(details, ['event-fixture']);
   assert.equal(opened.length, 1, 'Event details stay inside the dashboard');
 });
+
+test('all inline <script> blocks in jarvis.html are syntactically valid', () => {
+  const matches = [...html.matchAll(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/gi)];
+  assert.ok(matches.length > 0, 'Must have at least one inline script block in jarvis.html');
+  for (let i = 0; i < matches.length; i++) {
+    const code = matches[i][1];
+    assert.doesNotThrow(() => {
+      new vm.Script(code, { filename: `jarvis-inline-script-${i + 1}.js` });
+    }, `Inline script block ${i + 1} must be syntactically valid`);
+  }
+});

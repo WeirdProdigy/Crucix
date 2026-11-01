@@ -17,7 +17,7 @@ test('real server starts on an isolated non-default port with isolated runtime d
   writeFileSync(envFile, '');
   const child = spawn(process.execPath, ['--import', new URL('./fixtures/block-network.mjs', import.meta.url).href, 'server.mjs'], {
     cwd: new URL('..', import.meta.url), windowsHide: true,
-    env: { ...process.env, CRUCIX_ENV_FILE: envFile, RUNS_DIR: join(directory, 'runs'), PORT: String(port), HOST: '127.0.0.1',
+    env: { ...process.env, ENABLE_SWEEPS: 'false', CRUCIX_ENV_FILE: envFile, RUNS_DIR: join(directory, 'runs'), PORT: String(port), HOST: '127.0.0.1',
       NO_AUTO_OPEN: '1', AUTH_USER: '', AUTH_PASSWORD: '', LLM_PROVIDER: '', TELEGRAM_BOT_TOKEN: '',
       DISCORD_BOT_TOKEN: '', DISCORD_WEBHOOK_URL: '', TELEGRAM_OSINT_ENABLED: 'false', SWEEP_ARCHIVE_COUNT: '', SWEEP_ARCHIVE_MAX_MB: '' },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -26,9 +26,16 @@ test('real server starts on an isolated non-default port with isolated runtime d
   child.stdout.on('data', chunk => logs += chunk);
   child.stderr.on('data', chunk => logs += chunk);
   t.after(async () => {
-    const stopped = new Promise(resolve => child.once('exit', resolve));
-    if (child.exitCode === null) { child.kill(); await stopped; }
-    rmSync(directory, { recursive: true, force: true });
+    if (child.exitCode === null) {
+      const stopped = new Promise(resolve => child.once('exit', resolve));
+      try { child.kill('SIGTERM'); } catch {}
+      const forceKillTimer = setTimeout(() => {
+        try { child.kill('SIGKILL'); } catch {}
+      }, 2000);
+      await stopped;
+      clearTimeout(forceKillTimer);
+    }
+    try { rmSync(directory, { recursive: true, force: true }); } catch {}
   });
   for (let i = 0; i < 100; i++) {
     try {

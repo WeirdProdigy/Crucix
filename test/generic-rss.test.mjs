@@ -1271,7 +1271,7 @@ test('32. Shared 100 ceiling exceeded: all newsIds resolvable, partitions.news <
 
 test('33. Territorial classification: HVG national and international items never get Hajdú-Bihar county label, local portals default only without contradiction', () => {
   // 1. HVG national & international items without implicit county context
-  const orbanItem = detectSettlementMention('Orbán elítélte a brüsszeli döntést', undefined, { implicitCountyContext: false });
+  const orbanItem = detectSettlementMention('Orbán elítélte, Putyin-hívő barátját is meghívták Trump rezidenciájára', undefined, { implicitCountyContext: false });
   assert.equal(orbanItem.countyCode, null, 'National political headline in HVG must NOT receive Hajdú-Bihar countyCode');
   assert.equal(orbanItem.countyName, null, 'National political headline in HVG must NOT receive Hajdú-Bihar countyName');
   assert.notEqual(orbanItem.territoryLevel, 'county', 'Territory level must NOT be county');
