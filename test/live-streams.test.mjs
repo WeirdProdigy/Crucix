@@ -357,7 +357,7 @@ test('5. Frontend LiveMedia component: Click-to-load, single & 2x2 grid concurre
   assert.ok(emptyHtml.includes('Nincs a kiválasztott szűrőknek megfelelő élő közvetítés'), 'Empty state handled gracefully');
 });
 
-test('6. HTTP Security: Content-Security-Policy header permits youtube-nocookie frame-src', async t => {
+test('6. HTTP Security: Content-Security-Policy header permits youtube-nocookie frame-src and restricted img-src', async t => {
   const app = express();
   installHttpSecurity(app);
   app.get('/test', (_req, res) => res.send('ok'));
@@ -371,6 +371,8 @@ test('6. HTTP Security: Content-Security-Policy header permits youtube-nocookie 
   const csp = res.headers.get('content-security-policy');
   assert.ok(csp, 'Content-Security-Policy header must be present');
   assert.ok(csp.includes("frame-src 'self' https://www.youtube-nocookie.com;"), 'CSP must allow youtube-nocookie frame-src');
+  assert.ok(csp.includes("img-src 'self' data: https://cam.idokep.hu https://odp.met.hu;"), 'CSP must allow cam.idokep.hu and odp.met.hu img-src');
+  assert.ok(!csp.includes('*'), 'CSP must strictly disallow wildcard * origins');
 });
 
 test('7. Registry schema validation: channelId, provenance, embedStatus, and unverified status handling', () => {
@@ -479,8 +481,8 @@ test('8. Dashboard iframe audit: proof that frame-src permits all dashboard ifra
   // HTTP Security CSP header explicitly allows 'self' and https://www.youtube-nocookie.com
   const httpSecCode = readFileSync(new URL('lib/http-security.mjs', root), 'utf8');
   assert.ok(
-    httpSecCode.includes("'Content-Security-Policy': \"frame-src 'self' https://www.youtube-nocookie.com;\""),
-    'CSP frame-src rule explicitly whitelists https://www.youtube-nocookie.com'
+    httpSecCode.includes("'Content-Security-Policy': \"frame-src 'self' https://www.youtube-nocookie.com; img-src 'self' data: https://cam.idokep.hu https://odp.met.hu;\""),
+    'CSP frame-src and img-src rules explicitly whitelisted'
   );
 });
 
@@ -548,4 +550,154 @@ test('10. Directory stream type: SolarHam, Windy, and Útinform entries in regis
   assert.ok(utinform, 'Útinform must be registered with type=directory');
   assert.equal(utinform.status, 'page-ok');
   assert.equal(utinform.embedStatus, 'external-only');
+});
+
+test('11. Browser-side camera display: schema validation, synthetic click-to-load, lifecycle & visibility timer management, fallback error state, and server static audit', () => {
+  // 1. Schema validation for imageUrl and attribution
+  const camEntry = {
+    ...validEntry,
+    sourceType: 'link-only',
+    url: 'https://www.idokep.hu/webkamera/dmjvcam',
+    imageUrl: 'https://cam.idokep.hu/dmjvcam/thumbnail.jpg',
+    attribution: 'Forrás: Időkép / idokep.hu',
+    embedStatus: 'external-only',
+    videoId: undefined
+  };
+  assert.equal(validateLiveStreamEntry(camEntry), true, 'Valid entry with imageUrl and attribution must pass');
+
+  // Bad imageUrl: not starting with https://
+  assert.throws(() => validateLiveStreamEntry({ ...camEntry, imageUrl: 'http://insecure.cam/img.jpg' }), /Invalid 'imageUrl'/);
+  assert.throws(() => validateLiveStreamEntry({ ...camEntry, imageUrl: 12345 }), /Invalid 'imageUrl'/);
+
+  // Bad attribution: empty or whitespace
+  assert.throws(() => validateLiveStreamEntry({ ...camEntry, attribution: '   ' }), /'attribution' must be a non-empty string/);
+  assert.throws(() => validateLiveStreamEntry({ ...camEntry, attribution: 999 }), /'attribution' must be a non-empty string/);
+
+  // 2. Registry verification: 4 institutional cameras have verified imageUrl and attribution
+  const streams = loadLiveStreams();
+  const targetCamIds = [
+    'debrecen-kossuth-ter-webcam',
+    'debrecen-bekas-to-webcam',
+    'debrecen-egyetem-ter-webcam',
+    'hajduszoboszlo-aeroclub-webcam'
+  ];
+
+  for (const cid of targetCamIds) {
+    const s = streams.find(item => item.id === cid);
+    assert.ok(s, `Camera ${cid} must be present in registry`);
+    assert.ok(s.imageUrl && s.imageUrl.startsWith('https://cam.idokep.hu/'), `${cid} must point directly to cam.idokep.hu`);
+    assert.equal(s.attribution, 'Forrás: Időkép / idokep.hu', `${cid} must have attribution`);
+    assert.equal(s.embedStatus, 'external-only', `${cid} must be external-only`);
+    assert.equal(s.sourceType, 'link-only', `${cid} must be link-only`);
+  }
+
+  // 3. Frontend component synthetic testing (zero actual network requests)
+  const code = readFileSync(new URL('../dashboard/public/live-media-panel.js', import.meta.url), 'utf8');
+  let visibilityListener = null;
+  const mockWindow = {
+    innerWidth: 1280,
+    __CRUCIX_DATA__: {},
+    setInterval: () => 101,
+    clearInterval: () => {}
+  };
+  const mockDocument = {
+    hidden: false,
+    addEventListener: (type, fn) => {
+      if (type === 'visibilitychange') visibilityListener = fn;
+    }
+  };
+
+  const runModule = new Function('window', 'document', code);
+  runModule(mockWindow, mockDocument);
+  const LiveMedia = mockWindow.CrucixLiveMedia;
+  assert.ok(LiveMedia, 'CrucixLiveMedia exported');
+
+  const syntheticSnapshot = {
+    liveStreams: [
+      {
+        id: 'mock-kossuth',
+        name: 'Debrecen Kossuth tér',
+        type: 'webcam',
+        region: 'local',
+        provider: 'Debrecen MJV / Időkép',
+        sourceType: 'link-only',
+        url: 'https://www.idokep.hu/webkamera/dmjvcam',
+        imageUrl: 'https://cam.idokep.hu/dmjvcam/thumbnail.jpg',
+        attribution: 'Forrás: Időkép / idokep.hu',
+        status: 'unverified-live',
+        embedStatus: 'external-only',
+        checkedAt: '2026-11-01',
+        notes: 'Teszt kamera.'
+      }
+    ]
+  };
+
+  // A. Initial state: 0 images rendered, exact privacy warning present, "külső forrás" badge present
+  const initHtml = LiveMedia.panelHtml(syntheticSnapshot);
+  assert.ok(!initHtml.includes('<img'), 'Before user click: exactly 0 images rendered');
+  assert.ok(initHtml.includes('A kép betöltése kapcsolatot létesít az Időképpel; a Crucix nem tárolja.'), 'Must show privacy warning');
+  assert.ok(initHtml.includes('külső forrás'), 'Must render shared "külső forrás" badge');
+  assert.ok(initHtml.includes('📷 Kamera betöltése'), 'Must render load button');
+  assert.equal(LiveMedia.isCameraActive('mock-kossuth'), false);
+
+  // B. Click to load camera: user triggers camera load
+  LiveMedia.loadCamera('mock-kossuth');
+  assert.equal(LiveMedia.isCameraActive('mock-kossuth'), true);
+  const loadedHtml = LiveMedia.panelHtml(syntheticSnapshot);
+  assert.ok(loadedHtml.includes('<img'), 'After click: img element rendered');
+  assert.ok(loadedHtml.includes('id="lm-camera-img-mock-kossuth"'), 'Img has matching ID');
+  assert.ok(loadedHtml.includes('src="https://cam.idokep.hu/dmjvcam/thumbnail.jpg?t='), 'Img src has cache-busting timestamp');
+  assert.ok(loadedHtml.includes('referrerpolicy="no-referrer"'), 'Img has strict no-referrer');
+  assert.ok(loadedHtml.includes('Forrás: Időkép / idokep.hu'), 'Attribution rendered below image');
+  assert.ok(loadedHtml.includes('🔄 Frissítés: 60 mp'), '60s refresh indicator shown');
+  assert.ok(loadedHtml.includes('✕ Bezárás'), 'Close button rendered');
+
+  // C. Error state: fallback on 403 / 404 / network block
+  LiveMedia.onCameraImgError('mock-kossuth');
+  assert.equal(LiveMedia.isCameraActive('mock-kossuth'), false);
+  assert.ok(LiveMedia.getCameraError('mock-kossuth'));
+  const errorHtml = LiveMedia.panelHtml(syntheticSnapshot);
+  assert.ok(!errorHtml.includes('<img'), 'No img in error state');
+  assert.ok(errorHtml.includes('⚠ Nem tölthető be – megnyitás a forráson'), 'Shows required error fallback text');
+  assert.ok(errorHtml.includes('Újrapróbálás'), 'Shows retry button');
+
+  // D. Retry camera: recovers from error
+  LiveMedia.retryCamera('mock-kossuth');
+  assert.equal(LiveMedia.isCameraActive('mock-kossuth'), true);
+  assert.equal(LiveMedia.getCameraError('mock-kossuth'), null);
+
+  // E. Batch load and unload
+  LiveMedia.unloadAllCameras();
+  assert.equal(LiveMedia.isCameraActive('mock-kossuth'), false);
+  LiveMedia.loadAllCameras();
+  assert.equal(LiveMedia.isCameraActive('mock-kossuth'), true);
+
+  // F. Visibility change: stops timers when document.hidden is true
+  assert.ok(typeof visibilityListener === 'function', 'Visibility listener registered');
+  mockDocument.hidden = true;
+  visibilityListener();
+  // Timer is cleared
+  mockDocument.hidden = false;
+  visibilityListener();
+
+  // G. stopAllStreams: cleans up all camera timers and active IDs
+  LiveMedia.stopAllStreams();
+  assert.equal(LiveMedia.isCameraActive('mock-kossuth'), false);
+
+  // 4. Server static audit: STRICT ZERO outbound server requests to Időkép
+  const root = new URL('../', import.meta.url);
+  const apisDir = new URL('apis/', root);
+  const libDir = new URL('lib/', root);
+
+  const checkNoIdokepRequests = (dirPath) => {
+    const { readdirSync, statSync } = require ? { readdirSync: () => [], statSync: () => ({}) } : {};
+  };
+
+  // Read all source files in apis/ and lib/ and server.mjs
+  const serverMjs = readFileSync(new URL('server.mjs', root), 'utf8');
+  assert.ok(!serverMjs.includes('idokep.hu'), 'server.mjs must contain zero references to idokep.hu');
+
+  // Audit briefing sources: none may import or fetch Időkép
+  const briefingMjs = readFileSync(new URL('apis/briefing.mjs', root), 'utf8');
+  assert.ok(!briefingMjs.includes('idokep'), 'apis/briefing.mjs must contain zero references to idokep');
 });

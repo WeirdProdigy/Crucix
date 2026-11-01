@@ -24,6 +24,9 @@
 
   const YOUTUBE_VIDEO_ID_REGEX = /^[a-zA-Z0-9_-]{11}$/;
   const PRIVACY_NOTICE_TEXT = 'A közvetítés indítása kapcsolatot létesít a videószolgáltatóval.';
+  const CAMERA_PRIVACY_NOTICE_TEXT = 'A kép betöltése kapcsolatot létesít az Időképpel; a Crucix nem tárolja.';
+  const CAMERA_REFRESH_INTERVAL_MS = 60000;
+  const CAMERA_ERROR_BACKOFF_MS = 300000;
 
   const REGION_LABELS = Object.freeze({
     local: 'Helyi',
@@ -90,6 +93,53 @@
   let retryBackoff = new Map();   // streamId -> backoff seconds
   let changeListeners = [];
   let lastSnapshot = null;
+  let activeCameraIds = new Set();
+  let cameraErrorStates = new Map();
+  let cameraTimers = new Map();
+
+  function clearCameraTimer(streamId) {
+    if (cameraTimers.has(streamId)) {
+      clearInterval(cameraTimers.get(streamId));
+      cameraTimers.delete(streamId);
+    }
+  }
+
+  function clearAllCameraTimers() {
+    for (const [, timer] of cameraTimers.entries()) {
+      clearInterval(timer);
+    }
+    cameraTimers.clear();
+  }
+
+  function buildCameraImageUrl(baseUrl) {
+    if (!baseUrl) return '';
+    const sep = baseUrl.includes('?') ? '&' : '?';
+    return `${baseUrl}${sep}t=${Date.now()}`;
+  }
+
+  function refreshCameraDomImage(streamId, imageUrl) {
+    if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
+    const img = document.getElementById(`lm-camera-img-${streamId}`);
+    if (img && imageUrl) {
+      img.src = buildCameraImageUrl(imageUrl);
+    }
+  }
+
+  function startCameraTimer(streamId, imageUrl) {
+    clearCameraTimer(streamId);
+    if (typeof window === 'undefined' || typeof window.setInterval !== 'function') return;
+    const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
+      if (cameraErrorStates.has(streamId)) {
+        clearCameraTimer(streamId);
+        return;
+      }
+      refreshCameraDomImage(streamId, imageUrl);
+    }, CAMERA_REFRESH_INTERVAL_MS);
+    cameraTimers.set(streamId, timer);
+  }
 
   function isMobileViewport() {
     if (typeof window === 'undefined') return false;
@@ -290,8 +340,75 @@
   function stopAllStreams() {
     if (activeStreamIds.length > 0) {
       activeStreamIds = [];
-      notifyChange();
     }
+    clearAllCameraTimers();
+    activeCameraIds.clear();
+    notifyChange();
+  }
+
+  function loadCamera(streamId) {
+    if (typeof streamId !== 'string' || !streamId.trim()) return;
+    cameraErrorStates.delete(streamId);
+    activeCameraIds.add(streamId);
+    const rawStreams = resolveRawStreams();
+    const stream = rawStreams.find(s => s.id === streamId);
+    if (stream && stream.imageUrl) {
+      startCameraTimer(streamId, stream.imageUrl);
+    }
+    notifyChange();
+  }
+
+  function unloadCamera(streamId) {
+    if (typeof streamId !== 'string') return;
+    activeCameraIds.delete(streamId);
+    clearCameraTimer(streamId);
+    notifyChange();
+  }
+
+  function loadAllCameras() {
+    const rawStreams = resolveRawStreams();
+    const filtered = rawStreams.filter(matchesFilters);
+    for (const stream of filtered) {
+      if (stream.imageUrl && (stream.sourceType === 'link-only' || stream.embedStatus === 'external-only')) {
+        cameraErrorStates.delete(stream.id);
+        activeCameraIds.add(stream.id);
+        startCameraTimer(stream.id, stream.imageUrl);
+      }
+    }
+    notifyChange();
+  }
+
+  function unloadAllCameras() {
+    clearAllCameraTimers();
+    activeCameraIds.clear();
+    notifyChange();
+  }
+
+  function onCameraImgError(streamId) {
+    if (typeof streamId !== 'string') return;
+    clearCameraTimer(streamId);
+    cameraErrorStates.set(streamId, { timestamp: Date.now() });
+    activeCameraIds.delete(streamId);
+    notifyChange();
+  }
+
+  function onCameraImgLoad(streamId) {
+    if (typeof streamId !== 'string') return;
+    cameraErrorStates.delete(streamId);
+  }
+
+  function retryCamera(streamId) {
+    if (typeof streamId !== 'string') return;
+    cameraErrorStates.delete(streamId);
+    loadCamera(streamId);
+  }
+
+  function isCameraActive(streamId) {
+    return activeCameraIds.has(streamId);
+  }
+
+  function getCameraError(streamId) {
+    return cameraErrorStates.get(streamId) || null;
   }
 
   function markStreamError(streamId) {
@@ -490,13 +607,77 @@
     const embedInfo = getEmbedStatusInfo(stream);
 
     if (stream.sourceType === 'link-only' || embedInfo.code === 'external-only') {
+      const hasImage = Boolean(stream.imageUrl);
+      const isCameraActive = activeCameraIds.has(stream.id);
+      const isCameraError = cameraErrorStates.has(stream.id);
+
+      let externalBodyHtml = '';
+      if (hasImage) {
+        if (isCameraError) {
+          externalBodyHtml = `
+            <div class="lm-camera-fallback-box" role="alert">
+              <div class="lm-camera-fallback-title">⚠ Nem tölthető be – megnyitás a forráson</div>
+              <div class="lm-camera-fallback-desc">A kép közvetlen betöltése nem sikerült vagy a külső forrás korlátozta.</div>
+              <div class="lm-camera-fallback-actions">
+                <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">Megnyitás a forráson ↗</a>
+                <button type="button" class="lm-btn lm-btn-retry" onclick="window.CrucixLiveMedia?.retryCamera('${esc(stream.id)}')">Újrapróbálás</button>
+              </div>
+            </div>
+          `;
+        } else if (isCameraActive) {
+          externalBodyHtml = `
+            <div class="lm-camera-view-wrap">
+              <img
+                id="lm-camera-img-${esc(stream.id)}"
+                class="lm-camera-img"
+                src="${esc(buildCameraImageUrl(stream.imageUrl))}"
+                alt="${esc(stream.name)}"
+                loading="eager"
+                referrerpolicy="no-referrer"
+                onload="window.CrucixLiveMedia?.onCameraImgLoad('${esc(stream.id)}')"
+                onerror="window.CrucixLiveMedia?.onCameraImgError('${esc(stream.id)}')" />
+              <div class="lm-camera-meta-bar">
+                <span class="lm-camera-refresh-indicator">🔄 Frissítés: 60 mp (közvetlen böngészőoldali)</span>
+                <button type="button" class="lm-btn-camera-close" title="Kamera bezárása" onclick="window.CrucixLiveMedia?.unloadCamera('${esc(stream.id)}')">✕ Bezárás</button>
+              </div>
+            </div>
+            <div class="lm-camera-attribution">
+              ${esc(stream.attribution || 'Forrás: Időkép / idokep.hu')} — <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-link-external">Megnyitás a forráson ↗</a>
+            </div>
+          `;
+        } else {
+          externalBodyHtml = `
+            <div class="lm-camera-privacy-box">
+              <span class="lm-camera-privacy-text">${esc(CAMERA_PRIVACY_NOTICE_TEXT)}</span>
+            </div>
+            <div class="lm-external-actions">
+              <button type="button" class="lm-btn lm-btn-load-cam" onclick="window.CrucixLiveMedia?.loadCamera('${esc(stream.id)}')">
+                📷 Kamera betöltése
+              </button>
+              <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">
+                Megnyitás a szolgáltató oldalán ↗
+              </a>
+            </div>
+          `;
+        }
+      } else {
+        externalBodyHtml = `
+          <div class="lm-external-actions">
+            <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">
+              Megnyitás a szolgáltató oldalán ↗
+            </a>
+          </div>
+        `;
+      }
+
       return `
-        <article class="lm-card lm-card-external" id="lm-card-${esc(stream.id)}" data-stream-id="${esc(stream.id)}" data-embed-status="external-only">
+        <article class="lm-card lm-card-external${isCameraActive ? ' camera-active' : ''}${isCameraError ? ' camera-error' : ''}" id="lm-card-${esc(stream.id)}" data-stream-id="${esc(stream.id)}" data-embed-status="external-only">
           <div class="lm-card-head">
             <div class="lm-card-title-row">
               <span class="lm-card-type-badge lm-type-${esc(stream.type)}">${esc(typeLabel)}</span>
               <span class="lm-card-region-badge">${esc(regionLabel)}</span>
               <span class="lm-card-lang-badge">${esc(langCode)}</span>
+              <span class="lm-status-pill lm-badge-external-source" title="Közvetlen böngészőoldali kapcsolat a külső forrással (Crucix szerver nem proxyzza)">külső forrás</span>
               <span class="lm-card-title">${esc(stream.name)}</span>
             </div>
             <div class="lm-card-provider">${esc(stream.provider)}</div>
@@ -511,11 +692,7 @@
           </div>
           <div class="lm-card-body lm-external-body">
             ${stream.notes ? `<div class="lm-external-notes">${esc(stream.notes)}</div>` : ''}
-            <div class="lm-external-actions">
-              <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">
-                Megnyitás a szolgáltató oldalán ↗
-              </a>
-            </div>
+            ${externalBodyHtml}
           </div>
         </article>
       `;
@@ -635,6 +812,9 @@
         </div>
       `;
 
+    const externalCams = externalFiltered.filter(s => Boolean(s.imageUrl));
+    const anyCamActive = externalCams.some(s => activeCameraIds.has(s.id));
+
     const externalContent = externalFiltered.length > 0
       ? `
         <div class="lm-external-section" id="lm-external-section">
@@ -642,6 +822,17 @@
             <div class="lm-section-title-wrap">
               <span class="lm-section-title">Külső oldalon nézhető</span>
               <span class="lm-count-badge">${externalFiltered.length} forrás</span>
+              ${externalCams.length > 0 ? `
+                ${anyCamActive ? `
+                  <button type="button" class="lm-btn lm-btn-stop" onclick="window.CrucixLiveMedia?.unloadAllCameras()" title="Minden aktív intézményi kamera bezárása">
+                    ✕ Kamerák bezárása
+                  </button>
+                ` : `
+                  <button type="button" class="lm-btn lm-btn-load-cam" onclick="window.CrucixLiveMedia?.loadAllCameras()" title="Összes intézményi kamera betöltése">
+                    📷 Kamerák betöltése
+                  </button>
+                `}
+              ` : ''}
             </div>
             <span class="lm-section-sub">A szolgáltató hivatalos külső beágyazást nem biztosít (pl. X-Frame-Options korlátozás); a kamerák és adások közvetlenül a forrásoldalon érhetők el.</span>
           </div>
@@ -895,8 +1086,23 @@
   // --- Global Event Listeners ---
   if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden && !allowBackgroundPlayback) {
-        stopAllStreams();
+      if (document.hidden) {
+        clearAllCameraTimers();
+        if (!allowBackgroundPlayback) {
+          stopAllStreams();
+        }
+      } else {
+        if (activeCameraIds.size > 0) {
+          const rawStreams = resolveRawStreams();
+          const byId = new Map(rawStreams.map(s => [s.id, s]));
+          for (const cid of activeCameraIds) {
+            const stream = byId.get(cid);
+            if (stream && stream.imageUrl && !cameraErrorStates.has(cid)) {
+              refreshCameraDomImage(cid, stream.imageUrl);
+              startCameraTimer(cid, stream.imageUrl);
+            }
+          }
+        }
       }
     });
   }
@@ -943,10 +1149,20 @@
     stopAllStreams,
     markStreamError,
     retryStream,
+    loadCamera,
+    unloadCamera,
+    loadAllCameras,
+    unloadAllCameras,
+    onCameraImgError,
+    onCameraImgLoad,
+    retryCamera,
+    isCameraActive,
+    getCameraError,
     setAllowBackgroundPlayback,
     getAllowBackgroundPlayback,
     onChange,
-    PRIVACY_NOTICE_TEXT
+    PRIVACY_NOTICE_TEXT,
+    CAMERA_PRIVACY_NOTICE_TEXT
   });
 
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});

@@ -803,3 +803,9 @@ AGPL-3.0
 ### Third-Party Data & Component Acknowledgments
 
 - **World Monitor (`koala73/worldmonitor`, AGPL-3.0-only):** The architectural concept of the "Élő" broadcast and webcam panel, as well as selected international live stream identifiers (`data/live-streams.json`), are derived from the World Monitor project under the GNU Affero General Public License v3.0.
+
+### Böngészőoldali Külső Kameramegjelenítés és Jogi Tájékoztató (Időkép)
+
+- **Magáncélú, közvetlen böngészőoldali kapcsolat:** A Crucix „Élő” paneljében elérhető intézményi webkamerák (pl. debreceni és hajdúszoboszlói panorámakamerák) képmegjelenítése kizárólag a felhasználó saját felelősségére, magáncélú otthoni monitorozásra szolgál.
+- **Szerveroldali proxyzás és tárolás tilalma:** A Crucix szervere a kamerák képeit semmilyen módon nem kéri le, nem tárolja, nem proxyzza, és nem dolgozza fel. A képek kizárólag a felhasználó böngészője által, közvetlenül a külső szolgáltató (`cam.idokep.hu`) szerveréről töltődnek be, a felhasználó kifejezett kattintására (Click-to-Load).
+- **Időkép ÁSZF megfelelőség:** A forrásfelhasználási feltételekről és szerzői jogi korlátozásokról részletes tájékoztatás az Időkép Általános Szerződési Feltételeiben olvasható: [Időkép ÁSZF 10. pont](https://www.idokep.hu/aszf).
