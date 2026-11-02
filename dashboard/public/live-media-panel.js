@@ -17,20 +17,23 @@
  * 5. Külső oldalon nézhető források elkülönítése: A nem beágyazható (link-only) kamerák és
  *    oldalak külön „Külső oldalon nézhető” csoportban jelennek meg, külön jelezve a
  *    forrásoldali elérhetőséget/élő állapotot és a beágyazhatóságot.
- * 6. Szigorúan magáncélú, saját, egyfelhasználós használat (Időkép ÁSZF 3. és 10. pont):
+ * 6. Szigorúan magáncélú, saját, egyfelhasználós használat (Időkép ÁSZF 3., 9. és 10. pont):
  *    - A Crucix futó példánya privát, nem nyilvános, harmadik fél nem éri el (kizárólag saját
  *      helyi hálózatán LAN-on fut), és más médiacsatornán semmilyen formában nem teszi közzé a kamerákat.
  *    - A Crucix szervere a kamerák képeit NEM tölti le, nem tárolja elektronikusan, nem proxyzza és
  *      nem dolgozza fel (megfelelés az ÁSZF 3. pontjának: „Tilos a weboldalon megjelenő tartalmak vagy azok
- *      bármely részletének letöltése, elektronikus tárolása, feldolgozása és értékesítése...”).
+ *      bármely részletének letöltése, elektronikus tárolása, feldolgozása és értékesítése a Szolgáltató írásos hozzájárulása nélkül.”).
  *    - A képmegjelenítés kizárólag a végfelhasználó saját böngészőjében fut közvetlen <img> lekérésként,
  *      a felhasználó kifejezett kattintására (Click-to-Load), átmeneti memóriabeli megjelenítésként.
- *    - Szigorúan tilos a tartalmak más médiacsatornán való közzététele (ÁSZF 10. pont: „Szigorúan tilos továbbá
- *      ezeket a tartalmakat más médiacsatornán közzétenni...”).
+ *    - Terheléscsökkentés és csoportos korlát: A percenkénti terhelés csökkentése érdekében a csoportos
+ *      kameratöltés legfeljebb 4 kamerát indít egyszerre (MAX_GROUP_CAMERAS = 4), és a rendszerben egyidejűleg
+ *      legfeljebb 4 kamera tartható nyitva. A korlát elérésekor újabb betöltés nem indul, és a felület tájékoztatást ad.
+ *    - Szigorúan tilos a tartalmak más médiacsatornán való közzététele (ÁSZF 10. pont).
  *    - Az ÁSZF 10. pontja szerinti „Elvihető tartalmak” kivétel kizárólag az adott aloldal térképeire/elemeire
  *      vonatkozik forrásmegjelöléssel és linkkel; a webkamerák képeire ez a kivétel nem terjed ki.
+ *    - Módosítási jog (ÁSZF 9. pont): A Szolgáltató bármikor jogosult a szerződési feltételek egyoldalú módosítására.
  *    - Hatályosság: A vizsgált ÁSZF az oldalon megjelölt állapot szerint 2021. március 17-től hatályos
- *      („Hatályos 2021.03.17”); az Időkép fenntartja a jogot a feltételek egyoldalú módosítására.
+ *      („Hatályos 2021.03.17”).
  *    - Jogilag nem rendezett státusz: Az automatizált periodikus (1 perces) böngészőoldali frissítés és a közvetlen
  *      cam.idokep.hu mélyhivatkozás az ÁSZF alapján jogilag nem rendezett, ezért az Időkép kifejezett írásbeli
  *      hozzájárulásától függ (nem állítható, hogy az ÁSZF ezt megengedi).
@@ -67,6 +70,8 @@
   const CAMERA_PRIVACY_NOTICE_TEXT = 'A kép betöltése kapcsolatot létesít az Időképpel; a Crucix nem tárolja.';
   const CAMERA_REFRESH_INTERVAL_MS = 60000;
   const CAMERA_ERROR_BACKOFF_MS = 300000;
+  const MAX_GROUP_CAMERAS = 4;
+  const CAMERA_LIMIT_NOTICE_TEXT = 'Legfeljebb 4 kamera tölthető be egyszerre; a többit kártyánként nyisd meg.';
   const WINDY_PRIVACY_NOTICE_TEXT = 'A betöltés kapcsolatot létesít a Windy.com szervereivel, és a Windy a böngésző helyi tárolóját használhatja; a Crucix nem tárolja az adatot.';
   const WINDY_DISCLAIMER_TEXT = 'Nem hivatalos előrejelzés; hivatalos forrás: HungaroMet';
 
@@ -139,18 +144,28 @@
   let activeCameraIds = new Set();
   let cameraErrorStates = new Map();
   let cameraTimers = new Map();
+  let cameraNotice = '';
   let activeEmbedIds = new Set();
 
   function clearCameraTimer(streamId) {
     if (cameraTimers.has(streamId)) {
-      clearInterval(cameraTimers.get(streamId));
+      const timer = cameraTimers.get(streamId);
+      if (typeof window !== 'undefined' && typeof window.clearInterval === 'function') {
+        window.clearInterval(timer);
+      } else {
+        clearInterval(timer);
+      }
       cameraTimers.delete(streamId);
     }
   }
 
   function clearAllCameraTimers() {
     for (const [, timer] of cameraTimers.entries()) {
-      clearInterval(timer);
+      if (typeof window !== 'undefined' && typeof window.clearInterval === 'function') {
+        window.clearInterval(timer);
+      } else {
+        clearInterval(timer);
+      }
     }
     cameraTimers.clear();
   }
@@ -172,7 +187,7 @@
   function startCameraTimer(streamId, imageUrl) {
     clearCameraTimer(streamId);
     if (typeof window === 'undefined' || typeof window.setInterval !== 'function') return;
-    const timer = setInterval(() => {
+    const timer = window.setInterval(() => {
       if (typeof document !== 'undefined' && document.hidden) {
         return;
       }
@@ -567,12 +582,22 @@
   function loadCamera(streamId) {
     if (!isPrivateOrLocalHost()) return;
     if (typeof streamId !== 'string' || !streamId.trim()) return;
+    if (activeCameraIds.has(streamId)) return;
+    if (activeCameraIds.size >= MAX_GROUP_CAMERAS) {
+      cameraNotice = CAMERA_LIMIT_NOTICE_TEXT;
+      notifyChange();
+      return;
+    }
+    cameraNotice = '';
     cameraErrorStates.delete(streamId);
     activeCameraIds.add(streamId);
     const rawStreams = resolveRawStreams();
     const stream = rawStreams.find(s => s.id === streamId);
     if (stream && stream.imageUrl) {
       startCameraTimer(streamId, stream.imageUrl);
+    }
+    if (activeCameraIds.size >= MAX_GROUP_CAMERAS) {
+      cameraNotice = CAMERA_LIMIT_NOTICE_TEXT;
     }
     notifyChange();
   }
@@ -581,6 +606,9 @@
     if (typeof streamId !== 'string') return;
     activeCameraIds.delete(streamId);
     clearCameraTimer(streamId);
+    if (activeCameraIds.size < MAX_GROUP_CAMERAS) {
+      cameraNotice = '';
+    }
     notifyChange();
   }
 
@@ -588,12 +616,27 @@
     if (!isPrivateOrLocalHost()) return;
     const rawStreams = resolveRawStreams();
     const filtered = rawStreams.filter(matchesFilters);
-    for (const stream of filtered) {
-      if (stream.imageUrl && (stream.sourceType === 'link-only' || stream.embedStatus === 'external-only')) {
+    const available = filtered.filter(s => s.imageUrl && (s.sourceType === 'link-only' || s.embedStatus === 'external-only'));
+
+    if (activeCameraIds.size >= MAX_GROUP_CAMERAS) {
+      cameraNotice = CAMERA_LIMIT_NOTICE_TEXT;
+      notifyChange();
+      return;
+    }
+
+    for (const stream of available) {
+      if (activeCameraIds.size >= MAX_GROUP_CAMERAS) break;
+      if (!activeCameraIds.has(stream.id)) {
         cameraErrorStates.delete(stream.id);
         activeCameraIds.add(stream.id);
         startCameraTimer(stream.id, stream.imageUrl);
       }
+    }
+
+    if (available.length > MAX_GROUP_CAMERAS || activeCameraIds.size >= MAX_GROUP_CAMERAS) {
+      cameraNotice = CAMERA_LIMIT_NOTICE_TEXT;
+    } else {
+      cameraNotice = '';
     }
     notifyChange();
   }
@@ -601,6 +644,7 @@
   function unloadAllCameras() {
     clearAllCameraTimers();
     activeCameraIds.clear();
+    cameraNotice = '';
     notifyChange();
   }
 
@@ -609,6 +653,9 @@
     clearCameraTimer(streamId);
     cameraErrorStates.set(streamId, { timestamp: Date.now() });
     activeCameraIds.delete(streamId);
+    if (activeCameraIds.size < MAX_GROUP_CAMERAS) {
+      cameraNotice = '';
+    }
     notifyChange();
   }
 
@@ -1096,6 +1143,7 @@
     const isPrivateHost = isPrivateOrLocalHost();
     const externalCams = externalFiltered.filter(s => Boolean(s.imageUrl));
     const anyCamActive = externalCams.some(s => activeCameraIds.has(s.id));
+    const showLimitNotice = cameraNotice || (activeCameraIds.size >= MAX_GROUP_CAMERAS ? CAMERA_LIMIT_NOTICE_TEXT : '');
 
     const externalContent = externalFiltered.length > 0
       ? `
@@ -1110,12 +1158,17 @@
                     ✕ Kamerák bezárása
                   </button>
                 ` : `
-                  <button type="button" class="lm-btn lm-btn-load-cam" onclick="window.CrucixLiveMedia?.loadAllCameras()" title="Összes intézményi kamera betöltése">
-                    📷 Kamerák betöltése
+                  <button type="button" class="lm-btn lm-btn-load-cam" onclick="window.CrucixLiveMedia?.loadAllCameras()" title="Legfeljebb ${MAX_GROUP_CAMERAS} kamera betöltése egyszerre">
+                    📷 Kamerák betöltése (max ${MAX_GROUP_CAMERAS})
                   </button>
                 `}
               ` : ''}
             </div>
+            ${showLimitNotice && isPrivateHost ? `
+              <div class="lm-camera-limit-notice" role="status" id="lm-camera-limit-notice">
+                ${esc(showLimitNotice)}
+              </div>
+            ` : ''}
             <span class="lm-section-sub">A szolgáltató hivatalos külső beágyazást nem biztosít (pl. X-Frame-Options korlátozás); a kamerák és adások közvetlenül a forrásoldalon érhetők el.</span>
           </div>
           <div class="lm-external-grid scroll-region" tabindex="0" role="region" aria-label="Külső oldalon nézhető adások listája">
@@ -1449,6 +1502,10 @@
     onChange,
     PRIVACY_NOTICE_TEXT,
     CAMERA_PRIVACY_NOTICE_TEXT,
+    MAX_GROUP_CAMERAS,
+    CAMERA_LIMIT_NOTICE_TEXT,
+    getActiveCameraCount: () => activeCameraIds.size,
+    getCameraNotice: () => cameraNotice,
     WINDY_PRIVACY_NOTICE_TEXT,
     WINDY_DISCLAIMER_TEXT
   });

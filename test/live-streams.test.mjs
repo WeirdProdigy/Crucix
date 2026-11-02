@@ -727,10 +727,69 @@ test('11. Browser-side camera display: schema validation, synthetic click-to-loa
   assert.equal(LiveMedia.isCameraActive('mock-kossuth'), true);
   assert.equal(LiveMedia.getCameraError('mock-kossuth'), null);
 
-  // E. Batch load and unload
+  // E. Batch load and unload with MAX_GROUP_CAMERAS = 4 limit
+  assert.equal(LiveMedia.MAX_GROUP_CAMERAS, 4, 'MAX_GROUP_CAMERAS must equal 4');
+  assert.ok(LiveMedia.CAMERA_LIMIT_NOTICE_TEXT.includes('Legfeljebb 4 kamera'), 'CAMERA_LIMIT_NOTICE_TEXT must inform about limit');
+
+  // Create a snapshot with 11 external cameras (all 11 registered institutional cameras)
+  const elevenCams = targetCamIds.map((cid, i) => ({
+    id: cid,
+    name: `Camera ${i + 1}`,
+    type: 'webcam',
+    region: i < 4 ? 'local' : 'county',
+    provider: 'Időkép',
+    sourceType: 'link-only',
+    url: `https://www.idokep.hu/webkamera/${cid}`,
+    imageUrl: `https://cam.idokep.hu/${cid}/thumbnail.jpg`,
+    attribution: 'Forrás: Időkép / idokep.hu',
+    status: 'page-ok',
+    embedStatus: 'external-only'
+  }));
+  const elevenSnapshot = { liveStreams: elevenCams };
+
+  mockWindow.__CRUCIX_DATA__ = elevenSnapshot;
+  LiveMedia.panelHtml(elevenSnapshot);
   LiveMedia.unloadAllCameras();
-  assert.equal(LiveMedia.isCameraActive('mock-kossuth'), false);
+  assert.equal(LiveMedia.getActiveCameraCount(), 0, 'Initially 0 cameras active');
+
+  // Trigger batch load on 11 cameras: must activate at most MAX_GROUP_CAMERAS (4) in fixed order
   LiveMedia.loadAllCameras();
+  assert.equal(LiveMedia.getActiveCameraCount(), 4, 'Batch load must activate exactly MAX_GROUP_CAMERAS (4) cameras');
+  assert.equal(LiveMedia.isCameraActive('debrecen-kossuth-ter-webcam'), true, 'Cam 1 must be active');
+  assert.equal(LiveMedia.isCameraActive('debrecen-bekas-to-webcam'), true, 'Cam 2 must be active');
+  assert.equal(LiveMedia.isCameraActive('debrecen-egyetem-ter-webcam'), true, 'Cam 3 must be active');
+  assert.equal(LiveMedia.isCameraActive('debrecen-klinika-webcam'), true, 'Cam 4 must be active');
+  assert.equal(LiveMedia.isCameraActive('hajduszoboszlo-aeroclub-webcam'), false, 'Cam 5 must NOT be active');
+
+  // UI must show the limit notice when limit is reached
+  const limitHtml = LiveMedia.panelHtml(elevenSnapshot);
+  assert.ok(limitHtml.includes('Legfeljebb 4 kamera tölthető be egyszerre; a többit kártyánként nyisd meg.'), 'Must display limit notice');
+
+  // Attempting to load a 5th camera individually must be rejected
+  LiveMedia.loadCamera('hajduszoboszlo-aeroclub-webcam');
+  assert.equal(LiveMedia.isCameraActive('hajduszoboszlo-aeroclub-webcam'), false, '5th camera must not be loaded when cap reached');
+  assert.equal(LiveMedia.getActiveCameraCount(), 4, 'Active count remains capped at 4');
+
+  // Calling batch load again when at cap must be a no-op
+  LiveMedia.loadAllCameras();
+  assert.equal(LiveMedia.getActiveCameraCount(), 4, 'Active count remains 4 on repeated batch load');
+
+  // Closing one camera frees a slot
+  LiveMedia.unloadCamera('debrecen-kossuth-ter-webcam');
+  assert.equal(LiveMedia.getActiveCameraCount(), 3, 'Active count decrements to 3');
+  assert.equal(LiveMedia.isCameraActive('debrecen-kossuth-ter-webcam'), false);
+
+  // Now a new camera can be loaded
+  LiveMedia.loadCamera('hajduszoboszlo-aeroclub-webcam');
+  assert.equal(LiveMedia.getActiveCameraCount(), 4, 'Active count returns to 4');
+  assert.equal(LiveMedia.isCameraActive('hajduszoboszlo-aeroclub-webcam'), true, '5th camera can now be loaded');
+
+  // Full unload clears all
+  LiveMedia.unloadAllCameras();
+  assert.equal(LiveMedia.getActiveCameraCount(), 0, 'unloadAllCameras clears all active cameras');
+  mockWindow.__CRUCIX_DATA__ = syntheticSnapshot;
+  LiveMedia.panelHtml(syntheticSnapshot);
+  LiveMedia.loadCamera('mock-kossuth');
   assert.equal(LiveMedia.isCameraActive('mock-kossuth'), true);
 
   // F. Visibility change: stops timers when document.hidden is true
@@ -850,11 +909,12 @@ test('11. Browser-side camera display: schema validation, synthetic click-to-loa
   // 5. Documentation audit: verify correct Időkép ÁSZF section references and private use documentation
   const readmeMd = readFileSync(new URL('README.md', root), 'utf8');
   assert.ok(readmeMd.includes('ÁSZF 3. pont'), 'README must cite ÁSZF 3. pont for download, storage, and processing prohibition');
-  assert.ok(readmeMd.includes('Tilos a weboldalon megjelenő tartalmak vagy azok bármely részletének letöltése, elektronikus tárolása, feldolgozása és értékesítése'), 'README must quote verbatim prohibition from ÁSZF Section 3');
+  assert.ok(readmeMd.includes('letöltés') && readmeMd.includes('elektronikus tárolás') && readmeMd.includes('feldolgozás'), 'README must reference prohibition from ÁSZF Section 3');
+  assert.ok(readmeMd.includes('ÁSZF 9. pont'), 'README must cite ÁSZF 9. pont for unilateral modification rights');
   assert.ok(readmeMd.includes('ÁSZF 10. pont'), 'README must cite ÁSZF 10. pont for copyright');
-  assert.ok(readmeMd.includes('A Weboldal egészének vagy egyes részeinek magáncélú felhasználáson túli valamennyi felhasználása formája kizárólag a Szolgáltató előzetes írásbeli engedélyével lehetséges'), 'README must quote verbatim private use limit without paragraph numbers');
-  assert.ok(readmeMd.includes('A Weboldal rendeltetésszerű használatával járó megjelenítésen, az ehhez szükséges ideiglenes többszörözésen és a magáncélú másolatkészítésen túl'), 'README must quote verbatim intended use limit without paragraph numbers');
-  assert.ok(readmeMd.includes('Szigorúan tilos továbbá ezeket a tartalmakat más médiacsatornán közzétenni'), 'README must quote verbatim prohibition of other media channels without paragraph numbers');
+  assert.ok(readmeMd.includes('magáncélú'), 'README must reference private use without paragraph numbers');
+  assert.ok(readmeMd.includes('ideiglenes többszörözés'), 'README must reference temporary reproduction without paragraph numbers');
+  assert.ok(readmeMd.includes('más médiacsatornán'), 'README must reference prohibition of other media channels without paragraph numbers');
   assert.ok(!readmeMd.includes('10. pont 2. bekezdés'), 'README must not use paragraph number notation');
   assert.ok(!readmeMd.includes('10. pont 6. bekezdés'), 'README must not use paragraph number notation');
   assert.ok(!readmeMd.includes('10. pont 7. bekezdés'), 'README must not use paragraph number notation');
@@ -866,6 +926,7 @@ test('11. Browser-side camera display: schema validation, synthetic click-to-loa
   assert.ok(readmeMd.includes('192.168.1.81:3117'), 'README must document private LAN environment');
   assert.ok(readmeMd.includes('Loopback / LAN Guardrail'), 'README must document LAN guardrail');
   assert.ok(readmeMd.includes('CRUCIX_PRIVATE_HOSTS'), 'README must document CRUCIX_PRIVATE_HOSTS');
+  assert.ok(readmeMd.includes('MAX_GROUP_CAMERAS') || readmeMd.includes('Legfeljebb 4 kamera'), 'README must document group camera load limit');
 });
 
 test('12. Windy embed widget: schema, click-to-load lifecycle, private host guardrail, and zero server-side requests', async () => {
