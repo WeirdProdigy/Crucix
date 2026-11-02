@@ -669,6 +669,9 @@ All settings are in `.env` with sensible defaults:
 | `CRUCIX_ENABLE_FEED_QUBIT` | `false` | Opt-in science RSS feed for Qubit |
 | `CRUCIX_ENABLE_GNEWS` | `false` | Opt-in Google News RSS catalog aggregator (strictly 0 calls when false) |
 | `CRUCIX_ENABLE_HUNGAROMET_OBS` | `false` | Opt-in HungaroMet ODP 10-minute ground weather observations (Berettyóújfalu, Debrecen) |
+| `CRUCIX_HUNGAROMET_FALLBACK_STATIONS` | `64711,64310,64713` | Comma-separated candidate stations for per-field nearest valid sensor fallback |
+| `CRUCIX_OBSERVED_USER_LAT` | `47.2092` | Reference latitude for ground observation distance calculations (default: Berettyóújfalu) |
+| `CRUCIX_OBSERVED_USER_LON` | `21.5383` | Reference longitude for ground observation distance calculations (default: Berettyóújfalu) |
 
 Delta engine thresholds (how sensitive the system is to changes between sweeps) can be customized in `crucix.config.mjs` under the `delta.thresholds` section. The defaults are tuned to filter out noise while catching meaningful moves.
 
@@ -886,12 +889,18 @@ AGPL-3.0
   - Gyorsítótár élettartam (TTL): 10 perc (`CACHE_TTL_MS = 600000`).
   - Elévülési küszöb: 30 perc (`STALE_THRESHOLD_MINUTES = 30`). Ha a mért adat kora meghaladja a 30 percet, a kártya sárga figyelmeztető jelzést kap: *„NINCS FRISS MÉRÉS (Utolsó: ... UTC)”*.
   - Hibatűrés: Sikertelen letöltés esetén a rendszer a legutolsó érvényes állapotot jeleníti meg elévültként megjelölve (`fallback: true`).
-- **Hiányzó szenzorok pótlása legközelebbi teljes állomásról (Tartalékállomás-logika):**
+- **Hiányzó szenzorok pótlása mezőnként a legközelebbi érvényes állomásról (Tartalékállomás-logika):**
   - A szinoptikus mérési feed tanúsága szerint a `65305` Berettyóújfalu automata állomás dedikáltan hőmérsékletet, légnedvességet és csapadékot mér; a szélsebesség, légnyomás, látástávolság és talajhőmérsékletek nem mért értékek (`null`).
-  - **Konfigurálható prioritási sorrend:** A hiányzó mezőket a rendszer konfigurálható sorrendben vizsgálva keresi meg: alapértelmezetten `64711` (Debrecen repülőtér, teljes szenzorkészlet) -> `64310` (Debrecen Kismacs) -> `64713` (Derecske Petőfi major). A sorrend környezeti változóval felülbírálható (`CRUCIX_HUNGAROMET_FALLBACK_STATIONS=64711,64310,64713`).
-  - **Távolságszámítás (Haversine):** Az állomások hivatalos koordinátái alapján számítódik. Alapértelmezésben a Berettyóújfalu állomástól mért távolság szerepel (~31 km Debrecen repülőtérig). A felhasználói referencia-pozíció konfigurációval megadható (`CRUCIX_OBSERVED_USER_LAT`, `CRUCIX_OBSERVED_USER_LON`), nincs beégetve.
-  - **Önálló elévüléskezelés:** A tartalékállomások kora külön számítódik; ha egy tartalékállomás adata elévült (> 30 perc), a rendszer nem használja fel, hanem a következő friss tartalékállomásra lép. Ha egyik állomás sem szolgáltat friss mérést egy mezőre (pl. `soilTemp100cm`), az érték `null` marad, és a felületen semmilyen szám nem jelenik meg.
-  - **Megjelenítési szabály és adatvédelem:** Az elsődleges állomás saját mért értékei soha nem kerülnek felülírásra tartalékállomás értékével. A kimenet külön adatszerkezetben (`fallback.values.<mező> = { value, station, stationName, observedAt, distanceKm, isFallback }`) rögzíti a forrást. A felületen a helyi mérések a fő kártyákon szerepelnek, a pótolt szenzorok pedig egy külön, halványabb sorban, a forrásállomás nevével és becsült távolságával ellátva jelennek meg (pl. *„Szél: 5,0 m/s (Debrecen repülőtér, ~31 km)”*).
+  - **Mezőnkénti legközelebbi állomás választása:** Minden hiányzó mezőnél a referencia-pozíciótól (alapértelmezetten Berettyóújfalu) legkisebb távolságra lévő, friss (<= 30 perc), érvényes (nem null) méréssel rendelkező állomás értéke kerül kiválasztásra a jelölt tartalékállomások (`CRUCIX_HUNGAROMET_FALLBACK_STATIONS=64711,64310,64713`) közül.
+  - **Valódi mintán tapasztalt lefedettség:**
+    - Szél (`windSpeed`, `windGust`): Derecske Petőfi major (`64713`, ~17 km, `6,0 m/s`), mivel közelebb van Berettyóújfaluhoz, mint Debrecen repülőtér (~31 km), és a mintában érvényes széladatot szolgáltat.
+    - Légnyomás (`pressure`): Debrecen repülőtér (`64711`, ~31 km, `1009,4 hPa`), mivel Derecske nem mér légnyomást (`-999`), így a legközelebbi érvényes mérés a debreceni repülőtérről érkezik.
+    - Látástávolság (`visibility`): Debrecen repülőtér (`64711`, ~31 km, `20 km`).
+    - Talajhőmérséklet 5 cm (`soilTemp5cm`): Debrecen repülőtér (`64711`, ~31 km, `9,7 °C`).
+    - Talajhőmérséklet 100 cm (`soilTemp100cm`): Egyik állomás sem méri (`null` marad).
+  - **Távolságszámítás (Haversine):** Az állomások hivatalos koordinátái alapján dinamikusan számítódik. Alapértelmezésben a Berettyóújfalu állomástól mért távolság szerepel. A referencia-pozíció tetszőleges koordinátára konfigurálható (`CRUCIX_OBSERVED_USER_LAT`, `CRUCIX_OBSERVED_USER_LON`, pl. Bihartorda `47.165, 21.365`).
+  - **Önálló elévüléskezelés:** A tartalékállomások kora mezőnként és állomásonként függetlenül ellenőrzött; ha egy közelebbi állomás mérése elévült (> 30 perc), a rendszer a következő legközelebbi friss mérésre lép. Ha egyik állomás sem szolgáltat friss értéket egy mezőre, az érték `null` marad, és a felületen semmilyen szám nem jelenik meg.
+  - **Megjelenítési szabály és adatvédelem:** Az elsődleges állomás saját mért értékei soha nem kerülnek felülírásra tartalékállomás értékével. A kimenet külön adatszerkezetben (`fallback.values.<mező> = { value, station, stationName, observedAt, distanceKm, isFallback }`) rögzíti a pontos forrást és távolságot. A felületen a helyi mérések a fő kártyákon szerepelnek, a pótolt szenzorok pedig egy külön, halványabb sorban, mezőnként a saját forrásállomásuk nevével és távolságával jelennek meg (pl. *„Szél: 6,0 m/s (Derecske Petőfi major, ~17 km)”*, *„Légnyomás: 1009,4 hPa (Debrecen repülőtér, ~31 km)”*).
 - **HEAD előellenőrzés és mérési eredmény:**
   - Az adapter implementációja előtt végrehajtott kötelező előzetes mérés (2026. november 2. 12:00:52 GMT):
     - `Last-Modified: Mon, 02 Nov 2026 12:00:02 GMT`

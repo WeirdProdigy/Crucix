@@ -290,7 +290,7 @@ test('12. calculateHaversineDistanceKm: accurate station-to-station distance mat
   assert.equal(calculateHaversineDistanceKm(NaN, 21.5, 47.2, 21.5), null);
 });
 
-test('13. fillMissingObservations: fills missing fields from nearest full-sensor station (64711) on real sample', () => {
+test('13. fillMissingObservations: fills missing fields from nearest valid station per field (Derecske for wind, Debrecen for pressure/visibility)', () => {
   const fixedNow = new Date('2026-11-02T13:15:00.000Z').getTime();
   const parsed = parseSynopticCsv(fixtureCsv, { now: fixedNow });
 
@@ -331,15 +331,22 @@ test('13. fillMissingObservations: fills missing fields from nearest full-sensor
   assert.equal(fPrecip.station, '65305');
   assert.equal(fPrecip.isFallback, false);
 
-  // Missing values in primary station: filled from 64711 (Debrecen repülőtér)
+  // Missing values in primary station: filled from nearest valid station per field
+  // Wind: Derecske (64713) is closest (~17.4 km) and has valid wind data
   const fWind = fallback.values.windSpeed;
-  assert.equal(fWind.value, 5.0);
-  assert.equal(fWind.station, '64711');
-  assert.equal(fWind.stationName, 'Debrecen repülőtér');
+  assert.equal(fWind.value, 6.0);
+  assert.equal(fWind.station, '64713');
+  assert.equal(fWind.stationName, 'Derecske Petőfi major');
   assert.equal(fWind.isFallback, true);
-  assert.equal(fWind.distanceKm, 31);
+  assert.equal(fWind.distanceKm, 17.4);
   assert.equal(fWind.fresh, true);
 
+  const fGust = fallback.values.windGust;
+  assert.equal(fGust.value, 8.2);
+  assert.equal(fGust.station, '64713');
+  assert.equal(fGust.distanceKm, 17.4);
+
+  // Pressure: Derecske has null, closest valid is Debrecen repülőtér (64711: ~31 km)
   const fPress = fallback.values.pressure;
   assert.equal(fPress.value, 1009.4);
   assert.equal(fPress.station, '64711');
@@ -347,6 +354,13 @@ test('13. fillMissingObservations: fills missing fields from nearest full-sensor
   assert.equal(fPress.isFallback, true);
   assert.equal(fPress.distanceKm, 31);
 
+  // Visibility: Debrecen repülőtér (64711: ~31 km)
+  const fVis = fallback.values.visibility;
+  assert.equal(fVis.value, 20000);
+  assert.equal(fVis.station, '64711');
+  assert.equal(fVis.distanceKm, 31);
+
+  // Soil temp 5cm: Debrecen repülőtér (64711: ~31 km)
   const fSoil5 = fallback.values.soilTemp5cm;
   assert.equal(fSoil5.value, 9.7);
   assert.equal(fSoil5.station, '64711');
@@ -362,21 +376,21 @@ test('13. fillMissingObservations: fills missing fields from nearest full-sensor
   assert.equal(fSoil100.fresh, false);
 });
 
-test('14. fillMissingObservations: configurable fallback station order', () => {
+test('14. fillMissingObservations: candidate station filtering and fallback selection', () => {
   const fixedNow = new Date('2026-11-02T13:15:00.000Z').getTime();
 
-  // Test with custom order: 64310 (Debrecen Kismacs) before 64711
+  // Test with custom candidate list: only 64310 (Debrecen Kismacs)
   const parsed = parseSynopticCsv(fixtureCsv, {
     now: fixedNow,
-    fallbackStationOrder: ['64310', '64711', '64713']
+    fallbackStationOrder: ['64310']
   });
 
   const fallback = parsed.primaryStation.fallback;
-  assert.deepEqual(fallback.fallbackStations, ['64310', '64711', '64713']);
+  assert.deepEqual(fallback.fallbackStations, ['64310']);
 
   // In fixture, 64310 has windSpeed = 4.4, pressure = 1007.2
   const fWind = fallback.values.windSpeed;
-  assert.equal(fWind.value, 4.4, 'Wind speed must come from first fallback in priority (64310)');
+  assert.equal(fWind.value, 4.4, 'Wind speed must come from candidate station 64310');
   assert.equal(fWind.station, '64310');
   assert.equal(fWind.stationName, 'Debrecen Kismacs');
   assert.equal(fWind.distanceKm, 41);
@@ -401,8 +415,15 @@ test('15. fillMissingObservations: configurable user coordinates', () => {
   // Distance from Bihartorda (47.165, 21.365) to Berettyóújfalu (65305: 47.2092, 21.5383)
   assert.equal(fallback.values.temperature.distanceKm, 14);
 
-  // Distance from Bihartorda to Debrecen repülőtér (64711: 47.4844, 21.6056)
-  assert.equal(fallback.values.windSpeed.distanceKm, 39.9);
+  // Distance from Bihartorda to Derecske (64713: 47.3486, 21.5731) - closest for wind
+  assert.equal(fallback.values.windSpeed.station, '64713');
+  assert.equal(fallback.values.windSpeed.value, 6.0);
+  assert.equal(fallback.values.windSpeed.distanceKm, 26.3);
+
+  // Distance from Bihartorda to Debrecen repülőtér (64711: 47.4844, 21.6056) - closest valid for pressure
+  assert.equal(fallback.values.pressure.station, '64711');
+  assert.equal(fallback.values.pressure.value, 1009.4);
+  assert.equal(fallback.values.pressure.distanceKm, 39.9);
 });
 
 test('16. fillMissingObservations: stale fallback station handling and all-null fallback', () => {
@@ -482,11 +503,12 @@ test('17. Client weather-panel.js rendering: dimmer fallback row, direct values 
   // 2. Missing primary sensors must be rendered in the dimmer fallback row with exact format
   assert.ok(html.includes('wp-obs-fallback-box'), 'Must render wp-obs-fallback-box region');
   assert.ok(html.includes('Szél:'), 'Must show fallback label Szél:');
-  assert.ok(html.includes('5,0 m/s'), 'Must format wind speed as 5,0 m/s with Hungarian comma');
-  assert.ok(html.includes('(Debrecen repülőtér, ~31 km)'), 'Must show station name and distance in parentheses');
+  assert.ok(html.includes('6,0 m/s'), 'Must format wind speed as 6,0 m/s with Hungarian comma');
+  assert.ok(html.includes('(Derecske Petőfi major, ~17 km)'), 'Must show station name and distance in parentheses');
 
   assert.ok(html.includes('Légnyomás:'), 'Must show fallback label Légnyomás:');
   assert.ok(html.includes('1009,4 hPa'), 'Must format pressure with Hungarian comma');
+  assert.ok(html.includes('(Debrecen repülőtér, ~31 km)'), 'Must show station name and distance for pressure');
 
   assert.ok(html.includes('Talajhő (5cm):'), 'Must show fallback label Talajhő (5cm):');
   assert.ok(html.includes('9,7 °C'), 'Must format soil temp with Hungarian comma');

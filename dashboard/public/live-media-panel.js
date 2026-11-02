@@ -72,6 +72,12 @@
   const CAMERA_ERROR_BACKOFF_MS = 300000;
   const MAX_GROUP_CAMERAS = 4;
   const CAMERA_LIMIT_NOTICE_TEXT = 'Legfeljebb 4 kamera tölthető be egyszerre; a többit kártyánként nyisd meg.';
+  const DEFAULT_GROUP_CAMERA_IDS = Object.freeze([
+    'debrecen-kossuth-ter-webcam',
+    'debrecen-bekas-to-webcam',
+    'debrecen-egyetem-ter-webcam',
+    'debrecen-klinika-webcam'
+  ]);
   const WINDY_PRIVACY_NOTICE_TEXT = 'A betöltés kapcsolatot létesít a Windy.com szervereivel, és a Windy a böngésző helyi tárolóját használhatja; a Crucix nem tárolja az adatot.';
   const WINDY_DISCLAIMER_TEXT = 'Nem hivatalos előrejelzés; hivatalos forrás: HungaroMet';
 
@@ -624,12 +630,30 @@
       return;
     }
 
-    for (const stream of available) {
-      if (activeCameraIds.size >= MAX_GROUP_CAMERAS) break;
-      if (!activeCameraIds.has(stream.id)) {
-        cameraErrorStates.delete(stream.id);
-        activeCameraIds.add(stream.id);
-        startCameraTimer(stream.id, stream.imageUrl);
+    // Load available cameras prioritizing the fixed DEFAULT_GROUP_CAMERA_IDS order
+    const targetIds = [];
+    for (const gid of DEFAULT_GROUP_CAMERA_IDS) {
+      if (activeCameraIds.size + targetIds.length >= MAX_GROUP_CAMERAS) break;
+      if (available.some(s => s.id === gid) && !activeCameraIds.has(gid)) {
+        targetIds.push(gid);
+      }
+    }
+    // If slots remain, fill with remaining available streams in register order
+    if (activeCameraIds.size + targetIds.length < MAX_GROUP_CAMERAS) {
+      for (const stream of available) {
+        if (activeCameraIds.size + targetIds.length >= MAX_GROUP_CAMERAS) break;
+        if (!targetIds.includes(stream.id) && !activeCameraIds.has(stream.id)) {
+          targetIds.push(stream.id);
+        }
+      }
+    }
+
+    for (const id of targetIds) {
+      const stream = available.find(s => s.id === id);
+      if (stream) {
+        cameraErrorStates.delete(id);
+        activeCameraIds.add(id);
+        startCameraTimer(id, stream.imageUrl);
       }
     }
 
@@ -1504,7 +1528,9 @@
     CAMERA_PRIVACY_NOTICE_TEXT,
     MAX_GROUP_CAMERAS,
     CAMERA_LIMIT_NOTICE_TEXT,
+    DEFAULT_GROUP_CAMERA_IDS,
     getActiveCameraCount: () => activeCameraIds.size,
+    getActiveCameraIds: () => Array.from(activeCameraIds),
     getCameraNotice: () => cameraNotice,
     WINDY_PRIVACY_NOTICE_TEXT,
     WINDY_DISCLAIMER_TEXT

@@ -752,9 +752,29 @@ test('11. Browser-side camera display: schema validation, synthetic click-to-loa
   LiveMedia.unloadAllCameras();
   assert.equal(LiveMedia.getActiveCameraCount(), 0, 'Initially 0 cameras active');
 
-  // Trigger batch load on 11 cameras: must activate at most MAX_GROUP_CAMERAS (4) in fixed order
+  // Trigger batch load on 11 cameras: must activate exactly the 4 expected IDs in fixed order
   LiveMedia.loadAllCameras();
   assert.equal(LiveMedia.getActiveCameraCount(), 4, 'Batch load must activate exactly MAX_GROUP_CAMERAS (4) cameras');
+  assert.deepEqual(
+    LiveMedia.getActiveCameraIds(),
+    [
+      'debrecen-kossuth-ter-webcam',
+      'debrecen-bekas-to-webcam',
+      'debrecen-egyetem-ter-webcam',
+      'debrecen-klinika-webcam'
+    ],
+    'Group load must activate exactly the expected 4 IDs in fixed order'
+  );
+  assert.deepEqual(
+    LiveMedia.DEFAULT_GROUP_CAMERA_IDS,
+    [
+      'debrecen-kossuth-ter-webcam',
+      'debrecen-bekas-to-webcam',
+      'debrecen-egyetem-ter-webcam',
+      'debrecen-klinika-webcam'
+    ],
+    'DEFAULT_GROUP_CAMERA_IDS must match data/live-streams.json identifiers exactly'
+  );
   assert.equal(LiveMedia.isCameraActive('debrecen-kossuth-ter-webcam'), true, 'Cam 1 must be active');
   assert.equal(LiveMedia.isCameraActive('debrecen-bekas-to-webcam'), true, 'Cam 2 must be active');
   assert.equal(LiveMedia.isCameraActive('debrecen-egyetem-ter-webcam'), true, 'Cam 3 must be active');

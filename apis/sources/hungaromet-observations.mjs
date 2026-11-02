@@ -139,7 +139,7 @@ export function resolveReferenceCoordinates(targetStation, options = {}) {
  * Ensures:
  * 1. Primary/target values are NEVER overwritten if already present.
  * 2. Only fresh fallback stations (age <= 30 mins) can provide fallback values.
- * 3. Fallback candidates are evaluated in priority order with freshest timestamp winning.
+ * 3. Evaluates candidate stations per field: nearest valid (non-null) station with smallest distance wins.
  * 4. Separate structure values.<metric> = { value, station, stationName, observedAt, distanceKm, isFallback, fresh }
  * 5. Returns null if no valid measurement is found across target and all fallback stations.
  */
@@ -182,9 +182,11 @@ export function fillMissingObservations(targetStation, allStations = {}, options
 
         const fVal = fStation.values ? fStation.values[key] : null;
         if (fVal !== null && fVal !== undefined) {
+          const dist = calculateHaversineDistanceKm(refCoords.lat, refCoords.lon, fStation.lat, fStation.lon);
           candidates.push({
             station: fStation,
             value: fVal,
+            distanceKm: dist,
             orderIdx: order.indexOf(fId),
             timestamp: new Date(fStation.observedAt).getTime()
           });
@@ -192,7 +194,16 @@ export function fillMissingObservations(targetStation, allStations = {}, options
       }
 
       if (candidates.length > 0) {
+        // Nearest valid station fallback per field:
+        // 1. Minimum distance to reference coordinates
+        // 2. Freshest timestamp
+        // 3. Candidate order index
         candidates.sort((a, b) => {
+          const distA = a.distanceKm !== null ? a.distanceKm : Infinity;
+          const distB = b.distanceKm !== null ? b.distanceKm : Infinity;
+          if (distA !== distB) {
+            return distA - distB;
+          }
           if (b.timestamp !== a.timestamp) {
             return b.timestamp - a.timestamp;
           }
@@ -201,7 +212,7 @@ export function fillMissingObservations(targetStation, allStations = {}, options
 
         const best = candidates[0];
         const fStn = best.station;
-        const dist = calculateHaversineDistanceKm(refCoords.lat, refCoords.lon, fStn.lat, fStn.lon);
+        const dist = best.distanceKm;
 
         values[key] = {
           value: best.value,
