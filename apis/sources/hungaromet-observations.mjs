@@ -57,6 +57,186 @@ export const HUNGAROMET_STATIONS = Object.freeze({
   }
 });
 
+export const DEFAULT_FALLBACK_STATIONS = Object.freeze(['64711', '64310', '64713']);
+
+/**
+ * Calculates Haversine distance in kilometers between two lat/lon points.
+ * Returns null if any coordinate is not finite.
+ */
+export function calculateHaversineDistanceKm(lat1, lon1, lat2, lon2) {
+  if (!Number.isFinite(lat1) || !Number.isFinite(lon1) || !Number.isFinite(lat2) || !Number.isFinite(lon2)) {
+    return null;
+  }
+  const R = 6371; // Earth radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round((R * c) * 10) / 10;
+}
+
+/**
+ * Resolves fallback station priority order from options, environment, or default list.
+ */
+export function resolveFallbackStationOrder(options = {}) {
+  if (Array.isArray(options.fallbackStationOrder) && options.fallbackStationOrder.length > 0) {
+    return options.fallbackStationOrder.map(s => String(s).trim()).filter(Boolean);
+  }
+  if (process.env.CRUCIX_HUNGAROMET_FALLBACK_STATIONS) {
+    const fromEnv = process.env.CRUCIX_HUNGAROMET_FALLBACK_STATIONS
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (fromEnv.length > 0) return fromEnv;
+  }
+  return [...DEFAULT_FALLBACK_STATIONS];
+}
+
+/**
+ * Resolves reference coordinates for distance calculations.
+ * Order: options.userCoordinates -> process.env.CRUCIX_OBSERVED_USER_LAT/LON -> targetStation coordinates -> default.
+ */
+export function resolveReferenceCoordinates(targetStation, options = {}) {
+  if (
+    options.userCoordinates &&
+    Number.isFinite(options.userCoordinates.lat) &&
+    Number.isFinite(options.userCoordinates.lon)
+  ) {
+    return {
+      lat: Number(options.userCoordinates.lat),
+      lon: Number(options.userCoordinates.lon),
+      source: 'options'
+    };
+  }
+
+  const envLat = process.env.CRUCIX_OBSERVED_USER_LAT;
+  const envLon = process.env.CRUCIX_OBSERVED_USER_LON;
+  if (envLat !== undefined && envLon !== undefined) {
+    const latNum = parseFloat(envLat);
+    const lonNum = parseFloat(envLon);
+    if (Number.isFinite(latNum) && Number.isFinite(lonNum)) {
+      return { lat: latNum, lon: lonNum, source: 'env' };
+    }
+  }
+
+  if (targetStation && Number.isFinite(targetStation.lat) && Number.isFinite(targetStation.lon)) {
+    return { lat: targetStation.lat, lon: targetStation.lon, source: 'targetStation' };
+  }
+
+  const meta = targetStation?.station ? HUNGAROMET_STATIONS[targetStation.station] : HUNGAROMET_STATIONS['65305'];
+  if (meta && Number.isFinite(meta.lat) && Number.isFinite(meta.lon)) {
+    return { lat: meta.lat, lon: meta.lon, source: 'stationMeta' };
+  }
+
+  return { lat: 47.2092, lon: 21.5383, source: 'default' };
+}
+
+/**
+ * Fills missing (null) observation metrics for a target station from candidate fallback stations.
+ * Ensures:
+ * 1. Primary/target values are NEVER overwritten if already present.
+ * 2. Only fresh fallback stations (age <= 30 mins) can provide fallback values.
+ * 3. Fallback candidates are evaluated in priority order with freshest timestamp winning.
+ * 4. Separate structure values.<metric> = { value, station, stationName, observedAt, distanceKm, isFallback, fresh }
+ * 5. Returns null if no valid measurement is found across target and all fallback stations.
+ */
+export function fillMissingObservations(targetStation, allStations = {}, options = {}) {
+  if (!targetStation || typeof targetStation !== 'object') return null;
+
+  const order = resolveFallbackStationOrder(options);
+  const refCoords = resolveReferenceCoordinates(targetStation, options);
+  const targetValues = targetStation.values || {};
+  const metricKeys = Object.keys(targetValues);
+
+  const values = {};
+  const missingFields = [];
+  const filledFields = [];
+
+  for (const key of metricKeys) {
+    const rawVal = targetValues[key];
+    if (rawVal !== null && rawVal !== undefined) {
+      const dist = calculateHaversineDistanceKm(refCoords.lat, refCoords.lon, targetStation.lat, targetStation.lon);
+      values[key] = {
+        value: rawVal,
+        station: targetStation.station,
+        stationName: targetStation.stationName,
+        observedAt: targetStation.observedAt,
+        distanceKm: dist !== null ? Math.round(dist * 10) / 10 : 0,
+        isFallback: false,
+        fresh: Boolean(targetStation.fresh)
+      };
+    } else {
+      missingFields.push(key);
+
+      const candidates = [];
+      for (const fId of order) {
+        if (fId === targetStation.station) continue;
+        const fStation = allStations[fId];
+        if (!fStation) continue;
+
+        const isFresh = Boolean(fStation.fresh);
+        if (!isFresh) continue;
+
+        const fVal = fStation.values ? fStation.values[key] : null;
+        if (fVal !== null && fVal !== undefined) {
+          candidates.push({
+            station: fStation,
+            value: fVal,
+            orderIdx: order.indexOf(fId),
+            timestamp: new Date(fStation.observedAt).getTime()
+          });
+        }
+      }
+
+      if (candidates.length > 0) {
+        candidates.sort((a, b) => {
+          if (b.timestamp !== a.timestamp) {
+            return b.timestamp - a.timestamp;
+          }
+          return a.orderIdx - b.orderIdx;
+        });
+
+        const best = candidates[0];
+        const fStn = best.station;
+        const dist = calculateHaversineDistanceKm(refCoords.lat, refCoords.lon, fStn.lat, fStn.lon);
+
+        values[key] = {
+          value: best.value,
+          station: fStn.station,
+          stationName: fStn.stationName,
+          observedAt: fStn.observedAt,
+          distanceKm: dist !== null ? Math.round(dist * 10) / 10 : null,
+          isFallback: true,
+          fresh: true
+        };
+        filledFields.push(key);
+      } else {
+        values[key] = {
+          value: null,
+          station: null,
+          stationName: null,
+          observedAt: null,
+          distanceKm: null,
+          isFallback: true,
+          fresh: false
+        };
+      }
+    }
+  }
+
+  return {
+    targetStation: targetStation.station,
+    targetStationName: targetStation.stationName,
+    fallbackStations: order,
+    missingFields,
+    filledFields,
+    values
+  };
+}
+
 let observationCache = null;
 let lastSuccessfulData = null;
 
@@ -158,7 +338,8 @@ function decodeZipText(buffer) {
  * Parses raw unzipped CSV text into station observations.
  * Filters strictly to target stations: 65305, 64711, 64310, 64713.
  */
-export function parseSynopticCsv(csvText, { now = Date.now() } = {}) {
+export function parseSynopticCsv(csvText, options = {}) {
+  const now = options.now ? new Date(options.now).getTime() : Date.now();
   if (!csvText || typeof csvText !== 'string') {
     throw new Error('Üres vagy érvénytelen CSV tartalom');
   }
@@ -248,6 +429,25 @@ export function parseSynopticCsv(csvText, { now = Date.now() } = {}) {
   }
 
   const primaryStation = stations['65305'] || (Object.values(stations).length > 0 ? Object.values(stations)[0] : null);
+
+  // Compute fallback / filled observations
+  let primaryFallback = null;
+  if (primaryStation) {
+    primaryFallback = fillMissingObservations(primaryStation, stations, options);
+    primaryStation.composite = primaryFallback;
+    primaryStation.fallback = primaryFallback;
+    primaryStation.fallbackValues = primaryFallback.values;
+  }
+
+  for (const sId of Object.keys(stations)) {
+    if (stations[sId] !== primaryStation) {
+      const fb = fillMissingObservations(stations[sId], stations, options);
+      stations[sId].composite = fb;
+      stations[sId].fallback = fb;
+      stations[sId].fallbackValues = fb.values;
+    }
+  }
+
   const isOverallFresh = primaryStation ? primaryStation.fresh : false;
   const stationCount = Object.keys(stations).length;
   const minAgeMinutes = primaryStation ? primaryStation.ageMinutes : null;
@@ -265,6 +465,8 @@ export function parseSynopticCsv(csvText, { now = Date.now() } = {}) {
     feedTimestampLocal: latestBudapestTime,
     primaryStation,
     stations,
+    fallback: primaryFallback,
+    composite: primaryFallback,
     attribution: ATTRIBUTION
   };
 }
@@ -304,7 +506,7 @@ export async function briefing(options = {}) {
         const unzipped = readZipEntry(zipBuf);
         csvContent = decodeZipText(unzipped);
       }
-      const parsed = parseSynopticCsv(csvContent, { now });
+      const parsed = parseSynopticCsv(csvContent, { now, ...options });
       const briefResult = {
         status: parsed.fresh ? 'ok' : 'stale',
         data: {
@@ -355,7 +557,7 @@ export async function briefing(options = {}) {
 
     const unzipped = readZipEntry(fetchRes.rawBuffer);
     const csvText = decodeZipText(unzipped);
-    const parsed = parseSynopticCsv(csvText, { now });
+    const parsed = parseSynopticCsv(csvText, { now, ...options });
 
     const briefResult = {
       status: parsed.fresh ? 'ok' : 'stale',

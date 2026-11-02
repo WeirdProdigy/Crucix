@@ -32,6 +32,11 @@
       .replace(/'/g, '&#39;');
   }
 
+  function formatMetricNum(val, decimals = 1) {
+    if (val === null || val === undefined || !Number.isFinite(val)) return null;
+    return val.toFixed(decimals).replace('.', ',');
+  }
+
   function setWeatherRegion(region) {
     activeWeatherRegion = region;
     const panel = document.querySelector('.weather-panel-root');
@@ -122,6 +127,136 @@
       `;
     }).join('');
 
+    const fallbackInfo = currentStation.fallback || currentStation.composite || observed.fallback || null;
+    const fbVal = fallbackInfo?.values || {};
+
+    // Collect fallback items for metrics missing on currentStation
+    const fallbackItems = [];
+
+    if (stVal.windSpeed === null && fbVal.windSpeed?.value !== null && fbVal.windSpeed?.isFallback) {
+      const ws = formatMetricNum(fbVal.windSpeed.value, 1);
+      const stName = fbVal.windSpeed.stationName || 'Tartalékállomás';
+      const dist = fbVal.windSpeed.distanceKm !== null ? `~${Math.round(fbVal.windSpeed.distanceKm)} km` : '';
+      const meta = dist ? `(${stName}, ${dist})` : `(${stName})`;
+      fallbackItems.push({
+        label: 'Szél',
+        value: `${ws} m/s`,
+        meta
+      });
+    }
+
+    if (stVal.pressure === null && fbVal.pressure?.value !== null && fbVal.pressure?.isFallback) {
+      const p = formatMetricNum(fbVal.pressure.value, 1);
+      const stName = fbVal.pressure.stationName || 'Tartalékállomás';
+      const dist = fbVal.pressure.distanceKm !== null ? `~${Math.round(fbVal.pressure.distanceKm)} km` : '';
+      const meta = dist ? `(${stName}, ${dist})` : `(${stName})`;
+      fallbackItems.push({
+        label: 'Légnyomás',
+        value: `${p} hPa`,
+        meta
+      });
+    }
+
+    if (stVal.soilTemp5cm === null && fbVal.soilTemp5cm?.value !== null && fbVal.soilTemp5cm?.isFallback) {
+      const t = formatMetricNum(fbVal.soilTemp5cm.value, 1);
+      const stName = fbVal.soilTemp5cm.stationName || 'Tartalékállomás';
+      const dist = fbVal.soilTemp5cm.distanceKm !== null ? `~${Math.round(fbVal.soilTemp5cm.distanceKm)} km` : '';
+      const meta = dist ? `(${stName}, ${dist})` : `(${stName})`;
+      fallbackItems.push({
+        label: 'Talajhő (5cm)',
+        value: `${t} °C`,
+        meta
+      });
+    }
+
+    if (stVal.visibility === null && fbVal.visibility?.value !== null && fbVal.visibility?.isFallback) {
+      const v = fbVal.visibility.value >= 1000
+        ? `${formatMetricNum(fbVal.visibility.value / 1000, 1)} km`
+        : `${fbVal.visibility.value} m`;
+      const stName = fbVal.visibility.stationName || 'Tartalékállomás';
+      const dist = fbVal.visibility.distanceKm !== null ? `~${Math.round(fbVal.visibility.distanceKm)} km` : '';
+      const meta = dist ? `(${stName}, ${dist})` : `(${stName})`;
+      fallbackItems.push({
+        label: 'Látástávolság',
+        value: v,
+        meta
+      });
+    }
+
+    // Direct metrics for primary row
+    const directMetricsHtml = [];
+
+    if (stVal.temperature !== null) {
+      directMetricsHtml.push(`
+        <div class="wp-obs-metric-item">
+          <span class="wp-obs-ml">Hőmérséklet</span>
+          <span class="wp-obs-mv highlight">${stVal.temperature} °C</span>
+          ${stVal.temperatureAvg !== null ? `<span class="wp-obs-ms">Átlag: ${stVal.temperatureAvg} °C</span>` : ''}
+        </div>
+      `);
+    }
+
+    if (stVal.humidity !== null) {
+      directMetricsHtml.push(`
+        <div class="wp-obs-metric-item">
+          <span class="wp-obs-ml">Légnedvesség</span>
+          <span class="wp-obs-mv">${stVal.humidity} %</span>
+        </div>
+      `);
+    }
+
+    if (stVal.windSpeed !== null) {
+      directMetricsHtml.push(`
+        <div class="wp-obs-metric-item">
+          <span class="wp-obs-ml">Szél (10m)</span>
+          <span class="wp-obs-mv">${stVal.windSpeed} m/s</span>
+          ${stVal.windGust !== null ? `<span class="wp-obs-ms">Lökés: ${stVal.windGust} m/s</span>` : ''}
+        </div>
+      `);
+    }
+
+    if (stVal.precipitation !== null) {
+      directMetricsHtml.push(`
+        <div class="wp-obs-metric-item">
+          <span class="wp-obs-ml">Csapadék (10p)</span>
+          <span class="wp-obs-mv">${stVal.precipitation} mm</span>
+        </div>
+      `);
+    }
+
+    if (stVal.pressure !== null) {
+      directMetricsHtml.push(`
+        <div class="wp-obs-metric-item">
+          <span class="wp-obs-ml">Légnyomás</span>
+          <span class="wp-obs-mv">${stVal.pressure} hPa</span>
+        </div>
+      `);
+    }
+
+    if (stVal.soilTemp5cm !== null) {
+      directMetricsHtml.push(`
+        <div class="wp-obs-metric-item">
+          <span class="wp-obs-ml">Talajhő (5cm)</span>
+          <span class="wp-obs-mv">${stVal.soilTemp5cm} °C</span>
+        </div>
+      `);
+    }
+
+    const fallbackHtml = fallbackItems.length > 0 ? `
+      <div class="wp-obs-fallback-box" role="region" aria-label="Tartalékállomásról pótolt szenzoradatok">
+        <span class="wp-obs-fallback-title">Közeli állomásról pótolt szenzorok (más állomásról mérve):</span>
+        <div class="wp-obs-fallback-items">
+          ${fallbackItems.map(item => `
+            <span class="wp-obs-fallback-item">
+              <span class="wp-obs-fb-label">${esc(item.label)}:</span>
+              <strong class="wp-obs-fb-val">${esc(item.value)}</strong>
+              <span class="wp-obs-fb-meta">${esc(item.meta)}</span>
+            </span>
+          `).join('')}
+        </div>
+      </div>
+    ` : '';
+
     return `
       <div class="wp-observed-card ${statusClass}">
         <div class="wp-obs-header">
@@ -137,34 +272,10 @@
         </div>
 
         <div class="wp-obs-metrics-row">
-          <div class="wp-obs-metric-item">
-            <span class="wp-obs-ml">Hőmérséklet</span>
-            <span class="wp-obs-mv highlight">${stVal.temperature !== null ? stVal.temperature + ' °C' : '--'}</span>
-            ${stVal.temperatureAvg !== null ? `<span class="wp-obs-ms">Átlag: ${stVal.temperatureAvg} °C</span>` : ''}
-          </div>
-          <div class="wp-obs-metric-item">
-            <span class="wp-obs-ml">Légnedvesség</span>
-            <span class="wp-obs-mv">${stVal.humidity !== null ? stVal.humidity + ' %' : '--'}</span>
-          </div>
-          <div class="wp-obs-metric-item">
-            <span class="wp-obs-ml">Szél (10m)</span>
-            <span class="wp-obs-mv">${stVal.windSpeed !== null ? stVal.windSpeed + ' m/s' : '--'}</span>
-            ${stVal.windGust !== null ? `<span class="wp-obs-ms">Lökés: ${stVal.windGust} m/s</span>` : ''}
-          </div>
-          <div class="wp-obs-metric-item">
-            <span class="wp-obs-ml">Csapadék (10p)</span>
-            <span class="wp-obs-mv">${stVal.precipitation !== null ? stVal.precipitation + ' mm' : '0.0 mm'}</span>
-          </div>
-          <div class="wp-obs-metric-item">
-            <span class="wp-obs-ml">Légnyomás</span>
-            <span class="wp-obs-mv">${stVal.pressure !== null ? stVal.pressure + ' hPa' : '--'}</span>
-          </div>
-          ${stVal.soilTemp5cm !== null ? `
-          <div class="wp-obs-metric-item">
-            <span class="wp-obs-ml">Talajhő (5cm)</span>
-            <span class="wp-obs-mv">${stVal.soilTemp5cm} °C</span>
-          </div>` : ''}
+          ${directMetricsHtml.join('')}
         </div>
+
+        ${fallbackHtml}
 
         <div class="wp-obs-attribution">
           Adatbázis: Meteorológiai Adattár, HungaroMet Nonprofit Zrt. · Valós talajszinti mérés (nem numerikus modell)

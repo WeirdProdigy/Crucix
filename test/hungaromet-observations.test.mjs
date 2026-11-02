@@ -21,6 +21,11 @@ import {
   SOURCE,
   ATTRIBUTION,
   HUNGAROMET_STATIONS,
+  DEFAULT_FALLBACK_STATIONS,
+  calculateHaversineDistanceKm,
+  resolveFallbackStationOrder,
+  resolveReferenceCoordinates,
+  fillMissingObservations,
   parseOdpTimestampToUtcIso,
   formatToBudapestTime,
   parseSynopticCsv,
@@ -262,3 +267,240 @@ test('11. Robustness: duplicate station records keep latest, missing station han
   assert.ok(parsedMissing.primaryStation);
   assert.equal(parsedMissing.primaryStation.station, '64711');
 });
+
+test('12. calculateHaversineDistanceKm: accurate station-to-station distance math', () => {
+  // Berettyóújfalu (65305: 47.2092, 21.5383) to Debrecen repülőtér (64711: 47.4844, 21.6056)
+  const dDebrecenRepter = calculateHaversineDistanceKm(47.2092, 21.5383, 47.4844, 21.6056);
+  assert.equal(dDebrecenRepter, 31);
+
+  // Berettyóújfalu (65305) to Derecske (64713: 47.3653, 21.5497)
+  const dDerecske = calculateHaversineDistanceKm(47.2092, 21.5383, 47.3653, 21.5497);
+  assert.equal(dDerecske, 17.4);
+
+  // Berettyóújfalu (65305) to Debrecen Kismacs (64310: 47.5767, 21.5825)
+  const dKismacs = calculateHaversineDistanceKm(47.2092, 21.5383, 47.5767, 21.5825);
+  assert.equal(dKismacs, 41);
+
+  // Distance to self
+  assert.equal(calculateHaversineDistanceKm(47.2092, 21.5383, 47.2092, 21.5383), 0);
+
+  // Invalid coordinates return null
+  assert.equal(calculateHaversineDistanceKm(null, 21.5, 47.2, 21.5), null);
+  assert.equal(calculateHaversineDistanceKm(47.2, undefined, 47.2, 21.5), null);
+  assert.equal(calculateHaversineDistanceKm(NaN, 21.5, 47.2, 21.5), null);
+});
+
+test('13. fillMissingObservations: fills missing fields from nearest full-sensor station (64711) on real sample', () => {
+  const fixedNow = new Date('2026-11-02T13:15:00.000Z').getTime();
+  const parsed = parseSynopticCsv(fixtureCsv, { now: fixedNow });
+
+  const primary = parsed.primaryStation;
+  assert.equal(primary.station, '65305');
+  assert.equal(primary.stationName, 'Berettyóújfalu');
+
+  // Verify primary station raw values are NEVER overwritten
+  assert.equal(primary.values.temperature, 11.2);
+  assert.equal(primary.values.humidity, 71);
+  assert.equal(primary.values.precipitation, 0);
+  assert.equal(primary.values.windSpeed, null, 'Raw primary windSpeed must remain null');
+  assert.equal(primary.values.pressure, null, 'Raw primary pressure must remain null');
+  assert.equal(primary.values.soilTemp5cm, null, 'Raw primary soilTemp5cm must remain null');
+
+  // Separate fallback structure verification
+  const fallback = primary.fallback;
+  assert.ok(fallback, 'Fallback structure must be present on primaryStation');
+  assert.equal(fallback.targetStation, '65305');
+  assert.ok(parsed.fallback, 'Fallback structure must be present at root of parsed result');
+
+  // Direct values in fallback structure have isFallback=false, distanceKm=0
+  const fTemp = fallback.values.temperature;
+  assert.equal(fTemp.value, 11.2);
+  assert.equal(fTemp.station, '65305');
+  assert.equal(fTemp.stationName, 'Berettyóújfalu');
+  assert.equal(fTemp.isFallback, false);
+  assert.equal(fTemp.distanceKm, 0);
+  assert.equal(fTemp.fresh, true);
+
+  const fHum = fallback.values.humidity;
+  assert.equal(fHum.value, 71);
+  assert.equal(fHum.station, '65305');
+  assert.equal(fHum.isFallback, false);
+
+  const fPrecip = fallback.values.precipitation;
+  assert.equal(fPrecip.value, 0);
+  assert.equal(fPrecip.station, '65305');
+  assert.equal(fPrecip.isFallback, false);
+
+  // Missing values in primary station: filled from 64711 (Debrecen repülőtér)
+  const fWind = fallback.values.windSpeed;
+  assert.equal(fWind.value, 5.0);
+  assert.equal(fWind.station, '64711');
+  assert.equal(fWind.stationName, 'Debrecen repülőtér');
+  assert.equal(fWind.isFallback, true);
+  assert.equal(fWind.distanceKm, 31);
+  assert.equal(fWind.fresh, true);
+
+  const fPress = fallback.values.pressure;
+  assert.equal(fPress.value, 1009.4);
+  assert.equal(fPress.station, '64711');
+  assert.equal(fPress.stationName, 'Debrecen repülőtér');
+  assert.equal(fPress.isFallback, true);
+  assert.equal(fPress.distanceKm, 31);
+
+  const fSoil5 = fallback.values.soilTemp5cm;
+  assert.equal(fSoil5.value, 9.7);
+  assert.equal(fSoil5.station, '64711');
+  assert.equal(fSoil5.isFallback, true);
+  assert.equal(fSoil5.distanceKm, 31);
+
+  // Unmeasured on both primary and all fallbacks (soilTemp100cm): value is null
+  const fSoil100 = fallback.values.soilTemp100cm;
+  assert.equal(fSoil100.value, null);
+  assert.equal(fSoil100.station, null);
+  assert.equal(fSoil100.stationName, null);
+  assert.equal(fSoil100.distanceKm, null);
+  assert.equal(fSoil100.fresh, false);
+});
+
+test('14. fillMissingObservations: configurable fallback station order', () => {
+  const fixedNow = new Date('2026-11-02T13:15:00.000Z').getTime();
+
+  // Test with custom order: 64310 (Debrecen Kismacs) before 64711
+  const parsed = parseSynopticCsv(fixtureCsv, {
+    now: fixedNow,
+    fallbackStationOrder: ['64310', '64711', '64713']
+  });
+
+  const fallback = parsed.primaryStation.fallback;
+  assert.deepEqual(fallback.fallbackStations, ['64310', '64711', '64713']);
+
+  // In fixture, 64310 has windSpeed = 4.4, pressure = 1007.2
+  const fWind = fallback.values.windSpeed;
+  assert.equal(fWind.value, 4.4, 'Wind speed must come from first fallback in priority (64310)');
+  assert.equal(fWind.station, '64310');
+  assert.equal(fWind.stationName, 'Debrecen Kismacs');
+  assert.equal(fWind.distanceKm, 41);
+
+  const fPress = fallback.values.pressure;
+  assert.equal(fPress.value, 1007.2);
+  assert.equal(fPress.station, '64310');
+  assert.equal(fPress.distanceKm, 41);
+});
+
+test('15. fillMissingObservations: configurable user coordinates', () => {
+  const fixedNow = new Date('2026-11-02T13:15:00.000Z').getTime();
+
+  // Pass custom user coordinates for Bihartorda (47.165, 21.365)
+  const parsed = parseSynopticCsv(fixtureCsv, {
+    now: fixedNow,
+    userCoordinates: { lat: 47.165, lon: 21.365 }
+  });
+
+  const fallback = parsed.primaryStation.fallback;
+
+  // Distance from Bihartorda (47.165, 21.365) to Berettyóújfalu (65305: 47.2092, 21.5383)
+  assert.equal(fallback.values.temperature.distanceKm, 14);
+
+  // Distance from Bihartorda to Debrecen repülőtér (64711: 47.4844, 21.6056)
+  assert.equal(fallback.values.windSpeed.distanceKm, 39.9);
+});
+
+test('16. fillMissingObservations: stale fallback station handling and all-null fallback', () => {
+  // Construct CSV where primary 65305 is fresh (13:00), but 64711 is stale (12:00, 75 min old)
+  // and 64310 is fresh (13:00)
+  const mixedCsv = [
+    'Time;StationNumber;StationName;Latitude;Longitude;Elevation;r;Q_r;t;Q_t;ta;Q_ta;tn;Q_tn;tx;Q_tx;v;Q_v;p;Q_p;u;Q_u;sg;Q_sg;sr;Q_sr;suv;Q_suv;fs;Q_fs;fsd;Q_fsd;fx;Q_fx;fxd;Q_fxd;fxm;Q_fxm;fxs;Q_fxs;et5;Q_et5;et10;Q_et10;et20;Q_et20;et50;Q_et50;et100;Q_et100;tsn;Q_tsn;tviz;Q_tviz;EOR',
+    '202611021300;65305;Berettyóújfalu;47.2092;21.5383;92.0;0.0;;11.2;;11.2;;11.2;;11.2;;-999;;-999;;71;;-999;;58.9;;-999;;-999;;-999;;-999;;-999;;-999;;-999;;-999;;-999;;-999;;-999;;-999;;-999;;-999;;EOR',
+    '202611021200;64711;Debrecen repülőtér;47.4844;21.6056;106.6;0.0;;10.1;;10.0;;9.9;;10.1;;20000;;1009.4;;71;;-999;;61.8;;-999;;5.0;;21;;7.0;;34;;58;;39;;9.7;;9.9;;10.4;;12.5;;-999;;9.5;;-999;;EOR',
+    '202611021300;64310;Debrecen Kismacs;47.5767;21.5825;125.0;-999;;10.0;;10.0;;9.9;;10.0;;20000;;1007.2;;68;;-999;;65.9;;-999;;4.4;;359;;7.2;;11;;00;;00;;-999;;9.8;;10.4;;12.4;;-999;;-999;;-999;;EOR'
+  ].join('\n');
+
+  const fixedNow = new Date('2026-11-02T13:15:00.000Z').getTime();
+  const parsed = parseSynopticCsv(mixedCsv, { now: fixedNow });
+
+  // 64711 is stale (> 30 min)
+  assert.equal(parsed.stations['64711'].fresh, false);
+  assert.equal(parsed.stations['64310'].fresh, true);
+
+  // Even though 64711 is first in order, its stale data must NOT be used
+  // It must fall back to the fresh station 64310
+  const fallback = parsed.primaryStation.fallback;
+  assert.equal(fallback.values.windSpeed.station, '64310', 'Stale station 64711 was rejected in favor of fresh 64310');
+  assert.equal(fallback.values.windSpeed.value, 4.4);
+  assert.equal(fallback.values.windSpeed.distanceKm, 41);
+
+  // If ALL fallback stations are stale, missing field remains null
+  const allStaleCsv = [
+    'Time;StationNumber;StationName;Latitude;Longitude;Elevation;r;Q_r;t;Q_t;ta;Q_ta;tn;Q_tn;tx;Q_tx;v;Q_v;p;Q_p;u;Q_u;sg;Q_sg;sr;Q_sr;suv;Q_suv;fs;Q_fs;fsd;Q_fsd;fx;Q_fx;fxd;Q_fxd;fxm;Q_fxm;fxs;Q_fxs;et5;Q_et5;et10;Q_et10;et20;Q_et20;et50;Q_et50;et100;Q_et100;tsn;Q_tsn;tviz;Q_tviz;EOR',
+    '202611021300;65305;Berettyóújfalu;47.2092;21.5383;92.0;0.0;;11.2;;11.2;;11.2;;11.2;;-999;;-999;;71;;-999;;58.9;;-999;;-999;;-999;;-999;;-999;;-999;;-999;;-999;;-999;;-999;;-999;;-999;;-999;;-999;;EOR',
+    '202611021100;64711;Debrecen repülőtér;47.4844;21.6056;106.6;0.0;;10.1;;10.0;;9.9;;10.1;;20000;;1009.4;;71;;-999;;61.8;;-999;;5.0;;21;;7.0;;34;;58;;39;;9.7;;9.9;;10.4;;12.5;;-999;;9.5;;-999;;EOR'
+  ].join('\n');
+
+  const parsedAllStale = parseSynopticCsv(allStaleCsv, { now: fixedNow });
+  assert.equal(parsedAllStale.primaryStation.fallback.values.windSpeed.value, null);
+  assert.equal(parsedAllStale.primaryStation.fallback.values.windSpeed.station, null);
+});
+
+test('17. Client weather-panel.js rendering: dimmer fallback row, direct values preserved, zero alert emission', () => {
+  const code = fs.readFileSync(path.join(__dirname, '..', 'dashboard', 'public', 'weather-panel.js'), 'utf8');
+
+  const mockWindow = {
+    innerWidth: 1280,
+    currentSnapshot: () => ({})
+  };
+  const mockDocument = {
+    querySelector: () => null
+  };
+
+  const runModule = new Function('window', 'document', code);
+  runModule(mockWindow, mockDocument);
+  const WeatherPanel = mockWindow.CrucixWeatherPanel;
+  assert.ok(WeatherPanel, 'CrucixWeatherPanel exported');
+
+  // Synthetic snapshot with primary station 65305 and filled fallback data
+  const fixedNow = new Date('2026-11-02T13:15:00.000Z').getTime();
+  const parsed = parseSynopticCsv(fixtureCsv, { now: fixedNow });
+
+  const syntheticSnapshot = {
+    weather: {
+      byRegion: {
+        local: [{ name: 'Debrecen', current: { temp: 10 } }]
+      },
+      biomet: { score: 1.2, level: 'alacsony' },
+      observed: parsed
+    }
+  };
+
+  const html = WeatherPanel.panelHtml(syntheticSnapshot);
+
+  // 1. Primary station direct measurements must be in primary cards
+  assert.ok(html.includes('Hőmérséklet'), 'Must render Hőmérséklet card');
+  assert.ok(html.includes('11.2 °C'), 'Must render 11.2 °C directly for Berettyóújfalu');
+  assert.ok(html.includes('71 %'), 'Must render 71 % humidity');
+  assert.ok(html.includes('0 mm') || html.includes('0.0 mm'), 'Must render precipitation');
+
+  // 2. Missing primary sensors must be rendered in the dimmer fallback row with exact format
+  assert.ok(html.includes('wp-obs-fallback-box'), 'Must render wp-obs-fallback-box region');
+  assert.ok(html.includes('Szél:'), 'Must show fallback label Szél:');
+  assert.ok(html.includes('5,0 m/s'), 'Must format wind speed as 5,0 m/s with Hungarian comma');
+  assert.ok(html.includes('(Debrecen repülőtér, ~31 km)'), 'Must show station name and distance in parentheses');
+
+  assert.ok(html.includes('Légnyomás:'), 'Must show fallback label Légnyomás:');
+  assert.ok(html.includes('1009,4 hPa'), 'Must format pressure with Hungarian comma');
+
+  assert.ok(html.includes('Talajhő (5cm):'), 'Must show fallback label Talajhő (5cm):');
+  assert.ok(html.includes('9,7 °C'), 'Must format soil temp with Hungarian comma');
+
+  // 3. Unmeasured on all stations (soilTemp100cm): no numbers rendered
+  assert.ok(!html.includes('Talajhő (100cm)'), 'Unmeasured soilTemp100cm must not be rendered');
+
+  // 4. Station switcher buttons must remain for all stations
+  assert.ok(html.includes('Berettyóújfalu ★'), 'Berettyóújfalu station switcher present with star');
+  assert.ok(html.includes('Debrecen repülőtér'), 'Debrecen repülőtér switcher present');
+  assert.ok(html.includes('Debrecen Kismacs'), 'Debrecen Kismacs switcher present');
+  assert.ok(html.includes('Derecske Petőfi major'), 'Derecske switcher present');
+
+  // 5. Attribution present
+  assert.ok(html.includes('Adatbázis: Meteorológiai Adattár, HungaroMet Nonprofit Zrt.'), 'Mandatory attribution present');
+});
+

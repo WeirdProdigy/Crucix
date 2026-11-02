@@ -886,6 +886,12 @@ AGPL-3.0
   - Gyorsítótár élettartam (TTL): 10 perc (`CACHE_TTL_MS = 600000`).
   - Elévülési küszöb: 30 perc (`STALE_THRESHOLD_MINUTES = 30`). Ha a mért adat kora meghaladja a 30 percet, a kártya sárga figyelmeztető jelzést kap: *„NINCS FRISS MÉRÉS (Utolsó: ... UTC)”*.
   - Hibatűrés: Sikertelen letöltés esetén a rendszer a legutolsó érvényes állapotot jeleníti meg elévültként megjelölve (`fallback: true`).
+- **Hiányzó szenzorok pótlása legközelebbi teljes állomásról (Tartalékállomás-logika):**
+  - A szinoptikus mérési feed tanúsága szerint a `65305` Berettyóújfalu automata állomás dedikáltan hőmérsékletet, légnedvességet és csapadékot mér; a szélsebesség, légnyomás, látástávolság és talajhőmérsékletek nem mért értékek (`null`).
+  - **Konfigurálható prioritási sorrend:** A hiányzó mezőket a rendszer konfigurálható sorrendben vizsgálva keresi meg: alapértelmezetten `64711` (Debrecen repülőtér, teljes szenzorkészlet) -> `64310` (Debrecen Kismacs) -> `64713` (Derecske Petőfi major). A sorrend környezeti változóval felülbírálható (`CRUCIX_HUNGAROMET_FALLBACK_STATIONS=64711,64310,64713`).
+  - **Távolságszámítás (Haversine):** Az állomások hivatalos koordinátái alapján számítódik. Alapértelmezésben a Berettyóújfalu állomástól mért távolság szerepel (~31 km Debrecen repülőtérig). A felhasználói referencia-pozíció konfigurációval megadható (`CRUCIX_OBSERVED_USER_LAT`, `CRUCIX_OBSERVED_USER_LON`), nincs beégetve.
+  - **Önálló elévüléskezelés:** A tartalékállomások kora külön számítódik; ha egy tartalékállomás adata elévült (> 30 perc), a rendszer nem használja fel, hanem a következő friss tartalékállomásra lép. Ha egyik állomás sem szolgáltat friss mérést egy mezőre (pl. `soilTemp100cm`), az érték `null` marad, és a felületen semmilyen szám nem jelenik meg.
+  - **Megjelenítési szabály és adatvédelem:** Az elsődleges állomás saját mért értékei soha nem kerülnek felülírásra tartalékállomás értékével. A kimenet külön adatszerkezetben (`fallback.values.<mező> = { value, station, stationName, observedAt, distanceKm, isFallback }`) rögzíti a forrást. A felületen a helyi mérések a fő kártyákon szerepelnek, a pótolt szenzorok pedig egy külön, halványabb sorban, a forrásállomás nevével és becsült távolságával ellátva jelennek meg (pl. *„Szél: 5,0 m/s (Debrecen repülőtér, ~31 km)”*).
 - **HEAD előellenőrzés és mérési eredmény:**
   - Az adapter implementációja előtt végrehajtott kötelező előzetes mérés (2026. november 2. 12:00:52 GMT):
     - `Last-Modified: Mon, 02 Nov 2026 12:00:02 GMT`

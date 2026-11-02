@@ -496,6 +496,59 @@
   opacity: 0.8;
 }
 
+.wp-obs-fallback-box {
+  margin-top: 5px;
+  padding: 4px 6px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px dashed rgba(70, 95, 130, 0.35);
+  border-radius: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.wp-obs-fallback-title {
+  font-size: 8px;
+  font-family: var(--mono, monospace);
+  color: var(--dim, #8ba2b5);
+  opacity: 0.85;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.wp-obs-fallback-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.wp-obs-fallback-item {
+  font-size: 9.5px;
+  color: var(--dim, #94a3b8);
+  font-family: var(--font, sans-serif);
+}
+
+.wp-obs-fallback-item strong {
+  color: var(--text, #e2e8f0);
+  font-weight: 600;
+}
+
+.wp-obs-fb-label {
+  color: var(--dim, #8ba2b5);
+}
+
+.wp-obs-fb-val {
+  color: var(--text, #e6f0fa);
+  margin-left: 2px;
+}
+
+.wp-obs-fb-meta {
+  font-size: 8.5px;
+  color: var(--dim, #64748b);
+  font-family: var(--mono, monospace);
+  margin-left: 2px;
+}
+
 .wp-obs-attribution {
   font-family: var(--mono, monospace);
   font-size: 8px;
