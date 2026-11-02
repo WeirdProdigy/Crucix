@@ -134,6 +134,26 @@ function parseNum(val) {
   return Number.isFinite(n) ? n : null;
 }
 
+function colVal(row, colIndex, ...names) {
+  for (const name of names) {
+    const idx = colIndex[name];
+    if (idx !== undefined && idx < row.length) {
+      const val = row[idx];
+      if (val !== undefined && val !== '') return val;
+    }
+  }
+  return undefined;
+}
+
+function decodeZipText(buffer) {
+  if (!buffer) return '';
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+  } catch {
+    return buffer.toString('latin1');
+  }
+}
+
 /**
  * Parses raw unzipped CSV text into station observations.
  * Filters strictly to target stations: 65305, 64711, 64310, 64713.
@@ -175,28 +195,36 @@ export function parseSynopticCsv(csvText, { now = Date.now() } = {}) {
     const ageMinutes = Math.max(0, Math.round((now - obsDate.getTime()) / (60 * 1000)));
     const isFresh = ageMinutes <= STALE_THRESHOLD_MINUTES;
 
+    // If duplicate station row exists, keep the newer observation
+    if (stations[stationNum]) {
+      const existingTime = new Date(stations[stationNum].observedAt).getTime();
+      if (obsDate.getTime() <= existingTime) {
+        continue;
+      }
+    }
+
     const stationMeta = HUNGAROMET_STATIONS[stationNum];
 
-    // Decode metrics per Leiras_automata_10perces-HABP_10M_now-hu.pdf
+    // Decode metrics per Leiras_automata_10perces-HABP_10M_now-hu.pdf with meteorological fallback
     const values = {
-      temperature: parseNum(row[colIndex.t]),
-      temperatureAvg: parseNum(row[colIndex.ta]),
-      temperatureMin: parseNum(row[colIndex.tn]),
-      temperatureMax: parseNum(row[colIndex.tx]),
-      humidity: parseNum(row[colIndex.u]),
-      pressure: parseNum(row[colIndex.p]),
-      windSpeed: parseNum(row[colIndex.fs]),
-      windDirection: parseNum(row[colIndex.fsd]),
-      windGust: parseNum(row[colIndex.fx]),
-      windGustDirection: parseNum(row[colIndex.fxd]),
-      precipitation: parseNum(row[colIndex.r]),
-      visibility: parseNum(row[colIndex.v]),
-      soilTemp5cm: parseNum(row[colIndex.et5]),
-      soilTemp10cm: parseNum(row[colIndex.et10]),
-      soilTemp20cm: parseNum(row[colIndex.et20]),
-      soilTemp50cm: parseNum(row[colIndex.et50]),
-      soilTemp100cm: parseNum(row[colIndex.et100]),
-      groundTempMin5cm: parseNum(row[colIndex.tsn])
+      temperature: parseNum(colVal(row, colIndex, 't', 'temperature')),
+      temperatureAvg: parseNum(colVal(row, colIndex, 'ta')),
+      temperatureMin: parseNum(colVal(row, colIndex, 'tn', 'tmin')),
+      temperatureMax: parseNum(colVal(row, colIndex, 'tx', 'tmax')),
+      humidity: parseNum(colVal(row, colIndex, 'u', 'humidity')),
+      pressure: parseNum(colVal(row, colIndex, 'p', 'pressure')),
+      windSpeed: parseNum(colVal(row, colIndex, 'fs', 'ff', 'windSpeed')),
+      windDirection: parseNum(colVal(row, colIndex, 'fsd', 'dd', 'windDirection')),
+      windGust: parseNum(colVal(row, colIndex, 'fx', 'windGust')),
+      windGustDirection: parseNum(colVal(row, colIndex, 'fxd', 'windGustDirection')),
+      precipitation: parseNum(colVal(row, colIndex, 'r', 'rr', 'precipitation')),
+      visibility: parseNum(colVal(row, colIndex, 'v', 'vis', 'visibility')),
+      soilTemp5cm: parseNum(colVal(row, colIndex, 'et5', 't05')),
+      soilTemp10cm: parseNum(colVal(row, colIndex, 'et10', 't10')),
+      soilTemp20cm: parseNum(colVal(row, colIndex, 'et20', 't20')),
+      soilTemp50cm: parseNum(colVal(row, colIndex, 'et50', 't50')),
+      soilTemp100cm: parseNum(colVal(row, colIndex, 'et100', 't100')),
+      groundTempMin5cm: parseNum(colVal(row, colIndex, 'tsn', 'tn05'))
     };
 
     stations[stationNum] = {
@@ -219,15 +247,24 @@ export function parseSynopticCsv(csvText, { now = Date.now() } = {}) {
     };
   }
 
-  const primaryStation = stations['65305'] || null;
+  const primaryStation = stations['65305'] || (Object.values(stations).length > 0 ? Object.values(stations)[0] : null);
   const isOverallFresh = primaryStation ? primaryStation.fresh : false;
+  const stationCount = Object.keys(stations).length;
+  const minAgeMinutes = primaryStation ? primaryStation.ageMinutes : null;
+  const latestUtcIso = primaryStation ? primaryStation.observedAt : null;
+  const latestBudapestTime = primaryStation ? primaryStation.observedAtLocal : null;
 
   return {
     source: SOURCE,
     parsedAt: new Date(now).toISOString(),
+    status: isOverallFresh ? 'ok' : 'stale',
+    fresh: isOverallFresh,
+    stationCount,
+    ageMinutes: minAgeMinutes,
+    feedTimestampUtc: latestUtcIso,
+    feedTimestampLocal: latestBudapestTime,
     primaryStation,
     stations,
-    fresh: isOverallFresh,
     attribution: ATTRIBUTION
   };
 }
@@ -265,7 +302,7 @@ export async function briefing(options = {}) {
       if (!csvContent) {
         const zipBuf = options.fixtureBuffer || options.fixtureZip;
         const unzipped = readZipEntry(zipBuf);
-        csvContent = unzipped.toString('latin1');
+        csvContent = decodeZipText(unzipped);
       }
       const parsed = parseSynopticCsv(csvContent, { now });
       const briefResult = {
@@ -317,7 +354,7 @@ export async function briefing(options = {}) {
     }
 
     const unzipped = readZipEntry(fetchRes.rawBuffer);
-    const csvText = unzipped.toString('latin1');
+    const csvText = decodeZipText(unzipped);
     const parsed = parseSynopticCsv(csvText, { now });
 
     const briefResult = {

@@ -1,3 +1,17 @@
+/**
+ * test/hungaromet-observations.test.mjs
+ *
+ * Unit tests for HungaroMet ODP synoptic observations adapter.
+ * Fixture: test/fixtures/hungaromet-synop-fixture.csv
+ * Source: Official HungaroMet Open Data Portal (ODP) synoptic 10-minute feed:
+ *   URL: https://odp.met.hu/weather/weather_reports/synoptic/hungary/10_minutes/csv/HABP_10M_SYNOP_LATEST.csv.zip
+ *   Archived observation timestamp: 2026-11-02 13:00 UTC (14:00 Europe/Budapest local time)
+ *   Downloaded: 2026-11-02 13:12:45 GMT
+ *   Contains exact headers and real telemetry for target stations:
+ *     65305 (Berettyóújfalu, primary), 64711 (Debrecen repülőtér),
+ *     64310 (Debrecen Kismacs), 64713 (Derecske Petőfi major).
+ */
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -59,12 +73,17 @@ test('3. readZipEntry unzips in-memory synoptic zip fixture without external dep
 });
 
 test('4. parseSynopticCsv: filters stations, decodes -999 as null, attaches metadata', () => {
-  const fixedNow = new Date('2026-11-02T12:05:00.000Z').getTime(); // 15 mins after 11:50 UTC
+  const fixedNow = new Date('2026-11-02T13:15:00.000Z').getTime(); // 15 mins after 13:00 UTC
   const parsed = parseSynopticCsv(fixtureCsv, { now: fixedNow });
 
   assert.equal(parsed.source, SOURCE);
   assert.equal(parsed.attribution, ATTRIBUTION);
   assert.equal(parsed.fresh, true);
+  assert.equal(parsed.status, 'ok');
+  assert.equal(parsed.stationCount, 4);
+  assert.equal(parsed.ageMinutes, 15);
+  assert.equal(parsed.feedTimestampUtc, '2026-11-02T13:00:00.000Z');
+  assert.equal(parsed.feedTimestampLocal, '14:00');
 
   // Station filtering: must contain 65305, 64711, 64310, 64713, and NOT 33431
   const stationIds = Object.keys(parsed.stations);
@@ -77,17 +96,19 @@ test('4. parseSynopticCsv: filters stations, decodes -999 as null, attaches meta
   assert.equal(b.stationName, 'Berettyóújfalu');
   assert.equal(b.region, 'Hajdú-Bihar');
   assert.equal(b.isPrimary, true);
-  assert.equal(b.observedAt, '2026-11-02T11:50:00.000Z');
-  assert.equal(b.observedAtLocal, '12:50');
+  assert.equal(b.observedAt, '2026-11-02T13:00:00.000Z');
+  assert.equal(b.observedAtLocal, '14:00');
   assert.equal(b.ageMinutes, 15);
   assert.equal(b.fresh, true);
   assert.equal(b.status, 'fresh');
   assert.equal(b.staleReason, null);
 
-  // Numerical values: -999 -> null
-  assert.equal(b.values.temperature, 11.0);
-  assert.equal(b.values.temperatureAvg, 11.1);
-  assert.equal(b.values.humidity, 73);
+  // Numerical values from real sample: -999 -> null
+  assert.equal(b.values.temperature, 11.2);
+  assert.equal(b.values.temperatureAvg, 11.2);
+  assert.equal(b.values.temperatureMin, 11.2);
+  assert.equal(b.values.temperatureMax, 11.2);
+  assert.equal(b.values.humidity, 71);
   assert.equal(b.values.precipitation, 0.0);
   assert.equal(b.values.pressure, null, '-999 converted to null');
   assert.equal(b.values.windSpeed, null, '-999 converted to null');
@@ -97,22 +118,27 @@ test('4. parseSynopticCsv: filters stations, decodes -999 as null, attaches meta
   // Check Debrecen repülőtér (64711)
   const d = parsed.stations['64711'];
   assert.equal(d.stationName, 'Debrecen repülőtér');
-  assert.equal(d.values.temperature, 9.5);
-  assert.equal(d.values.pressure, 1010.0);
-  assert.equal(d.values.windSpeed, 5.7);
-  assert.equal(d.values.windDirection, 23);
-  assert.equal(d.values.windGust, 7.8);
+  assert.equal(d.values.temperature, 10.1);
+  assert.equal(d.values.temperatureAvg, 10.0);
+  assert.equal(d.values.temperatureMin, 9.9);
+  assert.equal(d.values.temperatureMax, 10.1);
+  assert.equal(d.values.pressure, 1009.4);
+  assert.equal(d.values.windSpeed, 5.0);
+  assert.equal(d.values.windDirection, 21);
+  assert.equal(d.values.windGust, 7.0);
+  assert.equal(d.values.windGustDirection, 34);
   assert.equal(d.values.visibility, 20000);
   assert.equal(d.values.soilTemp5cm, 9.7);
-  assert.equal(d.values.groundTempMin5cm, 9.3);
+  assert.equal(d.values.groundTempMin5cm, 9.5);
 });
 
 test('5. Freshness evaluation: flags stale data when older than 30 minutes', () => {
   // Test with now = 45 minutes after observation
-  const staleNow = new Date('2026-11-02T12:35:00.000Z').getTime();
+  const staleNow = new Date('2026-11-02T13:45:00.000Z').getTime();
   const parsed = parseSynopticCsv(fixtureCsv, { now: staleNow });
 
   assert.equal(parsed.fresh, false);
+  assert.equal(parsed.status, 'stale');
   const b = parsed.stations['65305'];
   assert.equal(b.fresh, false);
   assert.equal(b.status, 'stale');
@@ -147,7 +173,7 @@ test('8. briefing(): processes fixture buffer when enabled and caches result', a
     clearHungarometCache();
 
     const zipBuffer = zipOf('SYNOP_TEST.csv', fixtureCsv);
-    const fixedNow = new Date('2026-11-02T12:05:00.000Z').getTime();
+    const fixedNow = new Date('2026-11-02T13:15:00.000Z').getTime();
 
     const res = await briefing({
       fixtureBuffer: zipBuffer,
@@ -159,7 +185,7 @@ test('8. briefing(): processes fixture buffer when enabled and caches result', a
     assert.equal(res.data.fresh, true);
     assert.ok(res.data.primaryStation);
     assert.equal(res.data.primaryStation.stationName, 'Berettyóújfalu');
-    assert.equal(res.data.primaryStation.values.temperature, 11.0);
+    assert.equal(res.data.primaryStation.values.temperature, 11.2);
 
     // Call again to verify cache return
     const cached = await briefing({
@@ -186,7 +212,7 @@ test('9. synthesizeWeather: cleanly integrates observed ground telemetry into we
     data: {
       source: SOURCE,
       fresh: true,
-      primaryStation: { stationName: 'Berettyóújfalu', values: { temperature: 11.0 } }
+      primaryStation: { stationName: 'Berettyóújfalu', values: { temperature: 11.2 } }
     }
   };
 
@@ -210,4 +236,29 @@ test('10. Static audit: client code and other adapters do not call ODP directly 
   const adapterSrc = fs.readFileSync(path.join(__dirname, '..', 'apis', 'sources', 'hungaromet-observations.mjs'), 'utf8');
   assert.doesNotMatch(adapterSrc, /alertNotifier/i, 'Adapter never calls alertNotifier');
   assert.doesNotMatch(adapterSrc, /observations\.push\s*\(\s*\{.*severity/s, 'Adapter never emits alert events');
+});
+
+test('11. Robustness: duplicate station records keep latest, missing station handled gracefully', () => {
+  // Feed with duplicate 64310 lines (older 12:50, newer 13:00)
+  const dupCsv = [
+    'Time;StationNumber;StationName;Latitude;Longitude;Elevation;r;Q_r;t;Q_t;ta;Q_ta;tn;Q_tn;tx;Q_tx;v;Q_v;p;Q_p;u;Q_u;sg;Q_sg;sr;Q_sr;suv;Q_suv;fs;Q_fs;fsd;Q_fsd;fx;Q_fx;fxd;Q_fxd;fxm;Q_fxm;fxs;Q_fxs;et5;Q_et5;et10;Q_et10;et20;Q_et20;et50;Q_et50;et100;Q_et100;tsn;Q_tsn;tviz;Q_tviz;EOR',
+    '202611021250;64310;Debrecen Kismacs;47.5767;21.5825;125.0;0.0;;9.9;;9.9;;9.8;;9.9;;20000;;1007.2;;69;;-999;;62.0;;-999;;4.5;;356;;6.7;;5;;40;;02;;-999;;9.7;;10.3;;12.4;;-999;;-999;;-999;;EOR',
+    '202611021300;64310;Debrecen Kismacs;47.5767;21.5825;125.0;-999;;10.0;;10.0;;9.9;;10.0;;20000;;1007.2;;68;;-999;;65.9;;-999;;4.4;;359;;7.2;;11;;00;;00;;-999;;9.8;;10.4;;12.4;;-999;;-999;;-999;;EOR'
+  ].join('\n');
+
+  const parsedDup = parseSynopticCsv(dupCsv, { now: new Date('2026-11-02T13:10:00.000Z').getTime() });
+  assert.equal(parsedDup.stations['64310'].observedAt, '2026-11-02T13:00:00.000Z');
+  assert.equal(parsedDup.stations['64310'].values.temperature, 10.0);
+
+  // Missing primary station 65305 does not throw, falls back to first available station
+  const missingPrimaryCsv = [
+    'Time;StationNumber;StationName;Latitude;Longitude;Elevation;r;Q_r;t;Q_t;ta;Q_ta;tn;Q_tn;tx;Q_tx;v;Q_v;p;Q_p;u;Q_u;sg;Q_sg;sr;Q_sr;suv;Q_suv;fs;Q_fs;fsd;Q_fsd;fx;Q_fx;fxd;Q_fxd;fxm;Q_fxm;fxs;Q_fxs;et5;Q_et5;et10;Q_et10;et20;Q_et20;et50;Q_et50;et100;Q_et100;tsn;Q_tsn;tviz;Q_tviz;EOR',
+    '202611021300;64711;Debrecen repülőtér;47.4844;21.6056;106.6;0.0;;10.1;;10.0;;9.9;;10.1;;20000;;1009.4;;71;;-999;;61.8;;-999;;5.0;;21;;7.0;;34;;58;;39;;9.7;;9.9;;10.4;;12.5;;-999;;9.5;;-999;;EOR'
+  ].join('\n');
+
+  const parsedMissing = parseSynopticCsv(missingPrimaryCsv, { now: new Date('2026-11-02T13:10:00.000Z').getTime() });
+  assert.equal(parsedMissing.stations['65305'], undefined);
+  assert.equal(parsedMissing.stationCount, 1);
+  assert.ok(parsedMissing.primaryStation);
+  assert.equal(parsedMissing.primaryStation.station, '64711');
 });
