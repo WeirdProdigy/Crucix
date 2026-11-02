@@ -3,6 +3,8 @@
  *
  * Crucix Időjárás és Orvosmeteorológiai Ablak (Weather & Biometeorology Window):
  * - Forrás: Open-Meteo (DWD ICON, Közép-Európa 15 perces modell, CC BY 4.0).
+ * - Mért adat: HungaroMet ODP 10 perces szinoptikus automata mérőhálózat (Berettyóújfalu 65305, Debrecen 64711/64310, Derecske 64713).
+ * - Attribúció: "Adatbázis: Meteorológiai Adattár, HungaroMet Nonprofit Zrt." (kötelező feltétel).
  * - Területi hatókörök: Helyi (Bihartorda, Debrecen), Hajdú-Bihar, Magyarország, Közép-Európa.
  * - Nézetek: Most (hőmérséklet, érzet, szél, csapadék, nyomás, WMO kód) és Holnap + 5 nap.
  * - Orvosmeteorológia:
@@ -18,6 +20,7 @@
 
   let activeWeatherRegion = 'local'; // 'local' | 'county' | 'national' | 'regional_ce'
   let activeWeatherTab = 'current';  // 'current' | 'forecast' | 'biomet'
+  let activeObservedStation = '65305'; // Berettyóújfalu (elsődleges)
 
   function esc(s) {
     if (s === undefined || s === null) return '';
@@ -47,6 +50,129 @@
     }
   }
 
+  function setObservedStation(stationId) {
+    activeObservedStation = stationId;
+    const panel = document.querySelector('.weather-panel-root');
+    if (panel) {
+      const sn = typeof window.currentSnapshot === 'function' ? window.currentSnapshot() : (window.D || {});
+      panel.outerHTML = renderWeatherPanel(sn);
+    }
+  }
+
+  function renderObservedBlock(snapshot) {
+    const weather = snapshot?.weather || {};
+    const observed = weather.observed || snapshot?.hungarometObs || null;
+
+    if (!observed || observed.enabled === false) {
+      return `
+        <div class="wp-observed-card wp-obs-disabled">
+          <div class="wp-obs-header">
+            <div class="wp-obs-title-wrap">
+              <span class="wp-obs-badge">MÉRT ADAT</span>
+              <span class="wp-obs-station-name">HungaroMet ODP Automata Mérőhálózat</span>
+            </div>
+            <span class="wp-obs-pill wp-obs-pill-off">KIKAPCSOLVA</span>
+          </div>
+          <div class="wp-obs-note">
+            A valós idejű talajszinti mérések megjelenítése inaktív (<code>CRUCIX_ENABLE_HUNGAROMET_OBS=false</code>).
+            Az alábbi kártyák az Open-Meteo (DWD ICON) numerikus modell előrejelzéseit mutatják.
+          </div>
+        </div>
+      `;
+    }
+
+    const stations = observed.stations || {};
+    const stationKeys = Object.keys(stations);
+
+    if (stationKeys.length === 0) {
+      return `
+        <div class="wp-observed-card wp-obs-stale">
+          <div class="wp-obs-header">
+            <div class="wp-obs-title-wrap">
+              <span class="wp-obs-badge">MÉRT ADAT</span>
+              <span class="wp-obs-station-name">HungaroMet ODP</span>
+            </div>
+            <span class="wp-obs-pill wp-obs-pill-stale">&#9888; NINCS ELÉRHETŐ ÁLLOMÁS</span>
+          </div>
+          <div class="wp-obs-note">${esc(observed.error || 'Nincs feldolgozott állomásadat a szinoptikus csomagban.')}</div>
+        </div>
+      `;
+    }
+
+    let currentStation = stations[activeObservedStation];
+    if (!currentStation) {
+      currentStation = observed.primaryStation || stations['65305'] || stations[stationKeys[0]];
+    }
+
+    const stVal = currentStation.values || {};
+    const isFresh = Boolean(currentStation.fresh);
+    const statusClass = isFresh ? 'wp-obs-fresh' : 'wp-obs-stale';
+    const statusPill = isFresh
+      ? `<span class="wp-obs-pill wp-obs-pill-fresh">&#10003; FRISS MÉRÉS · ${esc(currentStation.observedAtLocal || '--:--')}</span>`
+      : `<span class="wp-obs-pill wp-obs-pill-stale">&#9888; NINCS FRISS MÉRÉS (Utolsó: ${esc(currentStation.observedAtLocal || '--:--')}${currentStation.ageMinutes ? ', ' + currentStation.ageMinutes + ' perce' : ''})</span>`;
+
+    const stationTabsHtml = stationKeys.map(sId => {
+      const sObj = stations[sId];
+      const isActive = sObj.station === currentStation.station;
+      const isPri = sObj.isPrimary ? ' ★' : '';
+      return `
+        <button type="button" class="wp-obs-station-btn ${isActive ? 'active' : ''}" onclick="window.CrucixWeatherPanel.setStation('${esc(sObj.station)}')">
+          ${esc(sObj.stationName)}${isPri}
+        </button>
+      `;
+    }).join('');
+
+    return `
+      <div class="wp-observed-card ${statusClass}">
+        <div class="wp-obs-header">
+          <div class="wp-obs-title-wrap">
+            <span class="wp-obs-badge">MÉRT ADAT (MÉRÉS vs MODELL)</span>
+            <span class="wp-obs-station-name">${esc(currentStation.stationName)} (${esc(currentStation.station)})</span>
+          </div>
+          ${statusPill}
+        </div>
+
+        <div class="wp-obs-station-tabs" role="tablist" aria-label="Mérőállomások">
+          ${stationTabsHtml}
+        </div>
+
+        <div class="wp-obs-metrics-row">
+          <div class="wp-obs-metric-item">
+            <span class="wp-obs-ml">Hőmérséklet</span>
+            <span class="wp-obs-mv highlight">${stVal.temperature !== null ? stVal.temperature + ' °C' : '--'}</span>
+            ${stVal.temperatureAvg !== null ? `<span class="wp-obs-ms">Átlag: ${stVal.temperatureAvg} °C</span>` : ''}
+          </div>
+          <div class="wp-obs-metric-item">
+            <span class="wp-obs-ml">Légnedvesség</span>
+            <span class="wp-obs-mv">${stVal.humidity !== null ? stVal.humidity + ' %' : '--'}</span>
+          </div>
+          <div class="wp-obs-metric-item">
+            <span class="wp-obs-ml">Szél (10m)</span>
+            <span class="wp-obs-mv">${stVal.windSpeed !== null ? stVal.windSpeed + ' m/s' : '--'}</span>
+            ${stVal.windGust !== null ? `<span class="wp-obs-ms">Lökés: ${stVal.windGust} m/s</span>` : ''}
+          </div>
+          <div class="wp-obs-metric-item">
+            <span class="wp-obs-ml">Csapadék (10p)</span>
+            <span class="wp-obs-mv">${stVal.precipitation !== null ? stVal.precipitation + ' mm' : '0.0 mm'}</span>
+          </div>
+          <div class="wp-obs-metric-item">
+            <span class="wp-obs-ml">Légnyomás</span>
+            <span class="wp-obs-mv">${stVal.pressure !== null ? stVal.pressure + ' hPa' : '--'}</span>
+          </div>
+          ${stVal.soilTemp5cm !== null ? `
+          <div class="wp-obs-metric-item">
+            <span class="wp-obs-ml">Talajhő (5cm)</span>
+            <span class="wp-obs-mv">${stVal.soilTemp5cm} °C</span>
+          </div>` : ''}
+        </div>
+
+        <div class="wp-obs-attribution">
+          Adatbázis: Meteorológiai Adattár, HungaroMet Nonprofit Zrt. · Valós talajszinti mérés (nem numerikus modell)
+        </div>
+      </div>
+    `;
+  }
+
   function renderWeatherPanel(snapshot) {
     const weather = snapshot?.weather || {};
     const byRegion = weather.byRegion || {};
@@ -54,8 +180,6 @@
     const hungaroMet = weather.hungaroMetBulletin || {};
 
     const regionLocations = byRegion[activeWeatherRegion] || byRegion.local || [];
-    const firstLoc = regionLocations[0] || {};
-    const firstCurrent = firstLoc.current || {};
 
     const biometScoreStr = biomet.score !== null && biomet.score !== undefined ? biomet.score.toFixed(1) : '--';
     const biometColor = biomet.levelColor || (biomet.level === 'jelentős' || biomet.level === 'magas' ? '#ff5f63' : (biomet.level === 'mersekelt' || biomet.level === 'közepes' ? '#ffb84c' : '#64f0c8'));
@@ -87,11 +211,14 @@
       </button>
     `).join('');
 
+    // Observed ground station block (HungaroMet ODP)
+    const observedBlockHtml = renderObservedBlock(snapshot);
+
     // Content by active mode tab
     let bodyHtml = '';
 
     if (activeWeatherTab === 'current') {
-      bodyHtml = regionLocations.map(loc => {
+      const modelCardsHtml = regionLocations.map(loc => {
         const cur = loc.current || {};
         if (loc.error) {
           return `
@@ -108,6 +235,7 @@
             </div>
             <div class="wp-loc-sub">
               <span>${esc(cur.weatherTextHu || 'Időjárási adat')}</span>
+              <span style="font-size:9px;color:var(--dim,#8ba2b5);font-family:var(--mono,monospace)">[MODELL · DWD ICON]</span>
               ${cur.feelsLike !== null ? `<span>(Érzet: ${cur.feelsLike} °C)</span>` : ''}
             </div>
             <div class="wp-metrics-row">
@@ -132,6 +260,14 @@
           </div>
         `;
       }).join('');
+
+      bodyHtml = `
+        ${observedBlockHtml}
+        <div style="font-size:9.5px;color:var(--dim,#8ba2b5);font-family:var(--mono,monospace);margin:6px 0 2px 2px;letter-spacing:0.5px">
+          NUMERIKUS ELŐREJELZÉSI MODELL (DWD ICON · TERÜLETI ADATOK):
+        </div>
+        ${modelCardsHtml}
+      `;
     } else if (activeWeatherTab === 'forecast') {
       bodyHtml = regionLocations.map(loc => {
         const forecasts = loc.forecast || [];
@@ -219,7 +355,7 @@
         <div class="weather-list scroll-region" tabindex="0" role="region" aria-label="Időjárási és orvosmeteorológiai adatok">
           ${bodyHtml}
           <div class="wp-footer-attribution">
-            Források: Open-Meteo (CC BY 4.0) · GFZ (CC BY 4.0) · HungaroMet (Meteorológiai Adattár)
+            Források: Open-Meteo (DWD ICON, CC BY 4.0) · GFZ (CC BY 4.0) · HungaroMet (Meteorológiai Adattár)
           </div>
         </div>
       </div>
@@ -229,7 +365,8 @@
   window.CrucixWeatherPanel = {
     panelHtml: renderWeatherPanel,
     setRegion: setWeatherRegion,
-    setTab: setWeatherTab
+    setTab: setWeatherTab,
+    setStation: setObservedStation
   };
 
 })(window, document);

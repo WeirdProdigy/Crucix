@@ -339,3 +339,175 @@
   border-top: 1px solid rgba(40, 60, 85, 0.2);
   margin-top: 6px;
 }
+
+/* HungaroMet ODP 10-Minute Measured Ground Observation Block */
+.wp-observed-card {
+  background: linear-gradient(135deg, rgba(20, 35, 55, 0.75), rgba(12, 22, 38, 0.85));
+  border: 1px solid rgba(68, 204, 255, 0.35);
+  border-left: 3px solid var(--accent2, #44ccff);
+  border-radius: 3px;
+  padding: 7px 9px;
+  margin-bottom: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.wp-observed-card.wp-obs-stale {
+  border-color: rgba(255, 184, 76, 0.4);
+  border-left-color: #ffb84c;
+}
+
+.wp-observed-card.wp-obs-disabled {
+  border-color: rgba(60, 80, 105, 0.3);
+  border-left-color: rgba(100, 120, 145, 0.4);
+  background: rgba(15, 22, 32, 0.5);
+}
+
+.wp-obs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.wp-obs-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.wp-obs-badge {
+  font-family: var(--mono, monospace);
+  font-size: 8.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--accent2, #44ccff);
+  background: rgba(68, 204, 255, 0.12);
+  border: 1px solid rgba(68, 204, 255, 0.3);
+  border-radius: 2px;
+  padding: 1px 4px;
+  letter-spacing: 0.5px;
+}
+
+.wp-obs-station-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text, #e6f0fa);
+}
+
+.wp-obs-pill {
+  font-family: var(--mono, monospace);
+  font-size: 8.5px;
+  padding: 1px 5px;
+  border-radius: 2px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.wp-obs-pill-fresh {
+  background: rgba(100, 240, 200, 0.15);
+  border: 1px solid rgba(100, 240, 200, 0.4);
+  color: var(--accent, #64f0c8);
+}
+
+.wp-obs-pill-stale {
+  background: rgba(255, 184, 76, 0.15);
+  border: 1px solid rgba(255, 184, 76, 0.4);
+  color: #ffb84c;
+}
+
+.wp-obs-pill-off {
+  background: rgba(139, 162, 181, 0.1);
+  border: 1px solid rgba(139, 162, 181, 0.25);
+  color: var(--dim, #8ba2b5);
+}
+
+.wp-obs-station-tabs {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+  margin: 2px 0;
+}
+
+.wp-obs-station-btn {
+  font-family: var(--mono, monospace);
+  font-size: 8.5px;
+  padding: 2px 5px;
+  background: rgba(25, 40, 60, 0.4);
+  border: 1px solid rgba(60, 85, 120, 0.3);
+  color: var(--dim, #8ba2b5);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.wp-obs-station-btn:hover {
+  background: rgba(40, 65, 95, 0.5);
+  color: var(--text, #e6f0fa);
+}
+
+.wp-obs-station-btn.active {
+  background: rgba(68, 204, 255, 0.2);
+  border-color: rgba(68, 204, 255, 0.5);
+  color: #fff;
+  font-weight: 700;
+}
+
+.wp-obs-metrics-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(75px, 1fr));
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.wp-obs-metric-item {
+  background: rgba(10, 18, 30, 0.5);
+  border: 1px solid rgba(40, 65, 95, 0.25);
+  border-radius: 2px;
+  padding: 3px 5px;
+  display: flex;
+  flex-direction: column;
+}
+
+.wp-obs-ml {
+  font-size: 8px;
+  font-family: var(--mono, monospace);
+  color: var(--dim, #8ba2b5);
+  text-transform: uppercase;
+}
+
+.wp-obs-mv {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text, #e6f0fa);
+}
+
+.wp-obs-mv.highlight {
+  color: var(--accent2, #44ccff);
+}
+
+.wp-obs-ms {
+  font-size: 8px;
+  font-family: var(--mono, monospace);
+  color: var(--dim, #8ba2b5);
+  opacity: 0.8;
+}
+
+.wp-obs-attribution {
+  font-family: var(--mono, monospace);
+  font-size: 8px;
+  color: var(--dim, #8ba2b5);
+  opacity: 0.8;
+  margin-top: 3px;
+  border-top: 1px dashed rgba(60, 85, 120, 0.25);
+  padding-top: 3px;
+}
+
+.wp-obs-note {
+  font-size: 9.5px;
+  color: var(--dim, #8ba2b5);
+  line-height: 1.3;
+}

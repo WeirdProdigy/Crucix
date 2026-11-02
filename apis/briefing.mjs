@@ -54,6 +54,7 @@ import { briefing as meteoalarm } from './sources/meteoalarm.mjs';
 import { briefing as gdacs } from './sources/gdacs.mjs';
 import { briefing as swpc } from './sources/swpc.mjs';
 import { briefing as gfzPotsdam } from './sources/gfz-potsdam.mjs';
+import { briefing as hungarometObs } from './sources/hungaromet-observations.mjs';
 import { briefing as weatherService } from './sources/weather-service.mjs';
 import { briefing as ecb } from './sources/ecb.mjs';
 import { briefing as eonet } from './sources/eonet.mjs';
@@ -197,6 +198,7 @@ export async function fullBriefing() {
     runSource('GDACS', gdacs),
     runSource('NOAA-SWPC', swpc),
     runSource('GFZ-Potsdam', gfzPotsdam),
+    runSource('HungaroMet-Observations', hungarometObs),
     runSource('Weather-Service', weatherService),
     runSource('ECB', ecb),
     runSource('NASA-EONET', eonet),

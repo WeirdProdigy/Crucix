@@ -561,7 +561,7 @@ Both are free and key-less, every request is bounded to 10 s and 2 MiB, and the 
 | VIEWS-Forecast | Predicted probability of at least 25 battle-related deaths in state-based armed conflict, and predicted fatalities, per country for the three months after the newest run's data month; a forecast, not observed events | `api.viewsforecasting.org` (run list, then `/<run>/cm/sb`) | Run list 24 h; data per run id; last good payload 45 days, shown as stale | "VIEWS (Uppsala University and PRIO)" and the run id; the provider states no data licence (its code repositories are CC BY-NC) |
 | INFORM-Risk | INFORM Risk Index, 0-10 per country (higher is worse), newest published release; a yearly baseline | `drmkc.jrc.ec.europa.eu/inform-index/API/InformAPI` (release list, then scores) | Release list 24 h; scores 7 days; last good result 45 days, shown as stale | "INFORM Risk Index, European Commission Joint Research Centre (DRMKC) / INFORM partnership, <release>"; the provider says only "INFORM is open-source" |
 
-### Tier 9: Space Weather & Weather Intelligence (2)
+### Tier 9: Space Weather & Weather Intelligence (3)
 
 Strictly opt-in modules disabled by default, protecting external API quotas and network resources.
 
@@ -569,6 +569,7 @@ Strictly opt-in modules disabled by default, protecting external API quotas and 
 | --- | --- | --- | --- | --- |
 | GFZ-Potsdam | Planetary Kp index nowcast + forecast, Hp30 and Hp60 high-resolution geomagnetic activity indices | `kp.gfz.de/app/json/` | 30 min | GFZ German Research Centre for Geosciences (CC BY 4.0) |
 | Weather-Service | 14 territorial stations across local, county, national and Central European scopes; biometeorological change indicator; HungaroMet ODP text bulletin | `api.open-meteo.com/v1/dwd-icon`, `odp.met.hu` | 30 min | Open-Meteo.com (CC BY 4.0) · HungaroMet Nonprofit Zrt. (Meteorológiai Adattár) |
+| HungaroMet-Observations | 10-minute automated ground weather observations (Berettyóújfalu primary, Debrecen repülőtér, Debrecen Kismacs, Derecske) | `odp.met.hu/.../HABP_10M_SYNOP_LATEST.csv.zip` | 10 min | HungaroMet Nonprofit Zrt. (Meteorológiai Adattár) · Valós talajszinti mérés (nem numerikus modell) |
 
 #### Space Weather Scales and Thresholds
 - **Opt-in variable:** `CRUCIX_ENABLE_GFZ=true` (default: `false`).
@@ -667,6 +668,7 @@ All settings are in `.env` with sensible defaults:
 | `CRUCIX_ENABLE_FEED_PORTFOLIO` | `false` | Opt-in economic/energy RSS feed for Portfolio |
 | `CRUCIX_ENABLE_FEED_QUBIT` | `false` | Opt-in science RSS feed for Qubit |
 | `CRUCIX_ENABLE_GNEWS` | `false` | Opt-in Google News RSS catalog aggregator (strictly 0 calls when false) |
+| `CRUCIX_ENABLE_HUNGAROMET_OBS` | `false` | Opt-in HungaroMet ODP 10-minute ground weather observations (Berettyóújfalu, Debrecen) |
 
 Delta engine thresholds (how sensitive the system is to changes between sweeps) can be customized in `crucix.config.mjs` under the `delta.thresholds` section. The defaults are tuned to filter out noise while catching meaningful moves.
 
@@ -863,3 +865,33 @@ AGPL-3.0
   - **CSP szigorítás:** A Content-Security-Policy `frame-src` direktívájához pontosan a `https://embed.windy.com` forrás került hozzáadásra (csillag nélkül).
   - **Hálózati védelmi kapu:** Nem privát hoszton a betöltő gomb rejtett, a betöltési függvény no-op, és kizárólag a forrásoldali külső hivatkozás látható.
   - **Vizuális kiegészítő jelleg:** A térkép kizárólag vizuális tájékozódást szolgál, semmilyen riasztási, pontozási vagy döntési logikába nem épül be. A felületen feltüntetett figyelmeztetés: *„Nem hivatalos előrejelzés; hivatalos forrás: HungaroMet”*.
+
+### HungaroMet ODP 10 perces mért adat adapter (SYNOP)
+
+- **Cél és hatókör:** Valós talajszinti automata meteorológiai mérési adatok (nem numerikus modell vagy előrejelzés) integrálása Hajdú-Bihar vármegyei fókusszal.
+- **Opt-in környezeti változó:** `CRUCIX_ENABLE_HUNGAROMET_OBS=true` (alapértelmezett: `false`). Kikapcsolt állapotban szigorúan 0 külső hálózati hívás indul.
+- **Forrás és formátum:** HungaroMet Nonprofit Zrt. Open Data Portal (ODP): `https://odp.met.hu/weather/weather_reports/synoptic/hungary/10_minutes/csv/HABP_10M_SYNOP_LATEST.csv.zip`. Tömörített zip archívum, pontosvesszővel tagolt CSV tábla (`HABP_10M_SYNOP_<TIMESTAMP>.csv`).
+- **Kitömörítés:** A repó meglévő, beépített kitömörítőjével (`apis/utils/zip.mjs`, `readZipEntry` / `node:zlib.inflateRawSync`) történik, szigorúan 0 új npm függőség bevonásával.
+- **Figyelt állomások (hivatalos HungaroMet azonosítókkal):**
+  - `65305`: Berettyóújfalu (elsődleges állomás)
+  - `64711`: Debrecen repülőtér
+  - `64310`: Debrecen Kismacs
+  - `64713`: Derecske Petőfi major (tartalék)
+- **Mért paraméterek és normalizálás:**
+  - 2 méteres pillanatnyi hőmérséklet (`t`), átlag (`ta`), minimum (`tmin`), maximum (`tmax`), relatív légnedvesség (`u`), állomási légnyomás (`p`), szélsebesség (`ff`), széllökés (`fx`), szélirány (`dd`), 10 perces csapadékösszeg (`rr`), látástávolság (`vis`), talajhőmérsékletek 5, 10, 20, 50, 100 cm mélységben (`t05`..`t100`), 5 cm-es felszínközeli minimum (`tn05`).
+  - A forrásban szereplő hiányzó adat értékeket (`-999`, `-999.0`) az adapter `null` értékre konvertálja.
+  - Az időbélyeg UTC (`YYYYMMDDHHmm`) formátumból ISO formátumra, a felületen helyi időre (`Europe/Budapest`, `HH:mm`) konvertálódik.
+- **Időzítés, gyorsítótár és elévülés (stale):**
+  - Gyorsítótár élettartam (TTL): 10 perc (`CACHE_TTL_MS = 600000`).
+  - Elévülési küszöb: 30 perc (`STALE_THRESHOLD_MINUTES = 30`). Ha a mért adat kora meghaladja a 30 percet, a kártya sárga figyelmeztető jelzést kap: *„NINCS FRISS MÉRÉS (Utolsó: ... UTC)”*.
+  - Hibatűrés: Sikertelen letöltés esetén a rendszer a legutolsó érvényes állapotot jeleníti meg elévültként megjelölve (`fallback: true`).
+- **HEAD előellenőrzés és mérési eredmény:**
+  - Az adapter implementációja előtt végrehajtott kötelező előzetes mérés (2026. november 2. 12:00:52 GMT):
+    - `Last-Modified: Mon, 02 Nov 2026 12:00:02 GMT`
+    - `ETag: "3ad6-65f49e2d016c0"`
+    - Belső CSV mérési időpont: `202611021150` (11:50 UTC).
+    - Adat kora a mérés pillanatában: **11 perc** (a forrás aktív és folyamatosan frissül, a korábban észlelt 2026-11-01 02:30 nem a feed leállását, hanem korábbi könyvtár-gyorsítótárazást tükrözött).
+- **Kötelező forrásmegjelölés és riasztási mentesség:**
+  - Kötelező attribúció: *„Adatbázis: Meteorológiai Adattár, HungaroMet Nonprofit Zrt.”*.
+  - A felületen világosan megkülönböztetve a numerikus modellektől (*„Valós talajszinti mérés (nem numerikus modell)”* vs *„MODELL · DWD ICON”*).
+  - Null riasztási hatás: A forrás nem generál riasztásokat vagy incidenseket (`observations: []`), a számlálókat nem növeli.

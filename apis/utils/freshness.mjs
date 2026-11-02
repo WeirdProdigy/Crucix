@@ -42,6 +42,7 @@ export const FEED_POLICIES = Object.freeze({
 
 export const SPECIAL_POLICIES = Object.freeze({
   'GFZ-Potsdam': { maxAgeMs: 6 * HOUR, observationMaxAgeMs: 48 * HOUR },
+  'HungaroMet-Observations': { maxAgeMs: 15 * 60 * 1000, observationMaxAgeMs: 2 * HOUR },
   'Weather-Service': { maxAgeMs: 3 * HOUR, observationMaxAgeMs: 48 * HOUR }
 });
 

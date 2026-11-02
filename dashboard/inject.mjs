@@ -912,7 +912,7 @@ export async function synthesize(data, options = {}) {
   const news = allNews.filter(n => Number.isFinite(n.lat) && Number.isFinite(n.lon));
 
   const spaceWeather = synthesizeSpaceWeather(data.sources?.['NOAA-SWPC'], data.sources?.['GFZ-Potsdam'], { now: options.now ?? Date.now() });
-  const weather = synthesizeWeather(data.sources?.['Weather-Service'], { now: options.now ?? Date.now() });
+  const weather = synthesizeWeather(data.sources?.['Weather-Service'], data.sources?.['HungaroMet-Observations'], { now: options.now ?? Date.now() });
 
   const V2 = {
     meta: data.crucix, air, thermal, tSignals, chokepoints, nuke, nukeSignals, liveSources,
