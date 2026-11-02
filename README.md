@@ -806,6 +806,18 @@ AGPL-3.0
 
 ### Böngészőoldali Külső Kameramegjelenítés és Jogi Tájékoztató (Időkép)
 
+- **Regisztrált webkamerák listája (helyi és vármegyei források):**
+  - **Debrecen – Kossuth tér és Nagytemplom** (`dmjvcam`): Debrecen Megyei Jogú Város Önkormányzata / Időkép (Helyi, `local`).
+  - **Debrecen – Békás-tó és Nagyerdő** (`dmjvcam3`): Debrecen Megyei Jogú Város Önkormányzata / Időkép (Helyi, `local`).
+  - **Debrecen – Egyetem tér és Főépület** (`deegyetemter`): Debreceni Egyetem / Időkép (Helyi, `local`).
+  - **Debrecen – Klinikai Központ** (`debreceniegyetemkk`): Debreceni Egyetem Klinikai Központ / Időkép (Helyi, `local`).
+  - **Hajdúszoboszló – Aero Club Repülőtér** (`lhho2`): Hajdúszoboszló - Aero Club / Időkép (Vármegyei, `county`).
+  - **Hajdúszoboszló – Városi panoráma** (`nagy_csilla`): Időkép (intézményi fenntartó nem igazolt; Vármegyei, `county`).
+  - **Hajdúdorog** (`zajgato_kft_2`): Időkép (fenntartó nem igazolt; Vármegyei, `county`).
+  - **Hajdúdorog – Észak** (`zajgato_kft_1`): Időkép (fenntartó nem igazolt; Vármegyei, `county`).
+  - **Hajdúböszörmény** (`gyberci`): Nyakas Optika / Időkép (Vármegyei, `county`).
+  - **Hajdúnánás – Városi fürdő** (`wifimiki2`): Hajdúnánás Város Önkormányzata / Időkép (Vármegyei, `county`).
+  - **Hortobágy – Máta** (`hnp2`): Hortobágyi Nemzeti Park Igazgatóság / Időkép (Vármegyei, `county`; külön a 2010 óta leállt Kilenclyukú híd tételtől).
 - **Kizárólag magáncélú, saját, egyfelhasználós használat:** A Crucix „Élő” paneljében elérhető intézményi webkamerák (pl. debreceni és hajdúszoboszlói panorámakamerák) képmegjelenítése szigorúan magáncélú, saját, egyfelhasználós otthoni tájékozódásra szolgál.
   - A Crucix futó példánya zárt, nem nyilvános rendszer: kizárólag a felhasználó saját privát helyi hálózatán (LAN: `192.168.1.81:3117` vagy loopback) érhető el.
   - Harmadik fél számára nem hozzáférhető, és más médiacsatornán semmilyen formában nem teszi közzé a kamerák tartalmát.

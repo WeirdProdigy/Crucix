@@ -507,7 +507,7 @@ test('9. Institutional operator audit: institutional webcams must have strictly 
   const streams = loadLiveStreams();
   const institutionalWebcams = streams.filter(s => s.type === 'webcam');
 
-  assert.ok(institutionalWebcams.length >= 4, 'Must have at least 4 registered webcams');
+  assert.ok(institutionalWebcams.length >= 11, 'Must have at least 11 registered webcams');
 
   // Verify that deb / hajduszoboszlo webcams are present and marked external-only
   const kossuth = institutionalWebcams.find(s => s.id === 'debrecen-kossuth-ter-webcam');
@@ -536,6 +536,42 @@ test('9. Institutional operator audit: institutional webcams must have strictly 
   assert.equal(aeroclub.embedStatus, 'external-only');
   assert.equal(aeroclub.status, 'page-ok', 'Status follows actual evidence: page-ok when unverified live motion');
   assert.ok(aeroclub.provider.includes('Aero Club'), 'Provider must be Aero Club');
+
+  // Verify newly added local and county webcams
+  const klinika = institutionalWebcams.find(s => s.id === 'debrecen-klinika-webcam');
+  assert.ok(klinika, 'Klinikai Központ webcam must be registered');
+  assert.equal(klinika.url, 'https://www.idokep.hu/webkamera/debreceniegyetemkk');
+  assert.equal(klinika.embedStatus, 'external-only');
+  assert.ok(klinika.provider.includes('Debreceni Egyetem Klinikai Központ'), 'Provider must be University Clinic');
+  assert.equal(klinika.region, 'local');
+
+  const hajdudorog = institutionalWebcams.find(s => s.id === 'hajdudorog-webcam');
+  assert.ok(hajdudorog, 'Hajdúdorog webcam must be registered');
+  assert.equal(hajdudorog.url, 'https://www.idokep.hu/webkamera/zajgato_kft_2');
+  assert.equal(hajdudorog.provider, 'Időkép');
+  assert.ok(hajdudorog.notes.includes('fenntartó nem igazolt'), 'Notes must indicate unverified operator');
+  assert.equal(hajdudorog.region, 'county');
+
+  const hajdudorogEszak = institutionalWebcams.find(s => s.id === 'hajdudorog-eszak-webcam');
+  assert.ok(hajdudorogEszak, 'Hajdúdorog Észak webcam must be registered');
+  assert.equal(hajdudorogEszak.url, 'https://www.idokep.hu/webkamera/zajgato_kft_1');
+  assert.equal(hajdudorogEszak.provider, 'Időkép');
+  assert.ok(hajdudorogEszak.notes.includes('fenntartó nem igazolt'), 'Notes must indicate unverified operator');
+
+  const hajduboszormeny = institutionalWebcams.find(s => s.id === 'hajduboszormeny-webcam');
+  assert.ok(hajduboszormeny, 'Hajdúböszörmény webcam must be registered');
+  assert.equal(hajduboszormeny.url, 'https://www.idokep.hu/webkamera/gyberci');
+  assert.ok(hajduboszormeny.provider.includes('Nyakas Optika'), 'Provider must include institutional operator Nyakas Optika');
+
+  const hajdunanas = institutionalWebcams.find(s => s.id === 'hajdunanas-furdo-webcam');
+  assert.ok(hajdunanas, 'Hajdúnánás fürdő webcam must be registered');
+  assert.equal(hajdunanas.url, 'https://www.idokep.hu/webkamera/wifimiki2');
+  assert.ok(hajdunanas.provider.includes('Hajdúnánás'), 'Provider must include municipality');
+
+  const hortobagyMata = institutionalWebcams.find(s => s.id === 'hortobagy-mata-webcam');
+  assert.ok(hortobagyMata, 'Hortobágy Máta webcam must be registered');
+  assert.equal(hortobagyMata.url, 'https://www.idokep.hu/webkamera/hnp2');
+  assert.ok(hortobagyMata.provider.includes('Hortobágyi Nemzeti Park'), 'Provider must include national park');
 
   // Disallowed private individual checks across the entire registry
   const disallowedNames = ['Nagy Csilla', 'Szatmári Tamás', 'nagy_csilla', 'debrecen_toci_kelet', 'elco'];
@@ -590,13 +626,20 @@ test('11. Browser-side camera display: schema validation, synthetic click-to-loa
   assert.throws(() => validateLiveStreamEntry({ ...camEntry, attribution: '   ' }), /'attribution' must be a non-empty string/);
   assert.throws(() => validateLiveStreamEntry({ ...camEntry, attribution: 999 }), /'attribution' must be a non-empty string/);
 
-  // 2. Registry verification: 4 institutional cameras have verified imageUrl and attribution
+  // 2. Registry verification: institutional and local cameras have verified imageUrl and attribution
   const streams = loadLiveStreams();
   const targetCamIds = [
     'debrecen-kossuth-ter-webcam',
     'debrecen-bekas-to-webcam',
     'debrecen-egyetem-ter-webcam',
-    'hajduszoboszlo-aeroclub-webcam'
+    'debrecen-klinika-webcam',
+    'hajduszoboszlo-aeroclub-webcam',
+    'hajduszoboszlo-varos-webcam',
+    'hajdudorog-webcam',
+    'hajdudorog-eszak-webcam',
+    'hajduboszormeny-webcam',
+    'hajdunanas-furdo-webcam',
+    'hortobagy-mata-webcam'
   ];
 
   for (const cid of targetCamIds) {
@@ -772,20 +815,37 @@ test('11. Browser-side camera display: schema validation, synthetic click-to-loa
 
   // 4. Server static audit: STRICT ZERO outbound server requests to Időkép
   const root = new URL('../', import.meta.url);
-  const apisDir = new URL('apis/', root);
-  const libDir = new URL('lib/', root);
-
-  const checkNoIdokepRequests = (dirPath) => {
-    const { readdirSync, statSync } = require ? { readdirSync: () => [], statSync: () => ({}) } : {};
-  };
 
   // Read all source files in apis/ and lib/ and server.mjs
   const serverMjs = readFileSync(new URL('server.mjs', root), 'utf8');
   assert.ok(!serverMjs.includes('idokep.hu'), 'server.mjs must contain zero references to idokep.hu');
 
-  // Audit briefing sources: none may import or fetch Időkép
-  const briefingMjs = readFileSync(new URL('apis/briefing.mjs', root), 'utf8');
-  assert.ok(!briefingMjs.includes('idokep'), 'apis/briefing.mjs must contain zero references to idokep');
+  const apisDir = fileURLToPath(new URL('apis', root));
+  for (const file of readdirSync(apisDir)) {
+    if (file.endsWith('.mjs') || file.endsWith('.js')) {
+      const code = readFileSync(join(apisDir, file), 'utf8');
+      assert.ok(!code.includes('idokep.hu'), `apis/${file} must contain zero requests or references to idokep.hu`);
+      assert.ok(!/fetch\s*\([^)]*idokep/i.test(code), `apis/${file} must contain zero fetch calls to idokep`);
+    }
+  }
+
+  const libDir = fileURLToPath(new URL('lib', root));
+  function scanDirForIdokep(dir) {
+    for (const f of readdirSync(dir)) {
+      const p = join(dir, f);
+      if (statSync(p).isDirectory()) {
+        scanDirForIdokep(p);
+      } else if (f.endsWith('.mjs') || f.endsWith('.js')) {
+        const code = readFileSync(p, 'utf8');
+        // http-security.mjs contains CSP img-src whitelist, and live-streams.mjs is the registry loader
+        if (f !== 'http-security.mjs' && f !== 'live-streams.mjs') {
+          assert.ok(!code.includes('idokep.hu'), `lib/${f} must contain zero requests or references to idokep.hu`);
+          assert.ok(!/fetch\s*\([^)]*idokep/i.test(code), `lib/${f} must contain zero fetch calls to idokep`);
+        }
+      }
+    }
+  }
+  scanDirForIdokep(libDir);
 
   // 5. Documentation audit: verify correct Időkép ÁSZF section references and private use documentation
   const readmeMd = readFileSync(new URL('README.md', root), 'utf8');
