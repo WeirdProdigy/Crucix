@@ -75,7 +75,11 @@ test('1. Registry schema validation: valid entries pass, invalid schemas throw',
   assert.throws(() => validateLiveStreamEntry({ ...validEntry, embedUrl: 'http://embed.windy.com/embed.html' }), /Invalid 'embedUrl'/);
   assert.throws(() => validateLiveStreamEntry({ ...validEntry, embedUrl: 'https://evil.com/embed.html' }), /Invalid 'embedUrl'/);
   assert.throws(() => validateLiveStreamEntry({ ...validEntry, embedUrl: 12345 }), /Invalid 'embedUrl'/);
+  assert.throws(() => validateLiveStreamEntry({ ...validEntry, embedUrl: 'https://embed.windy.com/embed.html?overlay=radar' }), /cannot contain radar overlay/);
+  assert.throws(() => validateLiveStreamEntry({ ...validEntry, embedUrl: 'https://embed.windy.com/embed.html?product=radar' }), /cannot contain radar overlay/);
   assert.equal(validateLiveStreamEntry({ ...validEntry, embedUrl: 'https://embed.windy.com/embed.html?type=map' }), true);
+  assert.equal(validateLiveStreamEntry({ ...validEntry, url: 'https://www.windy.com/?rain', type: 'map', sourceType: 'embed', embedKind: 'windy-widget', embedStatus: 'embeddable', embedUrl: 'https://embed.windy.com/embed.html?overlay=rain' }), true);
+  assert.throws(() => validateLiveStreamEntry({ ...validEntry, url: 'https://www.windy.com/?rain', type: 'map', sourceType: 'embed', embedKind: 'unsupported-kind', embedStatus: 'embeddable', embedUrl: 'https://embed.windy.com/embed.html?overlay=rain' }), /Invalid 'embedKind'/);
 });
 
 test('2. Registry file loading: parses repository registry and detects duplicates', () => {
@@ -808,17 +812,27 @@ test('12. Windy embed widget: schema, click-to-load lifecycle, private host guar
   const streams = loadLiveStreams();
   const windyRadar = streams.find(s => s.id === 'windy-radar-embed');
   assert.ok(windyRadar, 'windy-radar-embed must be present in data/live-streams.json');
+  assert.equal(windyRadar.name, 'Windy csapadéktérkép (Berettyóújfalu / Bihartorda)');
+  assert.equal(windyRadar.type, 'map');
   assert.equal(windyRadar.provider, 'Windy.com');
+  assert.equal(windyRadar.sourceType, 'embed');
+  assert.equal(windyRadar.embedKind, 'windy-widget');
+  assert.equal(windyRadar.embedStatus, 'embeddable');
   assert.equal(windyRadar.attribution, 'Forrás: Windy.com');
   assert.ok(windyRadar.embedUrl.startsWith('https://embed.windy.com/'), 'embedUrl must start with https://embed.windy.com/');
   assert.ok(windyRadar.embedUrl.includes('lat=47.214') && windyRadar.embedUrl.includes('lon=21.353'), 'embedUrl must target lat=47.214, lon=21.353 (Berettyóújfalu / Bihartorda)');
-  assert.ok(windyRadar.embedUrl.includes('overlay=radar'), 'embedUrl must set overlay=radar');
+  assert.ok(windyRadar.embedUrl.includes('overlay=rain'), 'embedUrl must set overlay=rain');
+  assert.ok(!windyRadar.embedUrl.includes('overlay=radar'), 'embedUrl must NOT contain overlay=radar');
+  assert.ok(!windyRadar.embedUrl.includes('product=radar'), 'embedUrl must NOT contain product=radar');
   assert.ok(windyRadar.url.includes('windy.com'), 'external url must link to windy.com coordinate view');
 
-  // 1. Schema tests: only embed.windy.com URL accepted, http:// and foreign domain rejected
+  // 1. Schema tests: only embed.windy.com URL accepted, http:// and foreign domain rejected, radar overlay rejected
   assert.throws(() => validateLiveStreamEntry({ ...windyRadar, embedUrl: 'http://embed.windy.com/embed.html' }), /Invalid 'embedUrl'/);
   assert.throws(() => validateLiveStreamEntry({ ...windyRadar, embedUrl: 'https://other-domain.com/embed.html' }), /Invalid 'embedUrl'/);
   assert.throws(() => validateLiveStreamEntry({ ...windyRadar, embedUrl: 'https://windy.com/embed' }), /Invalid 'embedUrl'/);
+  assert.throws(() => validateLiveStreamEntry({ ...windyRadar, embedUrl: 'https://embed.windy.com/embed.html?overlay=radar' }), /cannot contain radar overlay/);
+  assert.throws(() => validateLiveStreamEntry({ ...windyRadar, embedUrl: 'https://embed.windy.com/embed.html?product=radar' }), /cannot contain radar overlay/);
+  assert.throws(() => validateLiveStreamEntry({ ...windyRadar, embedKind: 'unsupported-widget' }), /Invalid 'embedKind'/);
 
   // 2. Component click-to-load test: default 0 iframes, click -> 1 iframe, close -> 0 iframes
   const root = new URL('../', import.meta.url);
@@ -875,7 +889,8 @@ test('12. Windy embed widget: schema, click-to-load lifecycle, private host guar
   assert.equal(lm.isEmbedActive('windy-radar-embed'), false, 'Embed widget must be inactive initially');
   const initialCard = lm.renderStreamCard(windyRadar);
   assert.ok(!initialCard.includes('<iframe'), 'Initial render must contain 0 iframes (Click-to-Load)');
-  assert.ok(initialCard.includes('🗺 Windy radar betöltése'), 'Initial render must display load button');
+  assert.ok(initialCard.includes('🗺 Windy csapadéktérkép betöltése'), 'Initial render must display load button');
+  assert.ok(!initialCard.includes('🗺 Windy radar betöltése'), 'Must not display old radar button text');
   assert.ok(initialCard.includes('A betöltés kapcsolatot létesít a Windy.com szervereivel'), 'Must show privacy notice before load');
 
   // Click / loadEmbed -> exactly 1 iframe created
@@ -904,7 +919,7 @@ test('12. Windy embed widget: schema, click-to-load lifecycle, private host guar
 
   const unloadedCard = lm.renderStreamCard(windyRadar);
   assert.ok(!unloadedCard.includes('<iframe'), 'Card after close must contain 0 iframes');
-  assert.ok(unloadedCard.includes('🗺 Windy radar betöltése'), 'Load button must return after close');
+  assert.ok(unloadedCard.includes('🗺 Windy csapadéktérkép betöltése'), 'Load button must return after close');
 
   // 3. Non-private host guardrail test: button absent and loadEmbed is no-op
   const publicWindow = {
@@ -916,7 +931,7 @@ test('12. Windy embed widget: schema, click-to-load lifecycle, private host guar
   const publicLm = publicWindow.CrucixLiveMedia;
 
   const publicCard = publicLm.renderStreamCard(windyRadar);
-  assert.ok(!publicCard.includes('🗺 Windy radar betöltése'), 'Load button must be hidden on non-private hosts');
+  assert.ok(!publicCard.includes('🗺 Windy csapadéktérkép betöltése'), 'Load button must be hidden on non-private hosts');
   assert.ok(!publicCard.includes('<iframe'), '0 iframes on non-private hosts');
   assert.ok(publicCard.includes('Megnyitás a szolgáltató oldalán ↗'), 'External link must be available on non-private hosts');
 
@@ -964,4 +979,8 @@ test('12. Windy embed widget: schema, click-to-load lifecycle, private host guar
   assert.ok(readme.includes('Map Forecast API') && readme.includes('Webcams API'), 'README must document APIs not in use');
   assert.ok(readme.includes('https://embed.windy.com'), 'README must record CSP frame-src change');
   assert.ok(readme.includes('Nem hivatalos előrejelzés; hivatalos forrás: HungaroMet'), 'README must document non-official forecast disclaimer');
+  assert.ok(readme.includes('8.5'), 'README must document Section 8.5');
+  assert.ok(readme.includes('weather radar map overlay'), 'README must reference weather radar map overlay restriction');
+  assert.ok(readme.includes('promotional text'), 'README must record promotional text rule');
+  assert.ok(readme.includes('info@windy.com'), 'README must cite official Windy contact email');
 });

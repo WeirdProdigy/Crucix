@@ -39,7 +39,7 @@
  *      IPv6 link-local fe80::/10, valamint az opcionális CRUCIX_PRIVATE_HOSTS lista) érhető el; egyéb hosztnév
  *      esetén a felület rejtve tartja a kamerákat és csak külső szolgáltatói linket jelenít meg a magáncélú
  *      használat védelmében.
- * 7. Windy Embed Widget (Időjárásradar) és használati feltételek (Windyty, SE):
+ * 7. Windy Embed Widget (Csapadéktérkép) és használati feltételek (Windyty, SE):
  *    - Hivatalos forrás: Windyty, SE (Praha, Csehország) – General Terms of Use of Windy Services
  *      (Hatályos: 2020. december 17., legutóbbi frissítés: 2023. szeptember 1.).
  *    - „Windy and Webcam embeddable widget” rendelkezés: „Embeddable widgets are intended for media use and are
@@ -52,7 +52,7 @@
  *      nem nyilvános és nem kereskedelmi időjárási app. Kizárólag a hivatalos embed.windy.com generált iframe-et használja,
  *      API-kulcsos szolgáltatás (Map Forecast API, Webcams API) nincs használatban. A Windy logó és forráslink megmarad és
  *      kattintható.
- *    - Click-to-Load elv: Alapállapotban 0 iframe és 0 hálózati kérés. Az iframe kizárólag a „🗺 Windy radar betöltése”
+ *    - Click-to-Load elv: Alapállapotban 0 iframe és 0 hálózati kérés. Az iframe kizárólag a „🗺 Windy csapadéktérkép betöltése”
  *      gombra kattintva jön létre a böngésző memóriájában.
  *    - Bezárás gomb: Teljes leállítás és iframe-eltávolítás src nélkül. Lapelhagyáskor nem indul újratöltés.
  *    - Hálózati védelmi kapu: Nem privát hoszton a betöltő gomb rejtett és a betöltés no-op; csak a külső link látható.
@@ -80,7 +80,8 @@
   const TYPE_LABELS = Object.freeze({
     news: 'Híradó',
     webcam: 'Kamera',
-    directory: 'Katalógus'
+    directory: 'Katalógus',
+    map: 'Térkép'
   });
 
   const BACKGROUND_PLAYBACK_PREF_KEY = 'crucix.liveMedia.background.v1';
@@ -677,6 +678,9 @@
 
   function getEmbedStatusInfo(stream) {
     if (!stream) return { code: 'unverified', label: 'Nem ellenőrzött' };
+    if (stream.sourceType === 'embed' || stream.embedKind === 'windy-widget') {
+      return { code: 'embeddable', label: 'Beágyazható widget' };
+    }
     if (stream.embedStatus === 'external-only' || stream.sourceType === 'link-only') {
       return { code: 'external-only', label: 'Csak külső oldalon nézhető' };
     }
@@ -825,7 +829,7 @@
     const pageStatusLabel = getPageStatusLabel(stream.status);
     const embedInfo = getEmbedStatusInfo(stream);
 
-    if (stream.sourceType === 'link-only' || embedInfo.code === 'external-only') {
+    if (stream.sourceType === 'link-only' || stream.sourceType === 'embed' || Boolean(stream.embedUrl) || embedInfo.code === 'external-only') {
       const isPrivateHost = isPrivateOrLocalHost();
       const hasImage = Boolean(stream.imageUrl) && isPrivateHost;
       const isCameraActive = activeCameraIds.has(stream.id);
@@ -849,7 +853,7 @@
                 </iframe>
                 <div class="lm-embed-meta-bar">
                   <span class="lm-embed-disclaimer">${esc(WINDY_DISCLAIMER_TEXT)}</span>
-                  <button type="button" class="lm-btn-embed-close" title="Radar bezárása" onclick="window.CrucixLiveMedia?.unloadEmbed('${esc(stream.id)}')">✕ Bezárás</button>
+                  <button type="button" class="lm-btn-embed-close" title="Térkép bezárása" onclick="window.CrucixLiveMedia?.unloadEmbed('${esc(stream.id)}')">✕ Bezárás</button>
                 </div>
               </div>
               <div class="lm-embed-attribution">
@@ -863,7 +867,7 @@
               </div>
               <div class="lm-external-actions">
                 <button type="button" class="lm-btn lm-btn-load-embed" onclick="window.CrucixLiveMedia?.loadEmbed('${esc(stream.id)}')">
-                  🗺 Windy radar betöltése
+                  🗺 Windy csapadéktérkép betöltése
                 </button>
                 <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">
                   Megnyitás a szolgáltató oldalán ↗
@@ -874,7 +878,7 @@
         } else {
           externalBodyHtml = `
             <div class="lm-embed-restricted-box">
-              <span class="lm-embed-restricted-text">ℹ A közvetlen radar widget kizárólag privát helyi hálózatról (LAN / loopback) tölthető be (magáncélú felhasználás védelme).</span>
+              <span class="lm-embed-restricted-text">ℹ A közvetlen térkép widget kizárólag privát helyi hálózatról (LAN / loopback) tölthető be (magáncélú felhasználás védelme).</span>
             </div>
             <div class="lm-external-actions">
               <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">
@@ -1060,7 +1064,8 @@
       { id: 'all', label: 'Mind' },
       { id: 'news', label: 'Híradók' },
       { id: 'webcam', label: 'Webkamerák' },
-      { id: 'directory', label: 'Katalógusok' }
+      { id: 'directory', label: 'Katalógusok' },
+      { id: 'map', label: 'Térképek' }
     ].map(b => `
       <button type="button" class="lm-filter-btn${typeFilter === b.id ? ' active' : ''}" onclick="window.CrucixLiveMedia?.setTypeFilter('${b.id}')">
         ${esc(b.label)}
@@ -1182,7 +1187,7 @@
     const effectiveMode = getEffectiveViewMode();
     const activeIds = getActiveStreamIds();
     const embeddableTotal = rawStreams.filter(isEmbeddableStream).length;
-    const externalTotal = rawStreams.filter(s => s.sourceType === 'link-only' || s.embedStatus === 'external-only').length;
+    const externalTotal = rawStreams.filter(s => s.sourceType === 'link-only' || s.sourceType === 'embed' || s.embedStatus === 'external-only').length;
 
     return `
       <div class="lm-title-wrap">

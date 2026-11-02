@@ -825,22 +825,29 @@ AGPL-3.0
 - **Hálózati védelmi kapu (Loopback / LAN Guardrail):** A panel kliensoldali ellenőrzést alkalmaz (`isPrivateOrLocalHost`): amennyiben a felület nem szabványos privát hálózatról (`localhost`, `127.0.0.1`, `::1`, `192.168.*`, `10.*`, `172.16-31.*`, `100.64.0.0/10` CGNAT/Tailscale, `*.local` mDNS, IPv6 ULA `fc00::/7`, IPv6 link-local `fe80::/10`, vagy az opcionális `CRUCIX_PRIVATE_HOSTS` lista) fut, a közvetlen kamerabetöltő gombok nem jelennek meg, és a felület kizárólag a külső szolgáltatói oldalra mutató linket biztosít a szigorúan magáncélú felhasználási keret védelmében.
 - **Hivatalos forrás:** [Időkép Általános Szerződési Feltételek (ÁSZF)](https://www.idokep.hu/aszf).
 
-### Windy Embed Widget (Időjárásradar) és Feltételek (Windy.com)
+### Windy Embed Widget (Csapadéktérkép) és Feltételek (Windy.com)
 
-- **Funkció és működés:** A Crucix „Élő” paneljében elérhető egy kattintásra induló (Click-to-Load), interaktív időjárási radar modul Berettyóújfalu / Bihartorda térségére (`lat=47.214`, `lon=21.353`, `zoom=8`, `overlay=radar`).
+- **Funkció és működés:** A Crucix „Élő” paneljében elérhető egy kattintásra induló (Click-to-Load), interaktív időjárási térkép modul Berettyóújfalu / Bihartorda térségére (`lat=47.214`, `lon=21.353`, `zoom=8`).
+- **Alapértelmezett nem-radar réteg (csapadéktérkép):** Az ÁSZF 8.5 pontjának korlátozásai miatt az alapértelmezett réteg **nem radar**, hanem a hivatalosan generált csapadék/eső réteg (`overlay=rain`, `product=ecmwf`). A felületen nincs beépített váltó a radarra; a felhasználó a radart közvetlenül a Windy.com weboldalán, külső hivatkozáson tekintheti meg.
 - **Kizárólag privát LAN-os, magáncélú használat:** A modul kizárólag a zárt otthoni helyi hálózaton futó példányon (`192.168.1.81:3117` vagy loopback/privát tartomány) érhető el. Nyilvános vagy kereskedelmi elérés nincs.
 - **Windy Általános Szerződési Feltételek (Windyty, SE):**
-  - **Szolgáltató:** Windyty, SE (Székhely: Strakonická 3363/2d, 150 00 Praha 5, Csehország, Cégjegyzékszám: 04641647).
-  - **Hatályosság:** A dokumentum 2020. december 17-én lépett hatályba, legutóbbi módosítása **2023. szeptember 1-től hatályos** (*„These Terms of Use enter into full force and effect on 17 December 2020 and their latest update is effective as of 1 September 2023.”*).
-  - **Embed widget megengedett használata és feltételei:**
+  - **Szolgáltató és hivatalos kapcsolat:** Windyty, SE (Székhely: Strakonická 3363/2d, 150 00 Praha 5, Csehország, Cégjegyzékszám: 04641647; e-mail: `info@windy.com`, fórum: Windy Community).
+  - **Vizsgálat és hatályosság dátuma:** A forrás-ellenőrzés dátuma: **2026. november 2.** A dokumentum 2020. december 17-én lépett hatályba, legutóbbi módosítása **2023. szeptember 1-től hatályos** (*„These Terms of Use enter into full force and effect on 17 December 2020 and their latest update is effective as of 1 September 2023.”*).
+  - **Embed widget megengedett használata és feltételei (8.6. pont):**
     > *„Embeddable widgets are intended for media use and are available at windy.com/widgets and via the webcam detail and Share button. The Windy logo must be present and clickable (leading to the Windy Website), and they are not allowed to be used by weather apps and other commercial websites.”*
   - **Ingyenes szolgáltatások magáncélú korlátozása:**
     > *„Free Services are intended to be used by private persons only. All other institutions are demanded to use the Paid Services.”*
+  - **Továbbadási kivétel beágyazható widgetre (4.2.3. pont):**
+    > *„You promise and agree that you are using the Services and Content for your own personal use and that you will not redistribute (does not apply to the use of the Windy embeddable widget) or transfer our Services or Content to any third party.”*
+  - **8.5. pont – Időjárási radar és webkamerák kizárása a vizualizációkból:**
+    > *„Notwithstanding the foregoing, the Permission to Use Visualizations does not include any Visualizations of the weather radar map overlay or webcam images.”*
+    Az ÁSZF 8.5 pontja alapján a vizualizációk felhasználási engedélye kifejezetten nem terjed ki a „weather radar map overlay” és a webkamerák képeire. Bár a 4.2.3 és 8.6 pontok kivételt tesznek a beágyazható widget terjesztési tilalma alól, a radar overlay megítélése és widgeten belüli státusza jogilag rendezetlen és korlátozott. Emiatt a Crucixban az **alapértelmezett réteg nem radar**, hanem a hivatalos csapadéktérkép (`overlay=rain`).
+  - **Megjelenítési és attribúciós integritás:** A Windy logó az iframe-en belül nem takarható el és kattinthatónak kell maradnia (a Windy weboldalára mutatva). A beágyazás konfigurációjában a promóciós szöveg („promotional text”) sem rejthető el.
 - **Megvalósítási garanciák és korlátok:**
-  - **Hivatalos embed URL:** Kizárólag a Windy hivatalos embed-generátora által biztosított forma (`https://embed.windy.com/embed.html?...`) engedélyezett.
+  - **Hivatalos embed URL:** Kizárólag a Windy hivatalos embed-generátora által biztosított forma (`https://embed.windy.com/embed.html?...`) engedélyezett, amelyben az `overlay=radar` és `product=radar` paraméterek tiltottak.
   - **Nincs API-használat:** Az API-kulcsot igénylő Map Forecast API vagy Webcams API **nincs használatban**.
   - **Click-to-Load és nulla szerveroldali kérés:** Alapértelmezetten 0 iframe és 0 külső kapcsolat létesül. Az iframe csak kifejezett felhasználói kattintásra jön létre a böngésző memóriájában. A Crucix szervere semmilyen hálózati kérést nem küld a Windy felé, nem proxyz és nem kapar adatot.
   - **Bezárás:** A bezárás gomb teljes leállítást végez és eltávolítja az iframe-et a DOM-ból. Nincs időzített újratöltés és nincs háttérbeli poll; a Windy saját maga frissíti a megjelenített réteget.
   - **CSP szigorítás:** A Content-Security-Policy `frame-src` direktívájához pontosan a `https://embed.windy.com` forrás került hozzáadásra (csillag nélkül).
   - **Hálózati védelmi kapu:** Nem privát hoszton a betöltő gomb rejtett, a betöltési függvény no-op, és kizárólag a forrásoldali külső hivatkozás látható.
-  - **Vizuális kiegészítő jelleg:** A radar kizárólag vizuális tájékozódást szolgál, semmilyen riasztási, pontozási vagy döntési logikába nem épül be. A felületen feltüntetett figyelmeztetés: *„Nem hivatalos előrejelzés; hivatalos forrás: HungaroMet”*.
+  - **Vizuális kiegészítő jelleg:** A térkép kizárólag vizuális tájékozódást szolgál, semmilyen riasztási, pontozási vagy döntési logikába nem épül be. A felületen feltüntetett figyelmeztetés: *„Nem hivatalos előrejelzés; hivatalos forrás: HungaroMet”*.

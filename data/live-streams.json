@@ -315,19 +315,20 @@
   },
   {
     "id": "windy-radar-embed",
-    "name": "Windy radar (Berettyóújfalu / Bihartorda)",
-    "type": "directory",
+    "name": "Windy csapadéktérkép (Berettyóújfalu / Bihartorda)",
+    "type": "map",
     "region": "county",
     "provider": "Windy.com",
-    "sourceType": "link-only",
-    "url": "https://www.windy.com/?radar,surface,47.214,21.353,8",
-    "embedUrl": "https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=default&metricTemp=default&metricWind=default&zoom=8&overlay=radar&product=radar&level=surface&lat=47.214&lon=21.353",
+    "sourceType": "embed",
+    "embedKind": "windy-widget",
+    "url": "https://www.windy.com/?rain,surface,47.214,21.353,8",
+    "embedUrl": "https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=default&metricTemp=default&metricWind=default&zoom=8&overlay=rain&product=ecmwf&level=surface&lat=47.214&lon=21.353",
     "attribution": "Forrás: Windy.com",
     "language": "hu",
     "status": "page-ok",
-    "embedStatus": "external-only",
+    "embedStatus": "embeddable",
     "checkedAt": "2026-11-01",
     "provenance": "Hivatalos embed modul (embed.windy.com)",
-    "notes": "Windy hivatalos interaktív időjárási radar embed widget (Berettyóújfalu / Bihartorda). Kattintásra induló böngészőoldali iframe privát LAN-on, szerveroldali tárolás és proxyzás nélkül."
+    "notes": "Windy hivatalos interaktív csapadéktérkép embed widget (Berettyóújfalu / Bihartorda). Kattintásra induló böngészőoldali iframe privát LAN-on, szerveroldali tárolás és proxyzás nélkül."
   }
 ]
