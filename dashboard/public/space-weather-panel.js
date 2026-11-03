@@ -53,10 +53,10 @@
       : (gScale.level >= 1 ? `<span class="badge" style="background:rgba(255,184,76,0.15);color:#ffb84c;border-color:#ffb84c">${esc(gScale.label)} VIHAR</span>`
       : '<span class="badge" style="color:#64f0c8;border-color:rgba(100,240,200,0.3)">NYUGODT</span>');
 
-    const noaaKpStr = kp.noaaKp !== null ? kp.noaaKp.toFixed(2) : '--';
-    const gfzKpStr = kp.gfzKp !== null ? `${kp.gfzKp.toFixed(2)} (${kp.gfzStatus || 'pre'})` : '--';
-    const hp30Str = kp.gfzHp30 !== null ? kp.gfzHp30.toFixed(2) : '--';
-    const hp60Str = kp.gfzHp60 !== null ? kp.gfzHp60.toFixed(2) : '--';
+    const noaaKpStr = (typeof kp.noaaKp === 'number' && Number.isFinite(kp.noaaKp)) ? kp.noaaKp.toFixed(2) : '--';
+    const gfzKpStr = (typeof kp.gfzKp === 'number' && Number.isFinite(kp.gfzKp)) ? `${kp.gfzKp.toFixed(2)} (${kp.gfzStatus || 'pre'})` : '--';
+    const hp30Str = (typeof kp.gfzHp30 === 'number' && Number.isFinite(kp.gfzHp30)) ? kp.gfzHp30.toFixed(2) : '--';
+    const hp60Str = (typeof kp.gfzHp60 === 'number' && Number.isFinite(kp.gfzHp60)) ? kp.gfzHp60.toFixed(2) : '--';
 
     const windSpeedStr = wind.speed !== null ? `${wind.speed} km/s` : '-- km/s';
     const windBzStr = wind.bz !== null ? `${wind.bz > 0 ? '+' : ''}${wind.bz} nT` : '-- nT';

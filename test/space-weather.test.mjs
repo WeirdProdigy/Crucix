@@ -271,3 +271,49 @@ test('10. GFZ Potsdam: Cache TTL 30 minutes prevents redundant upstream fetch', 
     }
   }
 });
+
+
+test('11. space-weather-panel.js: guards undefined, null, and NaN Kp values without throwing', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const testDir = path.dirname(fileURLToPath(import.meta.url));
+  const panelPath = path.join(testDir, '..', 'dashboard', 'public', 'space-weather-panel.js');
+  const code = fs.readFileSync(panelPath, 'utf8');
+
+  const mockWindow = {};
+  const mockDocument = { querySelector: () => null };
+  const runModule = new Function('window', 'document', code);
+  runModule(mockWindow, mockDocument);
+
+  assert.ok(mockWindow.CrucixSpaceWeatherPanel, 'CrucixSpaceWeatherPanel is defined');
+  assert.equal(typeof mockWindow.CrucixSpaceWeatherPanel.panelHtml, 'function');
+
+  const edgeSnapshots = [
+    { spaceWeather: { kp: { noaaKp: undefined, gfzKp: null, gfzHp30: NaN, gfzHp60: 'not-a-number' } } },
+    { spaceWeather: { kp: {} } },
+    { spaceWeather: {} },
+    {},
+    null,
+    undefined
+  ];
+
+  for (const snap of edgeSnapshots) {
+    assert.doesNotThrow(() => {
+      const html = mockWindow.CrucixSpaceWeatherPanel.panelHtml(snap);
+      assert.ok(typeof html === 'string', 'returns html string');
+      assert.ok(html.includes('--'), 'renders fallback dashes for non-finite Kp values');
+    });
+  }
+
+  const validSnap = {
+    spaceWeather: {
+      kp: { noaaKp: 4.67, gfzKp: 5.0, gfzHp30: 4.88, gfzHp60: 5.12, gfzStatus: 'def' }
+    }
+  };
+  const validHtml = mockWindow.CrucixSpaceWeatherPanel.panelHtml(validSnap);
+  assert.ok(validHtml.includes('4.67'), 'NOAA Kp formatted');
+  assert.ok(validHtml.includes('5.00 (def)'), 'GFZ Kp formatted');
+  assert.ok(validHtml.includes('4.88'), 'Hp30 formatted');
+  assert.ok(validHtml.includes('5.12'), 'Hp60 formatted');
+});
