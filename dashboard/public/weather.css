@@ -564,3 +564,184 @@
   color: var(--dim, #8ba2b5);
   line-height: 1.3;
 }
+
+/* OVF Hydro Gauges (Berettyó) Card */
+.wp-hydro-card {
+  background: rgba(14, 25, 42, 0.55);
+  border: 1px solid rgba(45, 80, 120, 0.4);
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin-top: 6px;
+  margin-bottom: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.wp-hydro-card.off {
+  background: rgba(15, 22, 35, 0.4);
+  border-color: rgba(50, 70, 95, 0.3);
+  opacity: 0.85;
+}
+
+.wp-hydro-card.stale {
+  border-color: rgba(255, 184, 76, 0.4);
+}
+
+.wp-hydro-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+
+.wp-hydro-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.wp-hydro-badge {
+  font-family: var(--mono, monospace);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: var(--accent2, #44ccff);
+  text-transform: uppercase;
+}
+
+.wp-hydro-subtitle {
+  font-size: 8px;
+  color: var(--dim, #8ba2b5);
+  font-family: var(--mono, monospace);
+}
+
+.wp-hydro-note {
+  font-size: 9px;
+  color: var(--dim, #8ba2b5);
+  padding: 4px 0;
+}
+
+.wp-hydro-gauges-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.wp-hydro-gauge-row {
+  background: rgba(10, 18, 30, 0.6);
+  border: 1px solid rgba(35, 60, 90, 0.35);
+  border-radius: 3px;
+  padding: 4px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.wp-hydro-gauge-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.wp-hydro-gauge-name {
+  font-size: 10.5px;
+  color: var(--text, #e6f0fa);
+}
+
+.wp-hydro-star {
+  color: #ffb84c;
+  font-size: 9px;
+}
+
+.wp-hydro-gauge-sub {
+  font-size: 8.5px;
+  color: var(--dim, #8ba2b5);
+  font-family: var(--mono, monospace);
+  margin-left: 2px;
+}
+
+.wp-hydro-time-badge {
+  font-family: var(--mono, monospace);
+  font-size: 8px;
+  padding: 1px 4px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+
+.wp-hydro-time-badge.fresh {
+  background: rgba(100, 240, 200, 0.12);
+  color: var(--accent, #64f0c8);
+}
+
+.wp-hydro-time-badge.stale {
+  background: rgba(255, 184, 76, 0.15);
+  color: #ffb84c;
+  border: 1px solid rgba(255, 184, 76, 0.3);
+}
+
+.wp-hydro-time-badge.off {
+  background: rgba(139, 162, 181, 0.1);
+  color: var(--dim, #8ba2b5);
+}
+
+.wp-hydro-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+@media (max-width: 480px) {
+  .wp-hydro-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.wp-hydro-m-item {
+  background: rgba(15, 25, 40, 0.45);
+  border: 1px solid rgba(40, 65, 95, 0.2);
+  border-radius: 2px;
+  padding: 2px 4px;
+  display: flex;
+  flex-direction: column;
+}
+
+.wp-hydro-m-item.wide {
+  grid-column: 1 / -1;
+}
+
+.wp-hydro-ml {
+  font-size: 7.5px;
+  font-family: var(--mono, monospace);
+  color: var(--dim, #8ba2b5);
+  text-transform: uppercase;
+}
+
+.wp-hydro-mv {
+  font-size: 10px;
+  color: var(--text, #e6f0fa);
+  font-family: var(--mono, monospace);
+}
+
+.wp-hydro-mv.highlight {
+  color: var(--accent2, #44ccff);
+  font-weight: 700;
+}
+
+.wp-hydro-mv.sub {
+  font-size: 8.5px;
+  color: var(--dim, #8ba2b5);
+  font-family: var(--font, sans-serif);
+}
+
+.wp-hydro-attribution {
+  font-family: var(--mono, monospace);
+  font-size: 8px;
+  color: var(--dim, #8ba2b5);
+  opacity: 0.8;
+  margin-top: 2px;
+  border-top: 1px dashed rgba(60, 85, 120, 0.25);
+  padding-top: 3px;
+  line-height: 1.25;
+}

@@ -672,6 +672,7 @@ All settings are in `.env` with sensible defaults:
 | `CRUCIX_HUNGAROMET_FALLBACK_STATIONS` | `64711,64310,64713` | Comma-separated candidate stations for per-field nearest valid sensor fallback |
 | `CRUCIX_OBSERVED_USER_LAT` | `47.2092` | Reference latitude for ground observation distance calculations (default: Berettyóújfalu) |
 | `CRUCIX_OBSERVED_USER_LON` | `21.5383` | Reference longitude for ground observation distance calculations (default: Berettyóújfalu) |
+| `CRUCIX_ENABLE_OVF_GAUGES` | `false` | Opt-in OVF Berettyó river water gauges (Berettyóújfalu, Pocsaj, Darvas, Szeghalom; memory-only) |
 
 Delta engine thresholds (how sensitive the system is to changes between sweeps) can be customized in `crucix.config.mjs` under the `delta.thresholds` section. The defaults are tuned to filter out noise while catching meaningful moves.
 
@@ -702,6 +703,8 @@ When running `npm run dev`:
 | `GET /api/predictions` | The prediction journal: `{calibration, recent}` (the 20 newest predictions) |
 | `POST /api/briefing` | A cited briefing `{scope, generatedAt, language, source: llm or rules, busy?: true, bullets: [{text, refs: [{n, id, title}]}]}` for `{scope: "global" or an ISO3}`; guarded like the alert routes, body at most 1 KB |
 | `GET /api/source-health` | The source-health matrix: `{sweeps, sources: [{source, domain, cells}]}`, cells oldest to newest (`sweeps` 1 to `SWEEP_ARCHIVE_COUNT`, default 48) |
+| `GET /api/live-streams` | Public live webcams and streams directory |
+| `GET /api/ovf-gauges` | In-memory OVF Berettyó river water gauge telemetry (read-only, never persisted) |
 
 The country routes take no query parameters and, like the archive routes, answer `400 {error, code, field}`, `404` or a generic `503`. The archive routes are read-only and `no-store`, behind the same Basic auth; a bad query parameter or sweep id is `400 {error, code, field}`, an unknown sweep `404`, any other failure a generic `503`.
 
@@ -911,3 +914,38 @@ AGPL-3.0
   - Kötelező attribúció: *„Adatbázis: Meteorológiai Adattár, HungaroMet Nonprofit Zrt.”*.
   - A felületen világosan megkülönböztetve a numerikus modellektől (*„Valós talajszinti mérés (nem numerikus modell)”* vs *„MODELL · DWD ICON”*).
   - Null riasztási hatás: A forrás nem generál riasztásokat vagy incidenseket (`observations: []`), a számlálókat nem növeli.
+
+### OVF Vízmérce (Berettyó) hidrológiai adapter
+
+- **Cél és hatókör:** Valós távmért vízállás-, vízhozam- és vízhőmérséklet-adatok integrálása a Berettyó folyó Hajdú-Bihar és Békés vármegyei szakaszára.
+- **Opt-in környezeti változó:** `CRUCIX_ENABLE_OVF_GAUGES=true` (alapértelmezett: `false`). Kikapcsolt állapotban szigorúan 0 külső hálózati kérés indul.
+- **Forrás és hozzáférési mód:** Országos Vízügyi Főigazgatóság (OVF) publikus ArcGIS REST MapServer rétege:
+  `https://geoportal.vizugy.hu/arcgis/rest/services/VIR/Vizmercek_vizugyhu/MapServer/60/query`
+- **A `data.vizugy.hu` és `vmservice.vizugy.hu` szándékos elkerülésének oka:** A korábbi felmérés során azonosított alternatív végpontok böngészőoldali `Origin: https://www.vizugy.hu` fejlécet és egyedi tokent követelnek meg. A fejlécek hamisítása és védelmek megkerülése tilos. A `geoportal.vizugy.hu` ArcGIS REST rétege hivatalosan nyílt, transzparens lekérdező felület, amely nem igényel fejléc-manipulációt vagy titkosított paramétereket.
+- **Figyelt mércék a Berettyó folyón (hivatalos vízügyi törzsszámokkal):**
+  - `2546`: **Berettyóújfalu** (elsődleges mérce, `primary: true`)
+  - `2545`: **Pocsaj**
+  - `2739`: **Darvas** (a mérőhely vízhozamot nem mér, értéke `null`, felületen: `-`)
+  - `2740`: **Szeghalom**
+- **Lekérdezési mechanizmus:** Pontos törzsszám-alapú szűrés: `vFeAllomas_webmerc.Torzsszam IN (2545, 2546, 2739, 2740)`.
+- **Mért és származtatott paraméterek:**
+  - Vízállás (`waterLevelCm`, `cm`), vízhozam (`dischargeM3s`, `m³/s`), vízhőmérséklet (`waterTempC`, `°C`).
+  - Árvízvédelmi készültségi szintek (`kf1`, `kf2`, `kf3`), legkisebb (`lkv`) és legnagyobb (`lnv`) mért vízállás.
+  - Vízállás-viszonyítás (`levelRelation`): az aktuális vízállás számított viszonya az I. fokú készültségi szinthez (pl. *431 cm tartalék, számítva a 300 cm-es I. fokú készültségi szinthez (nem hivatalos állapot)*).
+  - A forrásban szereplő negatív vízállások (pl. Berettyóújfalu -131 cm, Pocsaj -69 cm) valós, szabályos relatív szintek a mérce „0” pontjához képest, nem hibás adatok.
+- **Mércénkénti frissességi és elévülési ciklus (Cadence):**
+  - Gyorsítótár élettartam (TTL): 30 perc (`CACHE_TTL_MS = 1800000`).
+  - **Órás automata távmérők (`cadence: 'hourly'`, Berettyóújfalu #2546, Pocsaj #2545):** 90 perces frissességi küszöb (`HOURLY_FRESH_THRESHOLD_MINUTES = 90`). Indoklás: 60 perces mintavételi periódus (`HH:00` UTC) + 30 perc szerveroldali feldolgozási és közzétételi ráhagyás. Ezzel megelőzhető az óránkénti fals „ELAVULT” riasztás a teljesen egészséges méréseknél.
+  - **Napi leolvasású állomások (`cadence: 'daily'`, Darvas #2739, Szeghalom #2740):** 26 órás frissességi küszöb (`DAILY_FRESH_THRESHOLD_MINUTES = 1560`). Indoklás: A vízügyi minta alapján a kézi/napi leolvasású állomások naponta egyszer, reggel 06:00 UTC-kor frissülnek. A 24 órás ciklus + 2 óra ráhagyás garantálja, hogy a mérce a saját napi periódusán belül ne jelenjen meg tévesen „ELAVULT”-ként a napközbeni órákban. A felületen a napi mérce mérésének ideje és a `napi mérce` felirat transzparensen látható.
+  - Hibatűrés: Sikertelen hálózati kérés esetén az adapter a legutolsó érvényes memóriabeli mérést adja vissza elévültként megjelölve (`stale: true`).
+- **Tesztkörnyezet és szintetikus teszt-fixture:**
+  - A repóban található `test/fixtures/ovf-gauges-fixture.json` tesztállomány jogi minimalizáláson esett át: kizárólag a parszoláshoz feltétlenül szükséges 15 attribútumot tartalmazza kerekített/szintetikus értékekkel. Nem minősül OVF-adatállománynak. A valódi nyers lekérdezési minta a repón kívül helyezkedik el, és szigorúan sosem kerül verziókövetés alá.
+- **Szigorúan memóriában tartott működés (Memory-only persistence policy):**
+  - **Jogi és adatvédelmi indoklás:** Az OVF felhasználási feltételei szerint a tájékoztató jellegű adatok adatbázisban történő tartós tárolása, archiválása vagy továbbadása előzetes írásbeli engedélyhez kötött.
+  - **Garantált adatcsíkozás (`stripMemoryOnlySources`):** A szerver oldalon a `lib/snapshots.mjs` és `apis/save-briefing.mjs` modulokba beépített tisztító mechanizmus gondoskodik róla, hogy sem az `OVF-Gauges` forrásadat, sem a szintetizált `ovfGauges` rekord soha ne kerüljön kiírásra a perzisztens fájlokba (`runs/latest.json`, `runs/briefing_server_*.json`) vagy a sweep tömörített archívumaiba (`runs/sweep-*.json.gz`).
+  - Az adatok kizárólag a Node.js folyamat memóriájában (RAM) léteznek a gyorsítótár élettartama alatt, és csak az aktív `GET /api/weather` vagy a dedikált memóriabeli `GET /api/ovf-gauges` végponton keresztül érhetők el.
+- **Riasztási és eseményfolyam-mentesség (Zero alerts / events):**
+  - Az OVF adatok teljes mértékben mentesek a riasztási mechanizmusoktól. Nem képeznek riasztást (`alerts`), nem hoznak létre naplózott eseményt (`events`), nem számítanak delta-különbséget (`deltas`), nem módosítják a kockázati pontszámokat (`risk`), és nem küldenek semmilyen Telegram- vagy Discord-értesítést.
+- **Kötelező forrásmegjelölés és jogi nyilatkozat:**
+  - A felületen és az API kimenetben kötelezően megjelenített szó szerinti attribúció:
+    *„Forrás: Országos Vízügyi Főigazgatóság (OVF), tájékoztató jellegű adat; nem hivatalos árvízi vagy belvízi előrejelzés.”*

@@ -399,6 +399,11 @@ app.get('/api/live-streams', (_req, res) => {
   res.json({ liveStreams: liveStreamsRegistry });
 });
 
+// API: OVF gauges (memory-only hydro telemetry)
+app.get('/api/ovf-gauges', (_req, res) => {
+  res.json(currentData?.ovfGauges || { enabled: false, gauges: [] });
+});
+
 // After the last /api route: JSON for what a route could not answer itself (a broken percent-encoding in an id, an escaped error).
 installApiErrorHandler(app);
 
@@ -493,6 +498,7 @@ async function runSweepCycle() {
     // the last sweep on disk, so the next archived sweep also covers this one.
     if (!archiveSweep({ archive: sweepArchive, snapshot: synthesized, timing: rawData.timing, previous: previousArchived }).error) previousArchived = synthesized;
     synthesized.liveStreams = liveStreamsRegistry;
+    synthesized.ovfGauges = rawData.sources?.['OVF-Gauges']?.data || null;
     currentData = synthesized;
 
     // 6. Push to all connected browsers

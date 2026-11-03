@@ -284,6 +284,115 @@
     `;
   }
 
+  function renderHydroBlock(snapshot) {
+    const hydro = snapshot?.ovfGauges || snapshot?.weather?.ovfGauges || null;
+    const ATTRIBUTION_OVF = 'Forrás: Országos Vízügyi Főigazgatóság (OVF), tájékoztató jellegű adat; nem hivatalos árvízi vagy belvízi előrejelzés.';
+
+    if (!hydro || hydro.enabled === false) {
+      return `
+        <div class="wp-hydro-card off" role="region" aria-label="Vízállás adatok (Berettyó)">
+          <div class="wp-hydro-header">
+            <div class="wp-hydro-title-wrap">
+              <span class="wp-hydro-badge">VÍZÁLLÁS (BERETTYÓ)</span>
+              <span class="wp-hydro-subtitle">Berettyóújfalu · Pocsaj · Darvas · Szeghalom</span>
+            </div>
+            <span class="wp-obs-pill wp-obs-pill-off">KIKAPCSOLVA</span>
+          </div>
+          <div class="wp-hydro-note">
+            Az OVF vízmérce modul kikapcsolva (CRUCIX_ENABLE_OVF_GAUGES=false).
+          </div>
+          <div class="wp-hydro-attribution">
+            ${ATTRIBUTION_OVF}
+          </div>
+        </div>
+      `;
+    }
+
+    const isFresh = Boolean(hydro.fresh);
+    const statusClass = isFresh ? 'fresh' : 'stale';
+    const statusPill = isFresh
+      ? '<span class="wp-obs-pill wp-obs-pill-fresh">FRISS</span>'
+      : '<span class="wp-obs-pill wp-obs-pill-stale">ELAVULT</span>';
+
+    const gauges = Array.isArray(hydro.gauges) ? hydro.gauges : [];
+
+    const gaugeRowsHtml = gauges.map(g => {
+      const isGaugeFresh = Boolean(g.fresh);
+      const isDaily = g.cadence === 'daily';
+      const levelStr = g.waterLevelCm !== null ? `${g.waterLevelCm > 0 ? '+' : ''}${g.waterLevelCm} cm` : '-';
+      const dischargeStr = g.dischargeM3s !== null ? `${formatMetricNum(g.dischargeM3s, 2)} m³/s` : '-';
+      const tempStr = g.waterTempC !== null ? `${formatMetricNum(g.waterTempC, 1)} °C` : '-';
+      const timeStr = g.observedAtBudapestTime || '--:--';
+      const timeBadgeClass = isGaugeFresh ? 'fresh' : (g.observedAt ? 'stale' : 'off');
+      const timeBadgeText = isGaugeFresh
+        ? timeStr
+        : (g.observedAt ? `ELAVULT (${esc(g.observedAtBudapestDate || timeStr)})` : 'NINCS ADAT');
+
+      const kfText = g.levelRelation?.text && g.levelRelation.text !== '-'
+        ? esc(g.levelRelation.text)
+        : (g.kf1 ? `I. fok: ${g.kf1} cm` : '-');
+
+      const levelStatusClass = g.levelRelation?.status === 'kf3' ? 'alert-kf3' :
+        (g.levelRelation?.status === 'kf2' ? 'alert-kf2' :
+        (g.levelRelation?.status === 'kf1' ? 'alert-kf1' : 'normal'));
+
+      const officialFokozatHtml = (g.currentFokozat && g.currentFokozat > 0)
+        ? ` <span class="wp-hydro-fok-pill" style="font-size:8.5px;padding:1px 4px;border-radius:2px;background:rgba(255,184,76,0.18);color:#ffb84c;border:1px solid rgba(255,184,76,0.4)">OVF Fokozat mező: ${esc(g.currentFokozat)} (értelmezés ellenőrizendő)</span>`
+        : '';
+
+      return `
+        <div class="wp-hydro-gauge-row ${levelStatusClass}">
+          <div class="wp-hydro-gauge-head">
+            <div class="wp-hydro-gauge-name">
+              <strong>${esc(g.name)}</strong>${g.isPrimary ? ' <span class="wp-hydro-star" title="Elsődleges állomás">★</span>' : ''}${officialFokozatHtml}
+              <span class="wp-hydro-gauge-sub">(${esc(g.river || 'Berettyó')}, #${esc(g.id)}${isDaily ? ' · napi mérce' : ''})</span>
+            </div>
+            <span class="wp-hydro-time-badge ${timeBadgeClass}">${timeBadgeText}</span>
+          </div>
+
+          <div class="wp-hydro-metrics-grid">
+            <div class="wp-hydro-m-item">
+              <span class="wp-hydro-ml">Vízállás</span>
+              <strong class="wp-hydro-mv highlight">${levelStr}</strong>
+            </div>
+            <div class="wp-hydro-m-item">
+              <span class="wp-hydro-ml">Vízhozam</span>
+              <span class="wp-hydro-mv">${dischargeStr}</span>
+            </div>
+            <div class="wp-hydro-m-item">
+              <span class="wp-hydro-ml">Vízhő</span>
+              <span class="wp-hydro-mv">${tempStr}</span>
+            </div>
+            <div class="wp-hydro-m-item wide">
+              <span class="wp-hydro-ml">Készültségi viszony</span>
+              <span class="wp-hydro-mv sub">${kfText}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="wp-hydro-card ${statusClass}" role="region" aria-label="Vízállás adatok (Berettyó)">
+        <div class="wp-hydro-header">
+          <div class="wp-hydro-title-wrap">
+            <span class="wp-hydro-badge">VÍZÁLLÁS (BERETTYÓ)</span>
+            <span class="wp-hydro-subtitle">Berettyóújfalu · Pocsaj · Darvas · Szeghalom</span>
+          </div>
+          ${statusPill}
+        </div>
+
+        <div class="wp-hydro-gauges-list">
+          ${gaugeRowsHtml}
+        </div>
+
+        <div class="wp-hydro-attribution">
+          ${ATTRIBUTION_OVF}
+        </div>
+      </div>
+    `;
+  }
+
   function renderWeatherPanel(snapshot) {
     const weather = snapshot?.weather || {};
     const byRegion = weather.byRegion || {};
@@ -324,6 +433,9 @@
 
     // Observed ground station block (HungaroMet ODP)
     const observedBlockHtml = renderObservedBlock(snapshot);
+
+    // OVF Hydro gauges block (Berettyó)
+    const hydroBlockHtml = renderHydroBlock(snapshot);
 
     // Content by active mode tab
     let bodyHtml = '';
@@ -374,6 +486,7 @@
 
       bodyHtml = `
         ${observedBlockHtml}
+        ${hydroBlockHtml}
         <div style="font-size:9.5px;color:var(--dim,#8ba2b5);font-family:var(--mono,monospace);margin:6px 0 2px 2px;letter-spacing:0.5px">
           NUMERIKUS ELŐREJELZÉSI MODELL (DWD ICON · TERÜLETI ADATOK):
         </div>
@@ -475,6 +588,8 @@
 
   window.CrucixWeatherPanel = {
     panelHtml: renderWeatherPanel,
+    renderObservedBlock: renderObservedBlock,
+    renderHydroBlock: renderHydroBlock,
     setRegion: setWeatherRegion,
     setTab: setWeatherTab,
     setStation: setObservedStation

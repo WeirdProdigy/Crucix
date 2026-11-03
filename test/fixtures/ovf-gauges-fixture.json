@@ -1,0 +1,114 @@
+{
+  "_comment": "szintetikus/kerekített teszt-fixture az OVF nyilvános réteg szerkezete alapján; nem OVF-adatállomány",
+  "displayFieldName": "AllomasNev",
+  "fieldAliases": {
+    "vFeAllomas_webmerc.Torzsszam": "Torzsszam",
+    "vop.dbo.tAllomasFe.AllomasNev": "AllomasNev",
+    "vop.dbo.tAllomasFe.VizfolyasNev": "VizfolyasNev",
+    "vop.dbo.tAllomasFe.Idopont": "Idopont",
+    "vop.dbo.tAllomasFe.Vizallas": "Vizallas",
+    "vop.dbo.tAllomasFe.Vizhozam": "Vizhozam",
+    "vop.dbo.tAllomasFe.Vizho": "Vizho",
+    "vop.dbo.tAllomasFe.KF1": "KF1",
+    "vop.dbo.tAllomasFe.KF2": "KF2",
+    "vop.dbo.tAllomasFe.KF3": "KF3",
+    "vop.dbo.tAllomasFe.LKV": "LKV",
+    "vop.dbo.tAllomasFe.LNV": "LNV",
+    "vop.dbo.tAllomasFe.Fokozat": "Fokozat",
+    "vop.dbo.tAllomasFe.FokozatKod": "FokozatKod"
+  },
+  "fields": [
+    { "name": "vFeAllomas_webmerc.Torzsszam", "type": "esriFieldTypeInteger", "alias": "Torzsszam" },
+    { "name": "vop.dbo.tAllomasFe.AllomasNev", "type": "esriFieldTypeString", "alias": "AllomasNev" },
+    { "name": "vop.dbo.tAllomasFe.VizfolyasNev", "type": "esriFieldTypeString", "alias": "VizfolyasNev" },
+    { "name": "vop.dbo.tAllomasFe.Idopont", "type": "esriFieldTypeDate", "alias": "Idopont" },
+    { "name": "vop.dbo.tAllomasFe.Vizallas", "type": "esriFieldTypeInteger", "alias": "Vizallas" },
+    { "name": "vop.dbo.tAllomasFe.Vizhozam", "type": "esriFieldTypeDouble", "alias": "Vizhozam" },
+    { "name": "vop.dbo.tAllomasFe.Vizho", "type": "esriFieldTypeDouble", "alias": "Vizho" },
+    { "name": "vop.dbo.tAllomasFe.KF1", "type": "esriFieldTypeInteger", "alias": "KF1" },
+    { "name": "vop.dbo.tAllomasFe.KF2", "type": "esriFieldTypeInteger", "alias": "KF2" },
+    { "name": "vop.dbo.tAllomasFe.KF3", "type": "esriFieldTypeInteger", "alias": "KF3" },
+    { "name": "vop.dbo.tAllomasFe.LKV", "type": "esriFieldTypeInteger", "alias": "LKV" },
+    { "name": "vop.dbo.tAllomasFe.LNV", "type": "esriFieldTypeInteger", "alias": "LNV" },
+    { "name": "vop.dbo.tAllomasFe.Fokozat", "type": "esriFieldTypeInteger", "alias": "Fokozat" },
+    { "name": "vop.dbo.tAllomasFe.FokozatKod", "type": "esriFieldTypeInteger", "alias": "FokozatKod" }
+  ],
+  "features": [
+    {
+      "attributes": {
+        "vFeAllomas_webmerc.Torzsszam": 2545,
+        "vop.dbo.tAllomasFe.Torzsszam": 2545,
+        "vop.dbo.tAllomasFe.AllomasNev": "Pocsaj",
+        "vop.dbo.tAllomasFe.VizfolyasNev": "Berettyó",
+        "vop.dbo.tAllomasFe.Idopont": 1793656800000,
+        "vop.dbo.tAllomasFe.Vizallas": -69,
+        "vop.dbo.tAllomasFe.Vizhozam": 0.23,
+        "vop.dbo.tAllomasFe.Vizho": 10.6,
+        "vop.dbo.tAllomasFe.KF1": 350,
+        "vop.dbo.tAllomasFe.KF2": 450,
+        "vop.dbo.tAllomasFe.KF3": 500,
+        "vop.dbo.tAllomasFe.LKV": -90,
+        "vop.dbo.tAllomasFe.LNV": 680,
+        "vop.dbo.tAllomasFe.Fokozat": 0,
+        "vop.dbo.tAllomasFe.FokozatKod": 720
+      }
+    },
+    {
+      "attributes": {
+        "vFeAllomas_webmerc.Torzsszam": 2546,
+        "vop.dbo.tAllomasFe.Torzsszam": 2546,
+        "vop.dbo.tAllomasFe.AllomasNev": "Berettyóújfalu",
+        "vop.dbo.tAllomasFe.VizfolyasNev": "Berettyó",
+        "vop.dbo.tAllomasFe.Idopont": 1793656800000,
+        "vop.dbo.tAllomasFe.Vizallas": -131,
+        "vop.dbo.tAllomasFe.Vizhozam": 0.28,
+        "vop.dbo.tAllomasFe.Vizho": 11.4,
+        "vop.dbo.tAllomasFe.KF1": 300,
+        "vop.dbo.tAllomasFe.KF2": 400,
+        "vop.dbo.tAllomasFe.KF3": 450,
+        "vop.dbo.tAllomasFe.LKV": -166,
+        "vop.dbo.tAllomasFe.LNV": 512,
+        "vop.dbo.tAllomasFe.Fokozat": 0,
+        "vop.dbo.tAllomasFe.FokozatKod": 720
+      }
+    },
+    {
+      "attributes": {
+        "vFeAllomas_webmerc.Torzsszam": 2739,
+        "vop.dbo.tAllomasFe.Torzsszam": 2739,
+        "vop.dbo.tAllomasFe.AllomasNev": "Darvas",
+        "vop.dbo.tAllomasFe.VizfolyasNev": "Berettyó",
+        "vop.dbo.tAllomasFe.Idopont": 1793599200000,
+        "vop.dbo.tAllomasFe.Vizallas": 3,
+        "vop.dbo.tAllomasFe.Vizhozam": null,
+        "vop.dbo.tAllomasFe.Vizho": 11.2,
+        "vop.dbo.tAllomasFe.KF1": 0,
+        "vop.dbo.tAllomasFe.KF2": 0,
+        "vop.dbo.tAllomasFe.KF3": 0,
+        "vop.dbo.tAllomasFe.LKV": -30,
+        "vop.dbo.tAllomasFe.LNV": 450,
+        "vop.dbo.tAllomasFe.Fokozat": 0,
+        "vop.dbo.tAllomasFe.FokozatKod": 720
+      }
+    },
+    {
+      "attributes": {
+        "vFeAllomas_webmerc.Torzsszam": 2740,
+        "vop.dbo.tAllomasFe.Torzsszam": 2740,
+        "vop.dbo.tAllomasFe.AllomasNev": "Szeghalom",
+        "vop.dbo.tAllomasFe.VizfolyasNev": "Berettyó",
+        "vop.dbo.tAllomasFe.Idopont": 1793599200000,
+        "vop.dbo.tAllomasFe.Vizallas": 195,
+        "vop.dbo.tAllomasFe.Vizhozam": 3.02,
+        "vop.dbo.tAllomasFe.Vizho": 12.2,
+        "vop.dbo.tAllomasFe.KF1": 300,
+        "vop.dbo.tAllomasFe.KF2": 350,
+        "vop.dbo.tAllomasFe.KF3": 400,
+        "vop.dbo.tAllomasFe.LKV": 70,
+        "vop.dbo.tAllomasFe.LNV": 540,
+        "vop.dbo.tAllomasFe.Fokozat": 0,
+        "vop.dbo.tAllomasFe.FokozatKod": 720
+      }
+    }
+  ]
+}
