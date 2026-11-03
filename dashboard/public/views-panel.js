@@ -504,6 +504,7 @@
       advisoryLevelBadge = `<span class="vp-badge-level">${esc(levelText)}</span>`;
     }
 
+    const cardIcon = window.CrucixIcons ? `<span class="vp-card-cat-icon">${window.CrucixIcons.renderIcon(event.category || event.source?.name || level, { size: 16, severity: level })}</span>` : '';
     return `
       <div class="vp-card"
            role="button"
@@ -512,7 +513,7 @@
            onclick="window.CrucixIntelligence?.openEvent?.('${esc(event.id)}')"
            onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.CrucixIntelligence?.openEvent?.('${esc(event.id)}');}">
         <div class="vp-card-top">
-          <div class="vp-card-title">${esc(event.title)}</div>
+          <div class="vp-card-title">${cardIcon}${esc(event.title)}</div>
           <div class="vp-card-badges">
             ${isFixture ? `<span class="vp-badge-fixture">[TESZTADAT]</span>` : ''}
             ${advisoryLevelBadge}
@@ -690,9 +691,10 @@
     if (!item || typeof item !== 'object') return '';
     const safeUrl = escSafeUrl(item.link || item.url);
     const hasValidUrl = Boolean(safeUrl);
+    const newsIcon = window.CrucixIcons ? `<span class="vp-news-cat-icon">${window.CrucixIcons.renderIcon(item.category || item.newsCategory || 'general', { size: 14 })}</span>` : '';
     const titleHtml = hasValidUrl
-      ? `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="vp-news-card-title">${esc(item.title)}</a>`
-      : `<span class="vp-news-card-title">${esc(item.title)}</span>`;
+      ? `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="vp-news-card-title">${newsIcon}${esc(item.title)}</a>`
+      : `<span class="vp-news-card-title">${newsIcon}${esc(item.title)}</span>`;
 
     const topicKey = item.newsCategory || 'news_other';
     const topicLabel = NEWS_TOPIC_LABELS[topicKey] || 'Hír';
@@ -1187,10 +1189,12 @@
       if (!items.length) continue;
       renderedCount += items.length;
       const catTitle = CATEGORY_LABELS[cat] || cat;
+      const catIcon = window.CrucixIcons ? window.CrucixIcons.renderIcon(cat, { size: 18, className: 'vp-sec-cat-icon' }) : '';
       sectionsHtml += `
         <div class="vp-sec" data-cat="${esc(cat)}">
           <div class="vp-sec-head">
             <span class="vp-sec-title">
+              ${catIcon}
               <span>${esc(catTitle)}</span>
             </span>
             <span class="vp-sec-badge">${items.length} db</span>

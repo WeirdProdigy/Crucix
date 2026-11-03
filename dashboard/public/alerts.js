@@ -61,7 +61,8 @@
     let lead='';
     if(top){
       const id=esc(top.id);
-      lead=`<span class="as-top">${glyph(tx,levelOf(top.severity))}<span class="as-title">${esc(top.title)}</span><span class="as-age">${esc(ageLabel(top.firstSeenAt,now))}</span></span>`
+      const topIcon=window.CrucixIcons?`<span class="as-top-icon">${window.CrucixIcons.renderIcon(top.ruleId||top.category||levelOf(top.severity),{size:14,severity:levelOf(top.severity)})}</span>`:'';
+      lead=`<span class="as-top">${glyph(tx,levelOf(top.severity))}${topIcon}<span class="as-title">${esc(top.title)}</span><span class="as-age">${esc(ageLabel(top.firstSeenAt,now))}</span></span>`
         +(firing>1?more(tx,firing-1):'')
         +`<span class="as-actions">${button(tx,'ack',id,'ack','Acknowledge')}${snoozeControl(tx,id,'as-snooze')}${button(tx,'open',id,'open','Open')}</span>`;
     }
@@ -86,7 +87,8 @@
     const id=esc(alert.id),level=levelOf(alert.severity),resolved=alert.state==='resolved',n=count(alert.count);
     const evidence=list(alert.evidence).slice(0,MAX_EVIDENCE).map(evidenceItem).join('');
     const actions=resolved?'':`<div class="at-actions">${alert.state==='acked'?'':button(tx,'ack',id,'ack','Acknowledge')}${snoozeControl(tx,id,menuId)}${button(tx,'resolve',id,'resolve','Resolve')}</div>`;
-    return `<li class="at-alert at-${level}" data-alert-id="${id}">${glyph(tx,level)}<div class="at-body"><p class="at-title">${esc(alert.title)}</p>`
+    const rowIcon=window.CrucixIcons?`<span class="at-alert-cat-icon">${window.CrucixIcons.renderIcon(alert.ruleId||alert.category||level,{size:16,severity:level})}</span>`:'';
+    return `<li class="at-alert at-${level}" data-alert-id="${id}">${glyph(tx,level)}${rowIcon}<div class="at-body"><p class="at-title">${esc(alert.title)}</p>`
       +`<p class="at-meta"><span class="at-rule"><span class="ri-sr">${tx('alerts.rule','Rule')}: </span>${ruleLabel(tx,alert.ruleId,alert.ruleName)}</span><span class="at-age">${esc(ageLabel(alert.firstSeenAt,now))}</span>${n?`<span class="at-count">${tx('alerts.count','seen')} ${n}×</span>`:''}</p>`
       +`<p class="at-status">${stateLine(tx,alert,now)}${alert.silent===true?`<span class="at-badge">${tx('alerts.silent','Initial baseline')}</span>`:''}${alert.regionalNotice?`<span class="at-badge al-badge-regional">${esc(alert.regionalNotice)}</span>`:''}</p>`
       +`${text(alert.summary)?`<p class="at-summary">${esc(alert.summary)}</p>`:''}`
@@ -155,8 +157,9 @@
     const a=obj(alert);
     if(!a||!text(a.id))return '';
     const tx=translator(t),id=esc(a.id),level=levelOf(a.severity),close=tx('alerts.close','Close');
+    const toastIcon=window.CrucixIcons?`<span class="al-toast-icon">${window.CrucixIcons.renderIcon(a.ruleId||a.category||level,{size:16,severity:level})}</span>`:'';
     return `<div class="al-toast al-toast-${level}" role="${level==='critical'?'alert':'status'}" data-alert-id="${id}"><div class="al-toast-body"><p class="al-toast-kicker">${tx('alerts.toastNew','New alert')}</p>`
-      +`<p class="al-toast-title">${glyph(tx,level)}<span>${esc(a.title)}</span></p><p class="al-toast-rule">${ruleLabel(tx,a.ruleId,a.ruleName)}</p>`
+      +`<p class="al-toast-title">${glyph(tx,level)}${toastIcon}<span>${esc(a.title)}</span></p><p class="al-toast-rule">${ruleLabel(tx,a.ruleId,a.ruleName)}</p>`
       +`<div class="al-toast-actions">${button(tx,'ack',id,'ack','Acknowledge')}${button(tx,'open',id,'open','Open')}</div></div>`
       +`<button type="button" class="ri-icon al-toast-close" data-alert-action="dismiss" data-alert-id="${id}" aria-label="${close}" title="${close}"><span aria-hidden="true">×</span></button></div>`;
   }

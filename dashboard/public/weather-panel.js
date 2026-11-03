@@ -565,7 +565,7 @@
     return `
       <div class="g-panel weather-panel-root">
         <div class="sec-head">
-          <h3>IDŐJÁRÁS ÉS ORVOSMETEOROLÓGIA</h3>
+          <h3>${window.CrucixIcons ? window.CrucixIcons.renderIcon('weather', { size: 18, className: 'wp-head-icon' }) : ''}IDŐJÁRÁS ÉS ORVOSMETEOROLÓGIA</h3>
           <span class="badge" style="border-color:rgba(100,240,200,0.3);color:var(--accent)">DWD ICON · ODP</span>
         </div>
         <div class="wp-toolbar">

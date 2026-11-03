@@ -104,7 +104,8 @@
   }
   function countText(n){return n===0?say('countNone'):say(n===1?'countOne':'count',{count:n});}
   function option(item,index){
-    return `<li class="pl-opt" role="option" id="${optionId(item)}" data-palette-option="${index}" aria-selected="${index===active}"><span class="pl-mark" aria-hidden="true">›</span><span class="pl-text"><span class="pl-label">${escHtml(item.label)}</span>${item.hint?`<span class="pl-hint">${escHtml(item.hint)}</span>`:''}</span></li>`;
+    const icon = window.CrucixIcons ? window.CrucixIcons.renderIcon(item.group === 'record' ? 'general' : item.id, { size: 14, className: 'pl-cat-icon' }) : '';
+    return `<li class="pl-opt" role="option" id="${optionId(item)}" data-palette-option="${index}" aria-selected="${index===active}"><span class="pl-mark" aria-hidden="true">${icon || '›'}</span><span class="pl-text"><span class="pl-label">${escHtml(item.label)}</span>${item.hint?`<span class="pl-hint">${escHtml(item.hint)}</span>`:''}</span></li>`;
   }
   // reset: a new query starts at the top; otherwise (an answer arrived) the active item stays active when it is still listed.
   function draw(reset){

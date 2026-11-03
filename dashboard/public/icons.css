@@ -1,0 +1,105 @@
+/* ==========================================================================
+   Crucix Alert & Intelligence Pictograms CSS
+   ========================================================================== */
+
+.crucix-icon {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 0;
+  pointer-events: none;
+}
+
+.crucix-icon use {
+  pointer-events: none;
+}
+
+/* Common sizing helpers */
+.crucix-icon-12 { width: 12px; height: 12px; }
+.crucix-icon-14 { width: 14px; height: 14px; }
+.crucix-icon-16 { width: 16px; height: 16px; }
+.crucix-icon-18 { width: 18px; height: 18px; }
+.crucix-icon-20 { width: 20px; height: 20px; }
+.crucix-icon-24 { width: 24px; height: 24px; }
+
+/* In-panel and in-card icon spacing */
+.vp-sec-title .crucix-icon {
+  margin-right: 6px;
+}
+
+.vp-card-cat-icon {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.sw-head-icon,
+.wp-head-icon,
+.wp-hydro-icon {
+  margin-right: 8px;
+  vertical-align: -2px;
+}
+
+.pl-cat-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--dim, #6a8a82);
+}
+
+.pl-opt:hover .pl-cat-icon,
+.pl-opt[aria-selected="true"] .pl-cat-icon {
+  color: var(--accent, #64f0c8);
+}
+
+/* Pictogram Badges */
+.crucix-icon-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+  font-family: var(--mono, monospace);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.crucix-icon-badge-text {
+  line-height: 1;
+}
+
+/* Meteoalarm Severities */
+.crucix-icon.sev-low,
+.crucix-badge-low {
+  color: #64f0c8 !important;
+  border-color: rgba(100, 240, 200, 0.3);
+  background: rgba(100, 240, 200, 0.06);
+}
+
+.crucix-icon.sev-moderate,
+.crucix-badge-moderate {
+  color: #ffe600 !important;
+  border-color: rgba(255, 230, 0, 0.3);
+  background: rgba(255, 230, 0, 0.06);
+}
+
+.crucix-icon.sev-high,
+.crucix-badge-high {
+  color: #ff9f1a !important;
+  border-color: rgba(255, 159, 26, 0.3);
+  background: rgba(255, 159, 26, 0.06);
+}
+
+.crucix-icon.sev-critical,
+.crucix-badge-critical {
+  color: #ff4d4f !important;
+  border-color: rgba(255, 77, 79, 0.3);
+  background: rgba(255, 77, 79, 0.06);
+}

@@ -80,7 +80,7 @@
     return `
       <div class="g-panel space-weather-panel">
         <div class="sec-head">
-          <h3>ŰRIDŐJÁRÁS</h3>
+          <h3>${window.CrucixIcons ? window.CrucixIcons.renderIcon('space-weather', { size: 18, className: 'sw-head-icon' }) : ''}ŰRIDŐJÁRÁS</h3>
           ${topBadge}
         </div>
         <div class="sw-meta-bar">
