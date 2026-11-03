@@ -1,0 +1,116 @@
+{
+  "_comment": "szintetikus teszt-fixture az OVF Aszálymonitoring minta alapján; nem OVF-adatállomány",
+  "entries": {
+    "data": [
+      {
+        "rawname": "Legho",
+        "graphtitle": "Hőmérséklet °C",
+        "unit": "°C",
+        "freq": "hourly",
+        "legendlabels": [
+          { "rawname": "Levegőhőmérséklet", "level": "", "unit": "°C" }
+        ],
+        "data": [
+          [
+            { "msec": 1793660400000, "date": "2026-11-03 20:00:00.000", "value": "8.5" },
+            { "msec": 1793664000000, "date": "2026-11-03 21:00:00.000", "value": "7.9" }
+          ]
+        ]
+      },
+      {
+        "rawname": "Talajho10",
+        "graphtitle": "Talajhőmérséklet °C",
+        "unit": "°C",
+        "freq": "hourly",
+        "legendlabels": [
+          { "rawname": "Talajhőmérséklet", "level": "10 cm", "unit": "°C" },
+          { "rawname": "Talajhőmérséklet", "level": "20 cm", "unit": "°C" },
+          { "rawname": "Talajhőmérséklet", "level": "30 cm", "unit": "°C" },
+          { "rawname": "Talajhőmérséklet", "level": "45 cm", "unit": "°C" },
+          { "rawname": "Talajhőmérséklet", "level": "60 cm", "unit": "°C" },
+          { "rawname": "Talajhőmérséklet", "level": "75 cm", "unit": "°C" }
+        ],
+        "data": [
+          [ { "msec": 1793664000000, "date": "2026-11-03 21:00:00.000", "value": "10.2" } ],
+          [ { "msec": 1793664000000, "date": "2026-11-03 21:00:00.000", "value": "10.9" } ],
+          [ { "msec": 1793664000000, "date": "2026-11-03 21:00:00.000", "value": "11.5" } ],
+          [ { "msec": 1793664000000, "date": "2026-11-03 21:00:00.000", "value": "12.1" } ],
+          [ { "msec": 1793664000000, "date": "2026-11-03 21:00:00.000", "value": "12.7" } ],
+          [ { "msec": 1793664000000, "date": "2026-11-03 21:00:00.000", "value": "13.5" } ]
+        ]
+      },
+      {
+        "rawname": "TalajNedv10",
+        "graphtitle": "Talajnedvesség V/V % (kalibrált)",
+        "unit": "V/V %",
+        "freq": "hourly",
+        "legendlabels": [
+          { "rawname": "Talajnedvesség", "level": "10 cm", "unit": "V/V %" },
+          { "rawname": "Talajnedvesség", "level": "20 cm", "unit": "V/V %" },
+          { "rawname": "Talajnedvesség", "level": "30 cm", "unit": "V/V %" },
+          { "rawname": "Talajnedvesség", "level": "45 cm", "unit": "V/V %" },
+          { "rawname": "Talajnedvesség", "level": "60 cm", "unit": "V/V %" },
+          { "rawname": "Talajnedvesség", "level": "75 cm", "unit": "V/V %" }
+        ],
+        "data": [
+          [ { "msec": 1793664000000, "date": "2026-11-03 21:00:00.000", "value": "23.0" } ],
+          [ { "msec": 1793664000000, "date": "2026-11-03 21:00:00.000", "value": "24.6" } ],
+          [ { "msec": 1793664000000, "date": "2026-11-03 21:00:00.000", "value": "27.6" } ],
+          [ { "msec": 1793664000000, "date": "2026-11-03 21:00:00.000", "value": "26.9" } ],
+          [ { "msec": 1793664000000, "date": "2026-11-03 21:00:00.000", "value": "28.7" } ],
+          [ { "msec": 1793664000000, "date": "2026-11-03 21:00:00.000", "value": "37.3" } ]
+        ]
+      },
+      {
+        "rawname": "Csapadek60",
+        "graphtitle": "Csapadék mm",
+        "unit": "mm",
+        "freq": "hourly",
+        "legendlabels": [
+          { "rawname": "Csapadek60", "level": "", "unit": "mm" }
+        ],
+        "data": [
+          [ { "msec": 1793664000000, "date": "2026-11-03 21:00:00.000", "value": ".0" } ]
+        ]
+      },
+      {
+        "rawname": "Legnedvesseg",
+        "graphtitle": "Relatív páratartalom %",
+        "unit": "%",
+        "freq": "hourly",
+        "legendlabels": [
+          { "rawname": "Relatív páratartalom", "level": "", "unit": "%" }
+        ],
+        "data": [
+          [ { "msec": 1793664000000, "date": "2026-11-03 21:00:00.000", "value": "76" } ]
+        ]
+      },
+      {
+        "rawname": "HDIs",
+        "graphtitle": "Aszályindex",
+        "unit": "",
+        "freq": "daily",
+        "legendlabels": [
+          { "rawname": "Aszályindex", "level": "", "unit": "" }
+        ],
+        "data": [
+          [ { "msec": 1793664000000, "date": "", "value": "2.04626" } ]
+        ]
+      },
+      {
+        "rawname": "WD35",
+        "graphtitle": "Vízhiány mm",
+        "unit": "mm",
+        "freq": "daily",
+        "legendlabels": [
+          { "rawname": "Vízhiány", "level": "35 cm", "unit": "mm" },
+          { "rawname": "Vízhiány", "level": "80 cm", "unit": "mm" }
+        ],
+        "data": [
+          [ { "msec": 1793664000000, "date": "", "value": "51.30000" } ],
+          [ { "msec": 1793664000000, "date": "", "value": "33.13000" } ]
+        ]
+      }
+    ]
+  }
+}

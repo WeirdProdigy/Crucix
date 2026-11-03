@@ -56,6 +56,7 @@ import { briefing as swpc } from './sources/swpc.mjs';
 import { briefing as gfzPotsdam } from './sources/gfz-potsdam.mjs';
 import { briefing as hungarometObs } from './sources/hungaromet-observations.mjs';
 import { briefing as ovfGauges } from './sources/ovf-gauges.mjs';
+import { fetchOvfDroughtData, getOvfDroughtState } from './sources/ovf-drought.mjs';
 import { briefing as weatherService } from './sources/weather-service.mjs';
 import { briefing as ecb } from './sources/ecb.mjs';
 import { briefing as eonet } from './sources/eonet.mjs';
@@ -201,6 +202,7 @@ export async function fullBriefing() {
     runSource('GFZ-Potsdam', gfzPotsdam),
     runSource('HungaroMet-Observations', hungarometObs),
     runSource('OVF-Gauges', ovfGauges),
+    runSource('OVF-Drought', fetchOvfDroughtData),
     runSource('Weather-Service', weatherService),
     runSource('ECB', ecb),
     runSource('NASA-EONET', eonet),
@@ -251,6 +253,15 @@ export async function fullBriefing() {
       sources.map(s => [s.name, { status: s.status, ms: s.durationMs }])
     ),
   };
+  const ovfDrought = getOvfDroughtState();
+  if (ovfDrought) {
+    delete output.sources['OVF-Drought'];
+    Object.defineProperty(output.sources, 'ovfDrought', {
+      value: ovfDrought,
+      enumerable: false,
+      configurable: true
+    });
+  }
 
   console.error(`[Crucix] Sweep complete in ${totalMs}ms — ${output.crucix.sourcesOk}/${sources.length} sources returned data`);
   return output;

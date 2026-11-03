@@ -37,6 +37,32 @@
     return val.toFixed(decimals).replace('.', ',');
   }
 
+  function renderDroughtBlock(snapshot) {
+    const drought = snapshot?.sources?.ovfDrought || snapshot?.ovfDrought;
+    if (!drought || drought.enabled === false || !drought.station) return '';
+    const value = (metric, decimals = 1) => metric?.value === null || metric?.value === undefined ? '--' : formatMetricNum(metric.value, decimals);
+    const depthGrid = (data, decimals = 1) => ['10cm', '20cm', '30cm', '45cm', '60cm', '75cm'].map(depth => `
+      <div class="wp-drought-cell"><span>${esc(depth)}</span><strong>${data?.[depth] === null || data?.[depth] === undefined ? '--' : esc(formatMetricNum(data[depth], decimals))}</strong></div>
+    `).join('');
+    const status = drought.isFresh ? 'FRISS' : 'ELAVULT';
+    return `
+      <section class="wp-drought-card ${drought.isFresh ? 'fresh' : 'stale'}" role="region" aria-label="OVF Aszálymonitoring">
+        <div class="wp-drought-header">
+          <h4>${window.CrucixIcons ? window.CrucixIcons.renderIcon('drought', { size: 17, className: 'wp-drought-icon' }) : '◌'} OVF Aszálymonitoring (${esc(drought.station.name)}, ${esc(drought.station.distanceKm)} km)</h4>
+          <span class="wp-obs-pill ${drought.isFresh ? 'wp-obs-pill-fresh' : 'wp-obs-pill-stale'}">${status}</span>
+        </div>
+        <div class="wp-drought-section"><span class="wp-drought-label">Talajnedvesség · V/V %</span><div class="wp-drought-grid">${depthGrid(drought.soilMoisture)}</div></div>
+        <div class="wp-drought-section"><span class="wp-drought-label">Talajhőmérséklet · °C</span><div class="wp-drought-grid">${depthGrid(drought.soilTemperature)}</div></div>
+        <div class="wp-drought-summary">
+          <div><span>Aszályindex</span><strong>${esc(value(drought.droughtIndex, 2))}</strong></div>
+          <div><span>Vízhiány 35 cm</span><strong>${drought.waterDeficit?.['35cm'] == null ? '--' : esc(formatMetricNum(drought.waterDeficit['35cm'], 1))} mm</strong></div>
+          <div><span>Vízhiány 80 cm</span><strong>${drought.waterDeficit?.['80cm'] == null ? '--' : esc(formatMetricNum(drought.waterDeficit['80cm'], 1))} mm</strong></div>
+        </div>
+        <div class="wp-drought-meta">Utolsó mérés: ${esc(drought.lastUpdated || '--')}</div>
+      </section>
+    `;
+  }
+
   function setWeatherRegion(region) {
     activeWeatherRegion = region;
     const panel = document.querySelector('.weather-panel-root');
@@ -436,6 +462,7 @@
 
     // OVF Hydro gauges block (Berettyó)
     const hydroBlockHtml = renderHydroBlock(snapshot);
+    const droughtBlockHtml = renderDroughtBlock(snapshot);
 
     // Content by active mode tab
     let bodyHtml = '';
@@ -487,6 +514,7 @@
       bodyHtml = `
         ${observedBlockHtml}
         ${hydroBlockHtml}
+        ${droughtBlockHtml}
         <div style="font-size:9.5px;color:var(--dim,#8ba2b5);font-family:var(--mono,monospace);margin:6px 0 2px 2px;letter-spacing:0.5px">
           NUMERIKUS ELŐREJELZÉSI MODELL (DWD ICON · TERÜLETI ADATOK):
         </div>
@@ -590,6 +618,7 @@
     panelHtml: renderWeatherPanel,
     renderObservedBlock: renderObservedBlock,
     renderHydroBlock: renderHydroBlock,
+    renderDroughtBlock: renderDroughtBlock,
     setRegion: setWeatherRegion,
     setTab: setWeatherTab,
     setStation: setObservedStation

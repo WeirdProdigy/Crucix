@@ -943,10 +943,19 @@ AGPL-3.0
   - A repóban található `test/fixtures/ovf-gauges-fixture.json` tesztállomány jogi minimalizáláson esett át: kizárólag a parszoláshoz feltétlenül szükséges 15 attribútumot tartalmazza kerekített/szintetikus értékekkel. Nem minősül OVF-adatállománynak. A valódi nyers lekérdezési minta a repón kívül helyezkedik el, és szigorúan sosem kerül verziókövetés alá.
 - **Szigorúan memóriában tartott működés (Memory-only persistence policy):**
   - **Jogi és adatvédelmi indoklás:** Az OVF felhasználási feltételei szerint a tájékoztató jellegű adatok adatbázisban történő tartós tárolása, archiválása vagy továbbadása előzetes írásbeli engedélyhez kötött.
-  - **Garantált adatcsíkozás (`stripMemoryOnlySources`):** A szerver oldalon a `lib/snapshots.mjs` és `apis/save-briefing.mjs` modulokba beépített tisztító mechanizmus gondoskodik róla, hogy sem az `OVF-Gauges` forrásadat, sem a szintetizált `ovfGauges` rekord soha ne kerüljön kiírásra a perzisztens fájlokba (`runs/latest.json`, `runs/briefing_server_*.json`) vagy a sweep tömörített archívumaiba (`runs/sweep-*.json.gz`).
+  - **Garantált adatcsíkozás (`stripMemoryOnlySources`):** A szerver oldali tisztító mechanizmus gondoskodik róla, hogy sem az `OVF-Gauges`/`OVF-Drought` forrásadat, sem a szintetizált `ovfGauges`/`ovfDrought` rekord soha ne kerüljön kiírásra a perzisztens fájlokba vagy a sweep archívumaiba.
   - Az adatok kizárólag a Node.js folyamat memóriájában (RAM) léteznek a gyorsítótár élettartama alatt, és csak az aktív `GET /api/weather` vagy a dedikált memóriabeli `GET /api/ovf-gauges` végponton keresztül érhetők el.
 - **Riasztási és eseményfolyam-mentesség (Zero alerts / events):**
   - Az OVF adatok teljes mértékben mentesek a riasztási mechanizmusoktól. Nem képeznek riasztást (`alerts`), nem hoznak létre naplózott eseményt (`events`), nem számítanak delta-különbséget (`deltas`), nem módosítják a kockázati pontszámokat (`risk`), és nem küldenek semmilyen Telegram- vagy Discord-értesítést.
 - **Kötelező forrásmegjelölés és jogi nyilatkozat:**
   - A felületen és az API kimenetben kötelezően megjelenített szó szerinti attribúció:
     *„Forrás: Országos Vízügyi Főigazgatóság (OVF), tájékoztató jellegű adat; nem hivatalos árvízi vagy belvízi előrejelzés.”*
+
+### OVF Aszálymonitoring és talajnedvesség
+
+- **Opt-in:** `CRUCIX_ENABLE_OVF_DROUGHT=true` (alapértelmezés: `false`); kikapcsolva az adapter nem indít hálózati kérést.
+- **Végpont:** `https://aszalymonitoring.vizugy.hu/api.php?view=pattern&voa=<stationId>`.
+- **Alapállomás:** Mezősas, `22676D52-3F45-48BF-A75C-8024905FD3D4`, 11,9 km. A `CRUCIX_OVF_DROUGHT_STATION_ID` felülírhatja az állomásazonosítót.
+- **Lekérdezési ciklus:** `CRUCIX_OVF_DROUGHT_POLL_INTERVAL_MS`, alapértelmezés szerint 1 800 000 ms (30 perc).
+- **Megjelenített mérések:** órás levegő- és talajhőmérséklet, talajnedvesség, csapadék, relatív páratartalom; napi aszályindex és vízhiány.
+- **Adatkezelés:** szigorúan memóriabeli, nincs adatbázis- vagy fájlmentés, és nem generál riasztást, értesítést vagy kockázati eszkalációt.

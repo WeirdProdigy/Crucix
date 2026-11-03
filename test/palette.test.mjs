@@ -1,4 +1,4 @@
-import test from 'node:test';
+﻿import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
@@ -828,7 +828,7 @@ test('page: paletteSources has one item per source of the domain registry: live 
   const list = helper('paletteSources', context)();
   const names = window.CrucixDomains.DOMAINS.flatMap(domain => domain.sources);
   assert.equal(list.length, names.length);
-  assert.equal(list.length, 67);
+  assert.equal(list.length, 68);
   assert.ok(list.every(item => item.group === 'source'));
   const en = locale('en').palette;
   const gdacs = list.find(item => item.id === 'records:GDACS'), gdelt = list.find(item => item.id === 'health:GDELT');

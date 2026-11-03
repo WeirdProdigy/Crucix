@@ -81,6 +81,23 @@ riskJournal?.load();
 let riskStatus = config.risk.enabled ? 'unavailable' : 'disabled';
 let riskLatest = null; // the last successful step: {at, scores, inputs}
 let briefingService = null;
+
+export function stripMemoryOnlySources(briefing) {
+  if (!briefing || typeof briefing !== 'object') return briefing;
+  const cloned = { ...briefing };
+  if (briefing.sources && typeof briefing.sources === 'object') {
+    cloned.sources = { ...briefing.sources };
+    delete cloned.sources.ovfDrought;
+    delete cloned.sources['OVF-Drought'];
+    delete cloned.sources['OVF-Gauges'];
+    delete cloned.sources.ovfGauges;
+  }
+  delete cloned.ovfDrought;
+  delete cloned['OVF-Drought'];
+  delete cloned.ovfGauges;
+  delete cloned['OVF-Gauges'];
+  return cloned;
+}
 // Never throws: on a failure the snapshot goes on without `risk` and /api/health says 'unavailable'.
 function recordRisk(snapshot, raw) {
   if (!riskStore) return;
@@ -452,7 +469,7 @@ async function runSweepCycle() {
     const rawData = await fullBriefing();
 
     // 2. Save to runs/latest.json
-    saveSnapshot(RUNS_DIR, rawData);
+    saveSnapshot(RUNS_DIR, stripMemoryOnlySources(rawData));
     lastSweepTime = new Date().toISOString();
 
     // 3. Synthesize into dashboard format
@@ -499,6 +516,8 @@ async function runSweepCycle() {
     if (!archiveSweep({ archive: sweepArchive, snapshot: synthesized, timing: rawData.timing, previous: previousArchived }).error) previousArchived = synthesized;
     synthesized.liveStreams = liveStreamsRegistry;
     synthesized.ovfGauges = rawData.sources?.['OVF-Gauges']?.data || null;
+    synthesized.ovfDrought = rawData.sources?.ovfDrought || null;
+    synthesized.sources = { ...(synthesized.sources || {}), ovfDrought: rawData.sources?.ovfDrought || null };
     currentData = synthesized;
 
     // 6. Push to all connected browsers
