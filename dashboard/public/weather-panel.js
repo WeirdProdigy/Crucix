@@ -579,7 +579,7 @@
         <div class="weather-list scroll-region" tabindex="0" role="region" aria-label="Időjárási és orvosmeteorológiai adatok">
           ${bodyHtml}
           <div class="wp-footer-attribution">
-            Források: Open-Meteo (DWD ICON, CC BY 4.0) · GFZ (CC BY 4.0) · HungaroMet (Meteorológiai Adattár)
+            Források: Open-Meteo (DWD ICON, CC BY 4.0) · GFZ (CC BY 4.0) · HungaroMet (Meteorológiai Adattár) · Piktogramok: OCHA (CC0 1.0), Lucide (ISC)
           </div>
         </div>
       </div>
