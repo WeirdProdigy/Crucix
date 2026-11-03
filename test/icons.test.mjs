@@ -179,9 +179,28 @@ test('Documentation alignment: every icon in icons.svg is recorded in THIRD_PART
   assert.ok(docs.includes('Lucide Icons'), 'Must include Lucide Icons');
   assert.ok(docs.includes('ISC License'), 'Must include ISC License text');
 
+  // Verify Feather project icons
+  assert.ok(docs.includes('alert-triangle'), 'Must document alert-triangle / triangle-alert Feather origin');
+  assert.ok(docs.includes('crosshair'), 'Must document crosshair Feather origin');
+  assert.ok(docs.includes('The MIT License (MIT)'), 'Must include Feather MIT License text');
+  assert.ok(docs.includes('ochavisual@un.org'), 'Must note OCHA contact/notification notice');
+
   // Verify all 16 symbols are in table
   for (const cat of CATEGORIES) {
     const symbolId = `icon-${cat}`;
     assert.ok(docs.includes(`\`${symbolId}\``), `THIRD_PARTY_ICONS.md must document symbol \`${symbolId}\``);
   }
+});
+
+test('UI integration: jarvis.html includes discrete static license trigger and modal overlay', () => {
+  const jarvisPath = path.join(ROOT, 'dashboard/public/jarvis.html');
+  const html = fs.readFileSync(jarvisPath, 'utf8');
+
+  assert.ok(html.includes('id="licenseOverlay"'), 'jarvis.html must contain #licenseOverlay');
+  assert.ok(html.includes('openLicenses()'), 'jarvis.html must contain openLicenses() trigger');
+  assert.ok(html.includes('closeLicenses()'), 'jarvis.html must contain closeLicenses()');
+  assert.ok(html.includes('function openLicenses()'), 'jarvis.html must define function openLicenses()');
+  assert.ok(html.includes('function closeLicenses()'), 'jarvis.html must define function closeLicenses()');
+  assert.ok(html.includes('dashboard-footer'), 'jarvis.html must contain dashboard-footer with discrete license link');
+  assert.ok(html.includes('THIRD_PARTY_ICONS.md'), 'License modal must reference THIRD_PARTY_ICONS.md');
 });

@@ -34,7 +34,7 @@ export function buildQaServerEnv(options = {}) {
     ENABLE_SWEEPS: 'false',
     NO_AUTO_OPEN: '1',
     HOST: options.host || '127.0.0.1',
-    PORT: String(options.port || process.env.PORT || '3117'),
+    PORT: String(options.port || process.env.QA_PORT || '3199'),
     RUNS_DIR: runsDir,
     CRUCIX_ENV_FILE: envFile,
     AUTH_USER: '',
@@ -84,11 +84,22 @@ export async function startQaServer(options = {}) {
   let sweepsDisabledConfirmed = false;
   let serverListening = false;
 
+  let tripwireError = null;
+
   const onData = (chunk) => {
     const text = chunk.toString();
     logs += text;
     if (options.verbose) {
       process.stdout.write(text);
+    }
+    // ACTIVE TRIPWIRE: if a sweep started, kill process immediately
+    if (text.includes('Running initial sweep') ||
+        text.includes('Starting intelligence sweep') ||
+        text.includes('Starting sweep at')) {
+      console.error(`[Crucix QA] CRITICAL GUARD VIOLATION: Server attempted to run sweep! Terminating PID ${pid} immediately.`);
+      try { child.kill('SIGKILL'); } catch {}
+      tripwireError = new Error(`Sweep tripwire triggered: server attempted sweep. PID ${pid} terminated.`);
+      return;
     }
     if (text.includes('sweepek konfigurációval letiltva') ||
         text.includes('Sweeps disabled') ||

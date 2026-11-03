@@ -616,7 +616,8 @@ Strictly opt-in modules disabled by default, protecting external API quotas and 
 | `npm run diag` | `node diag.mjs` | Run diagnostics (Node version, imports, port check) |
 | `npm test` | `node --test test/*.test.mjs` | Local regressions using mocks/fixtures |
 | `npm run check` | `node scripts/check.mjs` | JavaScript syntax and locale checks |
-| QA server | `node scripts/qa-server.mjs` | Isolated test server launcher with sweeps and notifications strictly disabled |
+| QA launch (guarded) | `node scripts/qa-launch.mjs` | Ellenőrzött QA szerverindító (port: 3199). Explicit `ENABLE_SWEEPS: 'false'`, letiltott értesítők/LLM, PID kiírás és aktív naplófigyelő (tripwire), amely azonnal leállítja a folyamatot a PID alapján, ha a szerver sweepet kísérelne meg. QA tesztekhez kizárólag ez az indító vagy a `scripts/qa-server.mjs` használható. |
+| QA server | `node scripts/qa-server.mjs` | Isolated test server launcher with sweeps and notifications strictly disabled (default port: 3199) |
 
 ---
 

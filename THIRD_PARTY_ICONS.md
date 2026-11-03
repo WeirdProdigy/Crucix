@@ -18,7 +18,7 @@ Ez a dokumentum a Crucix felületén használt SVG kategória- és figyelmeztet�
 | **földrengés** (`earthquake`) | `icon-earthquake` | UN OCHA Humanitarian Icons | `Earthquake.svg` | Public Domain / CC0 1.0 |
 | **tűz** (`fire`) | `icon-fire` | UN OCHA Humanitarian Icons | `Fire.svg` | Public Domain / CC0 1.0 |
 | **baleset / közlekedés** (`transport`) | `icon-transport` | Lucide Icons | `car.svg` | ISC |
-| **katonai / biztonság** (`military`) | `icon-military` | Lucide Icons | `crosshair.svg` | ISC (Feather MIT) |
+| **katonai / biztonság** (`military`) | `icon-military` | Lucide Icons (Feather Project) | `crosshair.svg` | ISC (Feather MIT) |
 | **árvíz / vízállás** (`flood`) | `icon-flood` | UN OCHA Humanitarian Icons | `Flood.svg` | Public Domain / CC0 1.0 |
 | **aszály** (`drought`) | `icon-drought` | UN OCHA Humanitarian Icons | `Drought.svg` | Public Domain / CC0 1.0 |
 | **járvány / egészség** (`health`) | `icon-health` | UN OCHA Humanitarian Icons | `Epidemic.svg` | Public Domain / CC0 1.0 |
@@ -28,7 +28,7 @@ Ez a dokumentum a Crucix felületén használt SVG kategória- és figyelmeztet�
 | **gazdaság / piac** (`economy`) | `icon-economy` | Lucide Icons | `trending-up.svg` | ISC |
 | **ellátási lánc / logisztika** (`supply-chain`) | `icon-supply-chain` | Lucide Icons | `boxes.svg` | ISC |
 | **szankciók** (`sanctions`) | `icon-sanctions` | Lucide Icons | `ban.svg` | ISC |
-| **általános figyelmeztetés** (`general`) | `icon-general` | Lucide Icons | `triangle-alert.svg` | ISC |
+| **általános figyelmeztetés** (`general`) | `icon-general` | Lucide Icons (Feather Project) | `triangle-alert.svg` (korábban `alert-triangle.svg`) | ISC (Feather MIT) |
 
 ---
 
@@ -47,7 +47,10 @@ Ez a dokumentum a Crucix felületén használt SVG kategória- és figyelmeztet�
   > - Sending a notification to ochavisual@un.org with a link to your webpage or publication, for our records."
 
 - **Megjelölési követelmény pontosítása:** A CC0 1.0 Universal jogi szövege alapján a forrásmegjelölés jogilag **nem kötelező** (a mű közkincs), azonban az OCHA kérésének megfelelően a Crucix projekt felelősségteljesen feltünteti az alkotót. Ajánlott és alkalmazott forrásmegjelölés: **Source: OCHA (United Nations Office for the Coordination of Humanitarian Affairs)**.
-- **Jogi nyilatkozat:** Az OCHA ikonok használata nem jelenti az ENSZ vagy az OCHA hivatalos jóváhagyását vagy jogi állásfoglalását a megjelenített eseményekkel kapcsolatban; tájékoztató és humanitárius célú szimbólumok.
+- **ENSZ és OCHA jóváhagyási nyilatkozat:** Az OCHA ikonok használata **nem jelenti az ENSZ vagy az OCHA jóváhagyását, támogatását vagy hivatalos jelentését** a megjelenített eseményekkel vagy adatokkal kapcsolatban; tájékoztató és humanitárius célú szimbólumok.
+- **Az OCHA kérése:**
+  1. Az OCHA megnevezése, ahol megvalósítható (`Source: OCHA (United Nations Office for the Coordination of Humanitarian Affairs)`).
+  2. Értesítés küldése az `ochavisual@un.org` e-mail címre a közzétételi oldal/kiadvány linkjével nyilvántartási célból (*Tájékoztató jellegű feljegyzés: privát helyi hálózat / fejlesztési fázis esetén e-mail nem kerül elküldésre*).
 
 #### CC0 1.0 Universal Legal Code (Kivonat és összefoglaló / Waiver Summary)
 
@@ -67,7 +70,11 @@ Certain owners wish to permanently relinquish those rights to a Work for the pur
 
 ### B. Lucide Icons és Feather Icons
 - **Hivatalos forrás:** https://github.com/lucide-icons/lucide
-- **Licenc:** ISC License (a legtöbb ikon), illetve MIT License (a Cole Bemis által készített korábbi Feather ikonokból származtatott szimbólumok, például `crosshair.svg`).
+- **Licenc:** ISC License (a legtöbb ikon), illetve MIT License (a Cole Bemis által készített korábbi Feather ikonokból származtatott szimbólumok).
+- **Feather-eredetű ikonok a Crucix projektben:** A Lucide projekt `LICENSE` jegyzéke (amely a korábbi Feather ikonokból átvett szimbólumokat tételesen felsorolja) alapján a Crucix által használt ikonok közül az alábbi kettő Feather-eredetű, és Cole Bemis MIT licence alá tartozik:
+  - `icon-military`: `crosshair.svg` (Feather: `crosshair`)
+  - `icon-general`: `triangle-alert.svg` (Feather: `alert-triangle`, a Lucide projektben később átnevezve `triangle-alert`-re)
+  A többi használt Lucide ikon (`sun.svg`, `cloud-rain.svg`, `car.svg`, `radiation.svg`, `network.svg`, `zap.svg`, `trending-up.svg`, `boxes.svg`, `ban.svg`) a Lucide saját kollekciójának része, az ISC licenc hatálya alatt.
 
 #### 1. Lucide ISC License
 

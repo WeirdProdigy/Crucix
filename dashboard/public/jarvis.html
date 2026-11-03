@@ -475,6 +475,9 @@ body.low-perf .ticker-wrap::-webkit-scrollbar-thumb{background:rgba(100,240,200,
     <div class="col" id="rightRail"></div>
   </div>
 </div>
+  <footer class="dashboard-footer" style="padding:12px 16px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--dim);border-top:1px solid rgba(255,255,255,0.06);margin-top:16px;">
+    CRUCIX MONITOR · <button type="button" class="footer-license-btn" onclick="openLicenses()" style="background:none;border:none;color:var(--accent);cursor:pointer;font-family:var(--mono);font-size:10px;text-decoration:underline;padding:0;">Licencek (Third-Party Icons)</button>
+  </footer>
 <div id="replayBar" hidden></div>
 <div class="glossary-overlay" id="glossaryOverlay" onclick="if(event.target===this) closeGlossary()">
   <div class="glossary-panel">
@@ -487,7 +490,69 @@ body.low-perf .ticker-wrap::-webkit-scrollbar-thumb{background:rgba(100,240,200,
       <button class="glossary-close" onclick="closeGlossary()" aria-label="Close signal guide">&times;</button>
     </div>
     <div class="glossary-body" id="glossaryBody"></div>
-    <div class="glossary-foot">Treat these as interpretation guides, not conclusions. Stronger judgments should come from corroboration across multiple layers, not from a single signal viewed in isolation.</div>
+    <div class="glossary-foot">Treat these as interpretation guides, not conclusions. Stronger judgments should come from corroboration across multiple layers, not from a single signal viewed in isolation. · <button type="button" class="guide-btn" style="padding:2px 8px;font-size:10px;margin-left:6px;vertical-align:middle;" onclick="openLicenses()">Licencek</button></div>
+  </div>
+</div>
+<div class="glossary-overlay" id="licenseOverlay" onclick="if(event.target===this) closeLicenses()">
+  <div class="glossary-panel" style="width:min(680px,calc(100vw - 32px));">
+    <div class="glossary-head">
+      <div>
+        <div class="glossary-kicker">Harmadik Fél Licencek</div>
+        <div class="glossary-title">Licencek és Forrásmegjelölések</div>
+        <div class="glossary-sub">A Crucix felületén használt piktogramok, ikonok és adatszolgáltatók jogi jegyzéke (THIRD_PARTY_ICONS.md).</div>
+      </div>
+      <button class="glossary-close" onclick="closeLicenses()" aria-label="Ablak bezárása">&times;</button>
+    </div>
+    <div class="glossary-body" id="licenseBody" style="font-size:11px;line-height:1.5;color:#c8d8d2;overflow-y:auto;max-height:calc(100vh - 160px);">
+      <div class="glossary-card">
+        <div class="glossary-term"><strong>1. Kategória és Piktogram Leképezési Jegyzék</strong></div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;font-size:10px;border-collapse:collapse;font-family:var(--mono);margin-top:6px;">
+            <thead>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.1);text-align:left;color:var(--dim);">
+                <th style="padding:4px 6px;">Kategória</th>
+                <th style="padding:4px 6px;">Symbol ID</th>
+                <th style="padding:4px 6px;">Forrás</th>
+                <th style="padding:4px 6px;">Eredeti fájl</th>
+                <th style="padding:4px 6px;">Licenc</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.04);"><td style="padding:3px 6px;">űridőjárás (space-weather)</td><td style="padding:3px 6px;">icon-space-weather</td><td style="padding:3px 6px;">Lucide Icons</td><td style="padding:3px 6px;">sun.svg</td><td style="padding:3px 6px;">ISC</td></tr>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.04);"><td style="padding:3px 6px;">időjárás (weather)</td><td style="padding:3px 6px;">icon-weather</td><td style="padding:3px 6px;">Lucide Icons</td><td style="padding:3px 6px;">cloud-rain.svg</td><td style="padding:3px 6px;">ISC</td></tr>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.04);"><td style="padding:3px 6px;">földrengés (earthquake)</td><td style="padding:3px 6px;">icon-earthquake</td><td style="padding:3px 6px;">UN OCHA</td><td style="padding:3px 6px;">Earthquake.svg</td><td style="padding:3px 6px;">CC0 1.0</td></tr>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.04);"><td style="padding:3px 6px;">tűz (fire)</td><td style="padding:3px 6px;">icon-fire</td><td style="padding:3px 6px;">UN OCHA</td><td style="padding:3px 6px;">Fire.svg</td><td style="padding:3px 6px;">CC0 1.0</td></tr>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.04);"><td style="padding:3px 6px;">közlekedés (transport)</td><td style="padding:3px 6px;">icon-transport</td><td style="padding:3px 6px;">Lucide Icons</td><td style="padding:3px 6px;">car.svg</td><td style="padding:3px 6px;">ISC</td></tr>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.04);"><td style="padding:3px 6px;">katonai (military)</td><td style="padding:3px 6px;">icon-military</td><td style="padding:3px 6px;">Lucide (Feather)</td><td style="padding:3px 6px;">crosshair.svg</td><td style="padding:3px 6px;">MIT (Cole Bemis)</td></tr>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.04);"><td style="padding:3px 6px;">árvíz (flood)</td><td style="padding:3px 6px;">icon-flood</td><td style="padding:3px 6px;">UN OCHA</td><td style="padding:3px 6px;">Flood.svg</td><td style="padding:3px 6px;">CC0 1.0</td></tr>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.04);"><td style="padding:3px 6px;">aszály (drought)</td><td style="padding:3px 6px;">icon-drought</td><td style="padding:3px 6px;">UN OCHA</td><td style="padding:3px 6px;">Drought.svg</td><td style="padding:3px 6px;">CC0 1.0</td></tr>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.04);"><td style="padding:3px 6px;">járvány (health)</td><td style="padding:3px 6px;">icon-health</td><td style="padding:3px 6px;">UN OCHA</td><td style="padding:3px 6px;">Epidemic.svg</td><td style="padding:3px 6px;">CC0 1.0</td></tr>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.04);"><td style="padding:3px 6px;">sugárzás (radiation)</td><td style="padding:3px 6px;">icon-radiation</td><td style="padding:3px 6px;">Lucide Icons</td><td style="padding:3px 6px;">radiation.svg</td><td style="padding:3px 6px;">ISC</td></tr>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.04);"><td style="padding:3px 6px;">kiber (cyber)</td><td style="padding:3px 6px;">icon-cyber</td><td style="padding:3px 6px;">Lucide Icons</td><td style="padding:3px 6px;">network.svg</td><td style="padding:3px 6px;">ISC</td></tr>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.04);"><td style="padding:3px 6px;">energia (energy)</td><td style="padding:3px 6px;">icon-energy</td><td style="padding:3px 6px;">Lucide Icons</td><td style="padding:3px 6px;">zap.svg</td><td style="padding:3px 6px;">ISC</td></tr>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.04);"><td style="padding:3px 6px;">gazdaság (economy)</td><td style="padding:3px 6px;">icon-economy</td><td style="padding:3px 6px;">Lucide Icons</td><td style="padding:3px 6px;">trending-up.svg</td><td style="padding:3px 6px;">ISC</td></tr>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.04);"><td style="padding:3px 6px;">ellátási lánc (supply-chain)</td><td style="padding:3px 6px;">icon-supply-chain</td><td style="padding:3px 6px;">Lucide Icons</td><td style="padding:3px 6px;">boxes.svg</td><td style="padding:3px 6px;">ISC</td></tr>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.04);"><td style="padding:3px 6px;">szankciók (sanctions)</td><td style="padding:3px 6px;">icon-sanctions</td><td style="padding:3px 6px;">Lucide Icons</td><td style="padding:3px 6px;">ban.svg</td><td style="padding:3px 6px;">ISC</td></tr>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.04);"><td style="padding:3px 6px;">általános (general)</td><td style="padding:3px 6px;">icon-general</td><td style="padding:3px 6px;">Lucide (Feather)</td><td style="padding:3px 6px;">triangle-alert.svg</td><td style="padding:3px 6px;">MIT (Cole Bemis)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="glossary-card">
+        <div class="glossary-term"><strong>2. UN OCHA Humanitarian Icons (CC0 1.0 Universal)</strong></div>
+        <div class="glossary-line"><strong>Kanonikus forrás:</strong> https://github.com/UN-OCHA/humanitarian-icons</div>
+        <div class="glossary-line"><strong>Jogi nyilatkozat és hivatalos státusz:</strong> Az OCHA ikonok használata <em>nem jelenti az ENSZ vagy az OCHA jóváhagyását, támogatását vagy hivatalos jelentését</em> a megjelenített eseményekkel vagy adatokkal kapcsolatban; tájékoztató és humanitárius célú szimbólumok.</div>
+        <div class="glossary-line"><strong>Az OCHA kérése:</strong> Forrásmegjelölés (<code>Source: OCHA (United Nations Office for the Coordination of Humanitarian Affairs)</code>), és értesítés küldése az <code>ochavisual@un.org</code> címre a közzétételi oldal linkjével nyilvántartás céljából.</div>
+      </div>
+      <div class="glossary-card">
+        <div class="glossary-term"><strong>3. Lucide Icons (ISC) &amp; Feather Icons (MIT)</strong></div>
+        <div class="glossary-line"><strong>Lucide forrás:</strong> https://github.com/lucide-icons/lucide (ISC License, Copyright (c) 2026 Lucide Icons and Contributors)</div>
+        <div class="glossary-line"><strong>Feather Icons forrás:</strong> Cole Bemis Feather project (MIT License, Copyright (c) 2013-present Cole Bemis). Alkalmazva a <code>crosshair.svg</code> (military) és <code>triangle-alert.svg</code> (general) szimbólumokra.</div>
+      </div>
+    </div>
+    <div class="glossary-foot">
+      Statikus, helyi működés; külső hálózati kérés nem történik. A teljes jogi szöveg a repó gyökerében is elérhető (THIRD_PARTY_ICONS.md).
+    </div>
   </div>
 </div>
 <div class="settings-overlay" id="settingsOverlay" aria-hidden="true" inert onclick="if(event.target===this) closeSettings()">
@@ -2421,6 +2486,20 @@ function closeGlossary(){
   document.body.style.overflow = document.getElementById('settingsOverlay')?.classList.contains('show') ? 'hidden' : '';
 }
 
+function openLicenses(){
+  const overlay = document.getElementById('licenseOverlay');
+  if(!overlay) return;
+  overlay.classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeLicenses(){
+  const overlay = document.getElementById('licenseOverlay');
+  if(!overlay) return;
+  overlay.classList.remove('show');
+  document.body.style.overflow = (document.getElementById('settingsOverlay')?.classList.contains('show') || document.getElementById('glossaryOverlay')?.classList.contains('show')) ? 'hidden' : '';
+}
+
 // The command palette's actions (palette.js ranks and runs them, after it closed): the dashboard's own entry points, then the lenses.
 // Built on every open, so what the page cannot do now is left out (no alert tray, no archive on file pages and in the offline shell,
 // the changes panel not in the layout); during a replay the replay action leads back to live.
@@ -2612,7 +2691,7 @@ function init(){
     const openCard=card=>{if(!card)return;if(card.dataset.eventId)CrucixIntelligence.openEvent(card.dataset.eventId);else{const url=safeExternalUrl(card.dataset.url);if(url)window.open(url,'_blank','noopener');}};
     document.addEventListener('click',event=>openCard(event.target.closest('.tk-card[data-event-id],.tk-card[data-url]')));
     document.addEventListener('keydown',event=>{const card=event.target.closest('.tk-card[data-event-id]');if(card&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openCard(card);}});
-    document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!document.getElementById('settingsOverlay').classList.contains('show'))closeGlossary();});
+    document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!document.getElementById('settingsOverlay').classList.contains('show')){closeLicenses();closeGlossary();}});
   }
   syncResponsiveLayout(true);
 }
