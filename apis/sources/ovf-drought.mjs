@@ -154,6 +154,7 @@ export function parseOvfDroughtResponse(json, options = {}) {
     relativeHumidity: metricBlock(humidity, '%', metricFresh(humidity, now, HOURLY_FRESH_MS)),
     lastUpdated,
     isFresh: measurementCount > 0 && allFresh,
+    isFixture: Boolean(options.isFixture || options.fixtureJson || options.fixtureData),
     enabled: true
   };
 }

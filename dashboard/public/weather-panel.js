@@ -44,21 +44,26 @@
     const depthGrid = (data, decimals = 1) => ['10cm', '20cm', '30cm', '45cm', '60cm', '75cm'].map(depth => `
       <div class="wp-drought-cell"><span>${esc(depth)}</span><strong>${data?.[depth] === null || data?.[depth] === undefined ? '--' : esc(formatMetricNum(data[depth], decimals))}</strong></div>
     `).join('');
-    const status = drought.isFresh ? 'FRISS' : 'ELAVULT';
+    const isFixture = Boolean(drought.isFixture || snapshot?.isPreSynthesizedFixture || drought.status === 'fixture');
+    const statusText = isFixture ? 'FIXTURE MINTA' : (drought.isFresh ? 'FRISS' : 'ELAVULT');
+    const statusClass = isFixture ? 'wp-obs-pill-stale' : (drought.isFresh ? 'wp-obs-pill-fresh' : 'wp-obs-pill-stale');
     return `
-      <section class="wp-drought-card ${drought.isFresh ? 'fresh' : 'stale'}" role="region" aria-label="OVF Aszálymonitoring">
+      <section class="wp-drought-card ${drought.isFresh && !isFixture ? 'fresh' : 'stale'}" role="region" aria-label="OVF Aszálymonitoring">
         <div class="wp-drought-header">
           <h4>${window.CrucixIcons ? window.CrucixIcons.renderIcon('drought', { size: 17, className: 'wp-drought-icon' }) : '◌'} OVF Aszálymonitoring (${esc(drought.station.name)}, ${esc(drought.station.distanceKm)} km)</h4>
-          <span class="wp-obs-pill ${drought.isFresh ? 'wp-obs-pill-fresh' : 'wp-obs-pill-stale'}">${status}</span>
+          <span class="wp-obs-pill ${statusClass}">${statusText}</span>
         </div>
         <div class="wp-drought-section"><span class="wp-drought-label">Talajnedvesség · V/V %</span><div class="wp-drought-grid">${depthGrid(drought.soilMoisture)}</div></div>
         <div class="wp-drought-section"><span class="wp-drought-label">Talajhőmérséklet · °C</span><div class="wp-drought-grid">${depthGrid(drought.soilTemperature)}</div></div>
-        <div class="wp-drought-summary">
-          <div><span>Aszályindex</span><strong>${esc(value(drought.droughtIndex, 2))}</strong></div>
-          <div><span>Vízhiány 35 cm</span><strong>${drought.waterDeficit?.['35cm'] == null ? '--' : esc(formatMetricNum(drought.waterDeficit['35cm'], 1))} mm</strong></div>
-          <div><span>Vízhiány 80 cm</span><strong>${drought.waterDeficit?.['80cm'] == null ? '--' : esc(formatMetricNum(drought.waterDeficit['80cm'], 1))} mm</strong></div>
+        <div class="wp-drought-section">
+          <span class="wp-drought-label">OVF számított értékek (értelmezés nélkül)</span>
+          <div class="wp-drought-summary">
+            <div><span>Aszályindex (OVF számított érték)</span><strong>${esc(value(drought.droughtIndex, 2))}</strong></div>
+            <div><span>Vízhiány 35 cm (OVF számított érték)</span><strong>${drought.waterDeficit?.['35cm'] == null ? '--' : esc(formatMetricNum(drought.waterDeficit['35cm'], 1))} mm</strong></div>
+            <div><span>Vízhiány 80 cm (OVF számított érték)</span><strong>${drought.waterDeficit?.['80cm'] == null ? '--' : esc(formatMetricNum(drought.waterDeficit['80cm'], 1))} mm</strong></div>
+          </div>
         </div>
-        <div class="wp-drought-meta">Utolsó mérés: ${esc(drought.lastUpdated || '--')}</div>
+        <div class="wp-drought-meta">${isFixture ? 'Adatforrás: Fixture minta (nem élő telemetria) · ' : 'Adatforrás: OVF Aszálymonitoring hálózat (tájékoztató jellegű számított érték) · '}Utolsó mérés: ${esc(drought.lastUpdated || '--')}</div>
       </section>
     `;
   }

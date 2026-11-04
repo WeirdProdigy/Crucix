@@ -70,3 +70,36 @@ test('server strips drought data before persistence', () => {
   assert.match(server, /delete cloned\.sources\.ovfDrought/);
   assert.match(server, /saveSnapshot\(RUNS_DIR, stripMemoryOnlySources\(rawData\)\)/);
 });
+
+test('client rendering in weather-panel: uninterpreted OVF calculated values, no scale guessing, and fixture badge', () => {
+  const code = readFileSync(new URL('../dashboard/public/weather-panel.js', import.meta.url), 'utf8');
+  const mockWindow = { innerWidth: 1280, currentSnapshot: () => ({}) };
+  const mockDocument = { querySelector: () => null };
+
+  const runModule = new Function('window', 'document', code);
+  runModule(mockWindow, mockDocument);
+  const WeatherPanel = mockWindow.CrucixWeatherPanel;
+  assert.ok(WeatherPanel, 'CrucixWeatherPanel exported');
+  assert.ok(typeof WeatherPanel.renderDroughtBlock === 'function', 'renderDroughtBlock exported');
+
+  // 1. Fixture data must NOT be indicated as live
+  const parsedFixture = parseOvfDroughtResponse(fixture, { now: fixtureNow, fixtureData: fixture });
+  const fixtureHtml = WeatherPanel.renderDroughtBlock({ sources: { ovfDrought: parsedFixture } });
+  assert.match(fixtureHtml, /FIXTURE MINTA/, 'Fixture badge rendered');
+  assert.match(fixtureHtml, /nem élő telemetria/, 'Explicitly marked as non-live telemetry');
+  assert.match(fixtureHtml, /Aszályindex \(OVF számított érték\)/, 'Uninterpreted drought index label');
+  assert.match(fixtureHtml, /Vízhiány 35 cm \(OVF számított érték\)/, 'Uninterpreted water deficit label');
+  assert.match(fixtureHtml, /Vízhiány 80 cm \(OVF számított érték\)/, 'Uninterpreted water deficit label');
+  assert.doesNotMatch(fixtureHtml, /enyhe|mérsékelt|súlyos|rendkívüli/i, 'No invented drought scale');
+
+  // 2. Real live data: fresh
+  const liveFresh = { ...parsedFixture, isFixture: false, isFresh: true };
+  const liveFreshHtml = WeatherPanel.renderDroughtBlock({ sources: { ovfDrought: liveFresh } });
+  assert.match(liveFreshHtml, /wp-obs-pill-fresh.*FRISS/, 'Live fresh pill rendered');
+  assert.doesNotMatch(liveFreshHtml, /FIXTURE MINTA/, 'No fixture badge on live data');
+
+  // 3. Real live data: stale
+  const liveStale = { ...parsedFixture, isFixture: false, isFresh: false };
+  const liveStaleHtml = WeatherPanel.renderDroughtBlock({ sources: { ovfDrought: liveStale } });
+  assert.match(liveStaleHtml, /wp-obs-pill-stale.*ELAVULT/, 'Live stale pill rendered');
+});

@@ -955,7 +955,7 @@ AGPL-3.0
 
 - **Opt-in:** `CRUCIX_ENABLE_OVF_DROUGHT=true` (alapértelmezés: `false`); kikapcsolva az adapter nem indít hálózati kérést.
 - **Végpont:** `https://aszalymonitoring.vizugy.hu/api.php?view=pattern&voa=<stationId>`.
-- **Alapállomás:** Mezősas, `22676D52-3F45-48BF-A75C-8024905FD3D4`, 11,9 km. A `CRUCIX_OVF_DROUGHT_STATION_ID` felülírhatja az állomásazonosítót.
+- **Alapállomás:** Mezősas, `22676D52-3F45-48BF-A75C-8024905FD3D4`, 11,9 km (WGS84 réteg: Berettyóújfalu felé 11,92 km, Bihartorda felé 20,31 km). A `CRUCIX_OVF_DROUGHT_STATION_ID` felülírhatja az állomásazonosítót.
 - **Lekérdezési ciklus:** `CRUCIX_OVF_DROUGHT_POLL_INTERVAL_MS`, alapértelmezés szerint 1 800 000 ms (30 perc).
 - **Megjelenített mérések:** órás levegő- és talajhőmérséklet, talajnedvesség, csapadék, relatív páratartalom; napi aszályindex és vízhiány.
 - **Adatkezelés:** szigorúan memóriabeli, nincs adatbázis- vagy fájlmentés, és nem generál riasztást, értesítést vagy kockázati eszkalációt.
