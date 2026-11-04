@@ -31,6 +31,7 @@
 <script src="live-media-panel.js"></script>
 <script src="space-weather-panel.js"></script>
 <script src="weather-panel.js"></script>
+<script src="today-panel.js"></script>
 <script src="alerts-core.js"></script>
 <script src="alerts.js"></script>
 <script src="alert-rules.js"></script>
@@ -52,6 +53,7 @@
 <link rel="stylesheet" href="live-media-panel.css">
 <link rel="stylesheet" href="space-weather.css">
 <link rel="stylesheet" href="weather.css">
+<link rel="stylesheet" href="today-panel.css">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#020408">
 <script src="pwa.js"></script>
@@ -765,6 +767,7 @@ function getPanelLabel(panelId){
     case 'spaceWatch': return t('panels.spaceWatch','Space Watch');
     case 'territoryViews': return t('panels.territoryViews','Területi nézet');
     case 'coveragePanel': return t('panels.coveragePanel','Forrásfedettség');
+    case 'todayPanel': return t('panels.todayPanel','Mi érinthet ma?');
     case 'spaceWeather': return t('panels.spaceWeather','Űridőjárás');
     case 'weather': return t('panels.weather','Időjárás és Orvosmeteorológia');
     case 'liveSources': return t('liveSources.title','Current public data');
@@ -1401,6 +1404,7 @@ function buildPanelHtml(panelId, zone){
     case 'spaceWatch': return buildSpaceWatchPanel();
     case 'territoryViews': return window.CrucixViewsPanel?.panelHtml(currentSnapshot())||'';
     case 'coveragePanel': return window.CrucixViewsPanel?.coveragePanelHtml(currentSnapshot())||'';
+    case 'todayPanel': return window.CrucixTodayPanel?.renderTodayPanel(currentSnapshot())||'';
     case 'spaceWeather': return window.CrucixSpaceWeatherPanel?.panelHtml(currentSnapshot())||'';
     case 'weather': return window.CrucixWeatherPanel?.panelHtml(currentSnapshot())||'';
     case 'liveMedia': return window.CrucixLiveMedia?.panelHtml(currentSnapshot())||'';

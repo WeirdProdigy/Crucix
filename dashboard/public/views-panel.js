@@ -1301,12 +1301,17 @@
       `
       : newsFeedHtml(snapshot);
 
+    const todaySummaryHtml = (activeView === VIEWS.LOCAL && typeof window !== 'undefined' && window.CrucixTodayPanel?.renderTodayPanel)
+      ? window.CrucixTodayPanel.renderTodayPanel(snapshot)
+      : '';
+
     return `
       <div class="vp-panel" id="panel-territoryViews">
         <div class="vp-panel-head">
           <span class="vp-panel-title">${esc(VIEW_LABELS[activeView])} nézet</span>
           <span class="vp-panel-sub">Aktív: ${inViewEvents.length} | Elavult: ${inViewStale.length}</span>
         </div>
+        ${todaySummaryHtml}
         ${sectionsHtml}
         ${unlocatedStripHtml}
         <div class="vp-section-nav" role="tablist" aria-label="Nézeti média és hírek">
