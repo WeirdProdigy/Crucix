@@ -51,8 +51,11 @@
     return Object.keys(data).some(key => key !== 'enabled' && key !== 'fresh' && key !== 'isFresh' && key !== 'stale');
   }
 
-  function status(candidate) {
+  function status(candidate, snapshot) {
     if (candidate?.enabled === false) return ['KIKAPCSOLVA', 'tp-pill-off'];
+    if (Boolean(candidate?.isFixture || candidate?.status === 'fixture' || (hasData(candidate) && snapshot?.isPreSynthesizedFixture))) {
+      return ['FIXTURE MINTA', 'tp-pill-stale'];
+    }
     if (!hasData(candidate)) return ['NINCS ADAT', 'tp-pill-nodata'];
     if (candidate?.stale === true || candidate?.fresh === false || candidate?.isFresh === false ||
         candidate?.status === 'stale' || candidate?.status === 'error') return ['ELAVULT', 'tp-pill-stale'];
@@ -114,16 +117,39 @@
     const forecastDay = forecastData.daily || forecastData.today || forecastData;
     const scales = swData.scales || {};
 
+    const hydroAlertText = (function () {
+      if (!object(gauge)) return '—';
+      if (gauge.levelRelation?.text && gauge.levelRelation.text !== '-') return gauge.levelRelation.text;
+      const wl = valueOf(gauge, ['waterLevelCm', 'levelCm', 'waterLevel']);
+      const kf1 = valueOf(gauge, ['kf1', 'level1']);
+      const kf2 = valueOf(gauge, ['kf2', 'level2']);
+      const kf3 = valueOf(gauge, ['kf3', 'level3']);
+      if (finite(wl) && finite(kf1) && kf1 > 0) {
+        if (finite(kf3) && wl >= kf3) return `${wl - kf3} cm túllépés a ${kf3} cm-es III. fokú szinthez (nem hivatalos állapot)`;
+        if (finite(kf2) && wl >= kf2) return `${wl - kf2} cm túllépés a ${kf2} cm-es II. fokú szinthez (nem hivatalos állapot)`;
+        if (wl >= kf1) {
+          const over = wl - kf1;
+          return over > 0
+            ? `${over} cm túllépés, számítva a ${kf1} cm-es I. fokú készültségi szinthez (nem hivatalos állapot)`
+            : `pontosan a ${kf1} cm-es I. fokú készültségi szinten (nem hivatalos állapot)`;
+        }
+        return `${kf1 - wl} cm tartalék, számítva a ${kf1} cm-es I. fokú készültségi szinthez (nem hivatalos állapot)`;
+      }
+      return 'I. fok alatt (nem hivatalos állapot)';
+    })();
+    const hydroTendency = valueOf(gauge, ['tendency', 'trend']);
+    const hydroDetail = hydroTendency ? `${hydroTendency} · ${hydroAlertText}` : hydroAlertText;
+
     return [
       {
         id: 'meteoalarm', category: 'weather', title: 'Meteoalarm · Hajdú-Bihar', href: '#alerts',
-        badge: status(meteo), time: time(valueOf(meteoAlert, ['onset', 'effective', 'publishedAt'])),
+        badge: status(meteo, sn), time: time(valueOf(meteoAlert, ['onset', 'effective', 'publishedAt'])),
         body: `<div class="tp-main">${esc(text(valueOf(meteoAlert, ['event', 'eventType', 'title']), 'Nincs aktív figyelmeztetés'))}</div>` +
           `<div class="tp-detail">Fokozat: <strong>${esc(text(valueOf(meteoAlert, ['severity', 'level'])))}</strong> · ${esc(text(valueOf(meteoAlert, ['status']), 'aktív'))}</div>`
       },
       {
         id: 'hungaromet', category: 'weather', title: 'HungaroMet mért adat · Berettyóújfalu', href: '#weather',
-        badge: status(observed), time: time(valueOf(station, ['observedAt', 'timestamp']) || valueOf(observedData, ['timestamp'])),
+        badge: status(observed, sn), time: time(valueOf(station, ['observedAt', 'timestamp']) || valueOf(observedData, ['timestamp'])),
         body: `<div class="tp-metrics"><span>Hőmérséklet <strong>${metric(valueOf(station, ['temperatureC', 'temperature']), ' °C')}</strong></span>` +
           `<span>Szél <strong>${metric(valueOf(station, ['windSpeedKmh', 'windSpeed']), ' km/h')}</strong></span>` +
           `<span>Nyomás <strong>${metric(valueOf(station, ['pressureHpa', 'pressure']), ' hPa')}</strong></span>` +
@@ -132,36 +158,36 @@
       },
       {
         id: 'open-meteo', category: 'weather', title: 'Open-Meteo előrejelzés', href: '#weather-forecast',
-        badge: status(forecast), time: time(valueOf(forecastData, ['timestamp', 'updatedAt'])),
+        badge: status(forecast, sn), time: time(valueOf(forecastData, ['timestamp', 'updatedAt'])),
         body: `<div class="tp-main">${esc(text(valueOf(forecastDay, ['weatherCodeSummary', 'summary', 'weatherCode']), 'Nincs előrejelzés'))}</div>` +
           `<div class="tp-detail">Min/max: <strong>${metric(valueOf(forecastDay, ['minTemperature', 'temperatureMin']), ' °C')} / ${metric(valueOf(forecastDay, ['maxTemperature', 'temperatureMax']), ' °C')}</strong> · Csapadék: ${metric(valueOf(forecastDay, ['precipitationProbability', 'precipitationProb']), ' %')} / ${metric(valueOf(forecastDay, ['precipitationSum', 'precipitation']), ' mm')}</div>`
       },
       {
         id: 'ovf-gauges', category: 'flood', title: 'OVF Berettyó vízállás', href: '#hydro',
-        badge: status(hydro), time: time(valueOf(gauge, ['observedAt', 'timestamp'])),
+        badge: status(hydro, sn), time: time(valueOf(gauge, ['observedAt', 'timestamp'])),
         body: `<div class="tp-main">${metric(valueOf(gauge, ['waterLevelCm', 'levelCm', 'waterLevel']), ' cm')}</div>` +
-          `<div class="tp-detail">${esc(text(valueOf(gauge?.levelRelation, ['text']) || valueOf(gauge, ['tendency', 'trend']), 'stagnál'))} · I. fok alatt (nem hivatalos állapot)</div>`
+          `<div class="tp-detail">${esc(hydroDetail)}</div>`
       },
       {
         id: 'ovf-drought', category: 'drought', title: 'OVF aszály / talajnedvesség', href: '#drought',
-        badge: status(drought), time: time(valueOf(droughtData, ['lastUpdated', 'observedAt', 'timestamp'])),
+        badge: status(drought, sn), time: time(valueOf(droughtData, ['lastUpdated', 'observedAt', 'timestamp'])),
         body: `<div class="tp-main">10–20 cm: ${metric(valueOf(soil, ['10-20cm', '10cm', '20cm', '10_20cm']), ' V/V %')}</div>` +
           `<div class="tp-detail">Aszályindex: <strong>${esc(text(valueOf(droughtData.droughtIndex, ['value']) ?? valueOf(droughtData, ['droughtIndex'])))}</strong></div>`
       },
       {
         id: 'space-weather', category: 'space-weather', title: 'Űridőjárás (G/R/S)', href: '#space-weather',
-        badge: status(sw), time: time(valueOf(swData, ['timestamp', 'updatedAt'])),
+        badge: status(sw, sn), time: time(valueOf(swData, ['timestamp', 'updatedAt'])),
         body: `<div class="tp-metrics"><span>Kp <strong>${esc(text(valueOf(swData.kp, ['noaaKp', 'gfzKp']) ?? valueOf(swData, ['kp'])))}</strong></span>` +
           `<span>G <strong>${esc(text(valueOf(scales.G, ['label', 'level'])))}</strong></span><span>R <strong>${esc(text(valueOf(scales.R, ['label', 'level'])))}</strong></span><span>S <strong>${esc(text(valueOf(scales.S, ['label', 'level'])))}</strong></span></div>`
       },
       {
         id: 'police', category: 'transport', title: 'Rendőrségi hírek · Hajdú-Bihar', href: '#news',
-        badge: status(police), time: time(valueOf(newsItem, ['publishedAt', 'publicationDate', 'timestamp'])),
+        badge: status(police, sn), time: time(valueOf(newsItem, ['publishedAt', 'publicationDate', 'timestamp'])),
         body: `<div class="tp-main">${esc(text(valueOf(newsItem, ['title', 'headline']), 'Nincs rendőrségi közlemény'))}</div>`
       },
       {
         id: 'local-news', category: 'general', title: 'Helyi hírek', href: '#local-news',
-        badge: status(local), time: time(valueOf(localItem, ['publishedAt', 'publicationDate', 'timestamp'])),
+        badge: status(local, sn), time: time(valueOf(localItem, ['publishedAt', 'publicationDate', 'timestamp'])),
         body: `<div class="tp-main">${esc(text(valueOf(localItem, ['title', 'headline']), 'Nincs helyi hír'))}</div>`
       }
     ];

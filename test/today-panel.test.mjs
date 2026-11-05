@@ -52,3 +52,52 @@ test('has no browser network primitives', () => {
   assert.equal((source.match(/fetch\(/g) || []).length, 0);
   assert.equal((source.match(/XMLHttpRequest/g) || []).length, 0);
 });
+
+test('renders FIXTURE MINTA badge for fixture sources or pre-synthesized fixture snapshots', () => {
+  const fixtureSnapshot = {
+    sources: {
+      'OVF-Gauges': { enabled: true, isFixture: true, gauges: [{ name: 'Berettyóújfalu', waterLevelCm: 132, kf1: 350 }] },
+      ovfDrought: { enabled: true, isFixture: true, soilMoisture: { '10-20cm': 24 } }
+    }
+  };
+  const html = panel().renderTodayPanel(fixtureSnapshot);
+  assert.match(html, /FIXTURE MINTA/);
+  assert.match(html, /tp-pill-stale/);
+});
+
+test('dynamically calculates hydro alert stage from levelRelation or kf thresholds', () => {
+  const withLevelRelation = {
+    sources: {
+      'OVF-Gauges': {
+        enabled: true,
+        fresh: true,
+        gauges: [{
+          name: 'Berettyóújfalu',
+          waterLevelCm: 132,
+          kf1: 350,
+          levelRelation: { text: '218 cm tartalék, számítva a 350 cm-es I. fokú készültségi szinthez (nem hivatalos állapot)' },
+          tendency: 'stagnál'
+        }]
+      }
+    }
+  };
+  const html1 = panel().renderTodayPanel(withLevelRelation);
+  assert.match(html1, /218 cm tartalék, számítva a 350 cm-es I\. fokú készültségi szinthez \(nem hivatalos állapot\)/);
+
+  const withComputedThreshold = {
+    sources: {
+      'OVF-Gauges': {
+        enabled: true,
+        fresh: true,
+        gauges: [{
+          name: 'Berettyóújfalu',
+          waterLevelCm: 150,
+          kf1: 300,
+          tendency: 'árad'
+        }]
+      }
+    }
+  };
+  const html2 = panel().renderTodayPanel(withComputedThreshold);
+  assert.match(html2, /150 cm tartalék, számítva a 300 cm-es I\. fokú készültségi szinthez \(nem hivatalos állapot\)/);
+});
