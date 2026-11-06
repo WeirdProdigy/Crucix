@@ -69,7 +69,7 @@
   const PRIVACY_NOTICE_TEXT = 'A közvetítés indítása kapcsolatot létesít a videószolgáltatóval.';
   const CAMERA_PRIVACY_NOTICE_TEXT = 'A kép betöltése kapcsolatot létesít az Időképpel; a Crucix nem tárolja.';
   const CAMERA_REFRESH_INTERVAL_MS = 60000;
-  const STILL_IMAGE_REFRESH_INTERVAL_MS = 600000;
+  const STILL_IMAGE_REFRESH_INTERVAL_MS = 1800000; // 30 perc (Cumiana ELF/VLF spektrogram)
   const CAMERA_ERROR_BACKOFF_MS = 300000;
   const MAX_GROUP_CAMERAS = 4;
   const CAMERA_LIMIT_NOTICE_TEXT = 'Legfeljebb 4 kamera tölthető be egyszerre; a többit kártyánként nyisd meg.';
@@ -156,6 +156,53 @@
   let gridImageTimers = new Map();
   let lastImageRefreshedAt = new Map();
   let gridImageErrors = new Set();
+  let streamLastModified = new Map();
+
+  function computeFreshnessBadge(lastModified, now = Date.now()) {
+    if (!lastModified) return { label: 'ismeretlen', status: 'unknown', className: 'lm-freshness-unknown' };
+    const ts = typeof lastModified === 'number' ? lastModified : new Date(lastModified).getTime();
+    if (isNaN(ts)) return { label: 'ismeretlen', status: 'unknown', className: 'lm-freshness-unknown' };
+    const nowTs = typeof now === 'number' ? now : new Date(now).getTime();
+    const diffMs = Math.max(0, nowTs - ts);
+    const diffHours = diffMs / (3600 * 1000);
+    const diffDays = diffMs / (24 * 3600 * 1000);
+
+    if (diffHours < 6) {
+      return { label: 'LIVE', status: 'live', className: 'lm-freshness-live' };
+    } else if (diffDays <= 7) {
+      const h = Math.floor(diffHours);
+      return { label: `${h} órája`, status: 'recent', className: 'lm-freshness-recent', hours: h };
+    } else {
+      return { label: 'befagyott', status: 'stale', className: 'lm-freshness-stale' };
+    }
+  }
+
+  function probeLastModified(stream) {
+    if (!stream || !stream.id || !stream.imageUrl || typeof fetch === 'undefined') return;
+    try {
+      fetch(stream.imageUrl, { method: 'HEAD', mode: 'cors' })
+        .then(res => {
+          const lm = res.headers ? res.headers.get('last-modified') : null;
+          if (lm) {
+            streamLastModified.set(stream.id, lm);
+            updateGridFreshnessDom(stream.id);
+          }
+        })
+        .catch(() => {});
+    } catch (_) {}
+  }
+
+  function updateGridFreshnessDom(streamId) {
+    if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
+    const badge = document.getElementById(`lm-grid-freshness-${streamId}`);
+    if (badge) {
+      const lm = streamLastModified.get(streamId);
+      const freshness = computeFreshnessBadge(lm);
+      badge.textContent = freshness.label;
+      badge.className = `lm-freshness-badge ${freshness.className}`;
+      if (lm) badge.setAttribute('title', `Forrás utolsó módosítása (Last-Modified): ${lm}`);
+    }
+  }
 
   function formatTimeString(ts) {
     if (!ts) return '--:--:--';
@@ -245,6 +292,11 @@
       lastImageRefreshedAt.set(streamId, Date.now());
     }
     updateGridTimestampDom(streamId);
+    const rawStreams = resolveRawStreams();
+    const stream = rawStreams.find(s => s.id === streamId);
+    if (stream && stream.sourceType === 'still-image') {
+      probeLastModified(stream);
+    }
   }
 
   function onGridImgError(streamId) {
@@ -693,6 +745,9 @@
     if (stream.imageUrl) {
       lastImageRefreshedAt.set(streamId, Date.now());
       startGridImageTimer(stream);
+      if (stream.sourceType === 'still-image') {
+        probeLastModified(stream);
+      }
     }
 
     notifyChange();
@@ -1036,12 +1091,15 @@
       `;
     }
 
-    // 2. Webkamera vagy Állókép (Időkép 60 mp vagy Schumann 10 perc)
+    // 2. Webkamera vagy Állókép (Időkép 60 mp vagy Schumann 30 perc)
     if (stream.sourceType === 'still-image' || Boolean(stream.imageUrl)) {
       const isError = gridImageErrors.has(stream.id);
-      const intervalLabel = stream.sourceType === 'still-image' ? 'Állókép · 10 perc' : 'Állókép · 60 mp';
+      const isStillImage = stream.sourceType === 'still-image';
+      const intervalLabel = isStillImage ? 'Állókép · 30 perc' : 'Állókép · 60 mp';
       const refTs = lastImageRefreshedAt.get(stream.id);
       const refreshedText = `Frissítve: ${formatTimeString(refTs)}`;
+      const lmHeader = streamLastModified.get(stream.id) || stream.lastModified || stream.checkedAt;
+      const freshness = isStillImage ? computeFreshnessBadge(lmHeader) : null;
 
       return `
         <div class="lm-stage-slot lm-stage-slot-active lm-stage-slot-camera" id="lm-stage-slot-${esc(stream.id)}" data-active-stream-id="${esc(stream.id)}" data-video-id="">
@@ -1084,6 +1142,14 @@
               <div class="lm-player-bar lm-camera-bar">
                 <div class="lm-camera-bar-left">
                   <span class="lm-camera-interval-badge">${esc(intervalLabel)}</span>
+                  ${freshness ? `
+                    <span
+                      id="lm-grid-freshness-${esc(stream.id)}"
+                      class="lm-freshness-badge ${esc(freshness.className)}"
+                      title="Forrás utolsó módosítása (Last-Modified): ${esc(lmHeader || 'n/a')}">
+                      ${esc(freshness.label)}
+                    </span>
+                  ` : ''}
                   <span class="lm-camera-refreshed" id="lm-grid-ts-${esc(stream.id)}">${esc(refreshedText)}</span>
                 </div>
                 <div class="lm-player-right-controls">
@@ -1268,18 +1334,23 @@
                 onload="window.CrucixLiveMedia?.onCameraImgLoad('${esc(stream.id)}')"
                 onerror="window.CrucixLiveMedia?.onCameraImgError('${esc(stream.id)}')" />
               <div class="lm-camera-meta-bar">
-                <span class="lm-camera-refresh-indicator">🔄 Frissítés: 60 mp (közvetlen böngészőoldali)</span>
+                <span class="lm-camera-refresh-indicator">🔄 Frissítés: ${stream.sourceType === 'still-image' ? '30 perc' : '60 mp'} (közvetlen böngészőoldali)</span>
+                ${stream.sourceType === 'still-image' ? `
+                  <span class="lm-freshness-badge ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || stream.lastModified || stream.checkedAt).className)}">
+                    ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || stream.lastModified || stream.checkedAt).label)}
+                  </span>
+                ` : ''}
                 <button type="button" class="lm-btn-camera-close" title="Kamera bezárása" onclick="window.CrucixLiveMedia?.unloadCamera('${esc(stream.id)}')">✕ Bezárás</button>
               </div>
             </div>
             <div class="lm-camera-attribution">
-              ${esc(stream.attribution || 'Forrás: Időkép / idokep.hu')} — <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-link-external">Megnyitás a forráson ↗</a>
+              ${esc(stream.attribution || (stream.sourceType === 'still-image' ? 'Forrás: IK1QFK / vlf.it' : 'Forrás: Időkép / idokep.hu'))} — <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-link-external">Megnyitás a forráson ↗</a>
             </div>
           `;
         } else {
           externalBodyHtml = `
             <div class="lm-camera-privacy-box">
-              <span class="lm-camera-privacy-text">${esc(stream.sourceType === 'still-image' ? 'A kép betöltése kapcsolatot létesít a forrással (' + (stream.provider || 'sos70.ru') + '); a Crucix nem tárolja.' : CAMERA_PRIVACY_NOTICE_TEXT)}</span>
+              <span class="lm-camera-privacy-text">${esc(stream.sourceType === 'still-image' ? 'A kép betöltése kapcsolatot létesít a forrással (' + (stream.provider || 'IK1QFK / vlf.it') + '); a Crucix nem tárolja.' : CAMERA_PRIVACY_NOTICE_TEXT)}</span>
             </div>
             <div class="lm-external-actions">
               ${stream.sourceType === 'still-image' ? `
@@ -1327,6 +1398,11 @@
               <span class="lm-status-pill lm-embed-status lm-embed-external-only" title="Beágyazhatóság">
                 Beágyazhatóság: ${esc(embedInfo.label)}
               </span>
+              ${stream.sourceType === 'still-image' ? `
+                <span class="lm-status-pill lm-freshness-badge ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || stream.lastModified || stream.checkedAt).className)}" title="Last-Modified fejléc alapján">
+                  Frissesség: ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || stream.lastModified || stream.checkedAt).label)}
+                </span>
+              ` : ''}
             </div>
           </div>
           <div class="lm-card-body lm-external-body">
@@ -1854,7 +1930,10 @@
     getActiveCameraIds: () => Array.from(activeCameraIds),
     getCameraNotice: () => cameraNotice,
     WINDY_PRIVACY_NOTICE_TEXT,
-    WINDY_DISCLAIMER_TEXT
+    WINDY_DISCLAIMER_TEXT,
+    computeFreshnessBadge,
+    getStreamLastModified: (streamId) => streamLastModified.get(streamId),
+    setStreamLastModified: (streamId, lm) => streamLastModified.set(streamId, lm)
   });
 
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});

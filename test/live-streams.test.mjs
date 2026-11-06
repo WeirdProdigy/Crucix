@@ -1132,11 +1132,12 @@ test('13. Unified tile model in Live Media grid: 4-slot limit, FIFO replacement,
 
   // Load registry
   const streams = loadLiveStreams();
-  const schumann = streams.find(s => s.id === 'schumann-resonance-tomsk');
-  assert.ok(schumann, 'schumann-resonance-tomsk must be present in registry');
+  const schumann = streams.find(s => s.id === 'schumann-resonance-cumiana');
+  assert.ok(schumann, 'schumann-resonance-cumiana must be present in registry');
   assert.equal(schumann.sourceType, 'still-image');
   assert.equal(schumann.embedStatus, 'embeddable');
-  assert.ok(schumann.imageUrl.includes('sos70.ru/new/shm.jpg'), 'Schumann imageUrl must point to sos70.ru/new/shm.jpg');
+  assert.ok(schumann.imageUrl.includes('vlf.it/cumiana/last-geomar.jpg'), 'Schumann imageUrl must point to vlf.it/cumiana/last-geomar.jpg');
+  assert.ok(schumann.attribution.includes('IK1QFK / vlf.it'), 'Schumann attribution references IK1QFK / vlf.it');
 
   // Setup DOM mock
   let visibilityListener = null;
@@ -1242,12 +1243,12 @@ test('13. Unified tile model in Live Media grid: 4-slot limit, FIFO replacement,
 
   // Add 3 more streams of mixed types
   lm.playStream('debrecen-kossuth-ter-webcam');
-  lm.playStream('schumann-resonance-tomsk');
+  lm.playStream('schumann-resonance-cumiana');
   lm.playStream('debrecen-bekas-to-webcam');
   assert.equal(lm.getActiveStreamIds().length, 4, 'Grid must hold 4 items');
   assert.deepEqual(
     lm.getActiveStreamIds(),
-    ['windy-radar-embed', 'debrecen-kossuth-ter-webcam', 'schumann-resonance-tomsk', 'debrecen-bekas-to-webcam']
+    ['windy-radar-embed', 'debrecen-kossuth-ter-webcam', 'schumann-resonance-cumiana', 'debrecen-bekas-to-webcam']
   );
 
   // 4. FIFO replacement: adding a 5th stream drops the oldest (windy-radar-embed)
@@ -1255,7 +1256,7 @@ test('13. Unified tile model in Live Media grid: 4-slot limit, FIFO replacement,
   assert.equal(lm.getActiveStreamIds().length, 4, 'Active count remains capped at 4');
   assert.deepEqual(
     lm.getActiveStreamIds(),
-    ['debrecen-kossuth-ter-webcam', 'schumann-resonance-tomsk', 'debrecen-bekas-to-webcam', 'debrecen-egyetem-ter-webcam'],
+    ['debrecen-kossuth-ter-webcam', 'schumann-resonance-cumiana', 'debrecen-bekas-to-webcam', 'debrecen-egyetem-ter-webcam'],
     'Oldest stream (windy-radar-embed) was evicted via FIFO'
   );
 
@@ -1283,22 +1284,24 @@ test('13. Unified tile model in Live Media grid: 4-slot limit, FIFO replacement,
   assert.ok(stageHtml.includes('📷 Kamerák a rácsba'), 'Toolbar button present');
 
   // Test Schumann in grid
-  lm.playStream('schumann-resonance-tomsk');
+  lm.playStream('schumann-resonance-cumiana');
   const schumannStageHtml = lm.panelHtml({ liveStreams: streams });
-  assert.ok(schumannStageHtml.includes('id="lm-stage-slot-schumann-resonance-tomsk"'));
-  assert.ok(schumannStageHtml.includes('Állókép · 10 perc'), 'Schumann has 10 min badge');
-  assert.ok(schumannStageHtml.includes('sos70.ru/new/shm.jpg'), 'Schumann image src rendered');
+  assert.ok(schumannStageHtml.includes('id="lm-stage-slot-schumann-resonance-cumiana"'));
+  assert.ok(schumannStageHtml.includes('Állókép · 30 perc'), 'Schumann has 30 min badge');
+  assert.ok(schumannStageHtml.includes('vlf.it/cumiana/last-geomar.jpg'), 'Schumann image src rendered');
+  assert.ok(schumannStageHtml.includes('referrerpolicy="no-referrer"'), 'Referrer policy no-referrer');
+  assert.ok(schumannStageHtml.includes('id="lm-grid-freshness-schumann-resonance-cumiana"'), 'Freshness badge element present');
 
   // 7. Error fallback state in grid
-  lm.onGridImgError('schumann-resonance-tomsk');
-  assert.equal(lm.isGridImageError('schumann-resonance-tomsk'), true);
+  lm.onGridImgError('schumann-resonance-cumiana');
+  assert.equal(lm.isGridImageError('schumann-resonance-cumiana'), true);
   const errorGridHtml = lm.panelHtml({ liveStreams: streams });
   assert.ok(errorGridHtml.includes('⚠ Nem tölthető be – megnyitás a forráson'), 'Error fallback rendered in grid slot');
   assert.ok(errorGridHtml.includes('Újrapróbálás'), 'Retry button rendered in grid slot');
 
   // Retry recovers error
-  lm.retryGridImage('schumann-resonance-tomsk');
-  assert.equal(lm.isGridImageError('schumann-resonance-tomsk'), false);
+  lm.retryGridImage('schumann-resonance-cumiana');
+  assert.equal(lm.isGridImageError('schumann-resonance-cumiana'), false);
 
   // 8. Timers and visibility management
   assert.ok(timerCallbacks.size > 0, 'Image timers must be active');
@@ -1316,4 +1319,52 @@ test('13. Unified tile model in Live Media grid: 4-slot limit, FIFO replacement,
   lm.stopAllStreams();
   assert.equal(lm.getActiveStreamIds().length, 0);
   assert.equal(timerCallbacks.size, 0);
+});
+
+test('computeFreshnessBadge: accurate freshness categorization based on Last-Modified', () => {
+  const root = new URL('../', import.meta.url);
+  const jsCode = readFileSync(new URL('dashboard/public/live-media-panel.js', root), 'utf8');
+  const mockWindow = { location: { hostname: '192.168.1.81' }, __CRUCIX_DATA__: { liveStreams: [] } };
+  const mockDocument = { addEventListener: () => {} };
+  const fn = new Function('window', 'document', jsCode);
+  fn(mockWindow, mockDocument);
+  const compute = mockWindow.CrucixLiveMedia.computeFreshnessBadge;
+
+  const now = new Date('2026-11-06T22:00:00Z').getTime();
+
+  // 1. LIVE (< 6 óra)
+  const lm1 = new Date('2026-11-06T21:00:10Z').getTime(); // 1 órája
+  assert.equal(compute(lm1, now).label, 'LIVE');
+  assert.equal(compute(lm1, now).status, 'live');
+
+  const lm5h = new Date('2026-11-06T16:00:01Z').getTime(); // 5 óra 59 perc
+  assert.equal(compute(lm5h, now).label, 'LIVE');
+  assert.equal(compute(lm5h, now).status, 'live');
+
+  // 2. "N órája" (6 óra – 7 nap)
+  const lm6h = new Date('2026-11-06T16:00:00Z').getTime(); // pontosan 6 óra
+  assert.equal(compute(lm6h, now).label, '6 órája');
+  assert.equal(compute(lm6h, now).status, 'recent');
+
+  const lm24h = new Date('2026-11-05T22:00:00Z').getTime(); // 24 óra
+  assert.equal(compute(lm24h, now).label, '24 órája');
+  assert.equal(compute(lm24h, now).status, 'recent');
+
+  const lm7d = new Date('2026-10-30T22:00:00Z').getTime(); // 7 nap (168 óra)
+  assert.equal(compute(lm7d, now).label, '168 órája');
+  assert.equal(compute(lm7d, now).status, 'recent');
+
+  // 3. "befagyott" (> 7 nap)
+  const lm8d = new Date('2026-10-29T21:00:00Z').getTime(); // 8 nap 1 óra
+  assert.equal(compute(lm8d, now).label, 'befagyott');
+  assert.equal(compute(lm8d, now).status, 'stale');
+
+  const lm30d = new Date('2026-10-06T22:00:00Z').getTime();
+  assert.equal(compute(lm30d, now).label, 'befagyott');
+  assert.equal(compute(lm30d, now).status, 'stale');
+
+  // 4. Edge cases (null, undefined, invalid)
+  assert.equal(compute(null, now).label, 'ismeretlen');
+  assert.equal(compute(undefined, now).label, 'ismeretlen');
+  assert.equal(compute('invalid-date', now).label, 'ismeretlen');
 });

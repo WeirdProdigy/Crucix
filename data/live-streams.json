@@ -451,20 +451,22 @@
     "notes": "Windy hivatalos interaktív csapadéktérkép embed widget (Berettyóújfalu / Bihartorda). Kattintásra induló böngészőoldali iframe privát LAN-on, szerveroldali tárolás és proxyzás nélkül."
   },
   {
-    "id": "schumann-resonance-tomsk",
-    "name": "Schumann-rezonancia szonogram (Tomszk)",
+    "id": "schumann-resonance-cumiana",
+    "name": "Schumann-rezonancia és ELF spektrogram (Cumiana)",
     "type": "directory",
     "region": "global",
-    "provider": "Tomszki Állami Egyetem (TSU / sos70.ru)",
+    "provider": "IK1QFK / vlf.it",
     "sourceType": "still-image",
-    "url": "http://sos70.ru/",
-    "imageUrl": "http://sos70.ru/new/shm.jpg",
-    "attribution": "Forrás: Space Observing System (sos70.ru / TSU)",
-    "language": "ru",
-    "status": "unverified-live",
+    "url": "http://www.vlf.it/cumiana/livedata.html",
+    "imageUrl": "http://www.vlf.it/cumiana/last-geomar.jpg",
+    "attribution": "Forrás: IK1QFK / vlf.it (Cumiana VLF Monitoring Station)",
+    "language": "it",
+    "status": "verified-live",
     "embedStatus": "embeddable",
+    "refreshIntervalSec": 1800,
     "checkedAt": "2026-11-06",
-    "provenance": "Space Observing System (sos70.ru)",
-    "notes": "Tomszk, Nyugat-Szibéria; ELF/VLF elektromágneses zajszonogram az elmúlt 3 napról; a Föld–ionoszféra üregrezonátor alaprezgése (7,83 Hz) és felharmonikusai (14,3 / 20,8 / 27,3 / 33,8 Hz). Tájékoztató jellegű vizualizáció, nincs hivatalos API."
+    "lastModified": "2026-11-06T21:00:10.000Z",
+    "provenance": "IK1QFK / vlf.it (Cumiana VLF Monitoring Station)",
+    "notes": "Cumiana (Olaszország); ELF/VLF spektrogram (1–30 Hz geofon, 1–105 Hz Marconi-antenna); a Föld–ionoszféra üregrezonátor alaprezgése (7,83 Hz) és felharmonikusai (14,3 / 20,8 / 27,3 / 33,8 Hz). Frissítés 30 percenként, közvetlen böngészőoldali betöltés."
   }
 ]
