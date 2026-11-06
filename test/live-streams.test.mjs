@@ -1125,3 +1125,195 @@ test('12. Windy embed widget: schema, click-to-load lifecycle, private host guar
   assert.ok(readme.includes('promotional text'), 'README must record promotional text rule');
   assert.ok(readme.includes('info@windy.com'), 'README must cite official Windy contact email');
 });
+
+test('13. Unified tile model in Live Media grid: 4-slot limit, FIFO replacement, DOM preservation, camera & still-image periodic timers, and Schumann resonance', async () => {
+  const root = new URL('../', import.meta.url);
+  const jsCode = readFileSync(new URL('dashboard/public/live-media-panel.js', root), 'utf8');
+
+  // Load registry
+  const streams = loadLiveStreams();
+  const schumann = streams.find(s => s.id === 'schumann-resonance-tomsk');
+  assert.ok(schumann, 'schumann-resonance-tomsk must be present in registry');
+  assert.equal(schumann.sourceType, 'still-image');
+  assert.equal(schumann.embedStatus, 'embeddable');
+  assert.ok(schumann.imageUrl.includes('sos70.ru/new/shm.jpg'), 'Schumann imageUrl must point to sos70.ru/new/shm.jpg');
+
+  // Setup DOM mock
+  let visibilityListener = null;
+  const timerCallbacks = new Map();
+  let nextTimerId = 1;
+
+  const mockWindow = {
+    innerWidth: 1280,
+    location: { hostname: '192.168.1.81' },
+    __CRUCIX_DATA__: { liveStreams: streams },
+    localStorage: { getItem: () => null, setItem: () => {} },
+    setInterval: (cb, ms) => {
+      const id = nextTimerId++;
+      timerCallbacks.set(id, { cb, ms });
+      return id;
+    },
+    clearInterval: (id) => {
+      timerCallbacks.delete(id);
+    }
+  };
+
+  const domElements = new Map();
+  function makeElement(tag, id = null) {
+    const el = {
+      tagName: tag.toUpperCase(),
+      id: id || '',
+      className: '',
+      attributes: new Map(),
+      children: [],
+      src: '',
+      value: '',
+      textContent: '',
+      setAttribute(k, v) { this.attributes.set(k, v); if (k === 'src') this.src = v; },
+      getAttribute(k) { return this.attributes.get(k); },
+      removeAttribute(k) { this.attributes.delete(k); if (k === 'src') this.src = ''; },
+      appendChild(child) { this.children.push(child); },
+      removeChild(child) {
+        const idx = this.children.indexOf(child);
+        if (idx !== -1) this.children.splice(idx, 1);
+      },
+      insertBefore(newNode, refNode) {
+        if (!refNode) {
+          this.children.push(newNode);
+        } else {
+          const idx = this.children.indexOf(refNode);
+          if (idx !== -1) this.children.splice(idx, 0, newNode);
+          else this.children.push(newNode);
+        }
+      },
+      remove() {
+        if (this.id) domElements.delete(this.id);
+        this.src = '';
+      },
+      querySelector(sel) {
+        if (sel.startsWith('#')) {
+          const targetId = sel.slice(1);
+          return domElements.get(targetId) || null;
+        }
+        return null;
+      }
+    };
+    if (id) domElements.set(id, el);
+    return el;
+  }
+
+  const mockDocument = {
+    hidden: false,
+    activeElement: null,
+    getElementById: (id) => domElements.get(id) || null,
+    querySelector: (sel) => {
+      if (sel.startsWith('#')) return domElements.get(sel.slice(1)) || null;
+      return null;
+    },
+    querySelectorAll: () => [],
+    createElement: (tag) => makeElement(tag),
+    addEventListener: (type, fn) => {
+      if (type === 'visibilitychange') visibilityListener = fn;
+    }
+  };
+
+  const fn = new Function('window', 'document', jsCode);
+  fn(mockWindow, mockDocument);
+  const lm = mockWindow.CrucixLiveMedia;
+  assert.ok(lm, 'CrucixLiveMedia exported');
+
+  // 1. Initial state: 0 active streams
+  assert.equal(lm.getActiveStreamIds().length, 0);
+
+  // 2. Single view mode: max 1 stream
+  lm.setViewMode('single');
+  assert.equal(lm.getViewMode(), 'single');
+  lm.playStream('debrecen-kossuth-ter-webcam');
+  assert.deepEqual(lm.getActiveStreamIds(), ['debrecen-kossuth-ter-webcam']);
+
+  // Playing another stream in single mode replaces the active stream
+  lm.playStream('windy-radar-embed');
+  assert.deepEqual(lm.getActiveStreamIds(), ['windy-radar-embed']);
+
+  // 3. Switch to grid mode: capacity is 4
+  lm.setViewMode('grid');
+  assert.equal(lm.getViewMode(), 'grid');
+  assert.deepEqual(lm.getActiveStreamIds(), ['windy-radar-embed']);
+
+  // Add 3 more streams of mixed types
+  lm.playStream('debrecen-kossuth-ter-webcam');
+  lm.playStream('schumann-resonance-tomsk');
+  lm.playStream('debrecen-bekas-to-webcam');
+  assert.equal(lm.getActiveStreamIds().length, 4, 'Grid must hold 4 items');
+  assert.deepEqual(
+    lm.getActiveStreamIds(),
+    ['windy-radar-embed', 'debrecen-kossuth-ter-webcam', 'schumann-resonance-tomsk', 'debrecen-bekas-to-webcam']
+  );
+
+  // 4. FIFO replacement: adding a 5th stream drops the oldest (windy-radar-embed)
+  lm.playStream('debrecen-egyetem-ter-webcam');
+  assert.equal(lm.getActiveStreamIds().length, 4, 'Active count remains capped at 4');
+  assert.deepEqual(
+    lm.getActiveStreamIds(),
+    ['debrecen-kossuth-ter-webcam', 'schumann-resonance-tomsk', 'debrecen-bekas-to-webcam', 'debrecen-egyetem-ter-webcam'],
+    'Oldest stream (windy-radar-embed) was evicted via FIFO'
+  );
+
+  // 5. "Kamerák a rácsba" button loads 4 default Debrecen cameras
+  lm.loadCamerasIntoGrid();
+  assert.equal(lm.getViewMode(), 'grid');
+  assert.deepEqual(
+    lm.getActiveStreamIds(),
+    [
+      'debrecen-kossuth-ter-webcam',
+      'debrecen-bekas-to-webcam',
+      'debrecen-egyetem-ter-webcam',
+      'debrecen-klinika-webcam'
+    ],
+    'loadCamerasIntoGrid loads all 4 default Debrecen cameras into 2x2 grid'
+  );
+
+  // 6. Stage HTML rendering verification:
+  const stageHtml = lm.panelHtml({ liveStreams: streams });
+  assert.ok(stageHtml.includes('id="lm-stage-slot-debrecen-kossuth-ter-webcam"'));
+  assert.ok(stageHtml.includes('id="lm-stage-slot-debrecen-klinika-webcam"'));
+  assert.ok(stageHtml.includes('Állókép · 60 mp'), 'Webcams have 60s badge');
+  assert.ok(stageHtml.includes('Forrás ↗'), 'Attribution source link present');
+  assert.ok(stageHtml.includes('■ Bezárás'), 'Close button present');
+  assert.ok(stageHtml.includes('📷 Kamerák a rácsba'), 'Toolbar button present');
+
+  // Test Schumann in grid
+  lm.playStream('schumann-resonance-tomsk');
+  const schumannStageHtml = lm.panelHtml({ liveStreams: streams });
+  assert.ok(schumannStageHtml.includes('id="lm-stage-slot-schumann-resonance-tomsk"'));
+  assert.ok(schumannStageHtml.includes('Állókép · 10 perc'), 'Schumann has 10 min badge');
+  assert.ok(schumannStageHtml.includes('sos70.ru/new/shm.jpg'), 'Schumann image src rendered');
+
+  // 7. Error fallback state in grid
+  lm.onGridImgError('schumann-resonance-tomsk');
+  assert.equal(lm.isGridImageError('schumann-resonance-tomsk'), true);
+  const errorGridHtml = lm.panelHtml({ liveStreams: streams });
+  assert.ok(errorGridHtml.includes('⚠ Nem tölthető be – megnyitás a forráson'), 'Error fallback rendered in grid slot');
+  assert.ok(errorGridHtml.includes('Újrapróbálás'), 'Retry button rendered in grid slot');
+
+  // Retry recovers error
+  lm.retryGridImage('schumann-resonance-tomsk');
+  assert.equal(lm.isGridImageError('schumann-resonance-tomsk'), false);
+
+  // 8. Timers and visibility management
+  assert.ok(timerCallbacks.size > 0, 'Image timers must be active');
+  // Hide tab
+  mockDocument.hidden = true;
+  visibilityListener();
+  assert.equal(timerCallbacks.size, 0, 'Timers must be cleared when tab is hidden');
+
+  // Unhide tab
+  mockDocument.hidden = false;
+  visibilityListener();
+  assert.ok(timerCallbacks.size > 0, 'Timers must resume when tab becomes visible');
+
+  // 9. Stop all streams
+  lm.stopAllStreams();
+  assert.equal(lm.getActiveStreamIds().length, 0);
+  assert.equal(timerCallbacks.size, 0);
+});

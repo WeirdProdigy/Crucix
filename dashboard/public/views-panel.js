@@ -897,12 +897,34 @@
       ceilingNote = `<div class="vp-newsfeed-ceiling-note">Nézeti felső plafon aktív: ${retainedCount} / ${eligibleCount} hír megtartva${filterSuffix}.</div>`;
     }
 
-    // 8. Render news cards or empty filter state
+    // 8. Render news cards: top 10 full size, remainder scrollable inside panel
+    const topCount = Math.min(10, filtered.length);
+    const topNews = filtered.slice(0, 10);
+    const remainingNews = filtered.slice(10);
     let cardsContent = '';
     if (filtered.length === 0) {
       cardsContent = `<div class="vp-empty">Van hír (${nonPromoNews.length} db), de a szűrés után nincs találat.</div>`;
     } else {
-      cardsContent = `<div class="vp-news-items vp-scroll-region scroll-region" tabindex="0" role="region" aria-label="Hírfolyam lista">${filtered.map(item => renderNewsCard(item)).join('')}</div>`;
+      const topCardsHtml = topNews.map(item => renderNewsCard(item)).join('');
+      let remainingHtml = '';
+      if (remainingNews.length > 0) {
+        remainingHtml = `
+          <div class="vp-news-remaining-section" id="vp-news-remaining-container">
+            <div class="vp-news-remaining-head">
+              <span class="vp-news-remaining-title">További hírek a nézetből (${remainingNews.length} db)</span>
+            </div>
+            <div class="vp-news-items vp-news-remaining-scroll vp-scroll-region scroll-region" tabindex="0" role="region" aria-label="További hírek lista (görgethető)">
+              ${remainingNews.map(item => renderNewsCard(item)).join('')}
+            </div>
+          </div>
+        `;
+      }
+      cardsContent = `
+        <div class="vp-news-items vp-scroll-region scroll-region" tabindex="0" role="region" aria-label="Hírfolyam lista">
+          ${topCardsHtml}
+        </div>
+        ${remainingHtml}
+      `;
     }
 
     let headBadgeText = `${retainedCount} db`;
@@ -917,6 +939,7 @@
       <div class="vp-newsfeed-section" id="vp-newsfeed">
         <div class="vp-newsfeed-head">
           <span class="vp-newsfeed-title">Hírfolyam – ${esc(VIEW_LABELS[effectiveView] || 'Hírfolyam')}</span>
+          <span class="vp-newsfeed-ceiling-badge" id="vp-newsfeed-ceiling-badge">${topCount} / ${retainedCount} hír</span>
           <span class="vp-sec-badge">${esc(headBadgeText)}</span>
         </div>
         <div class="vp-newsfeed-tabs" role="tablist" aria-label="Hírfolyam hatókör">

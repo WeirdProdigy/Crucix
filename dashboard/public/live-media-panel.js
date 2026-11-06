@@ -69,6 +69,7 @@
   const PRIVACY_NOTICE_TEXT = 'A közvetítés indítása kapcsolatot létesít a videószolgáltatóval.';
   const CAMERA_PRIVACY_NOTICE_TEXT = 'A kép betöltése kapcsolatot létesít az Időképpel; a Crucix nem tárolja.';
   const CAMERA_REFRESH_INTERVAL_MS = 60000;
+  const STILL_IMAGE_REFRESH_INTERVAL_MS = 600000;
   const CAMERA_ERROR_BACKOFF_MS = 300000;
   const MAX_GROUP_CAMERAS = 4;
   const CAMERA_LIMIT_NOTICE_TEXT = 'Legfeljebb 4 kamera tölthető be egyszerre; a többit kártyánként nyisd meg.';
@@ -152,6 +153,118 @@
   let cameraTimers = new Map();
   let cameraNotice = '';
   let activeEmbedIds = new Set();
+  let gridImageTimers = new Map();
+  let lastImageRefreshedAt = new Map();
+  let gridImageErrors = new Set();
+
+  function formatTimeString(ts) {
+    if (!ts) return '--:--:--';
+    const d = new Date(ts);
+    const pad = n => String(n).padStart(2, '0');
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+
+  function buildGridImageUrl(baseUrl) {
+    if (!baseUrl) return '';
+    const sep = baseUrl.includes('?') ? '&' : '?';
+    return `${baseUrl}${sep}t=${Date.now()}`;
+  }
+
+  function updateGridTimestampDom(streamId) {
+    if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
+    const badge = document.getElementById(`lm-grid-ts-${streamId}`);
+    if (badge) {
+      const ts = lastImageRefreshedAt.get(streamId);
+      badge.textContent = `Frissítve: ${formatTimeString(ts)}`;
+    }
+  }
+
+  function refreshGridDomImage(streamId, imageUrl) {
+    if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
+    const img = document.getElementById(`lm-grid-img-${streamId}`);
+    if (img && imageUrl) {
+      img.src = buildGridImageUrl(imageUrl);
+      lastImageRefreshedAt.set(streamId, Date.now());
+      updateGridTimestampDom(streamId);
+    }
+  }
+
+  function startGridImageTimer(stream) {
+    if (!stream || !stream.id) return;
+    clearGridImageTimer(stream.id);
+    if (typeof window === 'undefined' || typeof window.setInterval !== 'function') return;
+    const intervalMs = stream.sourceType === 'still-image'
+      ? STILL_IMAGE_REFRESH_INTERVAL_MS
+      : CAMERA_REFRESH_INTERVAL_MS;
+
+    const timer = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
+      if (gridImageErrors.has(stream.id)) {
+        clearGridImageTimer(stream.id);
+        return;
+      }
+      refreshGridDomImage(stream.id, stream.imageUrl);
+    }, intervalMs);
+    gridImageTimers.set(stream.id, timer);
+  }
+
+  function clearGridImageTimer(streamId) {
+    if (gridImageTimers.has(streamId)) {
+      const timer = gridImageTimers.get(streamId);
+      if (typeof window !== 'undefined' && typeof window.clearInterval === 'function') {
+        window.clearInterval(timer);
+      } else {
+        clearInterval(timer);
+      }
+      gridImageTimers.delete(streamId);
+    }
+  }
+
+  function clearAllGridImageTimers() {
+    for (const [, timer] of gridImageTimers.entries()) {
+      if (typeof window !== 'undefined' && typeof window.clearInterval === 'function') {
+        window.clearInterval(timer);
+      } else {
+        clearInterval(timer);
+      }
+    }
+    gridImageTimers.clear();
+  }
+
+  function cleanupGridSlot(streamId) {
+    clearGridImageTimer(streamId);
+    gridImageErrors.delete(streamId);
+  }
+
+  function onGridImgLoad(streamId) {
+    if (typeof streamId !== 'string') return;
+    gridImageErrors.delete(streamId);
+    if (!lastImageRefreshedAt.has(streamId)) {
+      lastImageRefreshedAt.set(streamId, Date.now());
+    }
+    updateGridTimestampDom(streamId);
+  }
+
+  function onGridImgError(streamId) {
+    if (typeof streamId !== 'string') return;
+    clearGridImageTimer(streamId);
+    gridImageErrors.add(streamId);
+    notifyChange();
+  }
+
+  function retryGridImage(streamId) {
+    if (typeof streamId !== 'string') return;
+    gridImageErrors.delete(streamId);
+    const rawStreams = resolveRawStreams();
+    const stream = rawStreams.find(s => s.id === streamId);
+    if (stream && stream.imageUrl) {
+      lastImageRefreshedAt.set(streamId, Date.now());
+      startGridImageTimer(stream);
+    }
+    notifyChange();
+  }
 
   function clearCameraTimer(streamId) {
     if (cameraTimers.has(streamId)) {
@@ -400,6 +513,10 @@
       viewMode = mode;
       const max = getMaxPlayers();
       if (activeStreamIds.length > max) {
+        const evicted = activeStreamIds.slice(0, activeStreamIds.length - max);
+        for (const eid of evicted) {
+          cleanupGridSlot(eid);
+        }
         activeStreamIds = activeStreamIds.slice(activeStreamIds.length - max);
       }
       notifyChange();
@@ -498,7 +615,48 @@
     updateStageAudioControlsDom(targetId);
   }
 
+  function canStreamPlayInGrid(stream) {
+    if (!stream) return false;
+    if (stream.sourceType === 'youtube') {
+      return isEmbeddableStream(stream);
+    }
+    const isPrivate = isPrivateOrLocalHost();
+    if (!isPrivate) return false;
+    if (stream.sourceType === 'embed' || Boolean(stream.embedUrl)) {
+      return true;
+    }
+    if (stream.sourceType === 'still-image' || Boolean(stream.imageUrl)) {
+      return true;
+    }
+    return false;
+  }
+
+  function loadCamerasIntoGrid() {
+    if (!isPrivateOrLocalHost()) return;
+    if (viewMode !== 'grid') {
+      setViewMode('grid');
+    }
+    for (const camId of DEFAULT_GROUP_CAMERA_IDS) {
+      if (!activeStreamIds.includes(camId)) {
+        playStream(camId);
+      }
+    }
+    for (const camId of DEFAULT_GROUP_CAMERA_IDS) {
+      if (!activeStreamIds.includes(camId)) {
+        playStream(camId);
+      }
+    }
+    activeStreamIds = DEFAULT_GROUP_CAMERA_IDS.filter(id => activeStreamIds.includes(id));
+    notifyChange();
+    return;
+  }
+
   function playStream(streamId) {
+    if (typeof streamId !== 'string' || !streamId.trim()) return;
+    const rawStreams = resolveRawStreams();
+    const stream = rawStreams.find(s => s.id === streamId);
+    if (!stream || !canStreamPlayInGrid(stream)) return;
+    gridImageErrors.delete(streamId);
     if (typeof streamId !== 'string' || !streamId.trim()) return;
     errorStreams.delete(streamId);
     ensureAudioState(streamId);
@@ -506,7 +664,6 @@
     const max = getMaxPlayers();
     const existingIdx = activeStreamIds.indexOf(streamId);
     if (existingIdx !== -1) {
-      // Already active: keep it active (and make it primary) without recreating
       if (max === 1) {
         activeStreamIds = [streamId];
       }
@@ -514,15 +671,30 @@
       return;
     }
 
+    let evicted = null;
     if (max === 1) {
+      if (activeStreamIds.length > 0) {
+        evicted = activeStreamIds[0];
+      }
       activeStreamIds = [streamId];
     } else {
       if (activeStreamIds.length >= max) {
+        evicted = activeStreamIds[0];
         activeStreamIds = [...activeStreamIds.slice(1), streamId];
       } else {
         activeStreamIds = [...activeStreamIds, streamId];
       }
     }
+
+    if (evicted && evicted !== streamId) {
+      cleanupGridSlot(evicted);
+    }
+
+    if (stream.imageUrl) {
+      lastImageRefreshedAt.set(streamId, Date.now());
+      startGridImageTimer(stream);
+    }
+
     notifyChange();
   }
 
@@ -530,12 +702,16 @@
     if (typeof streamId === 'string' && streamId.trim()) {
       const next = activeStreamIds.filter(id => id !== streamId);
       if (next.length !== activeStreamIds.length) {
+        cleanupGridSlot(streamId);
         activeStreamIds = next;
         notifyChange();
       }
       return;
     }
     if (activeStreamIds.length > 0) {
+      for (const sid of activeStreamIds) {
+        cleanupGridSlot(sid);
+      }
       activeStreamIds = [];
       notifyChange();
     }
@@ -546,6 +722,7 @@
       activeStreamIds = [];
     }
     clearAllCameraTimers();
+    clearAllGridImageTimers();
     activeCameraIds.clear();
     for (const embedId of activeEmbedIds) {
       const frame = document.getElementById(`lm-embed-frame-${embedId}`);
@@ -749,6 +926,9 @@
 
   function getEmbedStatusInfo(stream) {
     if (!stream) return { code: 'unverified', label: 'Nem ellenőrzött' };
+    if (stream.sourceType === 'still-image') {
+      return { code: 'embeddable', label: 'Beágyazható állókép' };
+    }
     if (stream.sourceType === 'embed' || stream.embedKind === 'windy-widget') {
       return { code: 'embeddable', label: 'Beágyazható widget' };
     }
@@ -812,12 +992,114 @@
       `;
     }
 
-    const embedUrl = buildSafeEmbedUrl(stream.videoId);
-    const watchUrl = buildSafeWatchUrl(stream.videoId);
-    const audio = ensureAudioState(stream.id);
     const regionLabel = REGION_LABELS[stream.region] || stream.region;
     const typeLabel = TYPE_LABELS[stream.type] || stream.type;
     const pageStatusLabel = getPageStatusLabel(stream.status);
+
+    // 1. Embed Widget (pl. Windy csapadéktérkép)
+    if (stream.sourceType === 'embed' || Boolean(stream.embedUrl)) {
+      return `
+        <div class="lm-stage-slot lm-stage-slot-active lm-stage-slot-embed" id="lm-stage-slot-${esc(stream.id)}" data-active-stream-id="${esc(stream.id)}" data-video-id="">
+          <div class="lm-stage-slot-head">
+            <div class="lm-stage-slot-meta">
+              <span class="lm-live-dot" aria-hidden="true"></span>
+              <span class="lm-card-type-badge lm-type-${esc(stream.type)}">${esc(typeLabel)}</span>
+              <span class="lm-card-region-badge">${esc(regionLabel)}</span>
+              <span class="lm-badge lm-badge-${esc(stream.status)}">${esc(pageStatusLabel)}</span>
+              <strong class="lm-stage-slot-title">${esc(stream.name)}</strong>
+              <span class="lm-stage-slot-provider">(${esc(stream.provider)})</span>
+            </div>
+            <div class="lm-stage-slot-top-actions">
+              <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-link-external">Forrás (${esc(stream.provider || 'Windy')}) ↗</a>
+            </div>
+          </div>
+          <div class="lm-player-box">
+            <div class="lm-iframe-aspect">
+              <iframe
+                id="lm-stage-embed-${esc(stream.id)}"
+                class="lm-grid-embed-frame"
+                src="${esc(stream.embedUrl)}"
+                title="${esc(stream.name)}"
+                loading="lazy"
+                referrerpolicy="no-referrer"
+                sandbox="allow-scripts allow-same-origin allow-popups">
+              </iframe>
+            </div>
+            <div class="lm-player-bar lm-embed-bar">
+              <span class="lm-embed-disclaimer">${esc(WINDY_DISCLAIMER_TEXT)}</span>
+              <div class="lm-player-right-controls">
+                <button type="button" class="lm-btn lm-btn-stop" onclick="window.CrucixLiveMedia?.stopStream('${esc(stream.id)}')">■ Leállítás</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // 2. Webkamera vagy Állókép (Időkép 60 mp vagy Schumann 10 perc)
+    if (stream.sourceType === 'still-image' || Boolean(stream.imageUrl)) {
+      const isError = gridImageErrors.has(stream.id);
+      const intervalLabel = stream.sourceType === 'still-image' ? 'Állókép · 10 perc' : 'Állókép · 60 mp';
+      const refTs = lastImageRefreshedAt.get(stream.id);
+      const refreshedText = `Frissítve: ${formatTimeString(refTs)}`;
+
+      return `
+        <div class="lm-stage-slot lm-stage-slot-active lm-stage-slot-camera" id="lm-stage-slot-${esc(stream.id)}" data-active-stream-id="${esc(stream.id)}" data-video-id="">
+          <div class="lm-stage-slot-head">
+            <div class="lm-stage-slot-meta">
+              <span class="lm-live-dot" aria-hidden="true"></span>
+              <span class="lm-card-type-badge lm-type-${esc(stream.type)}">${esc(typeLabel)}</span>
+              <span class="lm-card-region-badge">${esc(regionLabel)}</span>
+              <span class="lm-badge lm-badge-${esc(stream.status)}">${esc(pageStatusLabel)}</span>
+              <strong class="lm-stage-slot-title">${esc(stream.name)}</strong>
+              <span class="lm-stage-slot-provider">(${esc(stream.provider)})</span>
+            </div>
+            <div class="lm-stage-slot-top-actions">
+              <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-link-external">Forrás ↗</a>
+            </div>
+          </div>
+          <div class="lm-player-box">
+            ${isError ? `
+              <div class="lm-camera-fallback-box lm-grid-error-box" role="alert">
+                <div class="lm-camera-fallback-title">⚠ Nem tölthető be – megnyitás a forráson</div>
+                <div class="lm-camera-fallback-desc">A kép közvetlen betöltése nem sikerült vagy a kapcsolat időtúllépéssel megszakadt.</div>
+                <div class="lm-camera-fallback-actions">
+                  <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">Megnyitás a forráson ↗</a>
+                  <button type="button" class="lm-btn lm-btn-retry" onclick="window.CrucixLiveMedia?.retryGridImage('${esc(stream.id)}')">Újrapróbálás</button>
+                  <button type="button" class="lm-btn lm-btn-stop" onclick="window.CrucixLiveMedia?.stopStream('${esc(stream.id)}')">Bezárás</button>
+                </div>
+              </div>
+            ` : `
+              <div class="lm-grid-img-wrap">
+                <img
+                  id="lm-grid-img-${esc(stream.id)}"
+                  class="lm-grid-camera-img"
+                  src="${esc(buildGridImageUrl(stream.imageUrl))}"
+                  alt="${esc(stream.name)}"
+                  loading="eager"
+                  referrerpolicy="no-referrer"
+                  onload="window.CrucixLiveMedia?.onGridImgLoad('${esc(stream.id)}')"
+                  onerror="window.CrucixLiveMedia?.onGridImgError('${esc(stream.id)}')" />
+              </div>
+              <div class="lm-player-bar lm-camera-bar">
+                <div class="lm-camera-bar-left">
+                  <span class="lm-camera-interval-badge">${esc(intervalLabel)}</span>
+                  <span class="lm-camera-refreshed" id="lm-grid-ts-${esc(stream.id)}">${esc(refreshedText)}</span>
+                </div>
+                <div class="lm-player-right-controls">
+                  <button type="button" class="lm-btn lm-btn-stop" onclick="window.CrucixLiveMedia?.stopStream('${esc(stream.id)}')">■ Bezárás</button>
+                </div>
+              </div>
+            `}
+          </div>
+        </div>
+      `;
+    }
+
+    // 3. YouTube stream (híradók)
+    const embedUrl = buildSafeEmbedUrl(stream.videoId);
+    const watchUrl = buildSafeWatchUrl(stream.videoId);
+    const audio = ensureAudioState(stream.id);
 
     return `
       <div class="lm-stage-slot lm-stage-slot-active" id="lm-stage-slot-${esc(stream.id)}" data-active-stream-id="${esc(stream.id)}" data-video-id="${esc(stream.videoId)}">
@@ -900,7 +1182,7 @@
     const pageStatusLabel = getPageStatusLabel(stream.status);
     const embedInfo = getEmbedStatusInfo(stream);
 
-    if (stream.sourceType === 'link-only' || stream.sourceType === 'embed' || Boolean(stream.embedUrl) || embedInfo.code === 'external-only') {
+    if (stream.sourceType === 'link-only' || stream.sourceType === 'embed' || stream.sourceType === 'still-image' || Boolean(stream.embedUrl) || embedInfo.code === 'external-only') {
       const isPrivateHost = isPrivateOrLocalHost();
       const hasImage = Boolean(stream.imageUrl) && isPrivateHost;
       const isCameraActive = activeCameraIds.has(stream.id);
@@ -937,6 +1219,9 @@
                 <span class="lm-embed-privacy-text">${esc(WINDY_PRIVACY_NOTICE_TEXT)}</span>
               </div>
               <div class="lm-external-actions">
+                <button type="button" class="lm-btn lm-btn-load-cam lm-btn-grid-embed" onclick="window.CrucixLiveMedia?.playStream('${esc(stream.id)}')">
+                  🗺 Windy a rácsba
+                </button>
                 <button type="button" class="lm-btn lm-btn-load-embed" onclick="window.CrucixLiveMedia?.loadEmbed('${esc(stream.id)}')">
                   🗺 Windy csapadéktérkép betöltése
                 </button>
@@ -994,12 +1279,15 @@
         } else {
           externalBodyHtml = `
             <div class="lm-camera-privacy-box">
-              <span class="lm-camera-privacy-text">${esc(CAMERA_PRIVACY_NOTICE_TEXT)}</span>
+              <span class="lm-camera-privacy-text">${esc(stream.sourceType === 'still-image' ? 'A kép betöltése kapcsolatot létesít a forrással (' + (stream.provider || 'sos70.ru') + '); a Crucix nem tárolja.' : CAMERA_PRIVACY_NOTICE_TEXT)}</span>
             </div>
             <div class="lm-external-actions">
-              <button type="button" class="lm-btn lm-btn-load-cam" onclick="window.CrucixLiveMedia?.loadCamera('${esc(stream.id)}')">
-                📷 Kamera betöltése
-              </button>
+              ${stream.sourceType === 'still-image' ? `
+                <button type="button" class="lm-btn lm-btn-load-cam lm-btn-load-still" onclick="window.CrucixLiveMedia?.playStream('${esc(stream.id)}')">⚡ Schumann a rácsba</button>
+              ` : `
+                <button type="button" class="lm-btn lm-btn-load-cam lm-btn-load-grid" onclick="window.CrucixLiveMedia?.playStream('${esc(stream.id)}')">⊞ Rácsba</button>
+                <button type="button" class="lm-btn lm-btn-load-cam" onclick="window.CrucixLiveMedia?.loadCamera('${esc(stream.id)}')">📷 Kamera betöltése</button>
+              `}
               <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">
                 Megnyitás a szolgáltató oldalán ↗
               </a>
@@ -1279,6 +1567,9 @@
           <input type="checkbox" id="lm-bg-playback-toggle" class="lm-bg-checkbox"${allowBackgroundPlayback ? ' checked' : ''} onchange="window.CrucixLiveMedia?.setAllowBackgroundPlayback(this.checked)" />
           <span class="lm-bg-label">Háttérben is fusson</span>
         </label>
+        <button type="button" class="lm-btn lm-btn-toolbar lm-btn-grid-load" id="lm-btn-cameras-to-grid" onclick="window.CrucixLiveMedia?.loadCamerasIntoGrid()" title="A 4 debreceni webkamera betöltése a 2×2 rácsba">
+          📷 Kamerák a rácsba
+        </button>
         <button type="button" class="lm-btn lm-btn-exit-live" onclick="window.CrucixViewsPanel?.setContentTab('news')" title="Kilépés az Élő nézetből (minden lejátszó leáll)">
           ← Térkép / Hírfolyam
         </button>
@@ -1383,7 +1674,9 @@
         const sid = child.getAttribute && child.getAttribute('data-active-stream-id');
         const vid = child.getAttribute && child.getAttribute('data-video-id');
         const targetStream = sid ? byId.get(sid) : null;
-        if (sid && activeIds.includes(sid) && targetStream && targetStream.videoId === vid) {
+        const matchVideo = targetStream && (targetStream.videoId ? targetStream.videoId === vid : true);
+        const isImgError = gridImageErrors.has(sid);
+        if (sid && activeIds.includes(sid) && targetStream && matchVideo && !isImgError) {
           existingActiveSlots.set(sid, child);
         } else {
           // Slot is either an empty placeholder or a stopped stream -> remove it
@@ -1447,8 +1740,17 @@
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
         clearAllCameraTimers();
+        clearAllGridImageTimers();
         if (!allowBackgroundPlayback) {
-          stopAllStreams();
+          const rawStreams = resolveRawStreams();
+          const byId = new Map(rawStreams.map(s => [s.id, s]));
+          const youtubeStreamIds = activeStreamIds.filter(sid => {
+            const s = byId.get(sid);
+            return s && s.sourceType === 'youtube';
+          });
+          for (const yid of youtubeStreamIds) {
+            stopStream(yid);
+          }
         }
       } else {
         if (activeCameraIds.size > 0) {
@@ -1459,6 +1761,17 @@
             if (stream && stream.imageUrl && !cameraErrorStates.has(cid)) {
               refreshCameraDomImage(cid, stream.imageUrl);
               startCameraTimer(cid, stream.imageUrl);
+            }
+          }
+        }
+        if (activeStreamIds.length > 0) {
+          const rawStreams = resolveRawStreams();
+          const byId = new Map(rawStreams.map(s => [s.id, s]));
+          for (const sid of activeStreamIds) {
+            const stream = byId.get(sid);
+            if (stream && stream.imageUrl && !gridImageErrors.has(sid)) {
+              refreshGridDomImage(sid, stream.imageUrl);
+              startGridImageTimer(stream);
             }
           }
         }
@@ -1529,6 +1842,14 @@
     MAX_GROUP_CAMERAS,
     CAMERA_LIMIT_NOTICE_TEXT,
     DEFAULT_GROUP_CAMERA_IDS,
+    loadCamerasIntoGrid,
+    canStreamPlayInGrid,
+    onGridImgLoad,
+    onGridImgError,
+    retryGridImage,
+    STILL_IMAGE_REFRESH_INTERVAL_MS,
+    getLastImageRefreshedAt: (streamId) => lastImageRefreshedAt.get(streamId),
+    isGridImageError: (streamId) => gridImageErrors.has(streamId),
     getActiveCameraCount: () => activeCameraIds.size,
     getActiveCameraIds: () => Array.from(activeCameraIds),
     getCameraNotice: () => cameraNotice,
