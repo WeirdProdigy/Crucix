@@ -6,7 +6,7 @@
  * - Mutatók: Kp (NOAA + GFZ), napszél sebesség és Bz mágneses tér, röntgenosztály (X-ray flare class),
  *   3 napos előrejelzés, aktív riasztások.
  * - Fokozatok: G1-G5, R1-R5, S1-S5 színkóddal és magyarázattal, "Veszélyes" jelöléssel G3+, R3+, S3+ esetén.
- * - Schumann-rezonancia: Tomsk link-kártya közvetlen forráslinkkel, geofizikai frekvenciákkal,
+ * - Schumann-rezonancia: Cumiana (IK1QFK / vlf.it) link-kártya közvetlen forráslinkkel, geofizikai frekvenciákkal,
  *   egészségügyi állítás nélkül.
  * - Kompakt, belső görgetés (crucix-scroll-region minta), utolsó frissítés és forrás-egészség.
  */
@@ -170,7 +170,7 @@
           <div class="sw-schumann-card">
             <div class="sw-schumann-title">
               <span>${esc(schumann.title || 'Schumann-rezonancia')}</span>
-              <span class="sw-schumann-station">Tomsk (TSU)</span>
+              <span class="sw-schumann-station">${esc(schumann.station || 'Cumiana (IK1QFK / vlf.it)')}</span>
             </div>
             <div class="sw-schumann-freqs">
               Fő frekvenciák: <strong>7.83 Hz</strong> (alap) · 14.3 Hz · 20.8 Hz · 27.3 Hz · 33.8 Hz
@@ -182,17 +182,17 @@
               &#9888; <strong>Fontos:</strong> ${esc(schumann.disclaimer || 'Egészségügyi hatása tudományosan nem igazolt (orvosi állítás nélkül).')}
             </div>
             <div class="sw-schumann-links">
-              <a href="${esc(schumann.sourceUrl || 'https://sosrff.tsu.ru/')}" target="_blank" rel="noopener noreferrer" class="sw-link-btn">
-                Tomszki spektrogram megnyitása ↗
+              <a href="${esc(schumann.sourceUrl || 'http://www.vlf.it/cumiana/livedata.html')}" target="_blank" rel="noopener noreferrer" class="sw-link-btn">
+                Cumiana spektrogram megnyitása (vlf.it) ↗
               </a>
-              <a href="${esc(schumann.mirrorUrl || 'https://sos70.ru/')}" target="_blank" rel="noopener noreferrer" class="sw-link-btn alt">
-                Hivatalos tüköroldal (sos70.ru) ↗
+              <a href="${esc(schumann.tomskUrl || schumann.mirrorUrl || 'http://sos70.ru/')}" target="_blank" rel="noopener noreferrer" class="sw-link-btn alt">
+                Tomszki archívum (2025.09.01 óta befagyott) ↗
               </a>
             </div>
           </div>
           
           <div class="sw-footer-attribution">
-            Források: NOAA Space Weather Prediction Center · GFZ Potsdam (CC BY 4.0) · TSU Space Observing System
+            Források: NOAA Space Weather Prediction Center · GFZ Potsdam (CC BY 4.0) · IK1QFK / vlf.it · TSU Space Observing System
           </div>
         </div>
       </div>

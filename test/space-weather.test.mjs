@@ -226,7 +226,8 @@ test('8. Schumann geophysics link-card: strict absence of pseudoscientific healt
   assert.ok(schumann);
   assert.equal(schumann.fundamentalFrequencyHz, 7.83);
   assert.deepEqual(schumann.harmonicsHz, [14.3, 20.8, 27.3, 33.8]);
-  assert.match(schumann.sourceUrl, /sosrff\.tsu\.ru/);
+  assert.match(schumann.sourceUrl, /vlf\.it/);
+  assert.match(schumann.tomskUrl, /sosrff\.tsu\.ru/);
   assert.match(schumann.mirrorUrl, /sos70\.ru/);
 
   // Verification of geophysics disclaimer

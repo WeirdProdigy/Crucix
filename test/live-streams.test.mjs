@@ -382,7 +382,7 @@ test('6. HTTP Security: Content-Security-Policy header permits youtube-nocookie 
   const csp = res.headers.get('content-security-policy');
   assert.ok(csp, 'Content-Security-Policy header must be present');
   assert.ok(csp.includes("frame-src 'self' https://www.youtube-nocookie.com https://embed.windy.com;"), 'CSP must allow youtube-nocookie and embed.windy.com frame-src');
-  assert.ok(csp.includes("img-src 'self' data: https://cam.idokep.hu https://odp.met.hu;"), 'CSP must allow cam.idokep.hu and odp.met.hu img-src');
+  assert.ok(csp.includes("img-src 'self' data: https://cam.idokep.hu https://odp.met.hu http://www.vlf.it;"), 'CSP must allow cam.idokep.hu, odp.met.hu, and vlf.it img-src');
   assert.ok(!csp.includes('*'), 'CSP must strictly disallow wildcard * origins');
 
   // Exact frame-src match: frame-src contains exactly the allowed three sources
@@ -498,7 +498,7 @@ test('8. Dashboard iframe audit: proof that frame-src permits all dashboard ifra
   // HTTP Security CSP header explicitly allows 'self' and https://www.youtube-nocookie.com
   const httpSecCode = readFileSync(new URL('lib/http-security.mjs', root), 'utf8');
   assert.ok(
-    httpSecCode.includes("'Content-Security-Policy': \"frame-src 'self' https://www.youtube-nocookie.com https://embed.windy.com; img-src 'self' data: https://cam.idokep.hu https://odp.met.hu;\""),
+    httpSecCode.includes("'Content-Security-Policy': \"frame-src 'self' https://www.youtube-nocookie.com https://embed.windy.com; img-src 'self' data: https://cam.idokep.hu https://odp.met.hu http://www.vlf.it;\""),
     'CSP frame-src and img-src rules explicitly whitelisted'
   );
 });
