@@ -234,6 +234,14 @@ test('8. Schumann geophysics link-card: strict absence of pseudoscientific healt
   assert.match(schumann.disclaimer, /orvosi állítás nélkül|tudományosan nem igazolt/i);
   // Ensure no pseudoscientific health claims exist in metadata
   assert.doesNotMatch(schumann.descriptionHu, /gyógyító|csakrák|rezgésszint emelkedés|DNS aktiválás/i);
+  assert.match(
+    schumann.descriptionHu,
+    /sosrff\.tsu\.ru: 2025\. szept\. 1\. óta nem frissül; sos70\.ru: a helyi hálózatról nem érhető el, állapota ismeretlen\./
+  );
+  assert.equal(
+    schumann.tomskStatusNote,
+    'sosrff.tsu.ru: 2025. szept. 1. óta nem frissül; sos70.ru: a helyi hálózatról nem érhető el, állapota ismeretlen.'
+  );
 });
 
 test('9. Configurable Thresholds: Dashboard (G3/R3/S2) vs Notification (G4/R4/S3)', () => {

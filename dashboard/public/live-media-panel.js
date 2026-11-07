@@ -195,12 +195,15 @@
   function updateGridFreshnessDom(streamId) {
     if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
     const badge = document.getElementById(`lm-grid-freshness-${streamId}`);
-    if (badge) {
-      const lm = streamLastModified.get(streamId);
-      const freshness = computeFreshnessBadge(lm);
-      badge.textContent = freshness.label;
-      badge.className = `lm-freshness-badge ${freshness.className}`;
-      if (lm) badge.setAttribute('title', `Forrás utolsó módosítása (Last-Modified): ${lm}`);
+    const headBadge = document.getElementById(`lm-grid-freshness-head-${streamId}`);
+    const lm = streamLastModified.get(streamId);
+    const freshness = computeFreshnessBadge(lm);
+    for (const b of [badge, headBadge]) {
+      if (b) {
+        b.textContent = freshness.label;
+        b.className = `lm-freshness-badge ${freshness.className}`;
+        if (lm) b.setAttribute('title', `Forrás utolsó módosítása (Last-Modified): ${lm}`);
+      }
     }
   }
 
@@ -1108,7 +1111,12 @@
               <span class="lm-live-dot" aria-hidden="true"></span>
               <span class="lm-card-type-badge lm-type-${esc(stream.type)}">${esc(typeLabel)}</span>
               <span class="lm-card-region-badge">${esc(regionLabel)}</span>
-              <span class="lm-badge lm-badge-${esc(stream.status)}">${esc(pageStatusLabel)}</span>
+              ${isStillImage ? `
+                <span class="lm-badge lm-badge-still">Állókép</span>
+                ${freshness ? `<span id="lm-grid-freshness-head-${esc(stream.id)}" class="lm-freshness-badge ${esc(freshness.className)}" title="Forrás utolsó módosítása (Last-Modified): ${esc(lmHeader || 'n/a')}">${esc(freshness.label)}</span>` : ''}
+              ` : `
+                <span class="lm-badge lm-badge-${esc(stream.status)}">${esc(pageStatusLabel)}</span>
+              `}
               <strong class="lm-stage-slot-title">${esc(stream.name)}</strong>
               <span class="lm-stage-slot-provider">(${esc(stream.provider)})</span>
             </div>
@@ -1392,17 +1400,24 @@
             </div>
             <div class="lm-card-provider">${esc(stream.provider)}</div>
             <div class="lm-dual-status-row">
-              <span class="lm-status-pill lm-page-status lm-badge-${esc(stream.status)}" title="Forrásoldal állapota">
-                Forrásoldalon: ${esc(pageStatusLabel)}
-              </span>
-              <span class="lm-status-pill lm-embed-status lm-embed-external-only" title="Beágyazhatóság">
-                Beágyazhatóság: ${esc(embedInfo.label)}
-              </span>
               ${stream.sourceType === 'still-image' ? `
-                <span class="lm-status-pill lm-freshness-badge ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || stream.lastModified || stream.checkedAt).className)}" title="Last-Modified fejléc alapján">
-                  Frissesség: ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || stream.lastModified || stream.checkedAt).label)}
+                <span class="lm-status-pill lm-page-status lm-badge-still" title="Típus">
+                  Állókép
                 </span>
-              ` : ''}
+                <span class="lm-status-pill lm-freshness-badge ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || stream.lastModified || stream.checkedAt).className)}" title="Last-Modified fejléc alapján">
+                  ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || stream.lastModified || stream.checkedAt).label)}
+                </span>
+                <span class="lm-status-pill lm-embed-status lm-embed-external-only" title="Beágyazhatóság">
+                  Beágyazhatóság: ${esc(embedInfo.label)}
+                </span>
+              ` : `
+                <span class="lm-status-pill lm-page-status lm-badge-${esc(stream.status)}" title="Forrásoldal állapota">
+                  Forrásoldalon: ${esc(pageStatusLabel)}
+                </span>
+                <span class="lm-status-pill lm-embed-status lm-embed-external-only" title="Beágyazhatóság">
+                  Beágyazhatóság: ${esc(embedInfo.label)}
+                </span>
+              `}
             </div>
           </div>
           <div class="lm-card-body lm-external-body">

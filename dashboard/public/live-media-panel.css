@@ -612,7 +612,8 @@
   border-color: rgba(100, 240, 200, 0.32);
 }
 
-.lm-badge-page-ok {
+.lm-badge-page-ok,
+.lm-badge-still {
   background: rgba(68, 204, 255, 0.14);
   color: #44ccff;
   border-color: rgba(68, 204, 255, 0.3);

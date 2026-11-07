@@ -1138,6 +1138,10 @@ test('13. Unified tile model in Live Media grid: 4-slot limit, FIFO replacement,
   assert.equal(schumann.embedStatus, 'embeddable');
   assert.ok(schumann.imageUrl.includes('vlf.it/cumiana/last-geomar.jpg'), 'Schumann imageUrl must point to vlf.it/cumiana/last-geomar.jpg');
   assert.ok(schumann.attribution.includes('IK1QFK / vlf.it'), 'Schumann attribution references IK1QFK / vlf.it');
+  assert.match(
+    schumann.notes,
+    /sosrff\.tsu\.ru: 2025\. szept\. 1\. óta nem frissül; sos70\.ru: a helyi hálózatról nem érhető el, állapota ismeretlen\./
+  );
 
   // Setup DOM mock
   let visibilityListener = null;
@@ -1288,6 +1292,9 @@ test('13. Unified tile model in Live Media grid: 4-slot limit, FIFO replacement,
   const schumannStageHtml = lm.panelHtml({ liveStreams: streams });
   assert.ok(schumannStageHtml.includes('id="lm-stage-slot-schumann-resonance-cumiana"'));
   assert.ok(schumannStageHtml.includes('Állókép · 30 perc'), 'Schumann has 30 min badge');
+  assert.ok(schumannStageHtml.includes('Állókép</span>'), 'Still-image has Állókép badge in slot head');
+  assert.ok(!schumannStageHtml.includes('<span class="lm-badge lm-badge-verified-live">Élő adás</span>'), 'Still-image does NOT render static Élő adás badge');
+  assert.ok(schumannStageHtml.includes('id="lm-grid-freshness-head-schumann-resonance-cumiana"'), 'Head freshness badge present');
   assert.ok(schumannStageHtml.includes('vlf.it/cumiana/last-geomar.jpg'), 'Schumann image src rendered');
   assert.ok(schumannStageHtml.includes('referrerpolicy="no-referrer"'), 'Referrer policy no-referrer');
   assert.ok(schumannStageHtml.includes('id="lm-grid-freshness-schumann-resonance-cumiana"'), 'Freshness badge element present');

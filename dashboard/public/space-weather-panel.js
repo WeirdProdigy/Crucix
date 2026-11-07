@@ -186,7 +186,7 @@
                 Cumiana spektrogram megnyitása (vlf.it) ↗
               </a>
               <a href="${esc(schumann.tomskUrl || schumann.mirrorUrl || 'http://sos70.ru/')}" target="_blank" rel="noopener noreferrer" class="sw-link-btn alt">
-                Tomszki archívum (2025.09.01 óta befagyott) ↗
+                Tomszki archívum (sosrff.tsu.ru: 2025. szept. 1. óta nem frissül; sos70.ru: a helyi hálózatról nem érhető el, állapota ismeretlen.) ↗
               </a>
             </div>
           </div>
