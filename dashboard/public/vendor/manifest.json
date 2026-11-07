@@ -189,6 +189,13 @@
       "licence": "SIL OFL 1.1; see font licences",
       "bytes": 1740,
       "sha256": "42584139a4957e2f515c6721b2074aa4afb99b95da7383983b643b3f1e4b2f7c"
+    },
+    {
+      "path": "/vendor/hls.min.js",
+      "source": "https://cdn.jsdelivr.net/npm/hls.js@1.7.4/dist/hls.min.js",
+      "licence": "Apache-2.0",
+      "bytes": 623915,
+      "sha256": "cfc70cc9e9fc63d071919e087670abc760c8fd1bc889b88588026e4d22193bbe"
     }
   ]
 }

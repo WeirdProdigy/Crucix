@@ -97,6 +97,15 @@
   });
 
   const BACKGROUND_PLAYBACK_PREF_KEY = 'crucix.liveMedia.background.v1';
+  const STALE_MAX_AGE_MS = 24 * 3600 * 1000; // 24 óra
+  const KNOWN_DEAD_CAMERAS = Object.freeze([
+    'kekesteto-panorama-webcam',
+    'budapest-duna-panorama-webcam',
+    'hortobagy-puszta-webcam'
+  ]);
+  const IPCAMLIVE_PRIVACY_NOTICE_TEXT = 'A lejátszó betöltése kapcsolatot létesít az IPCamLive szolgáltatóval; a Crucix nem tárolja.';
+  const UNIDEB_PRIVACY_NOTICE_TEXT = 'A közvetítés indítása kapcsolatot létesít a Debreceni Egyetem streaming szerverével (unideb.hu); a Crucix nem tárolja.';
+
 
   function readBackgroundPlaybackPreference() {
     try {
@@ -158,6 +167,7 @@
   let gridImageErrors = new Set();
   let streamLastModified = new Map();
   let streamMetaErrors = new Map();
+  let hlsInstances = new Map();
 
   function computeFreshnessBadge(lastModified, now = Date.now()) {
     if (!lastModified) return { label: 'ismeretlen', status: 'unknown', className: 'lm-freshness-unknown' };
@@ -242,6 +252,36 @@
     }
   }
 
+  
+  function isCameraStale(stream) {
+    if (!stream) return false;
+    if (KNOWN_DEAD_CAMERAS.includes(stream.id)) return true;
+    if (stream.status === 'no-live-feed' || stream.status === 'archive') return true;
+    const lm = streamLastModified.get(stream.id);
+    if (lm) {
+      const ts = typeof lm === 'number' ? lm : new Date(lm).getTime();
+      if (!isNaN(ts) && (Date.now() - ts) > STALE_MAX_AGE_MS) return true;
+    }
+    return false;
+  }
+
+  function getStaleReason(stream) {
+    if (!stream) return 'Ismeretlen ok';
+    if (KNOWN_DEAD_CAMERAS.includes(stream.id)) return 'Nem működő / 404 forrás';
+    if (cameraErrorStates.has(stream.id)) return 'Képbetöltési hiba';
+    if (streamMetaErrors.has(stream.id)) return streamMetaErrors.get(stream.id) || 'Fejléc hiba';
+    const lm = streamLastModified.get(stream.id);
+    if (lm) {
+      const ts = typeof lm === 'number' ? lm : new Date(lm).getTime();
+      if (!isNaN(ts)) {
+        const diffH = Math.floor(Math.max(0, Date.now() - ts) / (3600 * 1000));
+        return `${diffH} órája nem frissült (>24h)`;
+      }
+    }
+    if (stream.status === 'no-live-feed') return 'Nincs élő közvetítés';
+    return 'Elavult forrás';
+  }
+
   function formatTimeString(ts) {
     if (!ts) return '--:--:--';
     const d = new Date(ts);
@@ -321,6 +361,22 @@
   function cleanupGridSlot(streamId) {
     clearGridImageTimer(streamId);
     gridImageErrors.delete(streamId);
+    if (hlsInstances && hlsInstances.has(streamId)) {
+      try {
+        hlsInstances.get(streamId).destroy();
+      } catch {}
+      hlsInstances.delete(streamId);
+    }
+    if (typeof document !== 'undefined' && typeof document.getElementById === 'function') {
+      const v = document.getElementById(`lm-hls-video-${streamId}`);
+      if (v) {
+        try {
+          v.pause();
+          v.removeAttribute('src');
+          v.load();
+        } catch {}
+      }
+    }
   }
 
   function onGridImgLoad(streamId) {
@@ -712,6 +768,9 @@
     }
     const isPrivate = isPrivateOrLocalHost();
     if (!isPrivate) return false;
+    if (stream.sourceType === 'hls' || Boolean(stream.streamUrl)) {
+      return true;
+    }
     if (stream.sourceType === 'embed' || Boolean(stream.embedUrl)) {
       return true;
     }
@@ -1089,8 +1148,47 @@
     const typeLabel = TYPE_LABELS[stream.type] || stream.type;
     const pageStatusLabel = getPageStatusLabel(stream.status);
 
-    // 1. Embed Widget (pl. Windy csapadéktérkép)
-    if (stream.sourceType === 'embed' || Boolean(stream.embedUrl)) {
+    // 0. HLS Élő videostream (pl. Debreceni Egyetem Klinikai Központ)
+    if (stream.sourceType === 'hls' || Boolean(stream.streamUrl)) {
+      return `
+        <div class="lm-stage-slot lm-stage-slot-active lm-stage-slot-hls" id="lm-stage-slot-${esc(stream.id)}" data-active-stream-id="${esc(stream.id)}">
+          <div class="lm-stage-slot-head">
+            <div class="lm-stage-slot-meta">
+              <span class="lm-live-dot" aria-hidden="true"></span>
+              <span class="lm-card-type-badge lm-type-${esc(stream.type)}">${esc(typeLabel)}</span>
+              <span class="lm-card-region-badge">${esc(regionLabel)}</span>
+              <span class="lm-badge lm-badge-${esc(stream.status)}">${esc(pageStatusLabel)}</span>
+              <strong class="lm-stage-slot-title">${esc(stream.name)}</strong>
+              <span class="lm-stage-slot-provider">(${esc(stream.provider)})</span>
+            </div>
+            <div class="lm-stage-slot-top-actions">
+              <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-link-external">Forrás (${esc(stream.provider)}) ↗</a>
+            </div>
+          </div>
+          <div class="lm-player-box">
+            <div class="lm-video-aspect">
+              <video
+                id="lm-hls-video-${esc(stream.id)}"
+                class="lm-video-player"
+                controls
+                playsinline
+                data-stream-url="${esc(stream.streamUrl)}"
+                style="width: 100%; height: 100%; object-fit: contain; background: #000;">
+              </video>
+            </div>
+            <div class="lm-player-bar lm-hls-bar">
+              <span class="lm-hls-indicator">● Élő HLS közvetítés (Full HD)</span>
+              <div class="lm-player-right-controls">
+                <button type="button" class="lm-btn lm-btn-stop" onclick="window.CrucixLiveMedia?.stopStream('${esc(stream.id)}')">■ Leállítás</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // 1. Embed Widget (pl. Windy)
+    if (stream.sourceType === 'embed' || (Boolean(stream.embedUrl) && stream.sourceType !== 'still-image')) {
       return `
         <div class="lm-stage-slot lm-stage-slot-active lm-stage-slot-embed" id="lm-stage-slot-${esc(stream.id)}" data-active-stream-id="${esc(stream.id)}" data-video-id="">
           <div class="lm-stage-slot-head">
@@ -1115,7 +1213,7 @@
                 title="${esc(stream.name)}"
                 loading="lazy"
                 referrerpolicy="no-referrer"
-                sandbox="allow-scripts allow-same-origin allow-popups">
+                sandbox="allow-scripts allow-same-origin allow-popups" allow="autoplay; fullscreen" allowfullscreen>
               </iframe>
             </div>
             <div class="lm-player-bar lm-embed-bar">
@@ -1291,6 +1389,51 @@
     const pageStatusLabel = getPageStatusLabel(stream.status);
     const embedInfo = getEmbedStatusInfo(stream);
 
+    if (stream.sourceType === 'hls' || Boolean(stream.streamUrl)) {
+      const isPlaying = activeStreamIds.includes(stream.id);
+      return `
+        <article class="lm-card lm-card-embeddable${isPlaying ? ' playing' : ''}" id="lm-card-${esc(stream.id)}" data-stream-id="${esc(stream.id)}">
+          <div class="lm-card-head">
+            <div class="lm-card-title-row">
+              <span class="lm-card-type-badge lm-type-${esc(stream.type)}">${esc(typeLabel)}</span>
+              <span class="lm-card-region-badge">${esc(regionLabel)}</span>
+              <span class="lm-card-lang-badge">${esc(langCode)}</span>
+              <span class="lm-status-pill lm-badge-external-source" title="Közvetlen HLS videófolyam (Crucix szerver nem proxyzza)">élő HLS</span>
+              <span class="lm-card-title">${esc(stream.name)}</span>
+            </div>
+            <div class="lm-card-provider">${esc(stream.provider)}</div>
+            <div class="lm-dual-status-row">
+              <span class="lm-status-pill lm-page-status lm-badge-${esc(stream.status)}">
+                Állapot: ${esc(pageStatusLabel)}
+              </span>
+              <span class="lm-status-pill lm-embed-status lm-embed-embeddable">
+                Beágyazhatóság: Beágyazható
+              </span>
+            </div>
+          </div>
+          <div class="lm-card-body">
+            ${isPlaying ? `
+              <div class="lm-selector-active-bar">
+                <span class="lm-selector-playing-indicator"><span class="lm-live-dot"></span> Lejátszás folyamatban a rácsban</span>
+                <div class="lm-selector-btns">
+                  <button type="button" class="lm-btn lm-btn-stop" onclick="window.CrucixLiveMedia?.stopStream('${esc(stream.id)}')">■ Leállítás</button>
+                  <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-link-external">Forrás ↗</a>
+                </div>
+              </div>
+            ` : `
+              <div class="lm-selector-idle-bar">
+                <div class="lm-placeholder-privacy">${esc(UNIDEB_PRIVACY_NOTICE_TEXT)}</div>
+                <button type="button" class="lm-btn lm-btn-play" onclick="window.CrucixLiveMedia?.playStream('${esc(stream.id)}')">
+                  ▶ Élő HLS közvetítés indítása (Full HD)
+                </button>
+              </div>
+            `}
+          </div>
+          ${stream.notes ? `<div class="lm-card-footer"><span class="lm-card-notes">${esc(stream.notes)}</span></div>` : ''}
+        </article>
+      `;
+    }
+
     if (stream.sourceType === 'link-only' || stream.sourceType === 'embed' || stream.sourceType === 'still-image' || Boolean(stream.embedUrl) || embedInfo.code === 'external-only') {
       const isPrivateHost = isPrivateOrLocalHost();
       const hasImage = Boolean(stream.imageUrl) && isPrivateHost;
@@ -1299,7 +1442,8 @@
       const isEmbedActive = activeEmbedIds.has(stream.id);
 
       let externalBodyHtml = '';
-      if (stream.embedUrl) {
+      const isIpcam = Boolean(stream.embedUrl && stream.embedUrl.includes('ipcamlive.com'));
+      if (stream.embedUrl && !isIpcam) {
         if (isPrivateHost) {
           if (isEmbedActive) {
             externalBodyHtml = `
@@ -1311,7 +1455,7 @@
                   title="${esc(stream.name)}"
                   loading="lazy"
                   referrerpolicy="no-referrer"
-                  sandbox="allow-scripts allow-same-origin allow-popups">
+                  sandbox="allow-scripts allow-same-origin allow-popups" allow="autoplay; fullscreen" allowfullscreen>
                 </iframe>
                 <div class="lm-embed-meta-bar">
                   <span class="lm-embed-disclaimer">${esc(WINDY_DISCLAIMER_TEXT)}</span>
@@ -1364,6 +1508,27 @@
               </div>
             </div>
           `;
+        } else if (isIpcam && isEmbedActive) {
+          externalBodyHtml = `
+            <div class="lm-embed-view-wrap">
+              <iframe
+                id="lm-embed-frame-${esc(stream.id)}"
+                class="lm-embed-frame"
+                src="${esc(stream.embedUrl)}"
+                title="${esc(stream.name)}"
+                loading="lazy"
+                referrerpolicy="no-referrer"
+                sandbox="allow-scripts allow-same-origin allow-popups" allow="autoplay; fullscreen" allowfullscreen>
+              </iframe>
+              <div class="lm-embed-meta-bar">
+                <span class="lm-embed-disclaimer">● IPCamLive élő HD közvetítés</span>
+                <button type="button" class="lm-btn-embed-close" title="Lejátszó bezárása" onclick="window.CrucixLiveMedia?.unloadEmbed('${esc(stream.id)}')">✕ Bezárás</button>
+              </div>
+            </div>
+            <div class="lm-camera-attribution">
+              ${esc(stream.attribution || 'Forrás: debrecen.hu / IPCamLive')} — <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-link-external">Megnyitás a forráson ↗</a>
+            </div>
+          `;
         } else if (isCameraActive) {
           externalBodyHtml = `
             <div class="lm-camera-view-wrap">
@@ -1377,7 +1542,7 @@
                 onload="window.CrucixLiveMedia?.onCameraImgLoad('${esc(stream.id)}')"
                 onerror="window.CrucixLiveMedia?.onCameraImgError('${esc(stream.id)}')" />
               <div class="lm-camera-meta-bar">
-                <span class="lm-camera-refresh-indicator">🔄 Frissítés: ${stream.sourceType === 'still-image' ? '30 perc' : '60 mp'} (közvetlen böngészőoldali)</span>
+                <span class="lm-camera-refresh-indicator">🔄 Frissítés: ${stream.sourceType === 'still-image' ? (isIpcam ? 'élő pillanatkép (1080p)' : '30 perc') : '60 mp'} (közvetlen böngészőoldali)</span>
                 ${stream.sourceType === 'still-image' ? `
                   <span class="lm-freshness-badge ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || null).className)}" title="${streamLastModified.get(stream.id) ? `Forrás utolsó módosítása (Last-Modified): ${esc(streamLastModified.get(stream.id))}` : (streamMetaErrors.get(stream.id) ? `Frissesség nem állapítható meg: ${esc(streamMetaErrors.get(stream.id))}` : 'Frissesség ismeretlen')}">
                     ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || null).label)}
@@ -1387,7 +1552,21 @@
               </div>
             </div>
             <div class="lm-camera-attribution">
-              ${esc(stream.attribution || (stream.sourceType === 'still-image' ? 'Forrás: IK1QFK / vlf.it' : 'Forrás: Időkép / idokep.hu'))} — <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-link-external">Megnyitás a forráson ↗</a>
+              ${esc(stream.attribution || (stream.sourceType === 'still-image' ? (isIpcam ? 'Forrás: debrecen.hu / IPCamLive' : 'Forrás: IK1QFK / vlf.it') : 'Forrás: Időkép / idokep.hu'))} — <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-link-external">Megnyitás a forráson ↗</a>
+            </div>
+          `;
+        } else if (isIpcam) {
+          externalBodyHtml = `
+            <div class="lm-camera-privacy-box">
+              <span class="lm-camera-privacy-text">${esc(IPCAMLIVE_PRIVACY_NOTICE_TEXT)}</span>
+            </div>
+            <div class="lm-external-actions">
+              <button type="button" class="lm-btn lm-btn-load-cam" onclick="window.CrucixLiveMedia?.playStream('${esc(stream.id)}')">▶ Kamera a rácsba (élő)</button>
+              <button type="button" class="lm-btn lm-btn-load-embed" onclick="window.CrucixLiveMedia?.loadEmbed('${esc(stream.id)}')">▶ Élő lejátszó betöltése</button>
+              <button type="button" class="lm-btn lm-btn-load-cam" onclick="window.CrucixLiveMedia?.loadCamera('${esc(stream.id)}')">📷 Pillanatkép betöltése</button>
+              <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">
+                Megnyitás a forráson ↗
+              </a>
             </div>
           `;
         } else {
@@ -1579,17 +1758,28 @@
       `;
 
     const isPrivateHost = isPrivateOrLocalHost();
-    const externalCams = externalFiltered.filter(s => Boolean(s.imageUrl));
+    const activeExternalFiltered = externalFiltered.filter(s => !isCameraStale(s));
+    const hiddenStaleCameras = externalFiltered.filter(s => isCameraStale(s));
+    const externalCams = activeExternalFiltered.filter(s => Boolean(s.imageUrl));
     const anyCamActive = externalCams.some(s => activeCameraIds.has(s.id));
     const showLimitNotice = cameraNotice || (activeCameraIds.size >= MAX_GROUP_CAMERAS ? CAMERA_LIMIT_NOTICE_TEXT : '');
 
-    const externalContent = externalFiltered.length > 0
+    const staleTooltipText = hiddenStaleCameras.length > 0
+      ? `Elavult vagy nem elérhető kép miatt elrejtve:&#10;${hiddenStaleCameras.map(s => `• ${esc(s.name)}: ${esc(getStaleReason(s))}`).join('&#10;')}`
+      : '';
+
+    const externalContent = (activeExternalFiltered.length > 0 || hiddenStaleCameras.length > 0)
       ? `
         <div class="lm-external-section" id="lm-external-section">
           <div class="lm-section-head">
             <div class="lm-section-title-wrap">
               <span class="lm-section-title">Külső oldalon nézhető</span>
-              <span class="lm-count-badge">${externalFiltered.length} forrás</span>
+              <span class="lm-count-badge">${activeExternalFiltered.length} forrás</span>
+              ${hiddenStaleCameras.length > 0 ? `
+                <span class="lm-stale-counter-badge" id="lm-stale-counter-badge" title="${staleTooltipText}">
+                  ${hiddenStaleCameras.length} kamera elrejtve: elavult kép
+                </span>
+              ` : ''}
               ${externalCams.length > 0 && isPrivateHost ? `
                 ${anyCamActive ? `
                   <button type="button" class="lm-btn lm-btn-stop" onclick="window.CrucixLiveMedia?.unloadAllCameras()" title="Minden aktív intézményi kamera bezárása">
@@ -1610,7 +1800,7 @@
             <span class="lm-section-sub">A szolgáltató hivatalos külső beágyazást nem biztosít (pl. X-Frame-Options korlátozás); a kamerák és adások közvetlenül a forrásoldalon érhetők el.</span>
           </div>
           <div class="lm-external-grid scroll-region" tabindex="0" role="region" aria-label="Külső oldalon nézhető adások listája">
-            ${externalFiltered.map(renderStreamCard).join('')}
+            ${activeExternalFiltered.map(renderStreamCard).join('')}
           </div>
         </div>
       `
@@ -1835,6 +2025,36 @@
       while (stageGrid.children.length > maxSlots) {
         stageGrid.removeChild(stageGrid.lastElementChild);
       }
+
+      // 2b. Initialize HLS instances for active HLS streams
+      if (typeof window !== 'undefined') {
+        for (const sid of activeIds) {
+          const s = byId.get(sid);
+          if (s && (s.sourceType === 'hls' || Boolean(s.streamUrl))) {
+            const videoEl = document.getElementById(`lm-hls-video-${sid}`);
+            if (videoEl && !videoEl.dataset.hlsAttached) {
+              videoEl.dataset.hlsAttached = 'true';
+              if (window.Hls && typeof window.Hls.isSupported === 'function' && window.Hls.isSupported()) {
+                const hls = new window.Hls({ enableWorker: true });
+                hlsInstances.set(sid, hls);
+                hls.loadSource(s.streamUrl);
+                hls.attachMedia(videoEl);
+                hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+                  videoEl.play().catch(() => {});
+                });
+                hls.on(window.Hls.Events.ERROR, (_evt, data) => {
+                  if (data && data.fatal) {
+                    markStreamError(sid);
+                  }
+                });
+              } else if (videoEl.canPlayType && videoEl.canPlayType('application/vnd.apple.mpegurl')) {
+                videoEl.src = s.streamUrl;
+                videoEl.play().catch(() => {});
+              }
+            }
+          }
+        }
+      }
     }
 
     // 3. Update browser / filter section (preserving focus if user is typing in search input)
@@ -1870,12 +2090,12 @@
         if (!allowBackgroundPlayback) {
           const rawStreams = resolveRawStreams();
           const byId = new Map(rawStreams.map(s => [s.id, s]));
-          const youtubeStreamIds = activeStreamIds.filter(sid => {
+          const videoStreamIds = activeStreamIds.filter(sid => {
             const s = byId.get(sid);
-            return s && s.sourceType === 'youtube';
+            return s && (s.sourceType === 'youtube' || s.sourceType === 'hls' || s.sourceType === 'embed' || Boolean(s.embedUrl));
           });
-          for (const yid of youtubeStreamIds) {
-            stopStream(yid);
+          for (const vid of videoStreamIds) {
+            stopStream(vid);
           }
         }
       } else {
@@ -1989,7 +2209,11 @@
       if (lm) streamMetaErrors.delete(streamId);
       updateGridFreshnessDom(streamId);
     },
-    probeLastModified: (stream) => probeLastModified(stream)
+    probeLastModified: (stream) => probeLastModified(stream),
+    isCameraStale: (stream) => isCameraStale(stream),
+    getStaleReason: (stream) => getStaleReason(stream),
+    IPCAMLIVE_PRIVACY_NOTICE_TEXT,
+    UNIDEB_PRIVACY_NOTICE_TEXT
   });
 
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});

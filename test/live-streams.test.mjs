@@ -381,15 +381,17 @@ test('6. HTTP Security: Content-Security-Policy header permits youtube-nocookie 
   assert.equal(res.status, 200);
   const csp = res.headers.get('content-security-policy');
   assert.ok(csp, 'Content-Security-Policy header must be present');
-  assert.ok(csp.includes("frame-src 'self' https://www.youtube-nocookie.com https://embed.windy.com;"), 'CSP must allow youtube-nocookie and embed.windy.com frame-src');
-  assert.ok(csp.includes("img-src 'self' data: https://cam.idokep.hu https://odp.met.hu http://www.vlf.it;"), 'CSP must allow cam.idokep.hu, odp.met.hu, and vlf.it img-src');
+  assert.ok(csp.includes("frame-src 'self' https://www.youtube-nocookie.com https://embed.windy.com https://g0.ipcamlive.com;"), 'CSP must allow youtube-nocookie, embed.windy.com, and g0.ipcamlive.com frame-src');
+  assert.ok(csp.includes("img-src 'self' data: https://cam.idokep.hu https://odp.met.hu http://www.vlf.it https://g0.ipcamlive.com;"), 'CSP must allow cam.idokep.hu, odp.met.hu, vlf.it, and g0.ipcamlive.com img-src');
+  assert.ok(csp.includes("media-src 'self' blob: https://mms.iptv.unideb.hu;"), 'CSP must allow mms.iptv.unideb.hu media-src');
+  assert.ok(csp.includes("connect-src 'self' https://mms.iptv.unideb.hu;"), 'CSP must allow mms.iptv.unideb.hu connect-src');
   assert.ok(!csp.includes('*'), 'CSP must strictly disallow wildcard * origins');
 
-  // Exact frame-src match: frame-src contains exactly the allowed three sources
+  // Exact frame-src match: frame-src contains exactly the allowed four sources
   const frameSrcMatch = csp.match(/frame-src\s+([^;]+);/);
   assert.ok(frameSrcMatch, 'frame-src directive must be present');
   const frameSources = frameSrcMatch[1].trim().split(/\s+/);
-  assert.deepEqual(frameSources.sort(), ["'self'", "https://embed.windy.com", "https://www.youtube-nocookie.com"].sort(), 'frame-src must contain exactly the three allowed sources');
+  assert.deepEqual(frameSources.sort(), ["'self'", "https://embed.windy.com", "https://g0.ipcamlive.com", "https://www.youtube-nocookie.com"].sort(), 'frame-src must contain exactly the four allowed sources');
 });
 
 test('7. Registry schema validation: channelId, provenance, embedStatus, and unverified status handling', () => {
@@ -498,8 +500,8 @@ test('8. Dashboard iframe audit: proof that frame-src permits all dashboard ifra
   // HTTP Security CSP header explicitly allows 'self' and https://www.youtube-nocookie.com
   const httpSecCode = readFileSync(new URL('lib/http-security.mjs', root), 'utf8');
   assert.ok(
-    httpSecCode.includes("'Content-Security-Policy': \"frame-src 'self' https://www.youtube-nocookie.com https://embed.windy.com; img-src 'self' data: https://cam.idokep.hu https://odp.met.hu http://www.vlf.it;\""),
-    'CSP frame-src and img-src rules explicitly whitelisted'
+    httpSecCode.includes("'Content-Security-Policy': \"frame-src 'self' https://www.youtube-nocookie.com https://embed.windy.com https://g0.ipcamlive.com; img-src 'self' data: https://cam.idokep.hu https://odp.met.hu http://www.vlf.it https://g0.ipcamlive.com; media-src 'self' blob: https://mms.iptv.unideb.hu; connect-src 'self' https://mms.iptv.unideb.hu;\""),
+    'CSP frame-src, img-src, media-src and connect-src rules explicitly whitelisted'
   );
 });
 
@@ -512,16 +514,21 @@ test('9. Institutional operator audit: institutional webcams must have strictly 
   // Verify that deb / hajduszoboszlo webcams are present and marked external-only
   const kossuth = institutionalWebcams.find(s => s.id === 'debrecen-kossuth-ter-webcam');
   assert.ok(kossuth, 'Kossuth tér webcam must be registered');
-  assert.equal(kossuth.url, 'https://www.idokep.hu/webkamera/dmjvcam');
-  assert.equal(kossuth.embedStatus, 'external-only');
+  assert.equal(kossuth.url, 'https://www.debrecen.hu/hu/debreceni/webkamerak/');
+  assert.equal(kossuth.embedStatus, 'embeddable');
   assert.ok(kossuth.provider.includes('Önkormányzata'), 'Provider must be municipality');
 
   const bekas = institutionalWebcams.find(s => s.id === 'debrecen-bekas-to-webcam');
   assert.ok(bekas, 'Békás tó webcam must be registered');
-  assert.equal(bekas.url, 'https://www.idokep.hu/webkamera/dmjvcam3');
-  assert.equal(bekas.embedStatus, 'external-only');
-  assert.equal(bekas.status, 'page-ok', 'Status follows actual evidence: page-ok when unverified live motion');
+  assert.equal(bekas.url, 'https://www.debrecen.hu/hu/debreceni/webkamerak/');
+  assert.equal(bekas.embedStatus, 'embeddable');
   assert.ok(bekas.provider.includes('Önkormányzata'), 'Provider must be municipality');
+
+  const kodszinhaz = institutionalWebcams.find(s => s.id === 'debrecen-kodszinhaz-webcam');
+  assert.ok(kodszinhaz, 'Ködszínház webcam must be registered');
+  assert.equal(kodszinhaz.url, 'https://www.debrecen.hu/hu/debreceni/webkamerak/');
+  assert.equal(kodszinhaz.embedStatus, 'embeddable');
+  assert.ok(kodszinhaz.provider.includes('Önkormányzata'), 'Provider must be municipality');
 
   const egyetem = institutionalWebcams.find(s => s.id === 'debrecen-egyetem-ter-webcam');
   assert.ok(egyetem, 'Egyetem tér webcam must be registered');
@@ -540,8 +547,10 @@ test('9. Institutional operator audit: institutional webcams must have strictly 
   // Verify newly added local and county webcams
   const klinika = institutionalWebcams.find(s => s.id === 'debrecen-klinika-webcam');
   assert.ok(klinika, 'Klinikai Központ webcam must be registered');
-  assert.equal(klinika.url, 'https://www.idokep.hu/webkamera/debreceniegyetemkk');
-  assert.equal(klinika.embedStatus, 'external-only');
+  assert.equal(klinika.url, 'https://www.debrecen.hu/hu/debreceni/webkamerak/');
+  assert.equal(klinika.sourceType, 'hls');
+  assert.equal(klinika.embedStatus, 'embeddable');
+  assert.equal(klinika.streamUrl, 'https://mms.iptv.unideb.hu/ipcam/ipcam.dekk.stream/playlist.m3u8');
   assert.ok(klinika.provider.includes('Debreceni Egyetem Klinikai Központ'), 'Provider must be University Clinic');
   assert.equal(klinika.region, 'local');
 
@@ -628,11 +637,8 @@ test('11. Browser-side camera display: schema validation, synthetic click-to-loa
 
   // 2. Registry verification: institutional and local cameras have verified imageUrl and attribution
   const streams = loadLiveStreams();
-  const targetCamIds = [
-    'debrecen-kossuth-ter-webcam',
-    'debrecen-bekas-to-webcam',
+  const idokepCamIds = [
     'debrecen-egyetem-ter-webcam',
-    'debrecen-klinika-webcam',
     'hajduszoboszlo-aeroclub-webcam',
     'hajduszoboszlo-varos-webcam',
     'hajdudorog-webcam',
@@ -642,7 +648,7 @@ test('11. Browser-side camera display: schema validation, synthetic click-to-loa
     'hortobagy-mata-webcam'
   ];
 
-  for (const cid of targetCamIds) {
+  for (const cid of idokepCamIds) {
     const s = streams.find(item => item.id === cid);
     assert.ok(s, `Camera ${cid} must be present in registry`);
     assert.ok(s.imageUrl && s.imageUrl.startsWith('https://cam.idokep.hu/'), `${cid} must point directly to cam.idokep.hu`);
@@ -650,6 +656,25 @@ test('11. Browser-side camera display: schema validation, synthetic click-to-loa
     assert.equal(s.embedStatus, 'external-only', `${cid} must be external-only`);
     assert.equal(s.sourceType, 'link-only', `${cid} must be link-only`);
   }
+
+  // B5 Debrecen cameras: Kossuth, Békás-tó, Ködszínház point to IPCamLive, Klinika points to unideb HLS
+  const ipcamIds = ['debrecen-kossuth-ter-webcam', 'debrecen-bekas-to-webcam', 'debrecen-kodszinhaz-webcam'];
+  for (const cid of ipcamIds) {
+    const s = streams.find(item => item.id === cid);
+    assert.ok(s, `IPCamLive camera ${cid} must be registered`);
+    assert.ok(s.imageUrl && s.imageUrl.startsWith('https://g0.ipcamlive.com/player/snapshot.php'), `${cid} snapshot must point to g0.ipcamlive.com`);
+    assert.ok(s.embedUrl && s.embedUrl.startsWith('https://g0.ipcamlive.com/player/player.php'), `${cid} embed must point to g0.ipcamlive.com`);
+    assert.equal(s.attribution, 'Forrás: debrecen.hu / IPCamLive');
+    assert.equal(s.embedStatus, 'embeddable');
+    assert.equal(s.sourceType, 'still-image');
+  }
+
+  const dekk = streams.find(item => item.id === 'debrecen-klinika-webcam');
+  assert.ok(dekk, 'Debrecen Klinika must be registered');
+  assert.equal(dekk.sourceType, 'hls');
+  assert.equal(dekk.streamUrl, 'https://mms.iptv.unideb.hu/ipcam/ipcam.dekk.stream/playlist.m3u8');
+  assert.equal(dekk.attribution, 'Forrás: Debreceni Egyetem (unideb.hu)');
+  assert.equal(dekk.embedStatus, 'embeddable');
 
   // 3. Frontend component synthetic testing (zero actual network requests)
   const code = readFileSync(new URL('../dashboard/public/live-media-panel.js', import.meta.url), 'utf8');
@@ -732,6 +757,13 @@ test('11. Browser-side camera display: schema validation, synthetic click-to-loa
   assert.ok(LiveMedia.CAMERA_LIMIT_NOTICE_TEXT.includes('Legfeljebb 4 kamera'), 'CAMERA_LIMIT_NOTICE_TEXT must inform about limit');
 
   // Create a snapshot with 11 external cameras (all 11 registered institutional cameras)
+  const targetCamIds = [
+    'debrecen-kossuth-ter-webcam',
+    'debrecen-bekas-to-webcam',
+    'debrecen-egyetem-ter-webcam',
+    'debrecen-klinika-webcam',
+    ...idokepCamIds.filter(id => id !== 'debrecen-egyetem-ter-webcam')
+  ];
   const elevenCams = targetCamIds.map((cid, i) => ({
     id: cid,
     name: `Camera ${i + 1}`,
@@ -1293,7 +1325,9 @@ test('13. Unified tile model in Live Media grid: 4-slot limit, FIFO replacement,
   assert.ok(schumannStageHtml.includes('id="lm-stage-slot-schumann-resonance-cumiana"'));
   assert.ok(schumannStageHtml.includes('Állókép · 30 perc'), 'Schumann has 30 min badge');
   assert.ok(schumannStageHtml.includes('Állókép</span>'), 'Still-image has Állókép badge in slot head');
-  assert.ok(!schumannStageHtml.includes('<span class="lm-badge lm-badge-verified-live">Élő adás</span>'), 'Still-image does NOT render static Élő adás badge');
+  const schumannSlotStart = schumannStageHtml.indexOf('id="lm-stage-slot-schumann-resonance-cumiana"');
+  const schumannSlotChunk = schumannStageHtml.slice(schumannSlotStart, schumannSlotStart + 1200);
+  assert.ok(!schumannSlotChunk.includes('<span class="lm-badge lm-badge-verified-live">Élő adás</span>'), 'Still-image does NOT render static Élő adás badge');
   assert.ok(schumannStageHtml.includes('id="lm-grid-freshness-head-schumann-resonance-cumiana"'), 'Head freshness badge present');
   assert.ok(schumannStageHtml.includes('vlf.it/cumiana/last-geomar.jpg'), 'Schumann image src rendered');
   assert.ok(schumannStageHtml.includes('referrerpolicy="no-referrer"'), 'Referrer policy no-referrer');
@@ -1547,4 +1581,83 @@ test('probeLastModified: queries /api/still-image-meta endpoint with cache: no-s
   assert.equal(badgeEl.textContent, 'ismeretlen', 'Must be ismeretlen on network error');
   assert.equal(badgeEl.className, 'lm-freshness-badge lm-freshness-unknown');
   assert.match(badgeEl.getAttribute('title'), /Frissesség nem állapítható meg: Hálózati kapcsolat megszakadt/);
+});
+
+test('14. B5 Camera resilience: stale and dead cameras are hidden with discrete counter badge and tooltip', () => {
+  const code = readFileSync(new URL('../dashboard/public/live-media-panel.js', import.meta.url), 'utf8');
+  const mockWindow = {
+    innerWidth: 1280,
+    location: { hostname: 'localhost' },
+    __CRUCIX_DATA__: {}
+  };
+  const mockDocument = { hidden: false, addEventListener: () => {} };
+  const runModule = new Function('window', 'document', code);
+  runModule(mockWindow, mockDocument);
+  const LiveMedia = mockWindow.CrucixLiveMedia;
+
+  const testSnapshot = {
+    liveStreams: [
+      {
+        id: 'debrecen-egyetem-ter-webcam',
+        name: 'Debrecen – Egyetem tér',
+        type: 'webcam',
+        region: 'local',
+        provider: 'Debreceni Egyetem / Időkép',
+        sourceType: 'link-only',
+        url: 'https://www.idokep.hu/webkamera/deegyetemter',
+        imageUrl: 'https://cam.idokep.hu/deegyetemter/thumbnail.jpg',
+        attribution: 'Forrás: Időkép / idokep.hu',
+        status: 'page-ok',
+        embedStatus: 'external-only'
+      },
+      {
+        id: 'kekesteto-panorama-webcam',
+        name: 'Kékestető – Csúcspanoráma',
+        type: 'webcam',
+        region: 'national',
+        provider: 'Időkép',
+        sourceType: 'link-only',
+        url: 'https://www.idokep.hu/webkamera/kekesteto',
+        imageUrl: 'https://cam.idokep.hu/kekesteto/thumbnail.jpg',
+        attribution: 'Forrás: Időkép',
+        status: 'no-live-feed',
+        embedStatus: 'external-only'
+      },
+      {
+        id: 'budapest-duna-panorama-webcam',
+        name: 'Budapest – Duna-korzó',
+        type: 'webcam',
+        region: 'national',
+        provider: 'Időkép',
+        sourceType: 'link-only',
+        url: 'https://www.idokep.hu/webkamera/budapest_duna',
+        imageUrl: 'https://cam.idokep.hu/budapest_duna/thumbnail.jpg',
+        attribution: 'Forrás: Időkép',
+        status: 'no-live-feed',
+        embedStatus: 'external-only'
+      },
+      {
+        id: 'hortobagy-puszta-webcam',
+        name: 'Hortobágy – Puszta',
+        type: 'webcam',
+        region: 'county',
+        provider: 'Időkép',
+        sourceType: 'link-only',
+        url: 'https://www.idokep.hu/webkamera/hortobagypuszta',
+        imageUrl: 'https://cam.idokep.hu/hortobagypuszta/thumbnail.jpg',
+        attribution: 'Forrás: Időkép',
+        status: 'no-live-feed',
+        embedStatus: 'external-only'
+      }
+    ]
+  };
+
+  const html = LiveMedia.panelHtml(testSnapshot);
+  assert.ok(html.includes('Debrecen – Egyetem tér'), 'Active camera is visible');
+  assert.ok(!html.includes('id="lm-card-kekesteto-panorama-webcam"'), 'Kékestető must be hidden');
+  assert.ok(!html.includes('id="lm-card-budapest-duna-panorama-webcam"'), 'Budapest Duna must be hidden');
+  assert.ok(!html.includes('id="lm-card-hortobagy-puszta-webcam"'), 'Hortobágy Puszta must be hidden');
+  assert.ok(html.includes('id="lm-stale-counter-badge"'), 'Stale counter badge must be present');
+  assert.ok(html.includes('3 kamera elrejtve: elavult kép'), 'Counter badge text must show 3 hidden cameras');
+  assert.ok(html.includes('Kékestető'), 'Tooltip must list hidden camera names');
 });
