@@ -289,14 +289,41 @@ export function parseSWPC(data, { now = Date.now() } = {}) {
  * Combines scales with Kp, solar wind, X-ray flux, active alerts, and 3-day forecast.
  */
 export function parseEnhancedSWPC(data, { now = Date.now(), notifyMin = parseSwpcNotifyThreshold() } = {}) {
-  const baseResult = parseSWPC(data.scales || data, { now });
-  if (baseResult.status === 'error') return baseResult;
+  const rawScales = data.scales || data;
+  const hasScales = rawScales && !rawScales.error && rawScales['0'] && typeof rawScales['0'] === 'object';
+  const baseResult = hasScales
+    ? parseSWPC(rawScales, { now })
+    : {
+        status: 'warning',
+        observedAt: new Date(now).toISOString(),
+        observations: [],
+        metrics: {},
+        summary: 'A NOAA skálák jelenleg nem érhetők el.'
+      };
 
   const parsedKp = data.kp ? parseKpIndex(data.kp) : null;
   const parsedWind = (data.wind || data.mag) ? parseSolarWind(data.wind, data.mag) : null;
   const parsedXrays = data.xrays ? parseGoesXrays(data.xrays) : null;
   const parsedAlerts = data.alerts ? parseAlerts(data.alerts, { now }) : null;
   const parsedForecast = data.forecast ? parseForecast(typeof data.forecast === 'string' ? data.forecast : data.forecast.rawText) : null;
+
+  // Extract 1-3 day solar flare & proton probabilities from noaa-scales.json
+  const probabilities = [];
+  if (hasScales) {
+    for (const day of ['1', '2', '3']) {
+      const dayData = rawScales[day];
+      if (dayData && typeof dayData === 'object') {
+        probabilities.push({
+          day: Number(day),
+          date: dayData.DateStamp || null,
+          rMinorProb: dayData.R?.MinorProb ? Number(dayData.R.MinorProb) : null,
+          rMajorProb: dayData.R?.MajorProb ? Number(dayData.R.MajorProb) : null,
+          sProb: dayData.S?.Prob ? Number(dayData.S.Prob) : null,
+          gScale: dayData.G?.Scale != null ? Number(dayData.G.Scale) : null
+        });
+      }
+    }
+  }
 
   const metrics = { ...baseResult.metrics };
   if (parsedKp) metrics.kp = parsedKp.kp;
@@ -306,6 +333,7 @@ export function parseEnhancedSWPC(data, { now = Date.now(), notifyMin = parseSwp
   if (parsedAlerts?.activeCount != null) metrics.activeAlertsCount = parsedAlerts.activeCount;
   if (parsedForecast?.maxExpectedKp != null) metrics.maxForecastKp = parsedForecast.maxExpectedKp;
   if (parsedForecast?.maxExpectedGScale) metrics.maxForecastG = parsedForecast.maxExpectedGScale;
+  if (probabilities.length) metrics.probabilities = probabilities;
 
   const facts = [];
   if (parsedKp) facts.push({ label: 'kp', value: `${parsedKp.kp}` });
@@ -366,7 +394,7 @@ export function parseEnhancedSWPC(data, { now = Date.now(), notifyMin = parseSwp
     }
   }
 
-  const summaryParts = [baseResult.summary];
+  const summaryParts = hasScales ? [baseResult.summary] : ['A NOAA skálák jelenleg nem érhetők el.'];
   if (parsedKp) summaryParts.push(`Kp: ${parsedKp.kp}`);
   if (parsedWind?.speed != null) summaryParts.push(`Napszél: ${parsedWind.speed} km/s (Bz: ${parsedWind.bz ?? 0} nT)`);
   if (parsedXrays?.xrayClass) summaryParts.push(`Röntgen: ${parsedXrays.xrayClass}`);
@@ -381,10 +409,23 @@ export function parseEnhancedSWPC(data, { now = Date.now(), notifyMin = parseSwp
     facts
   }, now);
 
+  if (!hasScales) {
+    out.status = 'warning';
+  }
+
   if (out.stale) {
     out.metrics = {};
     out.summary = 'A jelenlegi NOAA űridőjárási telemetria nem érhető el az 1 órás frissességi ablakban.';
   }
+
+  // Preserve parsed sub-structures so consumers have direct structured access
+  out.wind = parsedWind;
+  out.solarWind = parsedWind;
+  out.xrays = parsedXrays;
+  out.forecast = parsedForecast;
+  out.alerts = parsedAlerts;
+  out.kp = parsedKp;
+  if (probabilities.length) out.probabilities = probabilities;
 
   return out;
 }
@@ -406,29 +447,38 @@ export async function briefing({
   }
 
   const [scalesRes, kpRes, windRes, magRes, xraysRes, alertsRes, forecastRes] = await Promise.allSettled([
-    safeFetch(FEED_URL, { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024, headers: swpcHeaders }),
-    safeFetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024, headers: swpcHeaders }),
-    safeFetch('https://services.swpc.noaa.gov/products/summary/solar-wind-speed.json', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024, headers: swpcHeaders }),
-    safeFetch('https://services.swpc.noaa.gov/products/summary/solar-wind-mag-field.json', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024, headers: swpcHeaders }),
-    safeFetch('https://services.swpc.noaa.gov/json/goes/primary/xrays-1-day.json', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024, headers: swpcHeaders }),
-    safeFetch('https://services.swpc.noaa.gov/products/alerts.json', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024, headers: swpcHeaders }),
-    safeFetch('https://services.swpc.noaa.gov/text/3-day-forecast.txt', { timeout: 8000, retries: 0, maxBytes: 2 * 1024 * 1024, format: 'text', headers: swpcHeaders })
+    safeFetch(FEED_URL, { timeout: 10000, retries: 1, maxBytes: 2 * 1024 * 1024, headers: swpcHeaders }),
+    safeFetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json', { timeout: 10000, retries: 1, maxBytes: 2 * 1024 * 1024, headers: swpcHeaders }),
+    safeFetch('https://services.swpc.noaa.gov/products/summary/solar-wind-speed.json', { timeout: 10000, retries: 1, maxBytes: 2 * 1024 * 1024, headers: swpcHeaders }),
+    safeFetch('https://services.swpc.noaa.gov/products/summary/solar-wind-mag-field.json', { timeout: 10000, retries: 1, maxBytes: 2 * 1024 * 1024, headers: swpcHeaders }),
+    safeFetch('https://services.swpc.noaa.gov/json/goes/primary/xrays-1-day.json', { timeout: 10000, retries: 1, maxBytes: 2 * 1024 * 1024, headers: swpcHeaders }),
+    safeFetch('https://services.swpc.noaa.gov/products/alerts.json', { timeout: 10000, retries: 1, maxBytes: 2 * 1024 * 1024, headers: swpcHeaders }),
+    safeFetch('https://services.swpc.noaa.gov/text/3-day-forecast.txt', { timeout: 10000, retries: 1, maxBytes: 2 * 1024 * 1024, format: 'text', headers: swpcHeaders })
   ]);
 
   const scales = scalesRes.status === 'fulfilled' ? scalesRes.value : { error: scalesRes.reason?.message };
-  if (scales?.error) {
+  const kp = kpRes.status === 'fulfilled' ? kpRes.value : null;
+  const wind = windRes.status === 'fulfilled' ? windRes.value : null;
+  const mag = magRes.status === 'fulfilled' ? magRes.value : null;
+  const xrays = xraysRes.status === 'fulfilled' ? xraysRes.value : null;
+  const alerts = alertsRes.status === 'fulfilled' ? alertsRes.value : null;
+  const forecast = forecastRes.status === 'fulfilled' ? forecastRes.value : null;
+
+  const anyTelemetrySucceeded = [kp, wind, mag, xrays, alerts, forecast].some(v => v && !v.error);
+
+  if (scales?.error && !anyTelemetrySucceeded) {
     const isBlocked = /403|429/i.test(scales.error);
     const status = isBlocked ? 'disabled' : 'error';
     return unavailableResult(SOURCE, scales.error, { ...META, metrics: {}, status }, now);
   }
 
   return parseEnhancedSWPC({
-    scales,
-    kp: kpRes.status === 'fulfilled' ? kpRes.value : null,
-    wind: windRes.status === 'fulfilled' ? windRes.value : null,
-    mag: magRes.status === 'fulfilled' ? magRes.value : null,
-    xrays: xraysRes.status === 'fulfilled' ? xraysRes.value : null,
-    alerts: alertsRes.status === 'fulfilled' ? alertsRes.value : null,
-    forecast: forecastRes.status === 'fulfilled' ? forecastRes.value : null
+    scales: scales?.error ? null : scales,
+    kp,
+    wind,
+    mag,
+    xrays,
+    alerts,
+    forecast
   }, { now, notifyMin });
 }

@@ -8,7 +8,8 @@ import {
   briefing as gfzBriefing
 } from '../apis/sources/gfz-potsdam.mjs';
 import {
-  parseSwpcNotifyThreshold
+  parseSwpcNotifyThreshold,
+  parseEnhancedSWPC
 } from '../apis/sources/swpc.mjs';
 import {
   SPACE_WEATHER_SCALES_HU,
@@ -325,4 +326,140 @@ test('11. space-weather-panel.js: guards undefined, null, and NaN Kp values with
   assert.ok(validHtml.includes('5.00 (def)'), 'GFZ Kp formatted');
   assert.ok(validHtml.includes('4.88'), 'Hp30 formatted');
   assert.ok(validHtml.includes('5.12'), 'Hp60 formatted');
+});
+
+test('12. synthesizeSpaceWeather: empty swpcMetrics results in null level and "Nincs adat", never "Nyugodt"', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const testDir = path.dirname(fileURLToPath(import.meta.url));
+  const panelPath = path.join(testDir, '..', 'dashboard', 'public', 'space-weather-panel.js');
+  const code = fs.readFileSync(panelPath, 'utf8');
+
+  const mockWindow = {};
+  const mockDocument = { querySelector: () => null };
+  const runModule = new Function('window', 'document', code);
+  runModule(mockWindow, mockDocument);
+
+  // 1. Completely empty swpcData
+  const synEmpty = synthesizeSpaceWeather({}, {});
+  assert.equal(synEmpty.scales.G.level, null, 'G-scale level must be null when NOAA scales are missing');
+  assert.equal(synEmpty.scales.G.label, '--');
+  assert.equal(synEmpty.scales.G.title, 'Nincs adat');
+  assert.notEqual(synEmpty.scales.G.title, 'Nyugodt', 'Must never claim "Nyugodt" without NOAA data');
+  assert.equal(synEmpty.scales.R.level, null);
+  assert.equal(synEmpty.scales.S.level, null);
+  assert.equal(synEmpty.isDangerous, false);
+
+  // 2. swpcData with empty metrics
+  const synMetricsEmpty = synthesizeSpaceWeather({ status: 'error', metrics: {} }, {});
+  assert.equal(synMetricsEmpty.scales.G.level, null);
+  assert.equal(synMetricsEmpty.scales.G.title, 'Nincs adat');
+  assert.notEqual(synMetricsEmpty.scales.G.title, 'Nyugodt');
+
+  // 3. Panel HTML renders grey "NOAA: NINCS ADAT" badge, never "NYUGODT"
+  const html = mockWindow.CrucixSpaceWeatherPanel.panelHtml({ spaceWeather: synMetricsEmpty });
+  assert.ok(html.includes('NOAA: NINCS ADAT'), 'Top badge must show "NOAA: NINCS ADAT"');
+  assert.ok(!html.includes('>NYUGODT</span>'), 'Top badge must not show "NYUGODT"');
+  assert.ok(html.includes('G--</strong> Nincs adat'), 'G-scale row must show "G-- Nincs adat"');
+});
+
+test('13. parseEnhancedSWPC: partial failure retains available telemetry (Kp, solar wind, alerts, forecast) without claiming scales', () => {
+  const mockKpTable = [
+    ['time_tag', 'Kp', 'a_running', 'station_count'],
+    ['2026-11-07 18:00:00.000', '3.33', '15', '8']
+  ];
+  const mockWind = [
+    { proton_speed: 580, proton_density: 8.2, proton_temperature: 120000, time_tag: '2026-11-07T18:00:00Z' }
+  ];
+  const mockMag = [
+    { bz_gsm: -6.2, bt: 9.1, time_tag: '2026-11-07T18:00:00Z' }
+  ];
+  const mockAlerts = [
+    {
+      product_id: 'WARK04',
+      issue_datetime: '2026-11-07 16:00:00.000',
+      message: 'WARNING: Geomagnetic K-index of 4 expected'
+    }
+  ];
+
+  // SWPC with scales = null (e.g. scales endpoint timed out or failed)
+  const enhanced = parseEnhancedSWPC({
+    scales: null,
+    kp: mockKpTable,
+    wind: mockWind,
+    mag: mockMag,
+    alerts: mockAlerts,
+    forecast: null
+  }, { now: Date.parse('2026-11-07T19:00:00Z') });
+
+  assert.equal(enhanced.status, 'warning', 'Status must reflect warning when scales are missing');
+  assert.equal(enhanced.metrics.kp, 3.33, 'Kp telemetry retained');
+  assert.equal(enhanced.metrics.solarWindSpeed, 580, 'Solar wind speed retained');
+  assert.equal(enhanced.metrics.bz, -6.2, 'Bz magnetic field retained');
+  assert.equal(enhanced.metrics.geomagneticStorms, undefined, 'G-scale must be undefined when scales are missing');
+  assert.ok(enhanced.summary.includes('Kp: 3.33'), 'Summary contains retained Kp');
+  assert.ok(enhanced.summary.includes('Napszél: 580 km/s'), 'Summary contains retained solar wind');
+
+  // Verify synthesis from this partial result retains solar wind and Kp, with G-scale = null
+  const syn = synthesizeSpaceWeather(enhanced, {});
+  assert.equal(syn.kp.current, 3.33);
+  assert.equal(syn.solarWind.speed, 580);
+  assert.equal(syn.solarWind.bz, -6.2);
+  assert.equal(syn.scales.G.level, null, 'G level is null');
+  assert.equal(syn.scales.G.title, 'Nincs adat');
+});
+
+test('14. parseEnhancedSWPC: extracts 1-3 day solar flare & proton probabilities from noaa-scales.json', () => {
+  const mockScales = {
+    '0': {
+      DateStamp: '2026-11-07',
+      TimeStamp: '18:00:00',
+      R: { Scale: '0', Text: 'none' },
+      S: { Scale: '0', Text: 'none' },
+      G: { Scale: '1', Text: 'minor' }
+    },
+    '1': {
+      DateStamp: '2026-11-07',
+      TimeStamp: '18:00:00',
+      R: { Scale: null, Text: null, MinorProb: '35', MajorProb: '10' },
+      S: { Scale: null, Text: null, Prob: '5' },
+      G: { Scale: '1', Text: 'minor' }
+    },
+    '2': {
+      DateStamp: '2026-11-08',
+      TimeStamp: '00:00:00',
+      R: { Scale: null, Text: null, MinorProb: '40', MajorProb: '15' },
+      S: { Scale: null, Text: null, Prob: '10' },
+      G: { Scale: '2', Text: 'moderate' }
+    },
+    '3': {
+      DateStamp: '2026-11-09',
+      TimeStamp: '00:00:00',
+      R: { Scale: null, Text: null, MinorProb: '25', MajorProb: '5' },
+      S: { Scale: null, Text: null, Prob: '1' },
+      G: { Scale: '0', Text: 'none' }
+    }
+  };
+
+  const enhanced = parseEnhancedSWPC({ scales: mockScales }, { now: Date.parse('2026-11-07T18:05:00Z') });
+  assert.equal(enhanced.status, 'ok');
+  assert.ok(Array.isArray(enhanced.metrics.probabilities));
+  assert.equal(enhanced.metrics.probabilities.length, 3);
+
+  const day1 = enhanced.metrics.probabilities[0];
+  assert.equal(day1.day, 1);
+  assert.equal(day1.rMinorProb, 35);
+  assert.equal(day1.rMajorProb, 10);
+  assert.equal(day1.sProb, 5);
+  assert.equal(day1.gScale, 1);
+
+  const day2 = enhanced.metrics.probabilities[1];
+  assert.equal(day2.day, 2);
+  assert.equal(day2.rMinorProb, 40);
+  assert.equal(day2.gScale, 2);
+
+  const syn = synthesizeSpaceWeather(enhanced, {});
+  assert.equal(syn.probabilities.length, 3);
+  assert.equal(syn.probabilities[0].rMinorProb, 35);
 });

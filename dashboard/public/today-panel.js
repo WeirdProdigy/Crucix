@@ -178,7 +178,7 @@
         id: 'space-weather', category: 'space-weather', title: 'Űridőjárás (G/R/S)', href: '#space-weather',
         badge: status(sw, sn), time: time(valueOf(swData, ['timestamp', 'updatedAt'])),
         body: `<div class="tp-metrics"><span>Kp <strong>${esc(text(valueOf(swData.kp, ['noaaKp', 'gfzKp']) ?? valueOf(swData, ['kp'])))}</strong></span>` +
-          `<span>G <strong>${esc(text(valueOf(scales.G, ['label', 'level'])))}</strong></span><span>R <strong>${esc(text(valueOf(scales.R, ['label', 'level'])))}</strong></span><span>S <strong>${esc(text(valueOf(scales.S, ['label', 'level'])))}</strong></span></div>`
+          `<span>G <strong>${esc(text(valueOf(scales.G, ['label', 'level']), '--'))}</strong></span><span>R <strong>${esc(text(valueOf(scales.R, ['label', 'level']), '--'))}</strong></span><span>S <strong>${esc(text(valueOf(scales.S, ['label', 'level']), '--'))}</strong></span></div>`
       },
       {
         id: 'police', category: 'transport', title: 'Rendőrségi hírek · Hajdú-Bihar', href: '#news',

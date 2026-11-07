@@ -25,8 +25,10 @@
   }
 
   function getBadgeHtml(scaleObj, typeLetter) {
-    if (!scaleObj) return `<span class="sw-badge normal">${typeLetter}0</span>`;
-    const lvl = scaleObj.level || 0;
+    if (!scaleObj || scaleObj.level === null || scaleObj.level === undefined) {
+      return `<span class="sw-scale-pill" style="border-color:#78909c;color:#90a4ae"><strong>${typeLetter}--</strong> Nincs adat</span>`;
+    }
+    const lvl = scaleObj.level;
     const isDanger = Boolean(scaleObj.dangerous || lvl >= 4);
     const dangerTag = isDanger ? ' <span class="sw-danger-pill">VESZÉLYES</span>' : '';
     const color = scaleObj.color || '#64f0c8';
@@ -44,14 +46,19 @@
     const schumann = sw.schumann || {};
     const sources = sw.sources || {};
 
-    const gScale = scales.G || { level: 0, label: 'G0', title: 'Nyugodt', desc: 'Nyugodt mágneses tér', color: '#64f0c8' };
-    const rScale = scales.R || { level: 0, label: 'R0', title: 'Nincs blackout', desc: 'Normál ionoszféra', color: '#64f0c8' };
-    const sScale = scales.S || { level: 0, label: 'S0', title: 'Háttérszint', desc: 'Normál protonfluxus', color: '#64f0c8' };
+    const gScale = scales.G || { level: null, label: '--', title: 'Nincs adat', desc: 'A NOAA geomágneses adatok nem érhetők el', color: '#78909c' };
+    const rScale = scales.R || { level: null, label: '--', title: 'Nincs adat', desc: 'A NOAA rádió-blackout adatok nem érhetők el', color: '#78909c' };
+    const sScale = scales.S || { level: null, label: '--', title: 'Nincs adat', desc: 'A NOAA sugárzási adatok nem érhetők el', color: '#78909c' };
 
+    const noaaHasData = (sources.noaa?.status === 'ok' || sources.noaa?.status === 'fresh' || sources.noaa?.status === 'warning') && gScale.level !== null;
     const isDangerous = sw.isDangerous || gScale.dangerous || rScale.dangerous || sScale.dangerous;
-    const topBadge = isDangerous ? '<span class="badge" style="background:rgba(255,95,99,0.2);color:#ff5f63;border-color:#ff5f63">VESZÉLYES AKTIVITÁS</span>'
-      : (gScale.level >= 1 ? `<span class="badge" style="background:rgba(255,184,76,0.15);color:#ffb84c;border-color:#ffb84c">${esc(gScale.label)} VIHAR</span>`
-      : '<span class="badge" style="color:#64f0c8;border-color:rgba(100,240,200,0.3)">NYUGODT</span>');
+    const topBadge = !noaaHasData
+      ? '<span class="badge" style="color:#90a4ae;border-color:rgba(144,164,174,0.3)">NOAA: NINCS ADAT</span>'
+      : (isDangerous
+        ? '<span class="badge" style="background:rgba(255,95,99,0.2);color:#ff5f63;border-color:#ff5f63">VESZÉLYES AKTIVITÁS</span>'
+        : (gScale.level >= 1
+          ? `<span class="badge" style="background:rgba(255,184,76,0.15);color:#ffb84c;border-color:#ffb84c">${esc(gScale.label)} VIHAR</span>`
+          : '<span class="badge" style="color:#64f0c8;border-color:rgba(100,240,200,0.3)">NYUGODT</span>'));
 
     const noaaKpStr = (typeof kp.noaaKp === 'number' && Number.isFinite(kp.noaaKp)) ? kp.noaaKp.toFixed(2) : '--';
     const gfzKpStr = (typeof kp.gfzKp === 'number' && Number.isFinite(kp.gfzKp)) ? `${kp.gfzKp.toFixed(2)} (${kp.gfzStatus || 'pre'})` : '--';
