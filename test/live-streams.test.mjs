@@ -1375,3 +1375,72 @@ test('computeFreshnessBadge: accurate freshness categorization based on Last-Mod
   assert.equal(compute(undefined, now).label, 'ismeretlen');
   assert.equal(compute('invalid-date', now).label, 'ismeretlen');
 });
+
+test('refresh transition: old Last-Modified to fresh Last-Modified updates badge state and DOM in both directions', () => {
+  const root = new URL('../', import.meta.url);
+  const jsCode = readFileSync(new URL('dashboard/public/live-media-panel.js', root), 'utf8');
+
+  const elements = new Map();
+  const createElement = (id) => {
+    const el = {
+      id,
+      textContent: '',
+      className: '',
+      attrs: new Map(),
+      setAttribute(k, v) { this.attrs.set(k, v); }
+    };
+    elements.set(id, el);
+    return el;
+  };
+
+  const badgeEl = createElement('lm-grid-freshness-schumann-resonance-cumiana');
+  const headBadgeEl = createElement('lm-grid-freshness-head-schumann-resonance-cumiana');
+
+  const mockWindow = {
+    location: { hostname: '192.168.1.81' },
+    __CRUCIX_DATA__: {
+      liveStreams: [{
+        id: 'schumann-resonance-cumiana',
+        name: 'Cumiana spektrogram',
+        sourceType: 'still-image',
+        imageUrl: 'http://www.vlf.it/cumiana/last-geomar.jpg',
+        lastModified: '2026-10-25T00:00:00.000Z'
+      }]
+    }
+  };
+  const mockDocument = {
+    addEventListener: () => {},
+    getElementById: (id) => elements.get(id) || null
+  };
+
+  const fn = new Function('window', 'document', jsCode);
+  fn(mockWindow, mockDocument);
+  const lm = mockWindow.CrucixLiveMedia;
+
+  // 1. Initial old state: simulate badge update for old Last-Modified (> 7 days)
+  lm.setStreamLastModified('schumann-resonance-cumiana', '2026-10-25T00:00:00.000Z');
+  assert.equal(badgeEl.textContent, 'befagyott');
+  assert.equal(badgeEl.className, 'lm-freshness-badge lm-freshness-stale');
+  assert.equal(headBadgeEl.textContent, 'befagyott');
+
+  // 2. Transition from OLD (befagyott) -> FRESH (LIVE)
+  const freshTime = new Date(Date.now() - 10 * 60 * 1000).toUTCString(); // 10 minutes ago
+  lm.setStreamLastModified('schumann-resonance-cumiana', freshTime);
+  assert.equal(badgeEl.textContent, 'LIVE', 'Badge transitioned to LIVE');
+  assert.equal(badgeEl.className, 'lm-freshness-badge lm-freshness-live');
+  assert.equal(headBadgeEl.textContent, 'LIVE');
+
+  // 3. Transition from FRESH (LIVE) -> RECENT ("N órája")
+  const recentTime = new Date(Date.now() - 12 * 60 * 60 * 1000).toUTCString(); // 12 hours ago
+  lm.setStreamLastModified('schumann-resonance-cumiana', recentTime);
+  assert.equal(badgeEl.textContent, '12 órája', 'Badge transitioned to 12 órája');
+  assert.equal(badgeEl.className, 'lm-freshness-badge lm-freshness-recent');
+  assert.equal(headBadgeEl.textContent, '12 órája');
+
+  // 4. Transition back to FRESH (LIVE)
+  const freshAgain = new Date(Date.now() - 5 * 60 * 1000).toUTCString(); // 5 minutes ago
+  lm.setStreamLastModified('schumann-resonance-cumiana', freshAgain);
+  assert.equal(badgeEl.textContent, 'LIVE', 'Badge transitioned back to LIVE');
+  assert.equal(badgeEl.className, 'lm-freshness-badge lm-freshness-live');
+  assert.equal(headBadgeEl.textContent, 'LIVE');
+});

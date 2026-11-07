@@ -180,7 +180,7 @@
   function probeLastModified(stream) {
     if (!stream || !stream.id || !stream.imageUrl || typeof fetch === 'undefined') return;
     try {
-      fetch(stream.imageUrl, { method: 'HEAD', mode: 'cors' })
+      fetch(stream.imageUrl, { method: 'HEAD', mode: 'cors', cache: 'no-store' })
         .then(res => {
           const lm = res.headers ? res.headers.get('last-modified') : null;
           if (lm) {
@@ -1948,7 +1948,10 @@
     WINDY_DISCLAIMER_TEXT,
     computeFreshnessBadge,
     getStreamLastModified: (streamId) => streamLastModified.get(streamId),
-    setStreamLastModified: (streamId, lm) => streamLastModified.set(streamId, lm)
+    setStreamLastModified: (streamId, lm) => {
+      streamLastModified.set(streamId, lm);
+      updateGridFreshnessDom(streamId);
+    }
   });
 
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});

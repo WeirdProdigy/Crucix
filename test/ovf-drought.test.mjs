@@ -103,3 +103,34 @@ test('client rendering in weather-panel: uninterpreted OVF calculated values, no
   const liveStaleHtml = WeatherPanel.renderDroughtBlock({ sources: { ovfDrought: liveStale } });
   assert.match(liveStaleHtml, /wp-obs-pill-stale.*ELAVULT/, 'Live stale pill rendered');
 });
+
+test('tile freshness badge is based on primary indicators (TalajNedv10, HDIs) with per-layer staleness', () => {
+  const code = readFileSync(new URL('../dashboard/public/weather-panel.js', import.meta.url), 'utf8');
+  const mockWindow = { innerWidth: 1280, currentSnapshot: () => ({}) };
+  const mockDocument = { querySelector: () => null };
+  const runModule = new Function('window', 'document', code);
+  runModule(mockWindow, mockDocument);
+  const WeatherPanel = mockWindow.CrucixWeatherPanel;
+
+  // 1. When primary indicators are fresh but waterDeficit is stale (live station scenario)
+  const parsed = parseOvfDroughtResponse(fixture, { now: fixtureNow });
+  const withStaleDeficit = {
+    ...parsed,
+    waterDeficit: { ...parsed.waterDeficit, fresh: false },
+    isFixture: false
+  };
+  assert.equal(withStaleDeficit.isFresh, true, 'Tile isFresh remains true when primary indicators are fresh');
+  const htmlWithStaleDeficit = WeatherPanel.renderDroughtBlock({ sources: { ovfDrought: withStaleDeficit } });
+  assert.match(htmlWithStaleDeficit, /wp-obs-pill-fresh.*FRISS/, 'Tile badge remains FRISS');
+  assert.match(htmlWithStaleDeficit, /Vízhiány 35 cm \(OVF számított érték\) \(elavult\)/, 'Stale layer indicator rendered');
+
+  // 2. When TalajNedv10 is stale (> 3h), isFresh becomes false
+  const staleHourly = parseOvfDroughtResponse(fixture, { now: fixtureNow + 4 * 60 * 60 * 1000 });
+  assert.equal(staleHourly.soilMoisture.fresh, false);
+  assert.equal(staleHourly.isFresh, false);
+
+  // 3. When drought index (HDIs) is stale (> 36h), isFresh becomes false
+  const staleDaily = parseOvfDroughtResponse(fixture, { now: fixtureNow + 40 * 60 * 60 * 1000 });
+  assert.equal(staleDaily.droughtIndex.fresh, false);
+  assert.equal(staleDaily.isFresh, false);
+});

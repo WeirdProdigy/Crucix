@@ -140,6 +140,17 @@ export function parseOvfDroughtResponse(json, options = {}) {
     distanceKm: DEFAULT_DISTANCE_KM
   };
 
+  const primaryMoisture = seriesValue(soilMoistureGroup, DEPTHS.indexOf('10cm'));
+  const hasPrimaryMoisture = primaryMoisture.value !== null;
+  const hasDroughtIndex = drought.value !== null;
+  const isPrimaryMoistureFresh = hasPrimaryMoisture && metricFresh(primaryMoisture, now, HOURLY_FRESH_MS);
+  const isDroughtIndexFresh = hasDroughtIndex && metricFresh(drought, now, DAILY_FRESH_MS);
+
+  // Primary freshness: tile badge is based on primary drought metrics (TalajNedv10, HDIs).
+  const isFresh = (hasPrimaryMoisture || hasDroughtIndex) &&
+    (!hasPrimaryMoisture || isPrimaryMoistureFresh) &&
+    (!hasDroughtIndex || isDroughtIndexFresh);
+
   return {
     station,
     soilMoisture: { ...soilMoisture, unit: 'V/V %', timestamp: groupTimestamp(soilMoistureGroup) || lastUpdated, fresh: DEPTHS.some(depth => soilMoisture[depth] !== null) && DEPTHS.filter(depth => soilMoisture[depth] !== null).every(depth => {
@@ -153,7 +164,8 @@ export function parseOvfDroughtResponse(json, options = {}) {
     airTemperature: metricBlock(air, '°C', metricFresh(air, now, HOURLY_FRESH_MS)),
     relativeHumidity: metricBlock(humidity, '%', metricFresh(humidity, now, HOURLY_FRESH_MS)),
     lastUpdated,
-    isFresh: measurementCount > 0 && allFresh,
+    isFresh,
+    allLayersFresh: measurementCount > 0 && allFresh,
     isFixture: Boolean(options.isFixture || options.fixtureJson || options.fixtureData),
     enabled: true
   };
