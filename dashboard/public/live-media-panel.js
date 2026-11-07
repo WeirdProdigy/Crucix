@@ -157,6 +157,7 @@
   let lastImageRefreshedAt = new Map();
   let gridImageErrors = new Set();
   let streamLastModified = new Map();
+  let streamMetaErrors = new Map();
 
   function computeFreshnessBadge(lastModified, now = Date.now()) {
     if (!lastModified) return { label: 'ismeretlen', status: 'unknown', className: 'lm-freshness-unknown' };
@@ -178,31 +179,65 @@
   }
 
   function probeLastModified(stream) {
-    if (!stream || !stream.id || !stream.imageUrl || typeof fetch === 'undefined') return;
+    if (!stream || !stream.id) return;
+    const fetchFn = (typeof window !== 'undefined' && typeof window.fetch === 'function')
+      ? window.fetch
+      : (typeof fetch === 'function' ? fetch : null);
+    if (!fetchFn) return;
     try {
-      fetch(stream.imageUrl, { method: 'HEAD', mode: 'cors', cache: 'no-store' })
+      fetchFn(`/api/still-image-meta?id=${encodeURIComponent(stream.id)}`, { method: 'GET', cache: 'no-store' })
         .then(res => {
-          const lm = res.headers ? res.headers.get('last-modified') : null;
-          if (lm) {
-            streamLastModified.set(stream.id, lm);
+          if (!res.ok) {
+            return res.json().catch(() => ({})).then(data => {
+              throw new Error(data?.error || `HTTP ${res.status}`);
+            });
+          }
+          return res.json();
+        })
+        .then(data => {
+          if (data && data.ok && data.lastModified) {
+            streamLastModified.set(stream.id, data.lastModified);
+            streamMetaErrors.delete(stream.id);
             updateGridFreshnessDom(stream.id);
+          } else {
+            streamLastModified.set(stream.id, null);
+            const errMsg = data?.error || 'A forrás fejléce nem érhető el';
+            streamMetaErrors.set(stream.id, errMsg);
+            updateGridFreshnessDom(stream.id, errMsg);
           }
         })
-        .catch(() => {});
-    } catch (_) {}
+        .catch(err => {
+          streamLastModified.set(stream.id, null);
+          const errMsg = err?.message || String(err) || 'Hálózati hiba a frissesség lekérdezésekor';
+          streamMetaErrors.set(stream.id, errMsg);
+          updateGridFreshnessDom(stream.id, errMsg);
+        });
+    } catch (err) {
+      streamLastModified.set(stream.id, null);
+      const errMsg = err?.message || String(err) || 'Hiba';
+      streamMetaErrors.set(stream.id, errMsg);
+      updateGridFreshnessDom(stream.id, errMsg);
+    }
   }
 
-  function updateGridFreshnessDom(streamId) {
+  function updateGridFreshnessDom(streamId, errorReason = null) {
     if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
     const badge = document.getElementById(`lm-grid-freshness-${streamId}`);
     const headBadge = document.getElementById(`lm-grid-freshness-head-${streamId}`);
     const lm = streamLastModified.get(streamId);
+    const err = errorReason || streamMetaErrors.get(streamId);
     const freshness = computeFreshnessBadge(lm);
     for (const b of [badge, headBadge]) {
       if (b) {
         b.textContent = freshness.label;
         b.className = `lm-freshness-badge ${freshness.className}`;
-        if (lm) b.setAttribute('title', `Forrás utolsó módosítása (Last-Modified): ${lm}`);
+        if (lm) {
+          b.setAttribute('title', `Forrás utolsó módosítása (Last-Modified): ${lm}`);
+        } else if (err) {
+          b.setAttribute('title', `Frissesség nem állapítható meg: ${err}`);
+        } else {
+          b.setAttribute('title', 'Frissesség ismeretlen');
+        }
       }
     }
   }
@@ -1101,7 +1136,7 @@
       const intervalLabel = isStillImage ? 'Állókép · 30 perc' : 'Állókép · 60 mp';
       const refTs = lastImageRefreshedAt.get(stream.id);
       const refreshedText = `Frissítve: ${formatTimeString(refTs)}`;
-      const lmHeader = streamLastModified.get(stream.id) || stream.lastModified || stream.checkedAt;
+      const lmHeader = streamLastModified.get(stream.id) || null;
       const freshness = isStillImage ? computeFreshnessBadge(lmHeader) : null;
 
       return `
@@ -1344,8 +1379,8 @@
               <div class="lm-camera-meta-bar">
                 <span class="lm-camera-refresh-indicator">🔄 Frissítés: ${stream.sourceType === 'still-image' ? '30 perc' : '60 mp'} (közvetlen böngészőoldali)</span>
                 ${stream.sourceType === 'still-image' ? `
-                  <span class="lm-freshness-badge ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || stream.lastModified || stream.checkedAt).className)}">
-                    ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || stream.lastModified || stream.checkedAt).label)}
+                  <span class="lm-freshness-badge ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || null).className)}" title="${streamLastModified.get(stream.id) ? `Forrás utolsó módosítása (Last-Modified): ${esc(streamLastModified.get(stream.id))}` : (streamMetaErrors.get(stream.id) ? `Frissesség nem állapítható meg: ${esc(streamMetaErrors.get(stream.id))}` : 'Frissesség ismeretlen')}">
+                    ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || null).label)}
                   </span>
                 ` : ''}
                 <button type="button" class="lm-btn-camera-close" title="Kamera bezárása" onclick="window.CrucixLiveMedia?.unloadCamera('${esc(stream.id)}')">✕ Bezárás</button>
@@ -1404,8 +1439,8 @@
                 <span class="lm-status-pill lm-page-status lm-badge-still" title="Típus">
                   Állókép
                 </span>
-                <span class="lm-status-pill lm-freshness-badge ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || stream.lastModified || stream.checkedAt).className)}" title="Last-Modified fejléc alapján">
-                  ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || stream.lastModified || stream.checkedAt).label)}
+                <span class="lm-status-pill lm-freshness-badge ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || null).className)}" title="${streamLastModified.get(stream.id) ? `Forrás utolsó módosítása (Last-Modified): ${esc(streamLastModified.get(stream.id))}` : (streamMetaErrors.get(stream.id) ? `Frissesség nem állapítható meg: ${esc(streamMetaErrors.get(stream.id))}` : 'Frissesség ismeretlen')}">
+                  ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || null).label)}
                 </span>
                 <span class="lm-status-pill lm-embed-status lm-embed-external-only" title="Beágyazhatóság">
                   Beágyazhatóság: ${esc(embedInfo.label)}
@@ -1948,10 +1983,13 @@
     WINDY_DISCLAIMER_TEXT,
     computeFreshnessBadge,
     getStreamLastModified: (streamId) => streamLastModified.get(streamId),
+    getStreamMetaError: (streamId) => streamMetaErrors.get(streamId),
     setStreamLastModified: (streamId, lm) => {
       streamLastModified.set(streamId, lm);
+      if (lm) streamMetaErrors.delete(streamId);
       updateGridFreshnessDom(streamId);
-    }
+    },
+    probeLastModified: (stream) => probeLastModified(stream)
   });
 
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});

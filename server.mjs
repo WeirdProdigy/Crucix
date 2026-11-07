@@ -8,6 +8,7 @@ import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { openBrowser } from './lib/open-browser.mjs';
 import { loadLiveStreams } from './lib/intelligence/live-streams.mjs';
+import { StillImageMetaService } from './lib/intelligence/still-image-meta.mjs';
 import { inlineJson } from './lib/html.mjs';
 import { installApiErrorHandler } from './lib/api-errors.mjs';
 import { installHttpSecurity } from './lib/http-security.mjs';
@@ -54,6 +55,7 @@ for (const dir of [RUNS_DIR, MEMORY_DIR, join(MEMORY_DIR, 'cold')]) {
 let currentData = null;    // Current synthesized dashboard data
 let liveStreamsRegistry = [];
 try { liveStreamsRegistry = loadLiveStreams(); } catch (e) { console.warn('[LiveStreams] Could not load registry:', e.message); }
+const stillImageMetaService = new StillImageMetaService({ getRegistry: () => liveStreamsRegistry });
 let lastSweepTime = null;  // Timestamp of last sweep
 let sweepStartedAt = null; // Timestamp when current/last sweep started
 let sweepInProgress = false;
@@ -414,6 +416,20 @@ app.get('/api/locales', (req, res) => {
 // API: public live streams and webcams registry
 app.get('/api/live-streams', (_req, res) => {
   res.json({ liveStreams: liveStreamsRegistry });
+});
+
+// API: still image metadata (cached HEAD Last-Modified)
+app.get('/api/still-image-meta', async (req, res) => {
+  const streamId = req.query.id;
+  const result = await stillImageMetaService.getMetadata(streamId);
+  res.status(result.status || 200).json({
+    ok: result.ok,
+    streamId: result.streamId,
+    lastModified: result.lastModified || null,
+    checkedAt: result.checkedAt,
+    cached: result.cached || false,
+    ...(result.error ? { error: result.error } : {})
+  });
 });
 
 // API: OVF gauges (memory-only hydro telemetry)

@@ -9,6 +9,7 @@ export const ENDPOINT_URL = 'https://aszalymonitoring.vizugy.hu/api.php';
 
 const HOURLY_FRESH_MS = 180 * 60 * 1000;
 const DAILY_FRESH_MS = 36 * 60 * 60 * 1000;
+const WATER_DEFICIT_FRESH_MS = 72 * 60 * 60 * 1000; // 72 óra: az OVF vízhiány réteg számítása ~2 napos modellszámítási késéssel érkezik
 const DEPTHS = ['10cm', '20cm', '30cm', '45cm', '60cm', '75cm'];
 const WATER_DEFICIT_DEPTHS = ['35cm', '80cm'];
 
@@ -114,7 +115,7 @@ export function parseOvfDroughtResponse(json, options = {}) {
     waterDeficit[depth] = deficit.value;
     if (deficit.value !== null) {
       measurementCount++;
-      allFresh = allFresh && metricFresh(deficit, now, DAILY_FRESH_MS);
+      allFresh = allFresh && metricFresh(deficit, now, WATER_DEFICIT_FRESH_MS);
     }
     if (deficit.timestamp) timestamps.push(deficit.timestamp);
   }
@@ -159,7 +160,7 @@ export function parseOvfDroughtResponse(json, options = {}) {
     }) },
     soilTemperature: { ...soilTemperature, unit: '°C', timestamp: groupTimestamp(soilTemperatureGroup) || lastUpdated, fresh: DEPTHS.some(depth => soilTemperature[depth] !== null) && DEPTHS.filter(depth => soilTemperature[depth] !== null).every(depth => metricFresh(seriesValue(soilTemperatureGroup, DEPTHS.indexOf(depth)), now, HOURLY_FRESH_MS)) },
     droughtIndex: { value: drought.value, unit: '', timestamp: drought.timestamp, fresh: metricFresh(drought, now, DAILY_FRESH_MS) },
-    waterDeficit: { ...waterDeficit, unit: 'mm', timestamp: groupTimestamp(waterDeficitGroup) || lastUpdated, fresh: WATER_DEFICIT_DEPTHS.some(depth => waterDeficit[depth] !== null) && WATER_DEFICIT_DEPTHS.filter(depth => waterDeficit[depth] !== null).every(depth => metricFresh(seriesValue(waterDeficitGroup, WATER_DEFICIT_DEPTHS.indexOf(depth)), now, DAILY_FRESH_MS)) },
+    waterDeficit: { ...waterDeficit, unit: 'mm', timestamp: groupTimestamp(waterDeficitGroup) || lastUpdated, fresh: WATER_DEFICIT_DEPTHS.some(depth => waterDeficit[depth] !== null) && WATER_DEFICIT_DEPTHS.filter(depth => waterDeficit[depth] !== null).every(depth => metricFresh(seriesValue(waterDeficitGroup, WATER_DEFICIT_DEPTHS.indexOf(depth)), now, WATER_DEFICIT_FRESH_MS)) },
     precipitation: metricBlock(precipitation, 'mm', metricFresh(precipitation, now, HOURLY_FRESH_MS)),
     airTemperature: metricBlock(air, '°C', metricFresh(air, now, HOURLY_FRESH_MS)),
     relativeHumidity: metricBlock(humidity, '%', metricFresh(humidity, now, HOURLY_FRESH_MS)),

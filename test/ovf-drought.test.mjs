@@ -41,6 +41,12 @@ test('applies hourly and daily freshness windows', () => {
   assert.equal(staleHourly.airTemperature.fresh, false);
   assert.equal(staleDaily.droughtIndex.fresh, false);
   assert.equal(freshDaily.droughtIndex.fresh, true);
+
+  // 72-hour window for waterDeficit (reflecting ~2-day batch calculation cycle)
+  const freshDeficit48h = parseOvfDroughtResponse(fixture, { now: fixtureNow + 48 * 60 * 60 * 1000 });
+  const staleDeficit73h = parseOvfDroughtResponse(fixture, { now: fixtureNow + 72 * 60 * 60 * 1000 + 1 });
+  assert.equal(freshDeficit48h.waterDeficit.fresh, true, 'waterDeficit remains fresh at 48h (~2 day cycle)');
+  assert.equal(staleDeficit73h.waterDeficit.fresh, false, 'waterDeficit becomes stale after 72h');
 });
 
 test('resists missing and malformed JSON', () => {

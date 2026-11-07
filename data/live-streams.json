@@ -465,7 +465,6 @@
     "embedStatus": "embeddable",
     "refreshIntervalSec": 1800,
     "checkedAt": "2026-11-06",
-    "lastModified": "2026-11-06T21:00:10.000Z",
     "provenance": "IK1QFK / vlf.it (Cumiana VLF Monitoring Station)",
     "notes": "Cumiana (Olaszország); ELF/VLF spektrogram (1–30 Hz geofon, 1–105 Hz Marconi-antenna); a Föld–ionoszféra üregrezonátor alaprezgése (7,83 Hz) és felharmonikusai (14,3 / 20,8 / 27,3 / 33,8 Hz). Frissítés 30 percenként, közvetlen böngészőoldali betöltés. Tomszk: sosrff.tsu.ru: 2025. szept. 1. óta nem frissül; sos70.ru: a helyi hálózatról nem érhető el, állapota ismeretlen."
   }

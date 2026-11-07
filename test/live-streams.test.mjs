@@ -1444,3 +1444,107 @@ test('refresh transition: old Last-Modified to fresh Last-Modified updates badge
   assert.equal(badgeEl.className, 'lm-freshness-badge lm-freshness-live');
   assert.equal(headBadgeEl.textContent, 'LIVE');
 });
+
+test('probeLastModified: queries /api/still-image-meta endpoint with cache: no-store, updates badge on success, and falls back to ismeretlen with error tooltip on failure (never befagyott)', async () => {
+  const root = new URL('../', import.meta.url);
+  const jsCode = readFileSync(new URL('dashboard/public/live-media-panel.js', root), 'utf8');
+
+  const elements = new Map();
+  const createElement = (id) => {
+    const el = {
+      id,
+      textContent: '',
+      className: '',
+      attrs: new Map(),
+      setAttribute(k, v) { this.attrs.set(k, v); },
+      getAttribute(k) { return this.attrs.get(k); }
+    };
+    elements.set(id, el);
+    return el;
+  };
+
+  const badgeEl = createElement('lm-grid-freshness-schumann-resonance-cumiana');
+  const headBadgeEl = createElement('lm-grid-freshness-head-schumann-resonance-cumiana');
+
+  const stream = {
+    id: 'schumann-resonance-cumiana',
+    name: 'Cumiana spektrogram',
+    sourceType: 'still-image',
+    imageUrl: 'http://www.vlf.it/cumiana/last-geomar.jpg'
+  };
+
+  let fetchedUrl = null;
+  let fetchedOpts = null;
+  let fetchOutcome = 'success';
+
+  const mockFetch = async (url, opts) => {
+    fetchedUrl = url;
+    fetchedOpts = opts;
+    if (fetchOutcome === 'success') {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          streamId: 'schumann-resonance-cumiana',
+          lastModified: new Date(Date.now() - 20 * 60 * 1000).toUTCString(), // 20 min ago
+          checkedAt: new Date().toISOString()
+        })
+      };
+    } else if (fetchOutcome === 'upstream-error') {
+      return {
+        ok: false,
+        status: 502,
+        json: async () => ({
+          ok: false,
+          error: 'A távoli forrás HTTP 500 hibát adott.'
+        })
+      };
+    } else {
+      throw new Error('Hálózati kapcsolat megszakadt');
+    }
+  };
+
+  const mockWindow = {
+    location: { hostname: '192.168.1.81' },
+    fetch: mockFetch,
+    __CRUCIX_DATA__: { liveStreams: [stream] }
+  };
+  const mockDocument = {
+    addEventListener: () => {},
+    getElementById: (id) => elements.get(id) || null
+  };
+
+  const fn = new Function('window', 'document', jsCode);
+  fn(mockWindow, mockDocument);
+  const lm = mockWindow.CrucixLiveMedia;
+
+  // 1. Success case: endpoint returns ok: true and fresh lastModified
+  fetchOutcome = 'success';
+  lm.probeLastModified(stream);
+  await new Promise(r => setTimeout(r, 20));
+
+  assert.equal(fetchedUrl, '/api/still-image-meta?id=schumann-resonance-cumiana');
+  assert.equal(fetchedOpts?.cache, 'no-store');
+  assert.equal(badgeEl.textContent, 'LIVE');
+  assert.equal(badgeEl.className, 'lm-freshness-badge lm-freshness-live');
+  assert.match(badgeEl.getAttribute('title'), /Forrás utolsó módosítása/);
+
+  // 2. Failure case 1: endpoint returns 502 with structured error message
+  fetchOutcome = 'upstream-error';
+  lm.probeLastModified(stream);
+  await new Promise(r => setTimeout(r, 20));
+
+  assert.equal(badgeEl.textContent, 'ismeretlen', 'Must be ismeretlen on error, NEVER befagyott');
+  assert.equal(badgeEl.className, 'lm-freshness-badge lm-freshness-unknown');
+  assert.match(badgeEl.getAttribute('title'), /Frissesség nem állapítható meg: A távoli forrás HTTP 500 hibát adott\./);
+
+  // 3. Failure case 2: network throw
+  fetchOutcome = 'network-throw';
+  lm.probeLastModified(stream);
+  await new Promise(r => setTimeout(r, 20));
+
+  assert.equal(badgeEl.textContent, 'ismeretlen', 'Must be ismeretlen on network error');
+  assert.equal(badgeEl.className, 'lm-freshness-badge lm-freshness-unknown');
+  assert.match(badgeEl.getAttribute('title'), /Frissesség nem állapítható meg: Hálózati kapcsolat megszakadt/);
+});
