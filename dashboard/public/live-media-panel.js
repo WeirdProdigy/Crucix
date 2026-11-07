@@ -766,6 +766,9 @@
     if (stream.sourceType === 'youtube') {
       return isEmbeddableStream(stream);
     }
+    if (stream.sourceType === 'embed' && stream.embedUrl && stream.embedUrl.includes('videa.hu')) {
+      return isEmbeddableStream(stream);
+    }
     const isPrivate = isPrivateOrLocalHost();
     if (!isPrivate) return false;
     if (stream.sourceType === 'hls' || Boolean(stream.streamUrl)) {
@@ -1068,7 +1071,7 @@
       case 'unverified-live': return 'Nem igazolt élő';
       case 'verified': return 'Hitelesített';
       case 'page-ok': return 'Oldal elérhető';
-      case 'delayed': return 'Késleltetett (60p)';
+      case 'delayed': return 'Késleltetett (60 perc)';
       case 'archive': return 'Archívum';
       case 'no-live-feed': return 'Nincs közvetítés';
       case 'unverified': return 'Nem ellenőrzött';
@@ -1081,7 +1084,7 @@
     if (stream.sourceType === 'still-image') {
       return { code: 'embeddable', label: 'Beágyazható állókép' };
     }
-    if (stream.sourceType === 'embed' || stream.embedKind === 'windy-widget') {
+    if (stream.embedKind === 'windy-widget') {
       return { code: 'embeddable', label: 'Beágyazható widget' };
     }
     if (stream.embedStatus === 'external-only' || stream.sourceType === 'link-only') {
@@ -1090,6 +1093,12 @@
     if (stream.status === 'unverified' || stream.embedStatus === 'unverified') {
       return { code: 'unverified', label: 'Nem beágyazható' };
     }
+    if (stream.sourceType === 'embed') {
+      return { code: 'embeddable', label: 'Beágyazható' };
+    }
+    if (stream.sourceType === 'hls') {
+      return { code: 'embeddable', label: 'Beágyazható HLS' };
+    }
     if (stream.sourceType === 'youtube' && YOUTUBE_VIDEO_ID_REGEX.test(stream.videoId || '')) {
       return { code: 'embeddable', label: 'Beágyazható' };
     }
@@ -1097,13 +1106,23 @@
   }
 
   function isEmbeddableStream(stream) {
-    return Boolean(
-      stream &&
-      stream.sourceType === 'youtube' &&
-      stream.embedStatus !== 'external-only' &&
-      stream.status !== 'unverified' &&
-      YOUTUBE_VIDEO_ID_REGEX.test(stream.videoId || '')
-    );
+    if (!stream || stream.embedStatus === 'external-only' || stream.status === 'unverified') {
+      return false;
+    }
+    if (stream.sourceType === 'youtube') {
+      return YOUTUBE_VIDEO_ID_REGEX.test(stream.videoId || '');
+    }
+    if (stream.sourceType === 'embed') {
+      return Boolean(stream.embedUrl && (
+        stream.embedUrl.startsWith('https://videa.hu/') ||
+        stream.embedUrl.startsWith('https://embed.windy.com/') ||
+        stream.embedUrl.startsWith('https://g0.ipcamlive.com/')
+      ));
+    }
+    if (stream.sourceType === 'hls') {
+      return Boolean(stream.streamUrl && stream.streamUrl.startsWith('https://'));
+    }
+    return false;
   }
 
   function resolveRawStreams(snapshot) {
@@ -1201,7 +1220,7 @@
               <span class="lm-stage-slot-provider">(${esc(stream.provider)})</span>
             </div>
             <div class="lm-stage-slot-top-actions">
-              <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-link-external">Forrás (${esc(stream.provider || 'Windy')}) ↗</a>
+              <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-link-external">Forrás (${esc(stream.provider || 'Külső')}) ↗</a>
             </div>
           </div>
           <div class="lm-player-box">
@@ -1217,7 +1236,7 @@
               </iframe>
             </div>
             <div class="lm-player-bar lm-embed-bar">
-              <span class="lm-embed-disclaimer">${esc(WINDY_DISCLAIMER_TEXT)}</span>
+              <span class="lm-embed-disclaimer">${esc(stream.embedKind === 'windy-widget' ? WINDY_DISCLAIMER_TEXT : (stream.embedUrl && stream.embedUrl.includes('videa.hu') ? 'Késleltetett adás (60 perc) · Forrás: Hír TV / Videa' : (stream.attribution || '')))}</span>
               <div class="lm-player-right-controls">
                 <button type="button" class="lm-btn lm-btn-stop" onclick="window.CrucixLiveMedia?.stopStream('${esc(stream.id)}')">■ Leállítás</button>
               </div>
@@ -1434,7 +1453,9 @@
       `;
     }
 
-    if (stream.sourceType === 'link-only' || stream.sourceType === 'embed' || stream.sourceType === 'still-image' || Boolean(stream.embedUrl) || embedInfo.code === 'external-only') {
+    const isIpcam = Boolean(stream.embedUrl && stream.embedUrl.includes('ipcamlive.com'));
+    const isWindy = stream.embedKind === 'windy-widget' || Boolean(stream.embedUrl && stream.embedUrl.includes('windy.com'));
+    if (stream.sourceType === 'link-only' || stream.sourceType === 'still-image' || isWindy || isIpcam || embedInfo.code === 'external-only') {
       const isPrivateHost = isPrivateOrLocalHost();
       const hasImage = Boolean(stream.imageUrl) && isPrivateHost;
       const isCameraActive = activeCameraIds.has(stream.id);
@@ -1442,8 +1463,7 @@
       const isEmbedActive = activeEmbedIds.has(stream.id);
 
       let externalBodyHtml = '';
-      const isIpcam = Boolean(stream.embedUrl && stream.embedUrl.includes('ipcamlive.com'));
-      if (stream.embedUrl && !isIpcam) {
+      if (isWindy) {
         if (isPrivateHost) {
           if (isEmbedActive) {
             externalBodyHtml = `
@@ -1642,15 +1662,20 @@
       `;
     }
 
+    const isPlayable = (stream.sourceType === 'youtube' && isValidId) ||
+                       (stream.sourceType === 'embed' && Boolean(stream.embedUrl)) ||
+                       (stream.sourceType === 'hls' && Boolean(stream.streamUrl));
+
     let actionAreaHtml = '';
-    if (!isValidId || isError) {
+    if (!isPlayable || isError) {
       const backoffSec = retryBackoff.get(stream.id) || 5;
-      const watchUrl = isValidId ? buildSafeWatchUrl(stream.videoId) : null;
+      const watchUrl = isValidId ? buildSafeWatchUrl(stream.videoId) : stream.url;
+      const watchLabel = stream.sourceType === 'youtube' ? 'Megnyitás a forráson (YouTube) ↗' : 'Megnyitás a forráson ↗';
       actionAreaHtml = `
         <div class="lm-error-box" role="alert">
           <div class="lm-error-text">⚠ A közvetítés jelenleg nem ágyazható be vagy nem érhető el.</div>
           <div class="lm-error-actions">
-            ${watchUrl ? `<a href="${esc(watchUrl)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">Megnyitás a forráson (YouTube) ↗</a>` : ''}
+            ${watchUrl ? `<a href="${esc(watchUrl)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">${esc(watchLabel)}</a>` : ''}
             <button type="button" class="lm-btn lm-btn-retry" onclick="window.CrucixLiveMedia?.retryStream('${esc(stream.id)}')">Újrapróbálás (${backoffSec}s)</button>
           </div>
         </div>
@@ -1663,7 +1688,7 @@
         </div>
       `;
     } else if (isPlaying) {
-      const watchUrl = buildSafeWatchUrl(stream.videoId);
+      const watchUrl = isValidId ? buildSafeWatchUrl(stream.videoId) : stream.url;
       actionAreaHtml = `
         <div class="lm-selector-active-bar">
           <span class="lm-selector-playing-indicator"><span class="lm-live-dot"></span> Lejátszás folyamatban a főképernyőn</span>

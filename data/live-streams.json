@@ -80,6 +80,22 @@
     "notes": "Közel-keleti és nemzetközi 24/7 hírfolyam. Ellenőrzött élő adás és érvényes YouTube beágyazás."
   },
   {
+    "id": "hirtv-delayed-stream",
+    "name": "HírTV – 60 perccel késleltetett",
+    "type": "news",
+    "region": "national",
+    "provider": "Hír TV / Videa",
+    "sourceType": "embed",
+    "url": "https://hirtv.origo.hu/adas",
+    "embedUrl": "https://videa.hu/player?v=CDzWNlyZ6ji2UTDc",
+    "language": "hu",
+    "status": "delayed",
+    "embedStatus": "embeddable",
+    "checkedAt": "2026-11-07",
+    "provenance": "Hivatalos szolgáltatói oldal (hirtv.origo.hu/adas / Videa)",
+    "notes": "Az oldal szerint 60 perccel késleltetett adás. Forrás: Hír TV (hirtv.origo.hu/adas) / Videa. Beágyazható Videa lejátszó iframe."
+  },
+  {
     "id": "nasa-earth-from-space",
     "name": "NASA Live: Official Stream of NASA TV",
     "type": "webcam",

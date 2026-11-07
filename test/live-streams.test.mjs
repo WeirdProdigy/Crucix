@@ -381,17 +381,17 @@ test('6. HTTP Security: Content-Security-Policy header permits youtube-nocookie 
   assert.equal(res.status, 200);
   const csp = res.headers.get('content-security-policy');
   assert.ok(csp, 'Content-Security-Policy header must be present');
-  assert.ok(csp.includes("frame-src 'self' https://www.youtube-nocookie.com https://embed.windy.com https://g0.ipcamlive.com;"), 'CSP must allow youtube-nocookie, embed.windy.com, and g0.ipcamlive.com frame-src');
+  assert.ok(csp.includes("frame-src 'self' https://www.youtube-nocookie.com https://embed.windy.com https://g0.ipcamlive.com https://videa.hu;"), 'CSP must allow youtube-nocookie, embed.windy.com, g0.ipcamlive.com, and videa.hu frame-src');
   assert.ok(csp.includes("img-src 'self' data: https://cam.idokep.hu https://odp.met.hu http://www.vlf.it https://g0.ipcamlive.com;"), 'CSP must allow cam.idokep.hu, odp.met.hu, vlf.it, and g0.ipcamlive.com img-src');
   assert.ok(csp.includes("media-src 'self' blob: https://mms.iptv.unideb.hu;"), 'CSP must allow mms.iptv.unideb.hu media-src');
   assert.ok(csp.includes("connect-src 'self' https://mms.iptv.unideb.hu;"), 'CSP must allow mms.iptv.unideb.hu connect-src');
   assert.ok(!csp.includes('*'), 'CSP must strictly disallow wildcard * origins');
 
-  // Exact frame-src match: frame-src contains exactly the allowed four sources
+  // Exact frame-src match: frame-src contains exactly the allowed five sources
   const frameSrcMatch = csp.match(/frame-src\s+([^;]+);/);
   assert.ok(frameSrcMatch, 'frame-src directive must be present');
   const frameSources = frameSrcMatch[1].trim().split(/\s+/);
-  assert.deepEqual(frameSources.sort(), ["'self'", "https://embed.windy.com", "https://g0.ipcamlive.com", "https://www.youtube-nocookie.com"].sort(), 'frame-src must contain exactly the four allowed sources');
+  assert.deepEqual(frameSources.sort(), ["'self'", "https://embed.windy.com", "https://g0.ipcamlive.com", "https://videa.hu", "https://www.youtube-nocookie.com"].sort(), 'frame-src must contain exactly the five allowed sources');
 });
 
 test('7. Registry schema validation: channelId, provenance, embedStatus, and unverified status handling', () => {
@@ -500,7 +500,7 @@ test('8. Dashboard iframe audit: proof that frame-src permits all dashboard ifra
   // HTTP Security CSP header explicitly allows 'self' and https://www.youtube-nocookie.com
   const httpSecCode = readFileSync(new URL('lib/http-security.mjs', root), 'utf8');
   assert.ok(
-    httpSecCode.includes("'Content-Security-Policy': \"frame-src 'self' https://www.youtube-nocookie.com https://embed.windy.com https://g0.ipcamlive.com; img-src 'self' data: https://cam.idokep.hu https://odp.met.hu http://www.vlf.it https://g0.ipcamlive.com; media-src 'self' blob: https://mms.iptv.unideb.hu; connect-src 'self' https://mms.iptv.unideb.hu;\""),
+    httpSecCode.includes("'Content-Security-Policy': \"frame-src 'self' https://www.youtube-nocookie.com https://embed.windy.com https://g0.ipcamlive.com https://videa.hu; img-src 'self' data: https://cam.idokep.hu https://odp.met.hu http://www.vlf.it https://g0.ipcamlive.com; media-src 'self' blob: https://mms.iptv.unideb.hu; connect-src 'self' https://mms.iptv.unideb.hu;\""),
     'CSP frame-src, img-src, media-src and connect-src rules explicitly whitelisted'
   );
 });
@@ -1660,4 +1660,83 @@ test('14. B5 Camera resilience: stale and dead cameras are hidden with discrete 
   assert.ok(html.includes('id="lm-stale-counter-badge"'), 'Stale counter badge must be present');
   assert.ok(html.includes('3 kamera elrejtve: elavult kép'), 'Counter badge text must show 3 hidden cameras');
   assert.ok(html.includes('Kékestető'), 'Tooltip must list hidden camera names');
+});
+
+test('15. HírTV delayed stream: schema, delayed status badge, click-to-load Videa iframe, sandbox attributes, and CSP allowlist', async () => {
+  const streams = loadLiveStreams();
+  const hirtv = streams.find(s => s.id === 'hirtv-delayed-stream');
+  assert.ok(hirtv, 'hirtv-delayed-stream must be registered in data/live-streams.json');
+  assert.equal(hirtv.name, 'HírTV – 60 perccel késleltetett');
+  assert.equal(hirtv.type, 'news');
+  assert.equal(hirtv.region, 'national');
+  assert.equal(hirtv.sourceType, 'embed');
+  assert.equal(hirtv.status, 'delayed');
+  assert.equal(hirtv.embedStatus, 'embeddable');
+  assert.equal(hirtv.embedUrl, 'https://videa.hu/player?v=CDzWNlyZ6ji2UTDc');
+  assert.ok(hirtv.provenance, 'Provenance must be recorded');
+  assert.match(hirtv.checkedAt, /^\d{4}-\d{2}-\d{2}$/, 'checkedAt must be ISO date');
+
+  // Schema validation
+  assert.doesNotThrow(() => validateLiveStreamEntry(hirtv));
+
+  // Rejection of disallowed embed domains
+  const maliciousEmbed = { ...hirtv, embedUrl: 'https://evil.com/player?v=123' };
+  assert.throws(() => validateLiveStreamEntry(maliciousEmbed), /Invalid 'embedUrl'/);
+
+  // Setup LiveMedia module in test environment
+  const code = readFileSync(new URL('../dashboard/public/live-media-panel.js', import.meta.url), 'utf8');
+  const mockWindow = {
+    innerWidth: 1280,
+    location: { hostname: 'localhost' },
+    __CRUCIX_DATA__: {}
+  };
+  const mockDocument = { hidden: false, addEventListener: () => {} };
+  const runModule = new Function('window', 'document', code);
+  runModule(mockWindow, mockDocument);
+  const LiveMedia = mockWindow.CrucixLiveMedia;
+
+  // UI rendering: card idle state
+  const snapshot = { liveStreams: [hirtv] };
+  const html = LiveMedia.panelHtml(snapshot);
+  assert.ok(html.includes('id="lm-card-hirtv-delayed-stream"'), 'HírTV card must be rendered in embeddable list');
+  assert.ok(html.includes('lm-badge-delayed'), 'Card must have lm-badge-delayed class');
+  assert.ok(html.includes('Késleltetett (60 perc)'), 'Status badge text must be "Késleltetett (60 perc)"');
+  assert.ok(html.includes('▶ Közvetítés indítása'), 'Card must feature click-to-load play button');
+  assert.ok(html.includes('60 perccel késleltetett adás'), 'Card notes must describe 60-minute delay');
+
+  // Play stream in stage slot
+  LiveMedia.playStream('hirtv-delayed-stream');
+  const activeHtml = LiveMedia.panelHtml(snapshot);
+  assert.ok(activeHtml.includes('id="lm-stage-slot-hirtv-delayed-stream"'), 'Stage slot must be active');
+  assert.ok(activeHtml.includes('src="https://videa.hu/player?v=CDzWNlyZ6ji2UTDc"'), 'Stage slot iframe must have correct Videa src');
+  assert.ok(activeHtml.includes('sandbox="allow-scripts allow-same-origin allow-popups"'), 'Iframe must have sandbox attributes');
+  assert.ok(activeHtml.includes('allow="autoplay; fullscreen"'), 'Iframe must allow fullscreen');
+  assert.ok(activeHtml.includes('Késleltetett adás (60 perc) · Forrás: Hír TV / Videa'), 'Stage slot must display HírTV / Videa disclaimer');
+
+  // Stop stream
+  LiveMedia.stopStream('hirtv-delayed-stream');
+  const stoppedHtml = LiveMedia.panelHtml(snapshot);
+  assert.ok(!stoppedHtml.includes('id="lm-stage-slot-hirtv-delayed-stream"'), 'Stage slot must be deactivated after stop');
+
+  // 4-player concurrency cap: adding 5th stream evicts FIFO oldest
+  const sNews1 = { id: 's-news-1', type: 'news', region: 'global', provider: 'DW', sourceType: 'youtube', videoId: 'LuKwFajn37U', status: 'verified-live', embedStatus: 'embeddable' };
+  const sNews2 = { id: 's-news-2', type: 'news', region: 'global', provider: 'F24', sourceType: 'youtube', videoId: 'HvZt-nh9sGg', status: 'verified-live', embedStatus: 'embeddable' };
+  const sNews3 = { id: 's-news-3', type: 'news', region: 'global', provider: 'Euro', sourceType: 'youtube', videoId: 'pykpO5kQJ98', status: 'verified-live', embedStatus: 'embeddable' };
+  const sNews4 = { id: 's-news-4', type: 'news', region: 'global', provider: 'Sky', sourceType: 'youtube', videoId: 'umLWFz4izTM', status: 'verified-live', embedStatus: 'embeddable' };
+  const multiSnapshot = { liveStreams: [sNews1, sNews2, sNews3, sNews4, hirtv] };
+  LiveMedia.panelHtml(multiSnapshot);
+  LiveMedia.setViewMode('grid');
+  LiveMedia.playStream('s-news-1');
+  LiveMedia.playStream('s-news-2');
+  LiveMedia.playStream('s-news-3');
+  LiveMedia.playStream('s-news-4');
+  assert.equal(LiveMedia.getActiveStreamIds().length, 4);
+  assert.deepEqual(LiveMedia.getActiveStreamIds(), ['s-news-1', 's-news-2', 's-news-3', 's-news-4']);
+  LiveMedia.playStream('hirtv-delayed-stream');
+  assert.equal(LiveMedia.getActiveStreamIds().length, 4, 'Must never exceed 4 concurrent streams in grid');
+  assert.deepEqual(LiveMedia.getActiveStreamIds(), ['s-news-2', 's-news-3', 's-news-4', 'hirtv-delayed-stream'], 'Oldest stream s-news-1 must be evicted FIFO');
+
+  // Cleanup
+  LiveMedia.stopAllStreams();
+  LiveMedia.setViewMode('single');
 });
