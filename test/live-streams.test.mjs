@@ -382,16 +382,25 @@ test('6. HTTP Security: Content-Security-Policy header permits youtube-nocookie 
   const csp = res.headers.get('content-security-policy');
   assert.ok(csp, 'Content-Security-Policy header must be present');
   assert.ok(csp.includes("frame-src 'self' https://www.youtube-nocookie.com https://embed.windy.com https://g0.ipcamlive.com https://videa.hu;"), 'CSP must allow youtube-nocookie, embed.windy.com, g0.ipcamlive.com, and videa.hu frame-src');
-  assert.ok(csp.includes("img-src 'self' data: https://cam.idokep.hu https://odp.met.hu http://www.vlf.it https://g0.ipcamlive.com;"), 'CSP must allow cam.idokep.hu, odp.met.hu, vlf.it, and g0.ipcamlive.com img-src');
+  assert.ok(csp.includes("img-src 'self' data: https://cam.idokep.hu https://odp.met.hu http://www.vlf.it https://g0.ipcamlive.com https://*.ipcamlive.com;"), 'CSP must allow cam.idokep.hu, odp.met.hu, vlf.it, g0.ipcamlive.com, and *.ipcamlive.com img-src');
   assert.ok(csp.includes("media-src 'self' blob: https://mms.iptv.unideb.hu;"), 'CSP must allow mms.iptv.unideb.hu media-src');
   assert.ok(csp.includes("connect-src 'self' https://mms.iptv.unideb.hu;"), 'CSP must allow mms.iptv.unideb.hu connect-src');
-  assert.ok(!csp.includes('*'), 'CSP must strictly disallow wildcard * origins');
 
   // Exact frame-src match: frame-src contains exactly the allowed five sources
   const frameSrcMatch = csp.match(/frame-src\s+([^;]+);/);
   assert.ok(frameSrcMatch, 'frame-src directive must be present');
   const frameSources = frameSrcMatch[1].trim().split(/\s+/);
   assert.deepEqual(frameSources.sort(), ["'self'", "https://embed.windy.com", "https://g0.ipcamlive.com", "https://videa.hu", "https://www.youtube-nocookie.com"].sort(), 'frame-src must contain exactly the five allowed sources');
+
+  // Exact img-src match: img-src contains exactly the allowed seven sources (including *.ipcamlive.com for dynamic edge snapshot nodes)
+  const imgSrcMatch = csp.match(/img-src\s+([^;]+);/);
+  assert.ok(imgSrcMatch, 'img-src directive must be present');
+  const imgSources = imgSrcMatch[1].trim().split(/\s+/);
+  assert.deepEqual(imgSources.sort(), ["'self'", "data:", "http://www.vlf.it", "https://*.ipcamlive.com", "https://cam.idokep.hu", "https://g0.ipcamlive.com", "https://odp.met.hu"].sort(), 'img-src must contain exactly the seven allowed sources');
+
+  // Universal wildcard disallow: disallow universal '*' token as an origin
+  const allTokens = csp.split(';').flatMap(d => d.trim().split(/\s+/));
+  assert.ok(!allTokens.includes('*'), 'CSP must strictly disallow universal wildcard * origins');
 });
 
 test('7. Registry schema validation: channelId, provenance, embedStatus, and unverified status handling', () => {
@@ -500,7 +509,7 @@ test('8. Dashboard iframe audit: proof that frame-src permits all dashboard ifra
   // HTTP Security CSP header explicitly allows 'self' and https://www.youtube-nocookie.com
   const httpSecCode = readFileSync(new URL('lib/http-security.mjs', root), 'utf8');
   assert.ok(
-    httpSecCode.includes("'Content-Security-Policy': \"frame-src 'self' https://www.youtube-nocookie.com https://embed.windy.com https://g0.ipcamlive.com https://videa.hu; img-src 'self' data: https://cam.idokep.hu https://odp.met.hu http://www.vlf.it https://g0.ipcamlive.com; media-src 'self' blob: https://mms.iptv.unideb.hu; connect-src 'self' https://mms.iptv.unideb.hu;\""),
+    httpSecCode.includes("'Content-Security-Policy': \"frame-src 'self' https://www.youtube-nocookie.com https://embed.windy.com https://g0.ipcamlive.com https://videa.hu; img-src 'self' data: https://cam.idokep.hu https://odp.met.hu http://www.vlf.it https://g0.ipcamlive.com https://*.ipcamlive.com; media-src 'self' blob: https://mms.iptv.unideb.hu; connect-src 'self' https://mms.iptv.unideb.hu;\""),
     'CSP frame-src, img-src, media-src and connect-src rules explicitly whitelisted'
   );
 });
