@@ -166,10 +166,28 @@
   };
 
   let newsScope = 'view'; // 'view' | 'all'
+  let visibleNewsLimit = 10;
+
+  function showMoreNews(step = 10) {
+    const increment = Number.isFinite(step) && step > 0 ? step : 10;
+    visibleNewsLimit += increment;
+    for (const fn of changeListeners) {
+      try { fn(activeView); } catch (e) { console.error('[ViewsPanel]', e); }
+    }
+  }
+
+  function getVisibleNewsLimit() {
+    return visibleNewsLimit;
+  }
+
+  function resetVisibleNewsLimit() {
+    visibleNewsLimit = 10;
+  }
 
   function setNewsScope(scope) {
     if (scope === 'view' || scope === 'all') {
       newsScope = scope;
+      visibleNewsLimit = 10;
       for (const fn of changeListeners) {
         try { fn(activeView); } catch {}
       }
@@ -182,6 +200,7 @@
 
   function resetNewsScope() {
     newsScope = 'view';
+    visibleNewsLimit = 10;
   }
 
   let contentTab = 'news'; // 'news' | 'live'
@@ -374,6 +393,7 @@
     activeView = view;
     saveView(view);
     newsScope = 'view';
+    visibleNewsLimit = 10;
     if (opts.syncLiveStream !== false && Object.values(LIVE_STREAM_TABS).includes(view)) {
       liveStreamTab = view;
       saveLiveTab(view);
@@ -755,6 +775,7 @@
     if (filter.source !== undefined) newsFilter.source = filter.source;
     if (filter.category !== undefined) newsFilter.category = filter.category;
     if (filter.sort !== undefined) newsFilter.sort = filter.sort;
+    visibleNewsLimit = 10;
     for (const fn of changeListeners) {
       try { fn(activeView); } catch {}
     }
@@ -766,6 +787,7 @@
 
   function resetNewsFilter() {
     newsFilter = { source: 'all', category: 'all', sort: 'priority' };
+    visibleNewsLimit = 10;
   }
 
   function newsFeedHtml(snapshot) {
@@ -897,33 +919,29 @@
       ceilingNote = `<div class="vp-newsfeed-ceiling-note">Nézeti felső plafon aktív: ${retainedCount} / ${eligibleCount} hír megtartva${filterSuffix}.</div>`;
     }
 
-    // 8. Render news cards: top 10 full size, remainder scrollable inside panel
-    const topCount = Math.min(10, filtered.length);
-    const topNews = filtered.slice(0, 10);
-    const remainingNews = filtered.slice(10);
+    // 8. Render news cards: visible items up to visibleNewsLimit in document flow, with "Mutass többet" pagination button
+    const shownCount = Math.min(visibleNewsLimit, filtered.length);
+    const visibleNews = filtered.slice(0, shownCount);
+    const remainingCount = Math.max(0, filtered.length - shownCount);
     let cardsContent = '';
     if (filtered.length === 0) {
       cardsContent = `<div class="vp-empty">Van hír (${nonPromoNews.length} db), de a szűrés után nincs találat.</div>`;
     } else {
-      const topCardsHtml = topNews.map(item => renderNewsCard(item)).join('');
-      let remainingHtml = '';
-      if (remainingNews.length > 0) {
-        remainingHtml = `
-          <div class="vp-news-remaining-section" id="vp-news-remaining-container">
-            <div class="vp-news-remaining-head">
-              <span class="vp-news-remaining-title">További hírek a nézetből (${remainingNews.length} db)</span>
-            </div>
-            <div class="vp-news-items vp-news-remaining-scroll vp-scroll-region scroll-region" tabindex="0" role="region" aria-label="További hírek lista (görgethető)">
-              ${remainingNews.map(item => renderNewsCard(item)).join('')}
-            </div>
+      const newsCardsHtml = visibleNews.map(item => renderNewsCard(item)).join('');
+      let moreBtnHtml = '';
+      if (remainingCount > 0) {
+        const nextStep = Math.min(10, remainingCount);
+        moreBtnHtml = `
+          <div class="vp-news-more-wrap">
+            <button type="button" class="vp-btn-more-news" id="vp-btn-more-news" onclick="window.CrucixViewsPanel?.showMoreNews(10)">↓ Mutass többet (+${nextStep} hír · még ${remainingCount} db van)</button>
           </div>
         `;
       }
       cardsContent = `
-        <div class="vp-news-items vp-scroll-region scroll-region" tabindex="0" role="region" aria-label="Hírfolyam lista">
-          ${topCardsHtml}
+        <div id="vp-news-items-flow" class="vp-news-items vp-scroll-region scroll-region" tabindex="0" role="region" aria-label="Hírfolyam lista">
+          ${newsCardsHtml}
         </div>
-        ${remainingHtml}
+        ${moreBtnHtml}
       `;
     }
 
@@ -939,7 +957,7 @@
       <div class="vp-newsfeed-section" id="vp-newsfeed">
         <div class="vp-newsfeed-head">
           <span class="vp-newsfeed-title">Hírfolyam – ${esc(VIEW_LABELS[effectiveView] || 'Hírfolyam')}</span>
-          <span class="vp-newsfeed-ceiling-badge" id="vp-newsfeed-ceiling-badge">${topCount} / ${retainedCount} hír</span>
+          <span class="vp-newsfeed-ceiling-badge" id="vp-newsfeed-ceiling-badge">${shownCount} / ${retainedCount} hír</span>
           <span class="vp-sec-badge">${esc(headBadgeText)}</span>
         </div>
         <div class="vp-newsfeed-tabs" role="tablist" aria-label="Hírfolyam hatókör">
@@ -1454,6 +1472,9 @@
     coveragePanelHtml,
     renderNewsCard,
     newsFeedHtml,
+    showMoreNews,
+    getVisibleNewsLimit,
+    resetVisibleNewsLimit,
     getViewNews,
     setNewsFilter,
     getNewsFilter,

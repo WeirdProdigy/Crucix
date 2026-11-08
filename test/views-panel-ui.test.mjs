@@ -1256,3 +1256,65 @@ test('30. Kompakt görgethető panelminta és térképi hírjelölő szűrés el
   assert.ok(covHtml.includes('class="cov-list vp-scroll-region scroll-region" tabindex="0" role="region" aria-label="Forrásfedettség lista"'));
   assert.ok(covHtml.indexOf('Dehir') < covHtml.indexOf('HAON'), 'Hibás/elavult forrás (stale_error) kerül előre a Forrásfedettség panelen');
 });
+
+test('31. Helyi hírek: folyam-alapú lapozás (Mutass többet), nincs belső 480px-es görgetődoboz', () => {
+  const { api } = createHarness();
+
+  // 25 teszt hír generálása
+  const mockNews = [];
+  for (let i = 1; i <= 25; i++) {
+    mockNews.push({
+      id: `news-${i}`,
+      title: `Helyi esemény hír #${i}`,
+      territory: 'local',
+      category: 'news_general',
+      publishedAt: '2026-11-01T12:00:00Z',
+      url: `https://example.com/hir-${i}`
+    });
+  }
+
+  const snapshot = {
+    views: {
+      local: { newsCount: 25, retainedNewsCount: 25, newsIds: mockNews.map(n => n.id) },
+      news: mockNews
+    }
+  };
+
+  // 1. Alapállapot: visibleNewsLimit = 10
+  assert.equal(api.getVisibleNewsLimit(), 10);
+  let html = api.newsFeedHtml(snapshot);
+
+  // Felső plafon jelvény 10 / 25 hír
+  assert.ok(html.includes('<span class="vp-newsfeed-ceiling-badge" id="vp-newsfeed-ceiling-badge">10 / 25 hír</span>'));
+  // "Mutass többet" gomb jelen van
+  assert.ok(html.includes('id="vp-btn-more-news"'));
+  assert.ok(html.includes('↓ Mutass többet (+10 hír · még 15 db van)'));
+  // Régi 480px-es belső görgetősáv NINCS a kimenetben
+  assert.ok(!html.includes('vp-news-remaining-scroll'));
+  assert.ok(!html.includes('vp-news-remaining-section'));
+
+  // 2. showMoreNews(10) -> visibleNewsLimit = 20
+  api.showMoreNews(10);
+  assert.equal(api.getVisibleNewsLimit(), 20);
+  html = api.newsFeedHtml(snapshot);
+
+  assert.ok(html.includes('<span class="vp-newsfeed-ceiling-badge" id="vp-newsfeed-ceiling-badge">20 / 25 hír</span>'));
+  assert.ok(html.includes('id="vp-btn-more-news"'));
+  assert.ok(html.includes('↓ Mutass többet (+5 hír · még 5 db van)'));
+
+  // 3. showMoreNews(10) újra -> visibleNewsLimit = 30 (mind a 25 látható)
+  api.showMoreNews(10);
+  assert.equal(api.getVisibleNewsLimit(), 30);
+  html = api.newsFeedHtml(snapshot);
+
+  assert.ok(html.includes('<span class="vp-newsfeed-ceiling-badge" id="vp-newsfeed-ceiling-badge">25 / 25 hír</span>'));
+  assert.ok(!html.includes('id="vp-btn-more-news"'), 'Nincs több hír, a léptetőgomb nem jelenik meg');
+
+  // 4. resetVisibleNewsLimit visszaállítja 10-re
+  api.resetVisibleNewsLimit();
+  assert.equal(api.getVisibleNewsLimit(), 10);
+  html = api.newsFeedHtml(snapshot);
+  assert.ok(html.includes('<span class="vp-newsfeed-ceiling-badge" id="vp-newsfeed-ceiling-badge">10 / 25 hír</span>'));
+  assert.ok(html.includes('id="vp-btn-more-news"'));
+});
+
