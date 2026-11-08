@@ -163,6 +163,9 @@
   let streamLastModified = new Map();
   let streamMetaErrors = new Map();
   let hlsInstances = new Map();
+  let windyResizeObserver = null;
+  let windyResizeDebounceTimers = new Map();
+  let lastWindyDimensions = new Map(); // streamId -> { width: number, height: number }
 
   function computeFreshnessBadge(lastModified, now = Date.now()) {
     if (!lastModified) return { label: 'ismeretlen', status: 'unknown', className: 'lm-freshness-unknown' };
@@ -426,6 +429,10 @@
   function cleanupGridSlot(streamId) {
     clearGridImageTimer(streamId);
     gridImageErrors.delete(streamId);
+    if (windyResizeDebounceTimers.has(streamId)) {
+      clearTimeout(windyResizeDebounceTimers.get(streamId));
+      windyResizeDebounceTimers.delete(streamId);
+    }
     if (hlsInstances && hlsInstances.has(streamId)) {
       try {
         hlsInstances.get(streamId).destroy();
@@ -440,6 +447,100 @@
           v.removeAttribute('src');
           v.load();
         } catch {}
+      }
+    }
+  }
+
+  function buildWindyEmbedUrl(rawUrl, width, height) {
+    if (!rawUrl || typeof rawUrl !== 'string') return '';
+    try {
+      const parsed = new URL(rawUrl, typeof window !== 'undefined' && window.location ? window.location.href : 'http://localhost');
+      if (width && Number.isFinite(width) && width > 0) {
+        parsed.searchParams.set('width', String(Math.round(width)));
+      }
+      if (height && Number.isFinite(height) && height > 0) {
+        parsed.searchParams.set('height', String(Math.round(height)));
+      }
+      return parsed.toString();
+    } catch (_e) {
+      let url = rawUrl;
+      if (width && Number.isFinite(width) && width > 0) {
+        url = url.includes('width=')
+          ? url.replace(/([?&])width=\d+/, `$1width=${Math.round(width)}`)
+          : (url.includes('?') ? `${url}&width=${Math.round(width)}` : `${url}?width=${Math.round(width)}`);
+      }
+      if (height && Number.isFinite(height) && height > 0) {
+        url = url.includes('height=')
+          ? url.replace(/([?&])height=\d+/, `$1height=${Math.round(height)}`)
+          : (url.includes('?') ? `${url}&height=${Math.round(height)}` : `${url}?height=${Math.round(height)}`);
+      }
+      return url;
+    }
+  }
+
+  function initWindyResizeObserver() {
+    if (typeof window === 'undefined' || typeof window.ResizeObserver !== 'function') return;
+    if (windyResizeObserver) return;
+    windyResizeObserver = new window.ResizeObserver(entries => {
+      for (const entry of entries) {
+        const target = entry.target;
+        const streamId = target?.dataset?.windyStreamId;
+        if (!streamId) continue;
+        const rect = entry.contentRect || (target.getBoundingClientRect ? target.getBoundingClientRect() : null);
+        if (!rect) continue;
+        const w = Math.round(rect.width);
+        const h = Math.round(rect.height);
+        if (w < 50 || h < 50) continue;
+
+        const prev = lastWindyDimensions.get(streamId);
+        if (prev && Math.abs(prev.width - w) < 15 && Math.abs(prev.height - h) < 15) {
+          continue;
+        }
+
+        if (windyResizeDebounceTimers.has(streamId)) {
+          clearTimeout(windyResizeDebounceTimers.get(streamId));
+        }
+        const timer = setTimeout(() => {
+          windyResizeDebounceTimers.delete(streamId);
+          updateWindyFrameDimensions(streamId, w, h);
+        }, 200);
+        windyResizeDebounceTimers.set(streamId, timer);
+      }
+    });
+  }
+
+  function updateWindyFrameDimensions(streamId, width, height) {
+    if (typeof document === 'undefined') return;
+    const iframe = document.getElementById(`lm-stage-embed-${streamId}`);
+    if (!iframe) return;
+    const rawStreams = resolveRawStreams();
+    const stream = rawStreams.find(s => s.id === streamId);
+    if (!stream || !stream.embedUrl) return;
+
+    lastWindyDimensions.set(streamId, { width: Math.round(width), height: Math.round(height) });
+    const newUrl = buildWindyEmbedUrl(stream.embedUrl, width, height);
+    if (iframe.src !== newUrl) {
+      iframe.src = newUrl;
+    }
+  }
+
+  function attachWindyResizeObservers(container) {
+    initWindyResizeObserver();
+    if (!container) return;
+    const windyWraps = container.querySelectorAll ? container.querySelectorAll('[data-windy-stream-id]') : [];
+    for (const wrap of windyWraps) {
+      if (windyResizeObserver) {
+        windyResizeObserver.observe(wrap);
+      }
+      if (wrap.getBoundingClientRect) {
+        const rect = wrap.getBoundingClientRect();
+        if (rect.width > 50 && rect.height > 50) {
+          const streamId = wrap.dataset.windyStreamId;
+          const prev = lastWindyDimensions.get(streamId);
+          if (!prev || Math.abs(prev.width - rect.width) >= 15 || Math.abs(prev.height - rect.height) >= 15) {
+            updateWindyFrameDimensions(streamId, rect.width, rect.height);
+          }
+        }
       }
     }
   }
@@ -1273,6 +1374,12 @@
 
     // 1. Embed Widget (pl. Windy)
     if (stream.sourceType === 'embed' || (Boolean(stream.embedUrl) && stream.sourceType !== 'still-image')) {
+      const isWindy = stream.embedKind === 'windy-widget' || Boolean(stream.embedUrl && stream.embedUrl.includes('windy.com'));
+      const dims = isWindy ? lastWindyDimensions.get(stream.id) : null;
+      const initialEmbedUrl = (isWindy && dims && dims.width && dims.height)
+        ? buildWindyEmbedUrl(stream.embedUrl, dims.width, dims.height)
+        : stream.embedUrl;
+
       return `
         <div class="lm-stage-slot lm-stage-slot-active lm-stage-slot-embed" id="lm-stage-slot-${esc(stream.id)}" data-active-stream-id="${esc(stream.id)}" data-video-id="">
           <div class="lm-stage-slot-head">
@@ -1289,11 +1396,11 @@
             </div>
           </div>
           <div class="lm-player-box">
-            <div class="lm-iframe-aspect">
+            <div class="lm-iframe-aspect"${isWindy ? ` data-windy-stream-id="${esc(stream.id)}"` : ''}>
               <iframe
                 id="lm-stage-embed-${esc(stream.id)}"
                 class="lm-grid-embed-frame"
-                src="${esc(stream.embedUrl)}"
+                src="${esc(initialEmbedUrl)}"
                 title="${esc(stream.name)}"
                 loading="lazy"
                 referrerpolicy="no-referrer"
@@ -2142,6 +2249,9 @@
             }
           }
         }
+
+        // 2c. Attach ResizeObserver for Windy embed widgets in stage slots
+        attachWindyResizeObservers(stageGrid || container);
       }
     }
 
@@ -2308,6 +2418,7 @@
     clearCameraError: (streamId) => { cameraErrorStates.delete(streamId); },
     setStreamMetaError: (streamId, err) => { streamMetaErrors.set(streamId, err); },
     clearStreamMetaError: (streamId) => { streamMetaErrors.delete(streamId); },
+    buildWindyEmbedUrl,
     IPCAMLIVE_PRIVACY_NOTICE_TEXT,
     UNIDEB_PRIVACY_NOTICE_TEXT
   });

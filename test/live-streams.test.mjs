@@ -1182,6 +1182,52 @@ test('12. Windy embed widget: schema, click-to-load lifecycle, private host guar
   assert.ok(cardHtml.includes('lm-card-windy'), 'Rendered Windy card must have lm-card-windy class');
 });
 
+test('Windy in stage grid: buildWindyEmbedUrl dynamically sets width/height from slot and sets data-windy-stream-id', () => {
+  const root = new URL('../', import.meta.url);
+  const jsCode = readFileSync(new URL('dashboard/public/live-media-panel.js', root), 'utf8');
+  const mockWindow = {
+    location: { hostname: '192.168.1.81', href: 'http://192.168.1.81:3000/' },
+    __CRUCIX_DATA__: {
+      liveStreams: [
+        {
+          id: 'windy-radar-satellite',
+          name: 'Windy Élő Csapadék- és Radartérkép (Debrecen)',
+          provider: 'Windy.com',
+          type: 'radar',
+          region: 'hajdu-bihar',
+          country: 'HU',
+          language: 'hu',
+          sourceType: 'embed',
+          embedKind: 'windy-widget',
+          embedStatus: 'embeddable',
+          embedUrl: 'https://embed.windy.com/embed.html?type=map&location=coordinates&width=650&height=450',
+          url: 'https://www.windy.com/?47.531,21.627,8',
+          status: 'active'
+        }
+      ]
+    },
+    localStorage: { getItem() { return null; }, setItem() {} }
+  };
+  const mockDocument = { addEventListener() {} };
+  const fn = new Function('window', 'document', jsCode);
+  fn(mockWindow, mockDocument);
+
+  const lm = mockWindow.CrucixLiveMedia;
+  assert.ok(typeof lm.buildWindyEmbedUrl === 'function', 'buildWindyEmbedUrl must be exposed');
+
+  // Test URL building
+  const base = 'https://embed.windy.com/embed.html?type=map&location=coordinates&width=650&height=450&message=true';
+  const custom = lm.buildWindyEmbedUrl(base, 858, 483);
+  assert.ok(custom.includes('width=858'), 'width parameter updated');
+  assert.ok(custom.includes('height=483'), 'height parameter updated');
+
+  // Test slot HTML generation has data-windy-stream-id
+  lm.playStream('windy-radar-satellite');
+  const html = lm.panelHtml();
+  assert.ok(html.includes('data-windy-stream-id="windy-radar-satellite"'), 'Slot aspect wrap has data-windy-stream-id attribute');
+  assert.ok(html.includes('id="lm-stage-embed-windy-radar-satellite"'), 'Stage embed iframe has correct ID');
+});
+
 test('13. Unified tile model in Live Media grid: 4-slot limit, FIFO replacement, DOM preservation, camera & still-image periodic timers, and Schumann resonance', async () => {
   const root = new URL('../', import.meta.url);
   const jsCode = readFileSync(new URL('dashboard/public/live-media-panel.js', root), 'utf8');
