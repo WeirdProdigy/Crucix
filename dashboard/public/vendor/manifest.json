@@ -192,10 +192,14 @@
     },
     {
       "path": "/vendor/hls.min.js",
-      "source": "https://cdn.jsdelivr.net/npm/hls.js@1.7.4/dist/hls.min.js",
+      "source": "https://registry.npmjs.org/hls.js/-/hls.js-1.7.4.tgz",
+      "package": "hls.js",
+      "version": "1.7.4",
+      "integrity": "sha512-3GlxGdPvT2YHvQYOt+yOzT/DEior/qJVNIylHA77kgeoBTdQQqi70GwefNEUmHQeNGyjC8U62+bruqW/Tpm+tg==",
       "licence": "Apache-2.0",
       "bytes": 623915,
-      "sha256": "cfc70cc9e9fc63d071919e087670abc760c8fd1bc889b88588026e4d22193bbe"
+      "sha256": "cfc70cc9e9fc63d071919e087670abc760c8fd1bc889b88588026e4d22193bbe",
+      "verifiedAt": "2026-11-08T16:03:00Z"
     }
   ]
 }
