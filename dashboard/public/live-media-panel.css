@@ -1079,6 +1079,13 @@
   color: #020408;
 }
 
+/* --- WINDY FULL WIDTH 16:9 MIN 480PX --- */
+.lm-card-windy,
+#lm-card-windy-radar-satellite {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
 .lm-embed-view-wrap {
   display: flex;
   flex-direction: column;
@@ -1093,7 +1100,9 @@
 
 .lm-embed-frame {
   width: 100%;
-  height: 380px;
+  aspect-ratio: 16 / 9;
+  min-height: 480px;
+  height: auto;
   border: 0;
   display: block;
   background: #000;
@@ -1181,8 +1190,7 @@
   }
 
   .lm-embed-frame {
-  .lm-embed-frame {
-    height: 280px;
+    min-height: 280px;
   }
 }
 

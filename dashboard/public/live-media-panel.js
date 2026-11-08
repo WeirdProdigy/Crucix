@@ -1623,7 +1623,7 @@
       }
 
       return `
-        <article class="lm-card lm-card-external${isCameraActive ? ' camera-active' : ''}${isCameraError ? ' camera-error' : ''}${isEmbedActive ? ' embed-active' : ''}" id="lm-card-${esc(stream.id)}" data-stream-id="${esc(stream.id)}" data-embed-status="external-only">
+        <article class="lm-card lm-card-external${isWindy ? ' lm-card-windy' : ''}${isCameraActive ? ' camera-active' : ''}${isCameraError ? ' camera-error' : ''}${isEmbedActive ? ' embed-active' : ''}" id="lm-card-${esc(stream.id)}" data-stream-id="${esc(stream.id)}" data-embed-status="external-only">
           <div class="lm-card-head">
             <div class="lm-card-title-row">
               <span class="lm-card-type-badge lm-type-${esc(stream.type)}">${esc(typeLabel)}</span>

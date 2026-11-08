@@ -1156,6 +1156,21 @@ test('12. Windy embed widget: schema, click-to-load lifecycle, private host guar
   assert.ok(readme.includes('weather radar map overlay'), 'README must reference weather radar map overlay restriction');
   assert.ok(readme.includes('promotional text'), 'README must record promotional text rule');
   assert.ok(readme.includes('info@windy.com'), 'README must cite official Windy contact email');
+
+  // Verify responsive full-width 16:9 min. 480px styling in CSS
+  const liveMediaCss = readFileSync(new URL('../dashboard/public/live-media-panel.css', import.meta.url), 'utf8');
+  assert.ok(liveMediaCss.includes('.lm-card-windy') && liveMediaCss.includes('grid-column: 1 / -1;'), 'Windy card must span full width');
+  assert.ok(liveMediaCss.includes('aspect-ratio: 16 / 9;'), 'Windy frame must enforce 16:9 aspect ratio');
+  assert.ok(liveMediaCss.includes('min-height: 480px;'), 'Windy frame must have min. 480px height');
+
+  // Verify Windy card renders lm-card-windy class
+  const liveMediaCode = readFileSync(new URL('../dashboard/public/live-media-panel.js', import.meta.url), 'utf8');
+  const win = { innerWidth: 1280, location: { hostname: 'localhost' }, __CRUCIX_DATA__: {} };
+  const doc = { hidden: false, addEventListener: () => {} };
+  new Function('window', 'document', liveMediaCode)(win, doc);
+  const snap = { liveStreams: [windyRadar] };
+  const cardHtml = win.CrucixLiveMedia.panelHtml(snap);
+  assert.ok(cardHtml.includes('lm-card-windy'), 'Rendered Windy card must have lm-card-windy class');
 });
 
 test('13. Unified tile model in Live Media grid: 4-slot limit, FIFO replacement, DOM preservation, camera & still-image periodic timers, and Schumann resonance', async () => {
