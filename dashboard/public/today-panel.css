@@ -8,9 +8,22 @@
   font-size: 11px;
 }
 
+.today-panel-root .sec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.today-panel-root .sec-head .badge {
+  position: static;
+  flex: none;
+}
+
 .today-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 10px;
 }
 
@@ -143,6 +156,70 @@
 
 .today-tile-foot a:hover,
 .today-tile-foot a:focus-visible {
+  text-decoration: underline;
+}
+
+.today-grid-empty {
+  padding: 14px 10px;
+  background: rgba(7, 18, 29, 0.48);
+  border: 1px dashed rgba(100, 240, 200, 0.2);
+}
+
+.today-chips-row {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: rgba(7, 18, 29, 0.35);
+  border: 1px dashed rgba(255, 95, 99, 0.2);
+  border-radius: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.today-chips-label {
+  font: 600 9px var(--mono);
+  color: var(--dim);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.today-chips-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.today-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 95, 99, 0.25);
+  border-radius: 3px;
+  min-width: 0;
+}
+
+.today-chip-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.today-chip-title {
+  color: var(--text);
+  font: 500 10px/1.3 var(--mono);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.today-chip-title:hover {
+  color: var(--accent2);
   text-decoration: underline;
 }
 

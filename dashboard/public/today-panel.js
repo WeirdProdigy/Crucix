@@ -88,6 +88,14 @@
       `</article>`;
   }
 
+  function renderChip(tile) {
+    const badge = tile.badge || ['NINCS ADAT', 'tp-pill-nodata'];
+    return `<div class="today-chip" data-today-tile="${esc(tile.id)}">` +
+      `<div class="today-chip-head">${icon(tile.category)}<a class="today-chip-title" href="${esc(tile.href)}">${esc(tile.title)}</a></div>` +
+      `<span class="tp-pill ${esc(badge[1])}">${esc(badge[0])}</span>` +
+      `</div>`;
+  }
+
   function dataTiles(snapshot) {
     const sn = object(snapshot) ? snapshot : {};
     const weather = object(sn.weather) ? sn.weather : {};
@@ -199,11 +207,31 @@
       sn = typeof window.currentSnapshot === 'function' ? window.currentSnapshot() : (window.D || {});
     }
     const tiles = dataTiles(sn);
+    const activeTiles = tiles.filter(t => t.badge && t.badge[0] !== 'NINCS ADAT' && t.badge[0] !== 'KIKAPCSOLVA');
+    const noDataTiles = tiles.filter(t => !t.badge || t.badge[0] === 'NINCS ADAT' || t.badge[0] === 'KIKAPCSOLVA');
+
+    const activeGridHtml = activeTiles.length > 0
+      ? `<div class="today-grid">${activeTiles.map(renderTile).join('')}</div>`
+      : `<div class="today-grid-empty"><p class="tp-empty">Egyetlen aktív forrás sem érhető el jelenleg.</p></div>`;
+
+    const noDataChipsHtml = noDataTiles.length > 0
+      ? `<div class="today-chips-row" role="region" aria-label="Nincs adat források">` +
+        `<span class="today-chips-label">NINCS ADAT / INAKTÍV (${noDataTiles.length}):</span>` +
+        `<div class="today-chips-list">${noDataTiles.map(renderChip).join('')}</div>` +
+        `</div>`
+      : '';
+
+    const badgeLabel = noDataTiles.length > 0 && activeTiles.length > 0
+      ? `${activeTiles.length} AKTÍV · ${noDataTiles.length} NINCS ADAT`
+      : `${tiles.length} TÁJÉKOZTATÓ CSEMPE`;
+
     return `<section class="g-panel today-panel-root" id="todayPanel" role="region" aria-labelledby="todayPanelTitle">` +
-      `<div class="sec-head"><h3 id="todayPanelTitle">MI ÉRINTHET MA?</h3><span class="badge">8 TÁJÉKOZTATÓ CSEMPE</span></div>` +
+      `<div class="sec-head"><h3 id="todayPanelTitle">MI ÉRINTHET MA?</h3><span class="badge">${esc(badgeLabel)}</span></div>` +
       `<p class="today-panel-intro">Helyi és környékbeli nyilvános adatforrások állapota, kockázati összesítés nélkül.</p>` +
-      `<div class="today-grid">${tiles.map(renderTile).join('')}</div></section>`;
+      activeGridHtml +
+      noDataChipsHtml +
+      `</section>`;
   }
 
-  return { renderTodayPanel, renderTile, esc };
+  return { renderTodayPanel, renderTile, renderChip, esc };
 });

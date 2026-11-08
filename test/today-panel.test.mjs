@@ -101,3 +101,25 @@ test('dynamically calculates hydro alert stage from levelRelation or kf threshol
   const html2 = panel().renderTodayPanel(withComputedThreshold);
   assert.match(html2, /150 cm tartalék, számítva a 300 cm-es I\. fokú készültségi szinthez \(nem hivatalos állapot\)/);
 });
+
+test('auto-fit grid separates active tiles from compact NINCS ADAT chips and renders badges in normal flow', () => {
+  const css = readFileSync(new URL('../dashboard/public/today-panel.css', import.meta.url), 'utf8');
+  assert.ok(css.includes('grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));'), 'CSS must use auto-fit responsive grid');
+  assert.ok(css.includes('.today-panel-root .sec-head .badge'), 'Badge must be explicitly styled in normal flow');
+
+  // Partially active snapshot: 3 active, 5 missing/disabled
+  const mixedSnapshot = {
+    sources: {
+      Meteoalarm: { enabled: true, fresh: true, alerts: [{ event: 'Zivatar', severity: 'yellow' }] },
+      'HungaroMet-Observations': { enabled: true, fresh: true, station: { temperatureC: 15 } },
+      'Open-Meteo': { enabled: true, fresh: true, daily: { summary: 'Napos' } },
+      'OVF-Gauges': { enabled: false }
+    }
+  };
+  const html = panel().renderTodayPanel(mixedSnapshot);
+  assert.equal((html.match(/data-today-tile=/g) || []).length, 8, 'All 8 tiles must retain data-today-tile attributes');
+  assert.match(html, /class="today-grid"/, 'Active tiles grid must be present');
+  assert.match(html, /class="today-chips-row"/, 'NINCS ADAT chips row must be present');
+  assert.match(html, /class="today-chip"/, 'Chip elements must be rendered');
+  assert.match(html, /AKTÍV · \d+ NINCS ADAT/, 'Header badge must summarize active and no-data counts');
+});
