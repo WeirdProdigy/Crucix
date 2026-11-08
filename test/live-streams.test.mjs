@@ -1682,7 +1682,8 @@ test('14. B5 Camera resilience: stale and dead cameras are hidden with discrete 
   assert.ok(!html.includes('id="lm-card-budapest-duna-panorama-webcam"'), 'Budapest Duna must be hidden');
   assert.ok(!html.includes('id="lm-card-hortobagy-puszta-webcam"'), 'Hortobágy Puszta must be hidden');
   assert.ok(html.includes('id="lm-stale-counter-badge"'), 'Stale counter badge must be present');
-  assert.ok(html.includes('3 kamera elrejtve: elavult kép'), 'Counter badge text must show 3 hidden cameras');
+  assert.ok(html.includes('3 forrás elrejtve'), 'Counter badge text must show 3 hidden sources');
+  assert.ok(html.includes('Halott (3 db)'), 'Tooltip must group dead sources');
   assert.ok(html.includes('Kékestető'), 'Tooltip must list hidden camera names');
 });
 
@@ -1763,4 +1764,120 @@ test('15. HírTV delayed stream: schema, delayed status badge, click-to-load Vid
   // Cleanup
   LiveMedia.stopAllStreams();
   LiveMedia.setViewMode('single');
+});
+
+test('16. Dynamic hiding: 404/onerror hiding, unverified freshness, ATV catalog display, and categorized tooltip', async () => {
+  const code = readFileSync(new URL('../dashboard/public/live-media-panel.js', import.meta.url), 'utf8');
+  const mockWindow = {
+    innerWidth: 1280,
+    location: { hostname: 'localhost' },
+    __CRUCIX_DATA__: {}
+  };
+  const mockDocument = { hidden: false, addEventListener: () => {} };
+  const runModule = new Function('window', 'document', code);
+  runModule(mockWindow, mockDocument);
+  const LiveMedia = mockWindow.CrucixLiveMedia;
+
+  const liveCam = {
+    id: 'test-live-cam',
+    name: 'Teszt Élő Kamera',
+    type: 'webcam',
+    region: 'local',
+    provider: 'Teszt',
+    sourceType: 'link-only',
+    url: 'https://example.com/live',
+    imageUrl: 'https://example.com/live.jpg',
+    status: 'verified-live',
+    embedStatus: 'external-only'
+  };
+
+  const deadCam = {
+    id: 'test-dead-cam',
+    name: 'Teszt Halott Kamera',
+    type: 'webcam',
+    region: 'local',
+    provider: 'Teszt',
+    sourceType: 'link-only',
+    url: 'https://example.com/dead',
+    imageUrl: 'https://example.com/dead.jpg',
+    status: 'no-live-feed',
+    embedStatus: 'external-only'
+  };
+
+  const archiveCam = {
+    id: 'test-archive-cam',
+    name: 'Teszt Archív Kamera',
+    type: 'webcam',
+    region: 'local',
+    provider: 'Teszt',
+    sourceType: 'link-only',
+    url: 'https://example.com/archive',
+    imageUrl: 'https://example.com/archive.jpg',
+    status: 'archive',
+    embedStatus: 'external-only'
+  };
+
+  const atvCatalog = {
+    id: 'atv-magyarorszag-stream',
+    name: 'ATV Magyarország Videótár',
+    type: 'news',
+    region: 'national',
+    provider: 'ATV Zrt.',
+    sourceType: 'link-only',
+    url: 'https://www.atv.hu/videok/',
+    status: 'page-ok',
+    embedStatus: 'external-only'
+  };
+
+  // 1. Initial state: live camera and ATV catalog are visible; dead & archive are hidden
+  assert.equal(LiveMedia.isSourceHidden(liveCam), false, 'Live camera must be visible initially');
+  assert.equal(LiveMedia.isSourceHidden(atvCatalog), false, 'ATV link catalog must be visible in list');
+  assert.equal(LiveMedia.getSourceHiddenCategory(deadCam), 'halott', 'Status no-live-feed must be categorized as halott');
+  assert.equal(LiveMedia.getSourceHiddenCategory(archiveCam), 'archív', 'Webcam status archive must be categorized as archív');
+
+  // 2. Dynamic image load failure (onerror on image)
+  LiveMedia.onGridImgError('test-live-cam');
+  assert.equal(LiveMedia.isSourceHidden(liveCam), true, 'Camera with image load error must be dynamically hidden');
+  assert.equal(LiveMedia.getSourceHiddenCategory(liveCam), 'halott', 'Image load error must categorize as halott');
+  assert.ok(LiveMedia.getSourceHiddenReason(liveCam).includes('Képbetöltési hiba'), 'Reason must mention image load error');
+
+  // Recover image load error
+  LiveMedia.retryGridImage('test-live-cam');
+  assert.equal(LiveMedia.isSourceHidden(liveCam), false, 'Camera must be visible once error is cleared');
+
+  // 3. Dynamic still-image-meta 404 error
+  LiveMedia.setStreamMetaError('test-live-cam', 'HTTP 404 Not Found');
+  assert.equal(LiveMedia.isSourceHidden(liveCam), true, 'Camera with 404 meta error must be dynamically hidden');
+  assert.equal(LiveMedia.getSourceHiddenCategory(liveCam), 'halott', '404 meta error must categorize as halott');
+
+  // 4. Missing Last-Modified (unverified freshness) is NOT hidden
+  LiveMedia.clearStreamMetaError('test-live-cam');
+  LiveMedia.setStreamLastModified('test-live-cam', null);
+  assert.equal(LiveMedia.isSourceHidden(liveCam), false, 'Missing Last-Modified header must NOT hide camera');
+
+  // 5. Non-404 meta error (e.g. transient timeout) is NOT hidden
+  LiveMedia.setStreamMetaError('test-live-cam', 'A forrás fejléce nem érhető el');
+  assert.equal(LiveMedia.isSourceHidden(liveCam), false, 'Non-404 meta error must NOT hide camera');
+  LiveMedia.clearStreamMetaError('test-live-cam');
+
+  // 6. Stale Last-Modified (> 24 hours) is categorized as elavult
+  const twoDaysAgo = Date.now() - 48 * 3600 * 1000;
+  LiveMedia.setStreamLastModified('test-live-cam', twoDaysAgo);
+  assert.equal(LiveMedia.isSourceHidden(liveCam), true, 'Camera older than 24h must be hidden');
+  assert.equal(LiveMedia.getSourceHiddenCategory(liveCam), 'elavult', 'Stale camera must be categorized as elavult');
+  assert.ok(LiveMedia.getSourceHiddenReason(liveCam).includes('nem frissült (>24h)'), 'Reason must mention age in hours');
+  LiveMedia.setStreamLastModified('test-live-cam', null);
+
+  // 7. Full snapshot rendering with categorized tooltip
+  const snapshot = {
+    liveStreams: [liveCam, deadCam, archiveCam, atvCatalog]
+  };
+  const html = LiveMedia.panelHtml(snapshot);
+  assert.ok(html.includes('ATV Magyarország Videótár'), 'ATV catalog must be rendered in external grid');
+  assert.ok(html.includes('Teszt Élő Kamera'), 'Active live camera must be rendered');
+  assert.ok(!html.includes('id="lm-card-test-dead-cam"'), 'Dead camera must be hidden from cards');
+  assert.ok(!html.includes('id="lm-card-test-archive-cam"'), 'Archive camera must be hidden from cards');
+  assert.ok(html.includes('2 forrás elrejtve'), 'Counter badge text must show 2 hidden sources');
+  assert.ok(html.includes('Halott (1 db)'), 'Tooltip must group halott sources');
+  assert.ok(html.includes('Archív (1 db)'), 'Tooltip must group archív sources');
 });

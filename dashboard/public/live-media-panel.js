@@ -98,11 +98,6 @@
 
   const BACKGROUND_PLAYBACK_PREF_KEY = 'crucix.liveMedia.background.v1';
   const STALE_MAX_AGE_MS = 24 * 3600 * 1000; // 24 óra
-  const KNOWN_DEAD_CAMERAS = Object.freeze([
-    'kekesteto-panorama-webcam',
-    'budapest-duna-panorama-webcam',
-    'hortobagy-puszta-webcam'
-  ]);
   const IPCAMLIVE_PRIVACY_NOTICE_TEXT = 'A lejátszó betöltése kapcsolatot létesít az IPCamLive szolgáltatóval; a Crucix nem tárolja.';
   const UNIDEB_PRIVACY_NOTICE_TEXT = 'A közvetítés indítása kapcsolatot létesít a Debreceni Egyetem streaming szerverével (unideb.hu); a Crucix nem tárolja.';
 
@@ -214,6 +209,9 @@
             const errMsg = data?.error || 'A forrás fejléce nem érhető el';
             streamMetaErrors.set(stream.id, errMsg);
             updateGridFreshnessDom(stream.id, errMsg);
+            if (errMsg.includes('404') || errMsg.toLowerCase().includes('not found')) {
+              notifyChange();
+            }
           }
         })
         .catch(err => {
@@ -221,12 +219,18 @@
           const errMsg = err?.message || String(err) || 'Hálózati hiba a frissesség lekérdezésekor';
           streamMetaErrors.set(stream.id, errMsg);
           updateGridFreshnessDom(stream.id, errMsg);
+          if (errMsg.includes('404') || errMsg.toLowerCase().includes('not found')) {
+            notifyChange();
+          }
         });
     } catch (err) {
       streamLastModified.set(stream.id, null);
       const errMsg = err?.message || String(err) || 'Hiba';
       streamMetaErrors.set(stream.id, errMsg);
       updateGridFreshnessDom(stream.id, errMsg);
+      if (errMsg.includes('404') || errMsg.toLowerCase().includes('not found')) {
+        notifyChange();
+      }
     }
   }
 
@@ -252,25 +256,52 @@
     }
   }
 
-  
-  function isCameraStale(stream) {
-    if (!stream) return false;
-    if (KNOWN_DEAD_CAMERAS.includes(stream.id)) return true;
-    if (stream.status === 'no-live-feed' || stream.status === 'archive') return true;
+  function getSourceHiddenCategory(stream) {
+    if (!stream) return null;
+    // Link-katalógusok és hírek (nem webkamera) nem rejtendők el, hacsak nem halott a forrásoldal
+    if (stream.sourceType === 'link-only' && stream.type !== 'webcam') {
+      if (stream.status === 'no-live-feed' || stream.status === 'dead') return 'halott';
+      return null;
+    }
+    // 1. Halott forrás (status szerinti leállás, still-image-meta 404 hiba, vagy rács képbetöltési hiba)
+    if (stream.status === 'no-live-feed' || stream.status === 'dead') return 'halott';
+    if (gridImageErrors.has(stream.id)) return 'halott';
+    const metaErr = String(streamMetaErrors.get(stream.id) || '');
+    if (metaErr && (metaErr.includes('404') || metaErr.toLowerCase().includes('not found'))) {
+      return 'halott';
+    }
+    // 2. Archív felvétel / nem élő kamera
+    if (stream.type === 'webcam' && stream.status === 'archive') return 'archív';
+    // 3. Elavult kép (Last-Modified régebbi mint 24 óra)
     const lm = streamLastModified.get(stream.id);
     if (lm) {
       const ts = typeof lm === 'number' ? lm : new Date(lm).getTime();
-      if (!isNaN(ts) && (Date.now() - ts) > STALE_MAX_AGE_MS) return true;
+      if (!isNaN(ts) && (Date.now() - ts) > STALE_MAX_AGE_MS) return 'elavult';
     }
-    // Missing Last-Modified or header errors are considered "frissesség nem igazolt", NEVER hidden as stale
-    return false;
+    // Hiányzó Last-Modified vagy nem-404 hiba: frissesség nem igazolt, NEM rejtett
+    return null;
   }
 
-  function getStaleReason(stream) {
+  function isCameraStale(stream) {
+    return getSourceHiddenCategory(stream) !== null;
+  }
+
+  function isSourceHidden(stream) {
+    return getSourceHiddenCategory(stream) !== null;
+  }
+
+  function getSourceHiddenReason(stream) {
     if (!stream) return 'Ismeretlen ok';
-    if (KNOWN_DEAD_CAMERAS.includes(stream.id)) return 'Nem működő / 404 forrás';
-    if (cameraErrorStates.has(stream.id)) return 'Képbetöltési hiba';
-    if (streamMetaErrors.has(stream.id)) return streamMetaErrors.get(stream.id) || 'Fejléc hiba';
+    if (cameraErrorStates.has(stream.id) || gridImageErrors.has(stream.id)) {
+      return 'Képbetöltési hiba (404/onerror)';
+    }
+    const metaErr = String(streamMetaErrors.get(stream.id) || '');
+    if (metaErr && (metaErr.includes('404') || metaErr.toLowerCase().includes('not found'))) {
+      return `Nem elérhető fejléc (${metaErr})`;
+    }
+    if (stream.status === 'no-live-feed') return 'Nincs élő közvetítés / leállt forrás';
+    if (stream.status === 'dead') return 'Nem működő forrás';
+    if (stream.status === 'archive') return 'Archív felvétel';
     const lm = streamLastModified.get(stream.id);
     if (lm) {
       const ts = typeof lm === 'number' ? lm : new Date(lm).getTime();
@@ -279,8 +310,41 @@
         return `${diffH} órája nem frissült (>24h)`;
       }
     }
-    if (stream.status === 'no-live-feed') return 'Nincs élő közvetítés';
-    return 'Elavult forrás';
+    return 'Elavult vagy elérhetetlen forrás';
+  }
+
+  function getStaleReason(stream) {
+    return getSourceHiddenReason(stream);
+  }
+
+  function buildHiddenSourcesTooltip(hiddenSources) {
+    if (!hiddenSources || hiddenSources.length === 0) return '';
+    const groups = { halott: [], archív: [], elavult: [] };
+    for (const s of hiddenSources) {
+      const cat = getSourceHiddenCategory(s) || 'elavult';
+      if (groups[cat]) groups[cat].push(s);
+      else groups.elavult.push(s);
+    }
+    const lines = ['Elrejtett források:'];
+    if (groups.halott.length > 0) {
+      lines.push(`• Halott (${groups.halott.length} db):`);
+      for (const s of groups.halott) {
+        lines.push(`  - ${s.name}: ${getSourceHiddenReason(s)}`);
+      }
+    }
+    if (groups.archív.length > 0) {
+      lines.push(`• Archív (${groups.archív.length} db):`);
+      for (const s of groups.archív) {
+        lines.push(`  - ${s.name}: ${getSourceHiddenReason(s)}`);
+      }
+    }
+    if (groups.elavult.length > 0) {
+      lines.push(`• Elavult (${groups.elavult.length} db):`);
+      for (const s of groups.elavult) {
+        lines.push(`  - ${s.name}: ${getSourceHiddenReason(s)}`);
+      }
+    }
+    return lines.join('\n');
   }
 
   function formatTimeString(ts) {
@@ -1785,25 +1849,23 @@
 
     const isPrivateHost = isPrivateOrLocalHost();
     const activeExternalFiltered = externalFiltered.filter(s => !isCameraStale(s));
-    const hiddenStaleCameras = externalFiltered.filter(s => isCameraStale(s));
+    const hiddenStaleSources = externalFiltered.filter(s => isCameraStale(s));
     const externalCams = activeExternalFiltered.filter(s => Boolean(s.imageUrl));
     const anyCamActive = externalCams.some(s => activeCameraIds.has(s.id));
     const showLimitNotice = cameraNotice || (activeCameraIds.size >= MAX_GROUP_CAMERAS ? CAMERA_LIMIT_NOTICE_TEXT : '');
 
-    const staleTooltipText = hiddenStaleCameras.length > 0
-      ? `Elavult vagy nem elérhető kép miatt elrejtve:&#10;${hiddenStaleCameras.map(s => `• ${esc(s.name)}: ${esc(getStaleReason(s))}`).join('&#10;')}`
-      : '';
+    const staleTooltipText = buildHiddenSourcesTooltip(hiddenStaleSources);
 
-    const externalContent = (activeExternalFiltered.length > 0 || hiddenStaleCameras.length > 0)
+    const externalContent = (activeExternalFiltered.length > 0 || hiddenStaleSources.length > 0)
       ? `
         <div class="lm-external-section" id="lm-external-section">
           <div class="lm-section-head">
             <div class="lm-section-title-wrap">
               <span class="lm-section-title">Külső oldalon nézhető</span>
               <span class="lm-count-badge">${activeExternalFiltered.length} forrás</span>
-              ${hiddenStaleCameras.length > 0 ? `
-                <span class="lm-stale-counter-badge" id="lm-stale-counter-badge" title="${staleTooltipText}">
-                  ${hiddenStaleCameras.length} kamera elrejtve: elavult kép
+              ${hiddenStaleSources.length > 0 ? `
+                <span class="lm-stale-counter-badge" id="lm-stale-counter-badge" title="${esc(staleTooltipText)}">
+                  ${hiddenStaleSources.length} forrás elrejtve
                 </span>
               ` : ''}
               ${externalCams.length > 0 && isPrivateHost ? `
@@ -2237,7 +2299,15 @@
     },
     probeLastModified: (stream) => probeLastModified(stream),
     isCameraStale: (stream) => isCameraStale(stream),
+    isSourceHidden: (stream) => isSourceHidden(stream),
     getStaleReason: (stream) => getStaleReason(stream),
+    getSourceHiddenReason: (stream) => getSourceHiddenReason(stream),
+    getSourceHiddenCategory: (stream) => getSourceHiddenCategory(stream),
+    buildHiddenSourcesTooltip: (sources) => buildHiddenSourcesTooltip(sources),
+    setCameraError: (streamId) => { cameraErrorStates.set(streamId, { timestamp: Date.now() }); },
+    clearCameraError: (streamId) => { cameraErrorStates.delete(streamId); },
+    setStreamMetaError: (streamId, err) => { streamMetaErrors.set(streamId, err); },
+    clearStreamMetaError: (streamId) => { streamMetaErrors.delete(streamId); },
     IPCAMLIVE_PRIVACY_NOTICE_TEXT,
     UNIDEB_PRIVACY_NOTICE_TEXT
   });
