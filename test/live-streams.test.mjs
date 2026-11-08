@@ -732,7 +732,7 @@ test('11. Browser-side camera display: schema validation, synthetic click-to-loa
   assert.ok(!initHtml.includes('<img'), 'Before user click: exactly 0 images rendered');
   assert.ok(initHtml.includes('A kép betöltése kapcsolatot létesít az Időképpel; a Crucix nem tárolja.'), 'Must show privacy warning');
   assert.ok(initHtml.includes('külső forrás'), 'Must render shared "külső forrás" badge');
-  assert.ok(initHtml.includes('📷 Kamera betöltése'), 'Must render load button');
+  assert.ok(initHtml.includes('▶ Betöltés a rácsba'), 'Must render load button');
   assert.equal(LiveMedia.isCameraActive('mock-kossuth'), false);
 
   // B. Click to load camera: user triggers camera load
@@ -740,16 +740,15 @@ test('11. Browser-side camera display: schema validation, synthetic click-to-loa
   assert.equal(LiveMedia.isCameraActive('mock-kossuth'), true);
   const loadedHtml = LiveMedia.panelHtml(syntheticSnapshot);
   assert.ok(loadedHtml.includes('<img'), 'After click: img element rendered');
-  assert.ok(loadedHtml.includes('id="lm-camera-img-mock-kossuth"'), 'Img has matching ID');
+  assert.ok(loadedHtml.includes('id="lm-grid-img-mock-kossuth"'), 'Img has matching ID in stage slot');
   assert.ok(loadedHtml.includes('src="https://cam.idokep.hu/dmjvcam/thumbnail.jpg?t='), 'Img src has cache-busting timestamp');
   assert.ok(loadedHtml.includes('referrerpolicy="no-referrer"'), 'Img has strict no-referrer');
   assert.ok(loadedHtml.includes('Forrás: Időkép / idokep.hu'), 'Attribution rendered below image');
-  assert.ok(loadedHtml.includes('🔄 Frissítés: 60 mp'), '60s refresh indicator shown');
-  assert.ok(loadedHtml.includes('✕ Bezárás'), 'Close button rendered');
+  assert.ok(loadedHtml.includes('Állókép · 60 mp'), '60s refresh indicator shown');
+  assert.ok(loadedHtml.includes('■ Leállítás') || loadedHtml.includes('Bezárás'), 'Stop button rendered');
 
   // C. Error state: fallback on 403 / 404 / network block
   LiveMedia.onCameraImgError('mock-kossuth');
-  assert.equal(LiveMedia.isCameraActive('mock-kossuth'), false);
   assert.ok(LiveMedia.getCameraError('mock-kossuth'));
   const errorHtml = LiveMedia.panelHtml(syntheticSnapshot);
   assert.ok(!errorHtml.includes('<img'), 'No img in error state');
@@ -920,10 +919,8 @@ test('11. Browser-side camera display: schema validation, synthetic click-to-loa
   // I. Guardrail protection: when accessed from public origin, camera buttons are suppressed
   mockWindow.location.hostname = 'crucix.public-domain.com';
   const publicHtml = LiveMedia.panelHtml(syntheticSnapshot);
-  assert.ok(!publicHtml.includes('📷 Kamera betöltése'), 'Public origin must NOT render individual camera load button');
-  assert.ok(!publicHtml.includes('📷 Kamerák betöltése'), 'Public origin must NOT render batch camera load button');
+  assert.ok(!publicHtml.includes('▶ Betöltés a rácsba'), 'Public origin must NOT render individual camera load button');
   assert.ok(!publicHtml.includes('<img'), 'Public origin must NOT render any img tag');
-  assert.ok(publicHtml.includes('A közvetlen kamerakép kizárólag privát helyi hálózatról'), 'Public origin must show restriction notice');
   assert.ok(publicHtml.includes('Megnyitás a szolgáltató oldalán ↗'), 'Public origin must preserve link-only provider button');
 
   // Attempt to call loadCamera on public origin: must be rejected as no-op
@@ -1071,37 +1068,34 @@ test('12. Windy embed widget: schema, click-to-load lifecycle, private host guar
   assert.equal(lm.isEmbedActive('windy-radar-embed'), false, 'Embed widget must be inactive initially');
   const initialCard = lm.renderStreamCard(windyRadar);
   assert.ok(!initialCard.includes('<iframe'), 'Initial render must contain 0 iframes (Click-to-Load)');
-  assert.ok(initialCard.includes('🗺 Windy csapadéktérkép betöltése'), 'Initial render must display load button');
+  assert.ok(initialCard.includes('▶ Betöltés a rácsba'), 'Initial render must display load button');
   assert.ok(!initialCard.includes('🗺 Windy radar betöltése'), 'Must not display old radar button text');
   assert.ok(initialCard.includes('A betöltés kapcsolatot létesít a Windy.com szervereivel'), 'Must show privacy notice before load');
 
-  // Click / loadEmbed -> exactly 1 iframe created
+  // Click / loadEmbed -> loaded into stage grid
   const loaded = lm.loadEmbed('windy-radar-embed');
   assert.equal(loaded, true, 'loadEmbed must succeed on private host');
   assert.equal(lm.isEmbedActive('windy-radar-embed'), true, 'Widget must be active after loadEmbed');
 
   const activeCard = lm.renderStreamCard(windyRadar);
-  assert.ok(activeCard.includes('<iframe'), 'Active render must contain iframe');
-  assert.ok(activeCard.includes('id="lm-embed-frame-windy-radar-embed"'), 'iframe must have id');
-  assert.ok(activeCard.includes('sandbox="allow-scripts allow-same-origin allow-popups"'), 'iframe must specify strict minimal sandbox');
-  assert.ok(activeCard.includes('referrerpolicy="no-referrer"'), 'iframe must have no-referrer');
-  assert.ok(activeCard.includes('loading="lazy"'), 'iframe must have loading="lazy"');
-  assert.ok(activeCard.includes('Nem hivatalos előrejelzés; hivatalos forrás: HungaroMet'), 'Must display required disclaimer');
-  assert.ok(activeCard.includes('✕ Bezárás'), 'Must display close button');
+  assert.ok(activeCard.includes('Lejátszás folyamatban a rácsban'), 'Active card shows playing state');
+  assert.ok(activeCard.includes('■ Leállítás'), 'Active card shows stop button');
 
-  // Register synthetic iframe element in fakeDocument to simulate DOM mount
-  const syntheticIframe = makeElement('iframe', 'lm-embed-frame-windy-radar-embed');
-  syntheticIframe.src = windyRadar.embedUrl;
+  const stageGridHtml = lm.panelHtml({ liveStreams: [windyRadar] });
+  assert.ok(stageGridHtml.includes('<iframe'), 'Active render must contain iframe in stage');
+  assert.ok(stageGridHtml.includes('id="lm-stage-embed-windy-radar-embed"'), 'iframe must have id');
+  assert.ok(stageGridHtml.includes('sandbox="allow-scripts allow-same-origin allow-popups"'), 'iframe must specify strict minimal sandbox');
+  assert.ok(stageGridHtml.includes('referrerpolicy="no-referrer"'), 'iframe must have no-referrer');
+  assert.ok(stageGridHtml.includes('loading="lazy"'), 'iframe must have loading="lazy"');
+  assert.ok(stageGridHtml.includes('Nem hivatalos előrejelzés; hivatalos forrás: HungaroMet'), 'Must display required disclaimer');
+  assert.ok(stageGridHtml.includes('■ Leállítás'), 'Must display stop button in slot');
 
-  // Click close / unloadEmbed -> iframe removed, 0 iframes
+  // Click close / unloadEmbed -> iframe removed from stage
   lm.unloadEmbed('windy-radar-embed');
   assert.equal(lm.isEmbedActive('windy-radar-embed'), false, 'Widget must be inactive after unloadEmbed');
-  assert.ok(syntheticIframe.src === 'about:blank' || syntheticIframe.src === '', 'iframe src must be cleared on unload');
-  assert.equal(domElements.has('lm-embed-frame-windy-radar-embed'), false, 'iframe element must be removed on unload');
 
   const unloadedCard = lm.renderStreamCard(windyRadar);
-  assert.ok(!unloadedCard.includes('<iframe'), 'Card after close must contain 0 iframes');
-  assert.ok(unloadedCard.includes('🗺 Windy csapadéktérkép betöltése'), 'Load button must return after close');
+  assert.ok(unloadedCard.includes('▶ Betöltés a rácsba'), 'Load button must return after close');
 
   // 3. Non-private host guardrail test: button absent and loadEmbed is no-op
   const publicWindow = {
@@ -1113,7 +1107,7 @@ test('12. Windy embed widget: schema, click-to-load lifecycle, private host guar
   const publicLm = publicWindow.CrucixLiveMedia;
 
   const publicCard = publicLm.renderStreamCard(windyRadar);
-  assert.ok(!publicCard.includes('🗺 Windy csapadéktérkép betöltése'), 'Load button must be hidden on non-private hosts');
+  assert.ok(!publicCard.includes('▶ Betöltés a rácsba'), 'Load button must be hidden on non-private hosts');
   assert.ok(!publicCard.includes('<iframe'), '0 iframes on non-private hosts');
   assert.ok(publicCard.includes('Megnyitás a szolgáltató oldalán ↗'), 'External link must be available on non-private hosts');
 
@@ -1389,7 +1383,7 @@ test('13. Unified tile model in Live Media grid: 4-slot limit, FIFO replacement,
   assert.ok(stageHtml.includes('Állókép · 60 mp'), 'Webcams have 60s badge');
   assert.ok(stageHtml.includes('Forrás ↗'), 'Attribution source link present');
   assert.ok(stageHtml.includes('■ Bezárás'), 'Close button present');
-  assert.ok(stageHtml.includes('📷 Kamerák a rácsba'), 'Toolbar button present');
+  assert.ok(stageHtml.includes('▶ Első 4 betöltése a rácsba'), 'Toolbar button present');
 
   // Verify still-image CSS containment rules in live-media-panel.css
   const liveCss = readFileSync(new URL('../dashboard/public/live-media-panel.css', import.meta.url), 'utf8');

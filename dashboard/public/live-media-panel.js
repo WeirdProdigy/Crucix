@@ -949,25 +949,36 @@
     return false;
   }
 
-  function loadCamerasIntoGrid() {
+  function loadFirstFourIntoGrid() {
     if (!isPrivateOrLocalHost()) return;
     if (viewMode !== 'grid') {
       setViewMode('grid');
     }
-    for (const camId of DEFAULT_GROUP_CAMERA_IDS) {
-      if (!activeStreamIds.includes(camId)) {
-        playStream(camId);
+    const rawStreams = resolveRawStreams();
+    const available = rawStreams.filter(s => canStreamPlayInGrid(s));
+    const defaultAvailable = DEFAULT_GROUP_CAMERA_IDS.filter(id => available.some(s => s.id === id));
+    const toLoad = defaultAvailable.length === 4
+      ? Array.from(DEFAULT_GROUP_CAMERA_IDS)
+      : available.slice(0, 4).map(s => s.id);
+
+    // Evict any currently active streams that are not in toLoad
+    const unwanted = activeStreamIds.filter(id => !toLoad.includes(id));
+    for (const uid of unwanted) {
+      cleanupGridSlot(uid);
+    }
+    activeStreamIds = activeStreamIds.filter(id => toLoad.includes(id));
+
+    // Fill missing streams from toLoad
+    for (const sid of toLoad) {
+      if (!activeStreamIds.includes(sid)) {
+        playStream(sid);
       }
     }
-    for (const camId of DEFAULT_GROUP_CAMERA_IDS) {
-      if (!activeStreamIds.includes(camId)) {
-        playStream(camId);
-      }
-    }
-    activeStreamIds = DEFAULT_GROUP_CAMERA_IDS.filter(id => activeStreamIds.includes(id));
+    activeStreamIds = toLoad.filter(id => activeStreamIds.includes(id));
     notifyChange();
-    return;
   }
+
+  const loadCamerasIntoGrid = loadFirstFourIntoGrid;
 
   function playStream(streamId) {
     if (typeof streamId !== 'string' || !streamId.trim()) return;
@@ -1058,146 +1069,69 @@
 
   function loadEmbed(streamId) {
     if (!isPrivateOrLocalHost()) return false;
-    if (typeof streamId !== 'string' || !streamId.trim()) return false;
-    const rawStreams = resolveRawStreams();
-    const stream = rawStreams.find(s => s.id === streamId);
-    if (!stream || !stream.embedUrl) return false;
-    activeEmbedIds.add(streamId);
-    notifyChange();
+    playStream(streamId);
     return true;
   }
 
   function unloadEmbed(streamId) {
-    if (activeEmbedIds.has(streamId)) {
-      const frame = document.getElementById(`lm-embed-frame-${streamId}`);
-      if (frame) {
-        try { frame.src = 'about:blank'; } catch {}
-        try { frame.remove(); } catch {}
-      }
-      activeEmbedIds.delete(streamId);
-      notifyChange();
-    }
+    stopStream(streamId);
   }
 
   function isEmbedActive(streamId) {
-    return activeEmbedIds.has(streamId);
+    return activeStreamIds.includes(streamId);
   }
 
   function loadCamera(streamId) {
     if (!isPrivateOrLocalHost()) return;
-    if (typeof streamId !== 'string' || !streamId.trim()) return;
-    if (activeCameraIds.has(streamId)) return;
-    if (activeCameraIds.size >= MAX_GROUP_CAMERAS) {
+    if (activeStreamIds.length >= MAX_GROUP_CAMERAS && !activeStreamIds.includes(streamId)) {
       cameraNotice = CAMERA_LIMIT_NOTICE_TEXT;
       notifyChange();
       return;
     }
     cameraNotice = '';
-    cameraErrorStates.delete(streamId);
-    activeCameraIds.add(streamId);
-    const rawStreams = resolveRawStreams();
-    const stream = rawStreams.find(s => s.id === streamId);
-    if (stream && stream.imageUrl) {
-      startCameraTimer(streamId, stream.imageUrl);
-    }
-    if (activeCameraIds.size >= MAX_GROUP_CAMERAS) {
+    playStream(streamId);
+    if (activeStreamIds.length >= MAX_GROUP_CAMERAS) {
       cameraNotice = CAMERA_LIMIT_NOTICE_TEXT;
     }
-    notifyChange();
   }
 
   function unloadCamera(streamId) {
-    if (typeof streamId !== 'string') return;
-    activeCameraIds.delete(streamId);
-    clearCameraTimer(streamId);
-    if (activeCameraIds.size < MAX_GROUP_CAMERAS) {
+    stopStream(streamId);
+    if (activeStreamIds.length < MAX_GROUP_CAMERAS) {
       cameraNotice = '';
     }
-    notifyChange();
   }
 
   function loadAllCameras() {
-    if (!isPrivateOrLocalHost()) return;
-    const rawStreams = resolveRawStreams();
-    const filtered = rawStreams.filter(matchesFilters);
-    const available = filtered.filter(s => s.imageUrl && (s.sourceType === 'link-only' || s.embedStatus === 'external-only'));
-
-    if (activeCameraIds.size >= MAX_GROUP_CAMERAS) {
+    loadFirstFourIntoGrid();
+    if (activeStreamIds.length >= MAX_GROUP_CAMERAS) {
       cameraNotice = CAMERA_LIMIT_NOTICE_TEXT;
-      notifyChange();
-      return;
     }
-
-    // Load available cameras prioritizing the fixed DEFAULT_GROUP_CAMERA_IDS order
-    const targetIds = [];
-    for (const gid of DEFAULT_GROUP_CAMERA_IDS) {
-      if (activeCameraIds.size + targetIds.length >= MAX_GROUP_CAMERAS) break;
-      if (available.some(s => s.id === gid) && !activeCameraIds.has(gid)) {
-        targetIds.push(gid);
-      }
-    }
-    // If slots remain, fill with remaining available streams in register order
-    if (activeCameraIds.size + targetIds.length < MAX_GROUP_CAMERAS) {
-      for (const stream of available) {
-        if (activeCameraIds.size + targetIds.length >= MAX_GROUP_CAMERAS) break;
-        if (!targetIds.includes(stream.id) && !activeCameraIds.has(stream.id)) {
-          targetIds.push(stream.id);
-        }
-      }
-    }
-
-    for (const id of targetIds) {
-      const stream = available.find(s => s.id === id);
-      if (stream) {
-        cameraErrorStates.delete(id);
-        activeCameraIds.add(id);
-        startCameraTimer(id, stream.imageUrl);
-      }
-    }
-
-    if (available.length > MAX_GROUP_CAMERAS || activeCameraIds.size >= MAX_GROUP_CAMERAS) {
-      cameraNotice = CAMERA_LIMIT_NOTICE_TEXT;
-    } else {
-      cameraNotice = '';
-    }
-    notifyChange();
   }
 
   function unloadAllCameras() {
-    clearAllCameraTimers();
-    activeCameraIds.clear();
+    stopAllStreams();
     cameraNotice = '';
-    notifyChange();
   }
 
   function onCameraImgError(streamId) {
-    if (typeof streamId !== 'string') return;
-    clearCameraTimer(streamId);
-    cameraErrorStates.set(streamId, { timestamp: Date.now() });
-    activeCameraIds.delete(streamId);
-    if (activeCameraIds.size < MAX_GROUP_CAMERAS) {
-      cameraNotice = '';
-    }
-    notifyChange();
+    onGridImgError(streamId);
   }
 
   function onCameraImgLoad(streamId) {
-    if (typeof streamId !== 'string') return;
-    cameraErrorStates.delete(streamId);
+    onGridImgLoad(streamId);
   }
 
   function retryCamera(streamId) {
-    if (typeof streamId !== 'string') return;
-    cameraErrorStates.delete(streamId);
-    loadCamera(streamId);
+    retryGridImage(streamId);
   }
 
   function isCameraActive(streamId) {
-    return activeCameraIds.has(streamId);
+    return activeStreamIds.includes(streamId);
   }
 
   function getCameraError(streamId) {
-    return cameraErrorStates.get(streamId) || null;
+    return gridImageErrors.has(streamId) ? { error: true } : null;
   }
 
   function markStreamError(streamId) {
@@ -1483,6 +1417,7 @@
                     </span>
                   ` : ''}
                   <span class="lm-camera-refreshed" id="lm-grid-ts-${esc(stream.id)}">${esc(refreshedText)}</span>
+                  <span class="lm-camera-attribution">${esc(stream.attribution || ('Forrás: ' + (stream.provider || 'Időkép / idokep.hu')))}</span>
                 </div>
                 <div class="lm-player-right-controls">
                   <button type="button" class="lm-btn lm-btn-stop" onclick="window.CrucixLiveMedia?.stopStream('${esc(stream.id)}')">■ Bezárás</button>
@@ -1629,161 +1564,49 @@
     const isWindy = stream.embedKind === 'windy-widget' || Boolean(stream.embedUrl && stream.embedUrl.includes('windy.com'));
     if (stream.sourceType === 'link-only' || stream.sourceType === 'still-image' || isWindy || isIpcam || embedInfo.code === 'external-only') {
       const isPrivateHost = isPrivateOrLocalHost();
-      const hasImage = Boolean(stream.imageUrl) && isPrivateHost;
-      const isCameraActive = activeCameraIds.has(stream.id);
-      const isCameraError = cameraErrorStates.has(stream.id);
-      const isEmbedActive = activeEmbedIds.has(stream.id);
+      const canPlay = canStreamPlayInGrid(stream);
 
       let externalBodyHtml = '';
-      if (isWindy) {
-        if (isPrivateHost) {
-          if (isEmbedActive) {
-            externalBodyHtml = `
-              <div class="lm-embed-view-wrap">
-                <iframe
-                  id="lm-embed-frame-${esc(stream.id)}"
-                  class="lm-embed-frame"
-                  src="${esc(stream.embedUrl)}"
-                  title="${esc(stream.name)}"
-                  loading="lazy"
-                  referrerpolicy="no-referrer"
-                  sandbox="allow-scripts allow-same-origin allow-popups" allow="autoplay; fullscreen" allowfullscreen>
-                </iframe>
-                <div class="lm-embed-meta-bar">
-                  <span class="lm-embed-disclaimer">${esc(WINDY_DISCLAIMER_TEXT)}</span>
-                  <button type="button" class="lm-btn-embed-close" title="Térkép bezárása" onclick="window.CrucixLiveMedia?.unloadEmbed('${esc(stream.id)}')">✕ Bezárás</button>
-                </div>
-              </div>
-              <div class="lm-embed-attribution">
-                ${esc(stream.attribution || 'Forrás: Windy.com')} — <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-link-external">Megnyitás a forráson ↗</a>
-              </div>
-            `;
-          } else {
-            externalBodyHtml = `
-              <div class="lm-embed-privacy-box">
-                <span class="lm-embed-privacy-text">${esc(WINDY_PRIVACY_NOTICE_TEXT)}</span>
-              </div>
-              <div class="lm-external-actions">
-                <button type="button" class="lm-btn lm-btn-load-cam lm-btn-grid-embed" onclick="window.CrucixLiveMedia?.playStream('${esc(stream.id)}')">
-                  🗺 Windy a rácsba
-                </button>
-                <button type="button" class="lm-btn lm-btn-load-embed" onclick="window.CrucixLiveMedia?.loadEmbed('${esc(stream.id)}')">
-                  🗺 Windy csapadéktérkép betöltése
-                </button>
-                <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">
-                  Megnyitás a szolgáltató oldalán ↗
-                </a>
-              </div>
-            `;
-          }
-        } else {
-          externalBodyHtml = `
-            <div class="lm-embed-restricted-box">
-              <span class="lm-embed-restricted-text">ℹ A közvetlen térkép widget kizárólag privát helyi hálózatról (LAN / loopback) tölthető be (magáncélú felhasználás védelme).</span>
+      if (isPlaying) {
+        externalBodyHtml = `
+          <div class="lm-selector-active-bar">
+            <span class="lm-selector-playing-indicator"><span class="lm-live-dot"></span> Lejátszás folyamatban a rácsban</span>
+            <div class="lm-selector-btns">
+              <button type="button" class="lm-btn lm-btn-stop" onclick="window.CrucixLiveMedia?.stopStream('${esc(stream.id)}')">■ Leállítás</button>
+              <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">Megnyitás a szolgáltató oldalán ↗</a>
             </div>
-            <div class="lm-external-actions">
-              <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">
-                Megnyitás a szolgáltató oldalán ↗
-              </a>
-            </div>
-          `;
-        }
-      } else if (hasImage) {
-        if (isCameraError) {
-          externalBodyHtml = `
-            <div class="lm-camera-fallback-box" role="alert">
-              <div class="lm-camera-fallback-title">⚠ Nem tölthető be – megnyitás a forráson</div>
-              <div class="lm-camera-fallback-desc">A kép közvetlen betöltése nem sikerült vagy a külső forrás korlátozta.</div>
-              <div class="lm-camera-fallback-actions">
-                <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">Megnyitás a forráson ↗</a>
-                <button type="button" class="lm-btn lm-btn-retry" onclick="window.CrucixLiveMedia?.retryCamera('${esc(stream.id)}')">Újrapróbálás</button>
-              </div>
-            </div>
-          `;
-        } else if (isIpcam && isEmbedActive) {
-          externalBodyHtml = `
-            <div class="lm-embed-view-wrap">
-              <iframe
-                id="lm-embed-frame-${esc(stream.id)}"
-                class="lm-embed-frame"
-                src="${esc(stream.embedUrl)}"
-                title="${esc(stream.name)}"
-                loading="lazy"
-                referrerpolicy="no-referrer"
-                sandbox="allow-scripts allow-same-origin allow-popups" allow="autoplay; fullscreen" allowfullscreen>
-              </iframe>
-              <div class="lm-embed-meta-bar">
-                <span class="lm-embed-disclaimer">● IPCamLive élő HD közvetítés</span>
-                <button type="button" class="lm-btn-embed-close" title="Lejátszó bezárása" onclick="window.CrucixLiveMedia?.unloadEmbed('${esc(stream.id)}')">✕ Bezárás</button>
-              </div>
-            </div>
-            <div class="lm-camera-attribution">
-              ${esc(stream.attribution || 'Forrás: debrecen.hu / IPCamLive')} — <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-link-external">Megnyitás a forráson ↗</a>
-            </div>
-          `;
-        } else if (isCameraActive) {
-          externalBodyHtml = `
-            <div class="lm-camera-view-wrap">
-              <img
-                id="lm-camera-img-${esc(stream.id)}"
-                class="lm-camera-img"
-                src="${esc(buildCameraImageUrl(stream.imageUrl))}"
-                alt="${esc(stream.name)}"
-                loading="eager"
-                referrerpolicy="no-referrer"
-                onload="window.CrucixLiveMedia?.onCameraImgLoad('${esc(stream.id)}')"
-                onerror="window.CrucixLiveMedia?.onCameraImgError('${esc(stream.id)}')" />
-              <div class="lm-camera-meta-bar">
-                <span class="lm-camera-refresh-indicator">🔄 Frissítés: ${stream.sourceType === 'still-image' ? (isIpcam ? 'élő pillanatkép (1080p)' : '30 perc') : '60 mp'} (közvetlen böngészőoldali)</span>
-                ${stream.sourceType === 'still-image' ? `
-                  <span class="lm-freshness-badge ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || null).className)}" title="${streamLastModified.get(stream.id) ? `Forrás utolsó módosítása (Last-Modified): ${esc(streamLastModified.get(stream.id))}` : (streamMetaErrors.get(stream.id) ? `Frissesség nem igazolt: ${esc(streamMetaErrors.get(stream.id))}` : 'Frissesség nem igazolt')}">
-                    ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || null).label)}
-                  </span>
-                ` : ''}
-                <button type="button" class="lm-btn-camera-close" title="Kamera bezárása" onclick="window.CrucixLiveMedia?.unloadCamera('${esc(stream.id)}')">✕ Bezárás</button>
-              </div>
-            </div>
-            <div class="lm-camera-attribution">
-              ${esc(stream.attribution || (stream.sourceType === 'still-image' ? (isIpcam ? 'Forrás: debrecen.hu / IPCamLive' : 'Forrás: IK1QFK / vlf.it') : 'Forrás: Időkép / idokep.hu'))} — <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-link-external">Megnyitás a forráson ↗</a>
-            </div>
-          `;
+          </div>
+        `;
+      } else if (isPrivateHost && canPlay) {
+        let privacyNoticeText = '';
+        if (isWindy) {
+          privacyNoticeText = WINDY_PRIVACY_NOTICE_TEXT;
         } else if (isIpcam) {
-          externalBodyHtml = `
-            <div class="lm-camera-privacy-box">
-              <span class="lm-camera-privacy-text">${esc(IPCAMLIVE_PRIVACY_NOTICE_TEXT)}</span>
-            </div>
-            <div class="lm-external-actions">
-              <button type="button" class="lm-btn lm-btn-load-cam" onclick="window.CrucixLiveMedia?.playStream('${esc(stream.id)}')">▶ Kamera a rácsba (élő)</button>
-              <button type="button" class="lm-btn lm-btn-load-embed" onclick="window.CrucixLiveMedia?.loadEmbed('${esc(stream.id)}')">▶ Élő lejátszó betöltése</button>
-              <button type="button" class="lm-btn lm-btn-load-cam" onclick="window.CrucixLiveMedia?.loadCamera('${esc(stream.id)}')">📷 Pillanatkép betöltése</button>
-              <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">
-                Megnyitás a forráson ↗
-              </a>
-            </div>
-          `;
+          privacyNoticeText = IPCAMLIVE_PRIVACY_NOTICE_TEXT;
+        } else if (stream.sourceType === 'still-image') {
+          privacyNoticeText = 'A kép betöltése kapcsolatot létesít a forrással (' + (stream.provider || 'IK1QFK / vlf.it') + '); a Crucix nem tárolja.';
         } else {
-          externalBodyHtml = `
-            <div class="lm-camera-privacy-box">
-              <span class="lm-camera-privacy-text">${esc(stream.sourceType === 'still-image' ? 'A kép betöltése kapcsolatot létesít a forrással (' + (stream.provider || 'IK1QFK / vlf.it') + '); a Crucix nem tárolja.' : CAMERA_PRIVACY_NOTICE_TEXT)}</span>
-            </div>
-            <div class="lm-external-actions">
-              ${stream.sourceType === 'still-image' ? `
-                <button type="button" class="lm-btn lm-btn-load-cam lm-btn-load-still" onclick="window.CrucixLiveMedia?.playStream('${esc(stream.id)}')">⚡ Schumann a rácsba</button>
-              ` : `
-                <button type="button" class="lm-btn lm-btn-load-cam lm-btn-load-grid" onclick="window.CrucixLiveMedia?.playStream('${esc(stream.id)}')">⊞ Rácsba</button>
-                <button type="button" class="lm-btn lm-btn-load-cam" onclick="window.CrucixLiveMedia?.loadCamera('${esc(stream.id)}')">📷 Kamera betöltése</button>
-              `}
-              <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">
-                Megnyitás a szolgáltató oldalán ↗
-              </a>
-            </div>
-          `;
+          privacyNoticeText = CAMERA_PRIVACY_NOTICE_TEXT;
         }
+
+        externalBodyHtml = `
+          <div class="lm-camera-privacy-box">
+            <span class="lm-camera-privacy-text">${esc(privacyNoticeText)}</span>
+          </div>
+          <div class="lm-external-actions">
+            <button type="button" class="lm-btn lm-btn-play lm-btn-load-grid" onclick="window.CrucixLiveMedia?.playStream('${esc(stream.id)}')">
+              ▶ Betöltés a rácsba
+            </button>
+            <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">
+              Megnyitás a szolgáltató oldalán ↗
+            </a>
+          </div>
+        `;
       } else {
         externalBodyHtml = `
-          ${stream.imageUrl && !isPrivateHost ? `
+          ${!isPrivateHost && canPlay ? `
             <div class="lm-camera-restricted-box">
-              <span class="lm-camera-restricted-text">ℹ A közvetlen kamerakép kizárólag privát helyi hálózatról (LAN / loopback) tölthető be (magáncélú felhasználás védelme).</span>
+              <span class="lm-camera-restricted-text">ℹ A közvetlen adatfolyam kizárólag privát helyi hálózatról (LAN / loopback) tölthető be (magáncélú felhasználás védelme).</span>
             </div>
           ` : ''}
           <div class="lm-external-actions">
@@ -1795,7 +1618,7 @@
       }
 
       return `
-        <article class="lm-card lm-card-external${isWindy ? ' lm-card-windy' : ''}${isCameraActive ? ' camera-active' : ''}${isCameraError ? ' camera-error' : ''}${isEmbedActive ? ' embed-active' : ''}" id="lm-card-${esc(stream.id)}" data-stream-id="${esc(stream.id)}" data-embed-status="external-only">
+        <article class="lm-card lm-card-external${isWindy ? ' lm-card-windy' : ''}${isPlaying ? ' camera-active' : ''}" id="lm-card-${esc(stream.id)}" data-stream-id="${esc(stream.id)}" data-embed-status="external-only">
           <div class="lm-card-head">
             <div class="lm-card-title-row">
               <span class="lm-card-type-badge lm-type-${esc(stream.type)}">${esc(typeLabel)}</span>
@@ -1975,17 +1798,6 @@
                   ${hiddenStaleSources.length} forrás elrejtve
                 </span>
               ` : ''}
-              ${externalCams.length > 0 && isPrivateHost ? `
-                ${anyCamActive ? `
-                  <button type="button" class="lm-btn lm-btn-stop" onclick="window.CrucixLiveMedia?.unloadAllCameras()" title="Minden aktív intézményi kamera bezárása">
-                    ✕ Kamerák bezárása
-                  </button>
-                ` : `
-                  <button type="button" class="lm-btn lm-btn-load-cam" onclick="window.CrucixLiveMedia?.loadAllCameras()" title="Legfeljebb ${MAX_GROUP_CAMERAS} kamera betöltése egyszerre">
-                    📷 Kamerák betöltése (max ${MAX_GROUP_CAMERAS})
-                  </button>
-                `}
-              ` : ''}
             </div>
             ${showLimitNotice && isPrivateHost ? `
               <div class="lm-camera-limit-notice" role="status" id="lm-camera-limit-notice">
@@ -2078,8 +1890,8 @@
           <input type="checkbox" id="lm-bg-playback-toggle" class="lm-bg-checkbox"${allowBackgroundPlayback ? ' checked' : ''} onchange="window.CrucixLiveMedia?.setAllowBackgroundPlayback(this.checked)" />
           <span class="lm-bg-label">Háttérben is fusson</span>
         </label>
-        <button type="button" class="lm-btn lm-btn-toolbar lm-btn-grid-load" id="lm-btn-cameras-to-grid" onclick="window.CrucixLiveMedia?.loadCamerasIntoGrid()" title="A 4 debreceni webkamera betöltése a 2×2 rácsba">
-          📷 Kamerák a rácsba
+        <button type="button" class="lm-btn lm-btn-toolbar lm-btn-grid-load" id="lm-btn-cameras-to-grid" onclick="window.CrucixLiveMedia?.loadFirstFourIntoGrid()" title="Az első 4 forrás betöltése a 2×2 rácsba">
+          ▶ Első 4 betöltése a rácsba
         </button>
         <button type="button" class="lm-btn lm-btn-exit-live" onclick="window.CrucixViewsPanel?.setContentTab('news')" title="Kilépés az Élő nézetből (minden lejátszó leáll)">
           ← Térkép / Hírfolyam
@@ -2387,6 +2199,7 @@
     CAMERA_LIMIT_NOTICE_TEXT,
     DEFAULT_GROUP_CAMERA_IDS,
     loadCamerasIntoGrid,
+    loadFirstFourIntoGrid,
     canStreamPlayInGrid,
     onGridImgLoad,
     onGridImgError,
@@ -2394,8 +2207,8 @@
     STILL_IMAGE_REFRESH_INTERVAL_MS,
     getLastImageRefreshedAt: (streamId) => lastImageRefreshedAt.get(streamId),
     isGridImageError: (streamId) => gridImageErrors.has(streamId),
-    getActiveCameraCount: () => activeCameraIds.size,
-    getActiveCameraIds: () => Array.from(activeCameraIds),
+    getActiveCameraCount: () => activeStreamIds.length,
+    getActiveCameraIds: () => Array.from(activeStreamIds),
     getCameraNotice: () => cameraNotice,
     WINDY_PRIVACY_NOTICE_TEXT,
     WINDY_DISCLAIMER_TEXT,
