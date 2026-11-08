@@ -1196,12 +1196,34 @@
 }
 
 /* --- UNIFIED GRID TILES (Webcam & Embed in Stage Slots) --- */
+.lm-grid-img-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
 .lm-grid-camera-img {
   width: 100%;
   height: 100%;
   object-fit: contain;
   background: #000;
   display: block;
+}
+
+.lm-grid-error-box {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 0;
+  box-sizing: border-box;
 }
 
 .lm-grid-embed-frame {

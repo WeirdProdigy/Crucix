@@ -1384,10 +1384,18 @@ test('13. Unified tile model in Live Media grid: 4-slot limit, FIFO replacement,
   const stageHtml = lm.panelHtml({ liveStreams: streams });
   assert.ok(stageHtml.includes('id="lm-stage-slot-debrecen-kossuth-ter-webcam"'));
   assert.ok(stageHtml.includes('id="lm-stage-slot-debrecen-klinika-webcam"'));
+  assert.ok(stageHtml.includes('class="lm-grid-img-wrap"'), 'lm-grid-img-wrap rendered for stage webcams');
+  assert.ok(stageHtml.includes('class="lm-grid-camera-img"'), 'lm-grid-camera-img rendered for stage webcams');
   assert.ok(stageHtml.includes('Állókép · 60 mp'), 'Webcams have 60s badge');
   assert.ok(stageHtml.includes('Forrás ↗'), 'Attribution source link present');
   assert.ok(stageHtml.includes('■ Bezárás'), 'Close button present');
   assert.ok(stageHtml.includes('📷 Kamerák a rácsba'), 'Toolbar button present');
+
+  // Verify still-image CSS containment rules in live-media-panel.css
+  const liveCss = readFileSync(new URL('../dashboard/public/live-media-panel.css', import.meta.url), 'utf8');
+  assert.ok(liveCss.includes('.lm-grid-img-wrap') && liveCss.includes('aspect-ratio: 16 / 9;'), 'lm-grid-img-wrap enforces 16:9 aspect-ratio');
+  assert.ok(liveCss.includes('.lm-grid-camera-img') && liveCss.includes('object-fit: contain;'), 'lm-grid-camera-img enforces object-fit: contain');
+  assert.ok(liveCss.includes('.lm-grid-camera-img') && liveCss.includes('width: 100%;'), 'lm-grid-camera-img enforces width: 100%');
 
   // Test Schumann in grid
   lm.playStream('schumann-resonance-cumiana');
