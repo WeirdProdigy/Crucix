@@ -246,7 +246,7 @@
         } else if (err) {
           b.setAttribute('title', `Frissesség nem állapítható meg: ${err}`);
         } else {
-          b.setAttribute('title', 'Frissesség ismeretlen');
+          b.setAttribute('title', 'Frissesség nem igazolt');
         }
       }
     }
@@ -262,6 +262,7 @@
       const ts = typeof lm === 'number' ? lm : new Date(lm).getTime();
       if (!isNaN(ts) && (Date.now() - ts) > STALE_MAX_AGE_MS) return true;
     }
+    // Missing Last-Modified or header errors are considered "frissesség nem igazolt", NEVER hidden as stale
     return false;
   }
 
@@ -1564,7 +1565,7 @@
               <div class="lm-camera-meta-bar">
                 <span class="lm-camera-refresh-indicator">🔄 Frissítés: ${stream.sourceType === 'still-image' ? (isIpcam ? 'élő pillanatkép (1080p)' : '30 perc') : '60 mp'} (közvetlen böngészőoldali)</span>
                 ${stream.sourceType === 'still-image' ? `
-                  <span class="lm-freshness-badge ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || null).className)}" title="${streamLastModified.get(stream.id) ? `Forrás utolsó módosítása (Last-Modified): ${esc(streamLastModified.get(stream.id))}` : (streamMetaErrors.get(stream.id) ? `Frissesség nem állapítható meg: ${esc(streamMetaErrors.get(stream.id))}` : 'Frissesség ismeretlen')}">
+                  <span class="lm-freshness-badge ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || null).className)}" title="${streamLastModified.get(stream.id) ? `Forrás utolsó módosítása (Last-Modified): ${esc(streamLastModified.get(stream.id))}` : (streamMetaErrors.get(stream.id) ? `Frissesség nem igazolt: ${esc(streamMetaErrors.get(stream.id))}` : 'Frissesség nem igazolt')}">
                     ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || null).label)}
                   </span>
                 ` : ''}
@@ -1638,7 +1639,7 @@
                 <span class="lm-status-pill lm-page-status lm-badge-still" title="Típus">
                   Állókép
                 </span>
-                <span class="lm-status-pill lm-freshness-badge ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || null).className)}" title="${streamLastModified.get(stream.id) ? `Forrás utolsó módosítása (Last-Modified): ${esc(streamLastModified.get(stream.id))}` : (streamMetaErrors.get(stream.id) ? `Frissesség nem állapítható meg: ${esc(streamMetaErrors.get(stream.id))}` : 'Frissesség ismeretlen')}">
+                <span class="lm-status-pill lm-freshness-badge ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || null).className)}" title="${streamLastModified.get(stream.id) ? `Forrás utolsó módosítása (Last-Modified): ${esc(streamLastModified.get(stream.id))}` : (streamMetaErrors.get(stream.id) ? `Frissesség nem igazolt: ${esc(streamMetaErrors.get(stream.id))}` : 'Frissesség nem igazolt')}">
                   ${esc(computeFreshnessBadge(streamLastModified.get(stream.id) || null).label)}
                 </span>
                 <span class="lm-status-pill lm-embed-status lm-embed-external-only" title="Beágyazhatóság">
