@@ -33,6 +33,7 @@ import {
   QUERY_WHERE,
   formatToBudapestTime,
   formatToBudapestDateTime,
+  parseOvfLocalTimestamp,
   calculateLevelRelation,
   parseOvfArcGisResponse,
   clearOvfGaugesCache,
@@ -108,9 +109,9 @@ test('2. parseOvfArcGisResponse on real fixture: all 4 gauges parsed with exact 
   assert.equal(parsed.primaryGauge.waterLevelCm, -131, 'Negative water level -131 cm preserved');
   assert.equal(parsed.primaryGauge.dischargeM3s, 0.28, 'Rounded discharge in fixture');
   assert.equal(parsed.primaryGauge.waterTempC, 11.4);
-  assert.equal(parsed.primaryGauge.observedAt, '2026-11-02T22:00:00.000Z');
-  assert.equal(parsed.primaryGauge.observedAtBudapestTime, '23:00');
-  assert.equal(parsed.primaryGauge.ageMinutes, 30);
+  assert.equal(parsed.primaryGauge.observedAt, '2026-11-02T21:00:00.000Z');
+  assert.equal(parsed.primaryGauge.observedAtBudapestTime, '22:00');
+  assert.equal(parsed.primaryGauge.ageMinutes, 90);
   assert.equal(parsed.primaryGauge.fresh, true);
   assert.equal(parsed.primaryGauge.cadence, 'hourly');
   assert.equal(parsed.primaryGauge.freshThresholdMinutes, 90);
@@ -130,7 +131,7 @@ test('2. parseOvfArcGisResponse on real fixture: all 4 gauges parsed with exact 
   assert.equal(pocsaj.waterLevelCm, -69);
   assert.equal(pocsaj.dischargeM3s, 0.23, 'Rounded discharge in fixture');
   assert.equal(pocsaj.waterTempC, 10.6);
-  assert.equal(pocsaj.observedAt, '2026-11-02T22:00:00.000Z');
+  assert.equal(pocsaj.observedAt, '2026-11-02T21:00:00.000Z');
   assert.equal(pocsaj.fresh, true);
   assert.equal(pocsaj.cadence, 'hourly');
 
@@ -142,12 +143,12 @@ test('2. parseOvfArcGisResponse on real fixture: all 4 gauges parsed with exact 
   assert.equal(darvas.dischargeM3s, null, 'Discharge is null for Darvas');
   assert.equal(darvas.hasDischarge, false);
   assert.equal(darvas.waterTempC, 11.2);
-  assert.equal(darvas.observedAt, '2026-11-02T06:00:00.000Z');
-  assert.equal(darvas.observedAtBudapestTime, '07:00');
+  assert.equal(darvas.observedAt, '2026-11-02T05:00:00.000Z');
+  assert.equal(darvas.observedAtBudapestTime, '06:00');
   assert.equal(darvas.cadence, 'daily');
-  assert.equal(darvas.ageMinutes, 990);
+  assert.equal(darvas.ageMinutes, 1050);
   assert.equal(darvas.freshThresholdMinutes, 1560);
-  assert.equal(darvas.fresh, true, 'Darvas from 06:00 UTC is fresh under 26h (1560 min) daily cadence at 22:30 UTC');
+  assert.equal(darvas.fresh, true, 'Darvas from 05:00 UTC is fresh under 26h (1560 min) daily cadence at 22:30 UTC');
 
   // Szeghalom gauge check (#2740) - daily cadence
   const szeghalom = parsed.gauges.find(g => g.id === '2740');
@@ -201,6 +202,8 @@ test('3. Sentinel, null and negative value handling', () => {
 test('4. Freshness evaluation: hourly (90m) and daily (26h) thresholds', () => {
   const hourlyEpoch = new Date('2026-11-02T22:00:00.000Z').getTime();
   const dailyEpoch = new Date('2026-11-02T06:00:00.000Z').getTime();
+  const hourlyParsed = parseOvfLocalTimestamp(hourlyEpoch);
+  const dailyParsed = parseOvfLocalTimestamp(dailyEpoch);
 
   const sampleData = {
     features: [
@@ -227,28 +230,28 @@ test('4. Freshness evaluation: hourly (90m) and daily (26h) thresholds', () => {
   };
 
   // 1. Hourly gauge: 85 minutes later -> FRESH (<= 90m)
-  const nowHourlyFresh = hourlyEpoch + 85 * 60 * 1000;
+  const nowHourlyFresh = hourlyParsed.utcEpoch + 85 * 60 * 1000;
   const resHourlyFresh = parseOvfArcGisResponse(sampleData, { now: nowHourlyFresh });
   const buFresh = resHourlyFresh.gauges.find(g => g.id === '2546');
   assert.equal(buFresh.fresh, true);
   assert.equal(buFresh.ageMinutes, 85);
 
   // 2. Hourly gauge: 95 minutes later -> STALE (> 90m)
-  const nowHourlyStale = hourlyEpoch + 95 * 60 * 1000;
+  const nowHourlyStale = hourlyParsed.utcEpoch + 95 * 60 * 1000;
   const resHourlyStale = parseOvfArcGisResponse(sampleData, { now: nowHourlyStale });
   const buStale = resHourlyStale.gauges.find(g => g.id === '2546');
   assert.equal(buStale.fresh, false);
   assert.equal(buStale.ageMinutes, 95);
 
   // 3. Daily gauge: 25 hours later (1500m) -> FRESH (<= 26h / 1560m)
-  const nowDailyFresh = dailyEpoch + 25 * 60 * 60 * 1000;
+  const nowDailyFresh = dailyParsed.utcEpoch + 25 * 60 * 60 * 1000;
   const resDailyFresh = parseOvfArcGisResponse(sampleData, { now: nowDailyFresh });
   const darvasFresh = resDailyFresh.gauges.find(g => g.id === '2739');
   assert.equal(darvasFresh.fresh, true);
   assert.equal(darvasFresh.ageMinutes, 1500);
 
   // 4. Daily gauge: 27 hours later (1620m) -> STALE (> 26h / 1560m)
-  const nowDailyStale = dailyEpoch + 27 * 60 * 60 * 1000;
+  const nowDailyStale = dailyParsed.utcEpoch + 27 * 60 * 60 * 1000;
   const resDailyStale = parseOvfArcGisResponse(sampleData, { now: nowDailyStale });
   const darvasStale = resDailyStale.gauges.find(g => g.id === '2739');
   assert.equal(darvasStale.fresh, false);
@@ -376,6 +379,14 @@ test('8. Client weather-panel.js rendering: renderHydroBlock, pills, Darvas null
   assert.ok(disabledHtml.includes('CRUCIX_ENABLE_OVF_GAUGES='), 'Hint rendered');
   assert.ok(disabledHtml.includes(ATTRIBUTION), 'Attribution rendered even when disabled');
 
+  // A2. Loading state after restart before first sweep
+  const loadingHtml = WeatherPanel.renderHydroBlock({
+    ovfGauges: { enabled: true, status: 'loading', loading: true, gauges: [] }
+  });
+  assert.ok(loadingHtml.includes('BETÖLTÉS ALATT'), 'Loading badge rendered');
+  assert.ok(loadingHtml.includes('Első adatgyűjtés folyamatban'), 'Loading note rendered');
+  assert.ok(loadingHtml.includes(ATTRIBUTION), 'Attribution rendered during loading');
+
   // B. Fresh parsed state with 4 gauges
   const fixedNow = new Date('2026-11-02T22:30:00.000Z').getTime();
   const parsed = parseOvfArcGisResponse(fixtureData, { now: fixedNow });
@@ -399,7 +410,7 @@ test('8. Client weather-panel.js rendering: renderHydroBlock, pills, Darvas null
   assert.ok(darvasIndex > 0, 'Darvas gauge card found');
   const afterDarvas = activeHtml.slice(darvasIndex, darvasIndex + 700);
   assert.ok(afterDarvas.includes('<span class="wp-hydro-mv">-</span>'), 'Darvas null discharge renders dash');
-  assert.ok(afterDarvas.includes('<span class="wp-hydro-time-badge fresh">07:00</span>'), 'Darvas renders 07:00 with fresh badge within daily cadence');
+  assert.ok(afterDarvas.includes('<span class="wp-hydro-time-badge fresh">06:00</span>'), 'Darvas renders 06:00 with fresh badge within daily cadence');
   assert.ok(!afterDarvas.includes('ELAVULT'), 'Darvas is not marked ELAVULT when within daily cadence');
   assert.ok(afterDarvas.includes('napi mérce'), 'Daily cadence marker rendered');
 
@@ -456,4 +467,53 @@ test('9. Static security audit: zero unauthorized vizugy endpoints, zero Origin 
     assert.ok(!content.includes('data.vizugy.hu'), `${f} must not call data.vizugy.hu`);
     assert.ok(!content.includes('vmservice.vizugy.hu'), `${f} must not call vmservice.vizugy.hu`);
   }
+});
+
+test('10. OVF local timestamp DST-correct UTC conversion and futureTimestamp anomaly', () => {
+  // 1. Tél (CET, UTC+1): 21:00 Budapest -> 20:00 UTC
+  const winterRaw = Date.UTC(2026, 10, 9, 21, 0, 0); // 2026-11-09 21:00
+  const winterParsed = parseOvfLocalTimestamp(winterRaw);
+  assert.equal(winterParsed.utcIso, '2026-11-09T20:00:00.000Z', 'Winter local 21:00 converts to 20:00Z');
+  assert.equal(winterParsed.localTime, '21:00', 'Winter local time is 21:00');
+
+  // 2. Nyár (CEST, UTC+2): 14:00 Budapest -> 12:00 UTC
+  const summerRaw = Date.UTC(2026, 6, 15, 14, 0, 0); // 2026-07-15 14:00
+  const summerParsed = parseOvfLocalTimestamp(summerRaw);
+  assert.equal(summerParsed.utcIso, '2026-07-15T12:00:00.000Z', 'Summer local 14:00 converts to 12:00Z');
+  assert.equal(summerParsed.localTime, '14:00', 'Summer local time is 14:00');
+
+  // 3. Őszi ismétlődő óra (2026-10-25 02:30 fall-back transition): maps cleanly to CET
+  const autumnRaw = Date.UTC(2026, 9, 25, 2, 30, 0);
+  const autumnParsed = parseOvfLocalTimestamp(autumnRaw);
+  assert.equal(autumnParsed.utcIso, '2026-10-25T01:30:00.000Z', 'Autumn repeated hour maps to standard CET');
+  assert.equal(autumnParsed.localTime, '02:30');
+
+  // 4. Tavaszi kimaradó óra (2026-03-29 02:30 spring-forward transition): handled gracefully
+  const springRaw = Date.UTC(2026, 2, 29, 2, 30, 0);
+  const springParsed = parseOvfLocalTimestamp(springRaw);
+  assert.ok(springParsed.utcIso, 'Spring missing hour yields valid UTC timestamp');
+  assert.equal(springParsed.localTime, '02:30');
+
+  // 5. Future timestamp detection (anomaly: measurement ahead of now)
+  const sampleFuture = {
+    features: [
+      {
+        attributes: {
+          'vFeAllomas_webmerc.Torzsszam': 2546,
+          'vop.dbo.tAllomasFe.AllomasNev': 'Berettyóújfalu',
+          'vop.dbo.tAllomasFe.Idopont': winterRaw, // 20:00Z true UTC
+          'vop.dbo.tAllomasFe.Vizallas': -122,
+          'vop.dbo.tAllomasFe.KF1': 300
+        }
+      }
+    ]
+  };
+  // Now is 30 minutes BEFORE the measurement (now = 19:30Z)
+  const pastNow = winterParsed.utcEpoch - 30 * 60 * 1000;
+  const futureRes = parseOvfArcGisResponse(sampleFuture, { now: pastNow });
+  const buFuture = futureRes.gauges.find(g => g.id === '2546');
+  assert.equal(buFuture.futureTimestamp, true, 'futureTimestamp is flagged true');
+  assert.equal(buFuture.ageMinutes, -30, 'ageMinutes preserves negative -30 rather than clamping to 0');
+  assert.equal(buFuture.fresh, false, 'future timestamp is NOT fresh');
+  assert.equal(futureRes.allFresh, false, 'allFresh is false when gauge has future timestamp');
 });

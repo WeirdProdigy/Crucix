@@ -96,6 +96,77 @@ export function clearOvfGaugesCache() {
 }
 
 /**
+ * ArcGIS MapServer encodes naive Hungarian local falióra-idő as UTC epoch milliseconds.
+ * This function extracts the falióra components and determines the DST-correct true UTC
+ * timestamp in Europe/Budapest, handling CET (winter, UTC+1), CEST (summer, UTC+2),
+ * spring missing hour (02:00 -> 03:00 transition) and autumn repeated hour (03:00 -> 02:00 transition).
+ */
+export function parseOvfLocalTimestamp(rawEpoch) {
+  if (typeof rawEpoch !== 'number' || !Number.isFinite(rawEpoch) || rawEpoch <= 0) {
+    return { utcIso: null, utcEpoch: null, localTime: '--:--', localDateTime: '--' };
+  }
+
+  const naive = new Date(rawEpoch);
+  const year = naive.getUTCFullYear();
+  const month = naive.getUTCMonth();
+  const day = naive.getUTCDate();
+  const hour = naive.getUTCHours();
+  const minute = naive.getUTCMinutes();
+  const second = naive.getUTCSeconds();
+
+  const pad = n => String(n).padStart(2, '0');
+  const targetIsoLocal = `${year}-${pad(month + 1)}-${pad(day)}T${pad(hour)}:${pad(minute)}:${pad(second)}`;
+
+  const dtf = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Budapest',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+
+  function getLocalString(utcMs) {
+    const parts = dtf.formatToParts(new Date(utcMs));
+    const m = {};
+    for (const p of parts) m[p.type] = p.value;
+    const h = m.hour === '24' ? '00' : m.hour;
+    return `${m.year}-${m.month}-${m.day}T${h}:${m.minute}:${m.second}`;
+  }
+
+  // Candidates: CET (UTC+1, 3600000 ms) or CEST (UTC+2, 7200000 ms)
+  // For autumn repeated hour (02:00-03:00), CET (+1h, standard civil hydrology time) is the timeline standard.
+  const offsetCandidates = [3600000, 7200000];
+  let bestUtc = null;
+
+  for (const off of offsetCandidates) {
+    const testUtc = rawEpoch - off;
+    if (getLocalString(testUtc) === targetIsoLocal) {
+      bestUtc = testUtc;
+      break;
+    }
+  }
+
+  if (bestUtc === null) {
+    // Spring missing hour: e.g. 02:30 during 02:00->03:00 jump.
+    // Pick candidate closest to target local representation.
+    const diff1 = Math.abs(new Date(getLocalString(rawEpoch - 3600000)).getTime() - new Date(targetIsoLocal).getTime());
+    const diff2 = Math.abs(new Date(getLocalString(rawEpoch - 7200000)).getTime() - new Date(targetIsoLocal).getTime());
+    bestUtc = diff1 <= diff2 ? (rawEpoch - 3600000) : (rawEpoch - 7200000);
+  }
+
+  const dt = new Date(bestUtc);
+  return {
+    utcIso: dt.toISOString(),
+    utcEpoch: bestUtc,
+    localTime: `${pad(hour)}:${pad(minute)}`,
+    localDateTime: `${year}. ${pad(month + 1)}. ${pad(day)}. ${pad(hour)}:${pad(minute)}`
+  };
+}
+
+/**
  * Formats an ISO UTC timestamp into Europe/Budapest local time string (HH:mm).
  */
 export function formatToBudapestTime(isoString) {
@@ -219,11 +290,28 @@ export function parseOvfArcGisResponse(responseJson, options = {}) {
     let observedAt = null;
     let ageMinutes = null;
     let fresh = false;
+    let futureTimestamp = false;
+    let observedAtBudapestTime = '--:--';
+    let observedAtBudapestDate = '--';
 
     if (typeof rawEpoch === 'number' && Number.isFinite(rawEpoch) && rawEpoch > 0) {
-      observedAt = new Date(rawEpoch).toISOString();
-      ageMinutes = Math.max(0, Math.round((now - rawEpoch) / 60000));
-      fresh = ageMinutes <= gaugeThresholdMinutes;
+      const parsedTime = parseOvfLocalTimestamp(rawEpoch);
+      observedAt = parsedTime.utcIso;
+      observedAtBudapestTime = parsedTime.localTime;
+      observedAtBudapestDate = parsedTime.localDateTime;
+
+      if (parsedTime.utcEpoch !== null) {
+        const rawDiffMinutes = Math.round((now - parsedTime.utcEpoch) / 60000);
+        if (rawDiffMinutes < -2) {
+          // Anomaly: future timestamp. Preserve actual negative age and flag it, do NOT clamp to 0.
+          futureTimestamp = true;
+          ageMinutes = rawDiffMinutes;
+          fresh = false;
+        } else {
+          ageMinutes = Math.max(0, rawDiffMinutes);
+          fresh = ageMinutes <= gaugeThresholdMinutes;
+        }
+      }
     }
 
     const waterLevelCm = parseNullableNum(a['vop.dbo.tAllomasFe.Vizallas'] ?? a['Vizallas']);
@@ -251,9 +339,10 @@ export function parseOvfArcGisResponse(responseJson, options = {}) {
       freshThresholdMinutes: gaugeThresholdMinutes,
       order: meta.order,
       observedAt,
-      observedAtBudapestTime: formatToBudapestTime(observedAt),
-      observedAtBudapestDate: formatToBudapestDateTime(observedAt),
+      observedAtBudapestTime,
+      observedAtBudapestDate,
       ageMinutes,
+      futureTimestamp,
       fresh,
       waterLevelCm,
       dischargeM3s,
@@ -290,6 +379,7 @@ export function parseOvfArcGisResponse(responseJson, options = {}) {
         observedAtBudapestTime: '--:--',
         observedAtBudapestDate: '--',
         ageMinutes: null,
+        futureTimestamp: false,
         fresh: false,
         waterLevelCm: null,
         dischargeM3s: null,
@@ -311,7 +401,8 @@ export function parseOvfArcGisResponse(responseJson, options = {}) {
 
   // Primary gauge is Berettyóújfalu (2546)
   const primaryGauge = gaugeList.find(g => g.id === '2546') || gaugeList[0] || null;
-  const allFresh = gaugeList.filter(g => g.observedAt).every(g => g.fresh);
+  const allFresh = gaugeList.filter(g => g.observedAt).length > 0 &&
+    gaugeList.filter(g => g.observedAt).every(g => g.fresh && !g.futureTimestamp);
   const anyFresh = gaugeList.some(g => g.fresh);
 
   return {
