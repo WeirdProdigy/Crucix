@@ -434,7 +434,22 @@ app.get('/api/still-image-meta', async (req, res) => {
 
 // API: OVF gauges (memory-only hydro telemetry)
 app.get('/api/ovf-gauges', (_req, res) => {
-  res.json(currentData?.ovfGauges || { enabled: false, gauges: [] });
+  if (currentData?.ovfGauges) {
+    return res.json(currentData.ovfGauges);
+  }
+  if (config.enableOvfGauges) {
+    return res.json({
+      source: 'OVF-Gauges',
+      enabled: true,
+      status: 'loading',
+      loading: true,
+      message: 'Első adatgyűjtés folyamatban (első sweep)...',
+      gauges: [],
+      fresh: false,
+      allFresh: false
+    });
+  }
+  res.json({ enabled: false, gauges: [] });
 });
 
 // After the last /api route: JSON for what a route could not answer itself (a broken percent-encoding in an id, an escaped error).

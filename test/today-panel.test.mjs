@@ -123,3 +123,15 @@ test('auto-fit grid separates active tiles from compact NINCS ADAT chips and ren
   assert.match(html, /class="today-chip"/, 'Chip elements must be rendered');
   assert.match(html, /AKTÍV · \d+ NINCS ADAT/, 'Header badge must summarize active and no-data counts');
 });
+
+test('OVF gauge tile renders BETÖLTÉS ALATT during initial startup before first sweep', () => {
+  const loadingSnapshot = {
+    ovfGauges: { enabled: true, status: 'loading', loading: true, gauges: [] }
+  };
+  const html = panel().renderTodayPanel(loadingSnapshot);
+  assert.match(html, /BETÖLTÉS ALATT/);
+  assert.match(html, /Betöltés alatt…/);
+  assert.match(html, /Első adatgyűjtés folyamatban/);
+  const activeGrid = html.slice(html.indexOf('class="today-grid"'), html.indexOf('class="today-chips-row"'));
+  assert.ok(activeGrid.includes('data-today-tile="ovf-gauges"'), 'Loading OVF tile remains in active grid');
+});

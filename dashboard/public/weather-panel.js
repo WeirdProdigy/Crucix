@@ -339,6 +339,26 @@
       `;
     }
 
+    if (hydro.status === 'loading' || hydro.loading === true || (hydro.enabled === true && (!hydro.gauges || hydro.gauges.length === 0))) {
+      return `
+        <div class="wp-hydro-card loading" role="region" aria-label="Vízállás adatok (Berettyó)">
+          <div class="wp-hydro-header">
+            <div class="wp-hydro-title-wrap">
+              <span class="wp-hydro-badge">VÍZÁLLÁS (BERETTYÓ)</span>
+              <span class="wp-hydro-subtitle">Berettyóújfalu · Pocsaj · Darvas · Szeghalom</span>
+            </div>
+            <span class="wp-obs-pill wp-obs-pill-loading">BETÖLTÉS ALATT</span>
+          </div>
+          <div class="wp-hydro-note">
+            Első adatgyűjtés folyamatban; az OVF telemetria az első sweep lefutása után jelenik meg.
+          </div>
+          <div class="wp-hydro-attribution">
+            ${ATTRIBUTION_OVF}
+          </div>
+        </div>
+      `;
+    }
+
     const isFresh = Boolean(hydro.fresh);
     const statusClass = isFresh ? 'fresh' : 'stale';
     const statusPill = isFresh
