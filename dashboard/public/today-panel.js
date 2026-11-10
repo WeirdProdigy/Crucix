@@ -56,12 +56,15 @@
     if (Boolean(candidate?.isFixture || candidate?.status === 'fixture' || (hasData(candidate) && snapshot?.isPreSynthesizedFixture))) {
       return ['FIXTURE MINTA', 'tp-pill-stale'];
     }
-    if (candidate?.stale === true || candidate?.fresh === false || candidate?.isFresh === false ||
-        candidate?.status === 'stale' || candidate?.status === 'error') return ['ELAVULT', 'tp-pill-stale'];
-    if (candidate?.status === 'loading' || candidate?.loading === true ||
-        (candidate?.enabled === true && Array.isArray(candidate.gauges) && candidate.gauges.length === 0)) {
+    if (candidate?.status === 'error' || Boolean(candidate?.error && (!candidate.gauges || candidate.gauges.length === 0))) {
+      return ['HIBA', 'tp-pill-nodata'];
+    }
+    if ((candidate?.status === 'loading' || candidate?.loading === true) &&
+        (candidate?.enabled === true && (!candidate.gauges || candidate.gauges.length === 0))) {
       return ['BETÖLTÉS ALATT', 'tp-pill-stale'];
     }
+    if (candidate?.stale === true || candidate?.fresh === false || candidate?.isFresh === false ||
+        candidate?.status === 'stale') return ['ELAVULT', 'tp-pill-stale'];
     if (!hasData(candidate)) return ['NINCS ADAT', 'tp-pill-nodata'];
     return ['FRISS', 'tp-pill-fresh'];
   }
@@ -177,10 +180,12 @@
       {
         id: 'ovf-gauges', category: 'flood', title: 'OVF Berettyó vízállás', href: '#hydro',
         badge: status(hydro, sn), time: time(valueOf(gauge, ['observedAt', 'timestamp'])),
-        body: (hydro?.status === 'loading' || hydro?.loading === true || (hydro?.enabled === true && (!hydro.gauges || hydro.gauges.length === 0)))
-          ? `<div class="tp-main">Betöltés alatt…</div><div class="tp-detail">Első adatgyűjtés folyamatban; az OVF telemetria az első sweep lefutása után jelenik meg.</div>`
-          : `<div class="tp-main">${metric(valueOf(gauge, ['waterLevelCm', 'levelCm', 'waterLevel']), ' cm')}</div>` +
-            `<div class="tp-detail">${esc(hydroDetail)}</div>`
+        body: (hydro?.status === 'error' || Boolean(hydro?.error && (!hydro.gauges || hydro.gauges.length === 0)))
+          ? `<div class="tp-main">Hiba</div><div class="tp-detail">${esc(hydro.error || hydro.message || 'Az OVF telemetria lekérése sikertelen')}</div>`
+          : ((hydro?.status === 'loading' || hydro?.loading === true) && (!hydro.gauges || hydro.gauges.length === 0))
+            ? `<div class="tp-main">Betöltés alatt…</div><div class="tp-detail">Első adatgyűjtés folyamatban; az OVF telemetria az első sweep lefutása után jelenik meg.</div>`
+            : `<div class="tp-main">${metric(valueOf(gauge, ['waterLevelCm', 'levelCm', 'waterLevel']), ' cm')}</div>` +
+              `<div class="tp-detail">${esc(hydroDetail)}</div>`
       },
       {
         id: 'ovf-drought', category: 'drought', title: 'OVF aszály / talajnedvesség', href: '#drought',

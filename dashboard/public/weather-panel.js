@@ -339,7 +339,27 @@
       `;
     }
 
-    if (hydro.status === 'loading' || hydro.loading === true || (hydro.enabled === true && (!hydro.gauges || hydro.gauges.length === 0))) {
+    if (hydro.status === 'error' || Boolean(hydro.error && (!hydro.gauges || hydro.gauges.length === 0))) {
+      return `
+        <div class="wp-hydro-card error" role="region" aria-label="Vízállás adatok (Berettyó)">
+          <div class="wp-hydro-header">
+            <div class="wp-hydro-title-wrap">
+              <span class="wp-hydro-badge">VÍZÁLLÁS (BERETTYÓ)</span>
+              <span class="wp-hydro-subtitle">Berettyóújfalu · Pocsaj · Darvas · Szeghalom</span>
+            </div>
+            <span class="wp-obs-pill wp-obs-pill-stale">HIBA</span>
+          </div>
+          <div class="wp-hydro-note">
+            ${esc(hydro.error || hydro.message || 'Nem sikerült lekérni az OVF vízmérce adatokat.')}
+          </div>
+          <div class="wp-hydro-attribution">
+            ${ATTRIBUTION_OVF}
+          </div>
+        </div>
+      `;
+    }
+
+    if ((hydro.status === 'loading' || hydro.loading === true) && (!hydro.gauges || hydro.gauges.length === 0)) {
       return `
         <div class="wp-hydro-card loading" role="region" aria-label="Vízállás adatok (Berettyó)">
           <div class="wp-hydro-header">

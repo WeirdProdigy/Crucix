@@ -135,3 +135,30 @@ test('OVF gauge tile renders BETÖLTÉS ALATT during initial startup before firs
   const activeGrid = html.slice(html.indexOf('class="today-grid"'), html.indexOf('class="today-chips-row"'));
   assert.ok(activeGrid.includes('data-today-tile="ovf-gauges"'), 'Loading OVF tile remains in active grid');
 });
+
+test('OVF gauge tile renders HIBA with concrete message on failed sweep (not stuck in loading)', () => {
+  const errorSnapshot = {
+    ovfGauges: { enabled: true, status: 'error', error: 'ArcGIS 503 Service Unavailable', gauges: [] }
+  };
+  const html = panel().renderTodayPanel(errorSnapshot);
+  assert.match(html, /HIBA/);
+  assert.doesNotMatch(html, /BETÖLTÉS ALATT/);
+  assert.match(html, /ArcGIS 503 Service Unavailable/);
+});
+
+test('OVF gauge tile renders FRISS with gauge water level on successful sweep', () => {
+  const successSnapshot = {
+    ovfGauges: {
+      enabled: true,
+      fresh: true,
+      status: 'ok',
+      gauges: [
+        { id: '2546', name: 'Berettyóújfalu', isPrimary: true, waterLevelCm: -122, observedAt: '2026-11-10T06:00:00.000Z', fresh: true }
+      ]
+    }
+  };
+  const html = panel().renderTodayPanel(successSnapshot);
+  assert.match(html, /FRISS/);
+  assert.match(html, /-122 cm/);
+  assert.match(html, /Berettyóújfalu/);
+});

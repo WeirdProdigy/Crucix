@@ -387,6 +387,14 @@ test('8. Client weather-panel.js rendering: renderHydroBlock, pills, Darvas null
   assert.ok(loadingHtml.includes('Első adatgyűjtés folyamatban'), 'Loading note rendered');
   assert.ok(loadingHtml.includes(ATTRIBUTION), 'Attribution rendered during loading');
 
+  // A3. Error state after failed sweep (must show HIBA, never infinite loading)
+  const errorHtml = WeatherPanel.renderHydroBlock({
+    ovfGauges: { enabled: true, status: 'error', error: 'ArcGIS 503 Service Unavailable', gauges: [] }
+  });
+  assert.ok(errorHtml.includes('HIBA'), 'Error badge rendered');
+  assert.ok(errorHtml.includes('ArcGIS 503 Service Unavailable'), 'Error message rendered');
+  assert.ok(!errorHtml.includes('BETÖLTÉS ALATT'), 'Must not render BETÖLTÉS ALATT on error');
+
   // B. Fresh parsed state with 4 gauges
   const fixedNow = new Date('2026-11-02T22:30:00.000Z').getTime();
   const parsed = parseOvfArcGisResponse(fixtureData, { now: fixedNow });
