@@ -48,7 +48,10 @@ export function buildQaServerEnv(options = {}) {
     DISCORD_CHANNEL_ID: '',
     DISCORD_WEBHOOK_URL: '',
     TELEGRAM_OSINT_ENABLED: 'false',
-    CRUCIX_ENABLE_POLICE_HAJDU: options.enablePolice ? 'true' : 'false'
+    CRUCIX_ENABLE_POLICE_HAJDU: options.enablePolice ? 'true' : 'false',
+    CRUCIX_ENABLE_OVF_GAUGES: options.enableOvfGauges !== undefined
+      ? (options.enableOvfGauges ? 'true' : 'false')
+      : (process.env.CRUCIX_ENABLE_OVF_GAUGES || 'true')
   };
 }
 

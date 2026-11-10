@@ -642,6 +642,18 @@ async function start() {
       // version with an archive, when that sweep ran before there was one. The initial sweep below is then the first one stored.
       attachAlertSummary(data, alertEngine);
       data.liveStreams = liveStreamsRegistry;
+      if (!data.ovfGauges && (config.enableOvfGauges || process.env.CRUCIX_ENABLE_OVF_GAUGES === 'true')) {
+        data.ovfGauges = {
+          source: 'OVF-Gauges',
+          enabled: true,
+          status: 'loading',
+          loading: true,
+          message: 'Első adatgyűjtés folyamatban (első sweep)...',
+          gauges: [],
+          fresh: false,
+          allFresh: false
+        };
+      }
       currentData = data;
       lastSweepTime = data.meta?.timestamp || null;
       console.log('[Crucix] Loaded existing data from runs/latest.json — dashboard ready instantly');

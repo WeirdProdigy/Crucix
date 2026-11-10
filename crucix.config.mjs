@@ -66,6 +66,7 @@ export default {
   maxSseClients: envInteger('MAX_SSE_CLIENTS', 100, 1, 10000),
   refreshIntervalMinutes: envInteger('REFRESH_INTERVAL_MINUTES', 15, 1, 1440),
   enableSweeps: envBoolean('ENABLE_SWEEPS', true),
+  enableOvfGauges: envBoolean('CRUCIX_ENABLE_OVF_GAUGES', false),
 
   // Small public watchlists. Adapters validate/cap these values; no API keys.
   publicSources: {
