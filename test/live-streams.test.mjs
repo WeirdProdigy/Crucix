@@ -1929,3 +1929,69 @@ test('16. Dynamic hiding: 404/onerror hiding, unverified freshness, ATV catalog 
   assert.ok(html.includes('Halott (1 db)'), 'Tooltip must group halott sources');
   assert.ok(html.includes('Archív (1 db)'), 'Tooltip must group archív sources');
 });
+
+
+test('17. Group camera providers notice: domain extraction from media URLs and toolbar HTML rendering', () => {
+  const code = readFileSync(new URL('../dashboard/public/live-media-panel.js', import.meta.url), 'utf8');
+  const mockWindow = {
+    innerWidth: 1280,
+    location: { hostname: 'localhost' },
+    __CRUCIX_DATA__: {}
+  };
+  const mockDocument = { hidden: false, addEventListener: () => {} };
+  const runModule = new Function('window', 'document', code);
+  runModule(mockWindow, mockDocument);
+  const LiveMedia = mockWindow.CrucixLiveMedia;
+
+  const realStreams = loadLiveStreams();
+
+  // 1. Provider count extraction on actual registry for DEFAULT_GROUP_CAMERA_IDS:
+  // Expected: ipcamlive.com: 2 (Kossuth, Békás-tó), idokep.hu: 1 (Egyetem tér), unideb.hu: 1 (Klinika)
+  const counts = LiveMedia.getGroupCameraProvidersCounts(realStreams);
+  assert.deepEqual(counts, {
+    'ipcamlive.com': 2,
+    'idokep.hu': 1,
+    'unideb.hu': 1
+  }, 'Must return exactly ipcamlive.com: 2, idokep.hu: 1, unideb.hu: 1');
+
+  // 2. Providers notice text string
+  const notice = LiveMedia.getGroupCameraProvidersNotice(realStreams);
+  assert.equal(notice, 'ipcamlive.com 2, idokep.hu 1, unideb.hu 1', 'Notice string must be strictly formatted');
+
+  // 3. Domain extraction strictly uses media URLs, never generic 'url'
+  const mockStreams = [
+    {
+      id: 'debrecen-kossuth-ter-webcam',
+      imageUrl: 'https://g0.ipcamlive.com/test.jpg',
+      url: 'https://ignored-domain.hu/webcam'
+    },
+    {
+      id: 'debrecen-egyetem-ter-webcam',
+      imageUrl: 'https://cam.idokep.hu/preview.jpg',
+      url: 'https://another-ignored.com/'
+    },
+    {
+      id: 'debrecen-bekas-to-webcam',
+      imageUrl: 'https://g0.ipcamlive.com/test2.jpg',
+      url: 'https://third-ignored.org/'
+    },
+    {
+      id: 'debrecen-klinika-webcam',
+      streamUrl: 'https://mms.iptv.unideb.hu/hls/test.m3u8',
+      url: 'https://unideb.hu/'
+    }
+  ];
+  const customCounts = LiveMedia.getGroupCameraProvidersCounts(mockStreams);
+  assert.equal(customCounts['ignored-domain.hu'], undefined, 'Generic url property must NOT be counted');
+  assert.equal(customCounts['another-ignored.com'], undefined, 'Generic url property must NOT be counted');
+  assert.equal(customCounts['third-ignored.org'], undefined, 'Generic url property must NOT be counted');
+  assert.equal(customCounts['ipcamlive.com'], 2);
+  assert.equal(customCounts['idokep.hu'], 1);
+  assert.equal(customCounts['unideb.hu'], 1);
+
+  // 4. Toolbar HTML rendering includes group button, notice text, and badge
+  const toolbarHtml = LiveMedia.panelHtml({ liveStreams: realStreams });
+  assert.ok(toolbarHtml.includes('Első 4 betöltése a rácsba'), 'Batch load button text must be "Első 4 betöltése a rácsba"');
+  assert.ok(toolbarHtml.includes('lm-group-providers-notice'), 'Notice span class must be present');
+  assert.ok(toolbarHtml.includes('ipcamlive.com 2, idokep.hu 1, unideb.hu 1'), 'Notice string must be present in toolbar');
+});

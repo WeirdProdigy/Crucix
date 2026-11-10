@@ -478,6 +478,44 @@
     }
   }
 
+
+  function extractMediaDomain(urlStr) {
+    if (!urlStr || typeof urlStr !== 'string') return null;
+    try {
+      const u = new URL(urlStr);
+      const host = u.hostname.toLowerCase();
+      const parts = host.split('.');
+      if (parts.length >= 2) {
+        return parts.slice(-2).join('.');
+      }
+      return host;
+    } catch {
+      return null;
+    }
+  }
+
+  function getGroupCameraProvidersCounts(rawStreams) {
+    const streams = rawStreams || resolveRawStreams();
+    const byId = new Map(streams.map(s => [s.id, s]));
+    const counts = {};
+    for (const id of DEFAULT_GROUP_CAMERA_IDS) {
+      const s = byId.get(id);
+      if (!s) continue;
+      // Extract domain strictly from media properties (imageUrl, streamUrl, embedUrl) NOT s.url
+      const mediaUrl = s.imageUrl || s.streamUrl || s.embedUrl;
+      const domain = extractMediaDomain(mediaUrl);
+      if (domain) {
+        counts[domain] = (counts[domain] || 0) + 1;
+      }
+    }
+    return counts;
+  }
+
+  function getGroupCameraProvidersNotice(rawStreams) {
+    const counts = getGroupCameraProvidersCounts(rawStreams);
+    return Object.entries(counts).map(([dom, cnt]) => `${dom} ${cnt}`).join(', ');
+  }
+
   function initWindyResizeObserver() {
     if (typeof window === 'undefined' || typeof window.ResizeObserver !== 'function') return;
     if (windyResizeObserver) return;
@@ -1890,9 +1928,10 @@
           <input type="checkbox" id="lm-bg-playback-toggle" class="lm-bg-checkbox"${allowBackgroundPlayback ? ' checked' : ''} onchange="window.CrucixLiveMedia?.setAllowBackgroundPlayback(this.checked)" />
           <span class="lm-bg-label">Háttérben is fusson</span>
         </label>
-        <button type="button" class="lm-btn lm-btn-toolbar lm-btn-grid-load" id="lm-btn-cameras-to-grid" onclick="window.CrucixLiveMedia?.loadFirstFourIntoGrid()" title="Az első 4 forrás betöltése a 2×2 rácsba">
+        <button type="button" class="lm-btn lm-btn-toolbar lm-btn-grid-load" id="lm-btn-cameras-to-grid" onclick="window.CrucixLiveMedia?.loadFirstFourIntoGrid()" title="Az első 4 forrás betöltése a 2×2 rácsba (Kapcsolatot létesít: ${esc(getGroupCameraProvidersNotice())})">
           ▶ Első 4 betöltése a rácsba
         </button>
+        <span class="lm-group-providers-notice" title="Az 'Első 4 betöltése' gomb az alábbi külső szolgáltatókhoz létesít közvetlen hálózati kapcsolatot">${esc(getGroupCameraProvidersNotice())}</span>
         <button type="button" class="lm-btn lm-btn-exit-live" onclick="window.CrucixViewsPanel?.setContentTab('news')" title="Kilépés az Élő nézetből (minden lejátszó leáll)">
           ← Térkép / Hírfolyam
         </button>
@@ -2232,6 +2271,9 @@
     setStreamMetaError: (streamId, err) => { streamMetaErrors.set(streamId, err); },
     clearStreamMetaError: (streamId) => { streamMetaErrors.delete(streamId); },
     buildWindyEmbedUrl,
+    extractMediaDomain,
+    getGroupCameraProvidersCounts,
+    getGroupCameraProvidersNotice,
     IPCAMLIVE_PRIVACY_NOTICE_TEXT,
     UNIDEB_PRIVACY_NOTICE_TEXT
   });
