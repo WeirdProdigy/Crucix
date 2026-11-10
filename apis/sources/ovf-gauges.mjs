@@ -418,12 +418,22 @@ export function parseOvfArcGisResponse(responseJson, options = {}) {
 }
 
 /**
+ * Evaluates opt-in switch: CRUCIX_ENABLE_OVF_GAUGES.
+ * Adheres to envBoolean conventions ('true', '1', 'yes', 'on', case-insensitively).
+ */
+export function isOvfGaugesEnabled(options = {}) {
+  if (options.enabled !== undefined) return Boolean(options.enabled);
+  const raw = (process.env.CRUCIX_ENABLE_OVF_GAUGES ?? '').trim().toLowerCase();
+  return ['true', '1', 'yes', 'on'].includes(raw);
+}
+
+/**
  * Main Briefing Entrypoint.
  * Evaluates opt-in switch: CRUCIX_ENABLE_OVF_GAUGES.
  * Memory-only: never written to disk, zero alerts/events emitted.
  */
 export async function briefing(options = {}) {
-  const isEnabled = process.env.CRUCIX_ENABLE_OVF_GAUGES === 'true';
+  const isEnabled = isOvfGaugesEnabled(options);
   if (!isEnabled) {
     return {
       status: 'disabled',

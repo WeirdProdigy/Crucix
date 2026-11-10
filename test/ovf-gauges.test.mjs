@@ -37,6 +37,7 @@ import {
   calculateLevelRelation,
   parseOvfArcGisResponse,
   clearOvfGaugesCache,
+  isOvfGaugesEnabled,
   briefing
 } from '../apis/sources/ovf-gauges.mjs';
 
@@ -258,41 +259,64 @@ test('4. Freshness evaluation: hourly (90m) and daily (26h) thresholds', () => {
   assert.equal(darvasStale.ageMinutes, 1620);
 });
 
-test('5. Opt-in switch evaluation: CRUCIX_ENABLE_OVF_GAUGES', async () => {
+test('5. Opt-in switch evaluation: CRUCIX_ENABLE_OVF_GAUGES adheres to envBoolean conventions', async () => {
   clearOvfGaugesCache();
 
-  // 1. When disabled (default), briefing() returns status: 'disabled' and 0 network calls
   const prevEnv = process.env.CRUCIX_ENABLE_OVF_GAUGES;
-  delete process.env.CRUCIX_ENABLE_OVF_GAUGES;
 
-  const resDisabled = await briefing();
-  assert.equal(resDisabled.status, 'disabled');
-  assert.equal(resDisabled.data.enabled, false);
-  assert.equal(resDisabled.data.attribution, ATTRIBUTION);
-  assert.deepEqual(resDisabled.data.gauges, []);
+  try {
+    // 1. isOvfGaugesEnabled truthy variants: 'true', '1', 'yes', 'on', and case variations
+    for (const val of ['true', '1', 'yes', 'on', 'TRUE', 'True', 'YES', 'ON', ' 1 ']) {
+      process.env.CRUCIX_ENABLE_OVF_GAUGES = val;
+      assert.equal(isOvfGaugesEnabled(), true, `Expected ${val} to be evaluated as truthy`);
+    }
 
-  // 2. When explicitly 'false'
-  process.env.CRUCIX_ENABLE_OVF_GAUGES = 'false';
-  const resFalse = await briefing();
-  assert.equal(resFalse.status, 'disabled');
+    // 2. isOvfGaugesEnabled falsy variants: 'false', '0', 'no', 'off', empty, undefined, other
+    for (const val of ['false', '0', 'no', 'off', 'FALSE', 'No', '', 'disabled', 'invalid']) {
+      process.env.CRUCIX_ENABLE_OVF_GAUGES = val;
+      assert.equal(isOvfGaugesEnabled(), false, `Expected ${val} to be evaluated as falsy`);
+    }
 
-  // 3. When enabled with fixtureJson
-  process.env.CRUCIX_ENABLE_OVF_GAUGES = 'true';
-  clearOvfGaugesCache();
-
-  const fixedNow = new Date('2026-11-02T22:30:00.000Z').getTime();
-  const resEnabled = await briefing({ fixtureJson, now: fixedNow, bypassCache: true });
-  assert.equal(resEnabled.status, 'ok');
-  assert.equal(resEnabled.data.enabled, true);
-  assert.equal(resEnabled.data.gauges.length, 4);
-
-  // Restore env
-  if (prevEnv !== undefined) {
-    process.env.CRUCIX_ENABLE_OVF_GAUGES = prevEnv;
-  } else {
     delete process.env.CRUCIX_ENABLE_OVF_GAUGES;
+    assert.equal(isOvfGaugesEnabled(), false, 'Expected unset env to be falsy');
+
+    // 3. options.enabled overrides env
+    process.env.CRUCIX_ENABLE_OVF_GAUGES = 'false';
+    assert.equal(isOvfGaugesEnabled({ enabled: true }), true, 'options.enabled: true overrides env false');
+    process.env.CRUCIX_ENABLE_OVF_GAUGES = 'true';
+    assert.equal(isOvfGaugesEnabled({ enabled: false }), false, 'options.enabled: false overrides env true');
+
+    // 4. When disabled (default), briefing() returns status: 'disabled' and 0 network calls
+    delete process.env.CRUCIX_ENABLE_OVF_GAUGES;
+    const resDisabled = await briefing();
+    assert.equal(resDisabled.status, 'disabled');
+    assert.equal(resDisabled.data.enabled, false);
+    assert.equal(resDisabled.data.attribution, ATTRIBUTION);
+    assert.deepEqual(resDisabled.data.gauges, []);
+
+    // 5. When enabled with '1' and fixtureJson
+    process.env.CRUCIX_ENABLE_OVF_GAUGES = '1';
+    clearOvfGaugesCache();
+    const fixedNow = new Date('2026-11-02T22:30:00.000Z').getTime();
+    const resEnabledOne = await briefing({ fixtureJson, now: fixedNow, bypassCache: true });
+    assert.equal(resEnabledOne.status, 'ok');
+    assert.equal(resEnabledOne.data.enabled, true);
+    assert.equal(resEnabledOne.data.gauges.length, 4);
+
+    // 6. When enabled with 'true'
+    process.env.CRUCIX_ENABLE_OVF_GAUGES = 'true';
+    clearOvfGaugesCache();
+    const resEnabledTrue = await briefing({ fixtureJson, now: fixedNow, bypassCache: true });
+    assert.equal(resEnabledTrue.status, 'ok');
+    assert.equal(resEnabledTrue.data.enabled, true);
+  } finally {
+    if (prevEnv !== undefined) {
+      process.env.CRUCIX_ENABLE_OVF_GAUGES = prevEnv;
+    } else {
+      delete process.env.CRUCIX_ENABLE_OVF_GAUGES;
+    }
+    clearOvfGaugesCache();
   }
-  clearOvfGaugesCache();
 });
 
 test('6. Memory-only persistence policy: stripMemoryOnlySources and saveSnapshot', () => {
