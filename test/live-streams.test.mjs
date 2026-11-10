@@ -1930,7 +1930,6 @@ test('16. Dynamic hiding: 404/onerror hiding, unverified freshness, ATV catalog 
   assert.ok(html.includes('Archív (1 db)'), 'Tooltip must group archív sources');
 });
 
-
 test('17. Group camera providers notice: domain extraction from media URLs and toolbar HTML rendering', () => {
   const code = readFileSync(new URL('../dashboard/public/live-media-panel.js', import.meta.url), 'utf8');
   const mockWindow = {
@@ -1994,4 +1993,27 @@ test('17. Group camera providers notice: domain extraction from media URLs and t
   assert.ok(toolbarHtml.includes('Első 4 betöltése a rácsba'), 'Batch load button text must be "Első 4 betöltése a rácsba"');
   assert.ok(toolbarHtml.includes('lm-group-providers-notice'), 'Notice span class must be present');
   assert.ok(toolbarHtml.includes('ipcamlive.com 2, idokep.hu 1, unideb.hu 1'), 'Notice string must be present in toolbar');
+});
+
+test('18. Discrete Windy slot sizing and absence of continuous ResizeObserver', () => {
+  const code = readFileSync(new URL('../dashboard/public/live-media-panel.js', import.meta.url), 'utf8');
+  const mockWindow = {
+    innerWidth: 1280,
+    location: { hostname: 'localhost' },
+    __CRUCIX_DATA__: {}
+  };
+  const mockDocument = { hidden: false, addEventListener: () => {} };
+  const runModule = new Function('window', 'document', code);
+  runModule(mockWindow, mockDocument);
+  const LiveMedia = mockWindow.CrucixLiveMedia;
+
+  // 1. Discrete Windy slot dimensions for single and 2x2 grid
+  const singleDims = LiveMedia.getWindySlotDimensions('single');
+  assert.deepEqual(singleDims, { width: 858, height: 483 }, 'Single mode must return 858x483');
+  const gridDims = LiveMedia.getWindySlotDimensions('grid');
+  assert.deepEqual(gridDims, { width: 498, height: 280 }, 'Grid mode must return 498x280');
+
+  // 2. Ensure ResizeObserver is NOT used for continuous resize
+  assert.equal(typeof LiveMedia.initWindyResizeObserver, 'undefined', 'Continuous ResizeObserver must not be exported or used');
+  assert.ok(!code.includes('windyResizeObserver'), 'live-media-panel.js must not reference continuous windyResizeObserver');
 });

@@ -163,8 +163,6 @@
   let streamLastModified = new Map();
   let streamMetaErrors = new Map();
   let hlsInstances = new Map();
-  let windyResizeObserver = null;
-  let windyResizeDebounceTimers = new Map();
   let lastWindyDimensions = new Map(); // streamId -> { width: number, height: number }
 
   function computeFreshnessBadge(lastModified, now = Date.now()) {
@@ -429,10 +427,7 @@
   function cleanupGridSlot(streamId) {
     clearGridImageTimer(streamId);
     gridImageErrors.delete(streamId);
-    if (windyResizeDebounceTimers.has(streamId)) {
-      clearTimeout(windyResizeDebounceTimers.get(streamId));
-      windyResizeDebounceTimers.delete(streamId);
-    }
+    lastWindyDimensions.delete(streamId);
     if (hlsInstances && hlsInstances.has(streamId)) {
       try {
         hlsInstances.get(streamId).destroy();
@@ -478,7 +473,6 @@
     }
   }
 
-
   function extractMediaDomain(urlStr) {
     if (!urlStr || typeof urlStr !== 'string') return null;
     try {
@@ -516,67 +510,40 @@
     return Object.entries(counts).map(([dom, cnt]) => `${dom} ${cnt}`).join(', ');
   }
 
-  function initWindyResizeObserver() {
-    if (typeof window === 'undefined' || typeof window.ResizeObserver !== 'function') return;
-    if (windyResizeObserver) return;
-    windyResizeObserver = new window.ResizeObserver(entries => {
-      for (const entry of entries) {
-        const target = entry.target;
-        const streamId = target?.dataset?.windyStreamId;
-        if (!streamId) continue;
-        const rect = entry.contentRect || (target.getBoundingClientRect ? target.getBoundingClientRect() : null);
-        if (!rect) continue;
-        const w = Math.round(rect.width);
-        const h = Math.round(rect.height);
-        if (w < 50 || h < 50) continue;
-
-        const prev = lastWindyDimensions.get(streamId);
-        if (prev && Math.abs(prev.width - w) < 15 && Math.abs(prev.height - h) < 15) {
-          continue;
+  function getWindySlotDimensions(mode) {
+    const effectiveMode = mode || getEffectiveViewMode();
+    if (typeof document !== 'undefined' && typeof document.getElementById === 'function') {
+      const stage = document.getElementById('lm-stage-grid') || (typeof document.querySelector === 'function' ? document.querySelector('.lm-stage') : null);
+      if (stage && stage.clientWidth > 100) {
+        const w = stage.clientWidth;
+        if (effectiveMode === 'single') {
+          return { width: Math.round(w), height: Math.round(w * 9 / 16) };
+        } else {
+          const slotW = Math.round((w - 12) / 2);
+          return { width: slotW, height: Math.round(slotW * 9 / 16) };
         }
-
-        if (windyResizeDebounceTimers.has(streamId)) {
-          clearTimeout(windyResizeDebounceTimers.get(streamId));
-        }
-        const timer = setTimeout(() => {
-          windyResizeDebounceTimers.delete(streamId);
-          updateWindyFrameDimensions(streamId, w, h);
-        }, 200);
-        windyResizeDebounceTimers.set(streamId, timer);
       }
-    });
-  }
-
-  function updateWindyFrameDimensions(streamId, width, height) {
-    if (typeof document === 'undefined') return;
-    const iframe = document.getElementById(`lm-stage-embed-${streamId}`);
-    if (!iframe) return;
-    const rawStreams = resolveRawStreams();
-    const stream = rawStreams.find(s => s.id === streamId);
-    if (!stream || !stream.embedUrl) return;
-
-    lastWindyDimensions.set(streamId, { width: Math.round(width), height: Math.round(height) });
-    const newUrl = buildWindyEmbedUrl(stream.embedUrl, width, height);
-    if (iframe.src !== newUrl) {
-      iframe.src = newUrl;
     }
+    return effectiveMode === 'single'
+      ? { width: 858, height: 483 }
+      : { width: 498, height: 280 };
   }
 
-  function attachWindyResizeObservers(container) {
-    initWindyResizeObserver();
-    if (!container) return;
-    const windyWraps = container.querySelectorAll ? container.querySelectorAll('[data-windy-stream-id]') : [];
-    for (const wrap of windyWraps) {
-      if (windyResizeObserver) {
-        windyResizeObserver.observe(wrap);
-      }
-      if (wrap.getBoundingClientRect) {
-        const rect = wrap.getBoundingClientRect();
-        if (rect.width > 50 && rect.height > 50) {
-          const streamId = wrap.dataset.windyStreamId;
-          const prev = lastWindyDimensions.get(streamId);
-          if (!prev || Math.abs(prev.width - rect.width) >= 15 || Math.abs(prev.height - rect.height) >= 15) {
-            updateWindyFrameDimensions(streamId, rect.width, rect.height);
+  function updateWindyOnViewModeChange(newMode) {
+    if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return;
+    const dims = getWindySlotDimensions(newMode);
+    const rawStreams = resolveRawStreams();
+    for (const sid of activeStreamIds) {
+      const stream = rawStreams.find(s => s.id === sid);
+      if (!stream) continue;
+      const isWindy = stream.embedKind === 'windy-widget' || Boolean(stream.embedUrl && stream.embedUrl.includes('windy.com'));
+      if (isWindy && stream.embedUrl) {
+        lastWindyDimensions.set(sid, dims);
+        const iframe = document.getElementById(`lm-stage-embed-${sid}`);
+        if (iframe) {
+          const newUrl = buildWindyEmbedUrl(stream.embedUrl, dims.width, dims.height);
+          if (iframe.src !== newUrl) {
+            iframe.src = newUrl;
           }
         }
       }
@@ -869,6 +836,7 @@
         }
         activeStreamIds = activeStreamIds.slice(activeStreamIds.length - max);
       }
+      updateWindyOnViewModeChange(mode);
       notifyChange();
     }
   }
@@ -1347,7 +1315,10 @@
     // 1. Embed Widget (pl. Windy)
     if (stream.sourceType === 'embed' || (Boolean(stream.embedUrl) && stream.sourceType !== 'still-image')) {
       const isWindy = stream.embedKind === 'windy-widget' || Boolean(stream.embedUrl && stream.embedUrl.includes('windy.com'));
-      const dims = isWindy ? lastWindyDimensions.get(stream.id) : null;
+      const dims = isWindy ? (lastWindyDimensions.get(stream.id) || getWindySlotDimensions()) : null;
+      if (isWindy && dims) {
+        lastWindyDimensions.set(stream.id, dims);
+      }
       const initialEmbedUrl = (isWindy && dims && dims.width && dims.height)
         ? buildWindyEmbedUrl(stream.embedUrl, dims.width, dims.height)
         : stream.embedUrl;
@@ -1914,6 +1885,7 @@
     const activeIds = getActiveStreamIds();
     const embeddableTotal = rawStreams.filter(isEmbeddableStream).length;
     const externalTotal = rawStreams.filter(s => s.sourceType === 'link-only' || s.sourceType === 'embed' || s.embedStatus === 'external-only').length;
+    const providersNotice = getGroupCameraProvidersNotice(rawStreams);
 
     return `
       <div class="lm-title-wrap">
@@ -1928,10 +1900,10 @@
           <input type="checkbox" id="lm-bg-playback-toggle" class="lm-bg-checkbox"${allowBackgroundPlayback ? ' checked' : ''} onchange="window.CrucixLiveMedia?.setAllowBackgroundPlayback(this.checked)" />
           <span class="lm-bg-label">Háttérben is fusson</span>
         </label>
-        <button type="button" class="lm-btn lm-btn-toolbar lm-btn-grid-load" id="lm-btn-cameras-to-grid" onclick="window.CrucixLiveMedia?.loadFirstFourIntoGrid()" title="Az első 4 forrás betöltése a 2×2 rácsba (Kapcsolatot létesít: ${esc(getGroupCameraProvidersNotice())})">
+        <button type="button" class="lm-btn lm-btn-toolbar lm-btn-grid-load" id="lm-btn-cameras-to-grid" onclick="window.CrucixLiveMedia?.loadFirstFourIntoGrid()" title="Az első 4 forrás betöltése a 2×2 rácsba (${esc(providersNotice)})">
           ▶ Első 4 betöltése a rácsba
         </button>
-        <span class="lm-group-providers-notice" title="Az 'Első 4 betöltése' gomb az alábbi külső szolgáltatókhoz létesít közvetlen hálózati kapcsolatot">${esc(getGroupCameraProvidersNotice())}</span>
+        <span class="lm-group-providers-notice" title="A 4 forrás által használt külső szolgáltatók: ${esc(providersNotice)}">Szolgáltatók: ${esc(providersNotice)}</span>
         <button type="button" class="lm-btn lm-btn-exit-live" onclick="window.CrucixViewsPanel?.setContentTab('news')" title="Kilépés az Élő nézetből (minden lejátszó leáll)">
           ← Térkép / Hírfolyam
         </button>
@@ -2100,9 +2072,6 @@
             }
           }
         }
-
-        // 2c. Attach ResizeObserver for Windy embed widgets in stage slots
-        attachWindyResizeObservers(stageGrid || container);
       }
     }
 
@@ -2274,6 +2243,7 @@
     extractMediaDomain,
     getGroupCameraProvidersCounts,
     getGroupCameraProvidersNotice,
+    getWindySlotDimensions,
     IPCAMLIVE_PRIVACY_NOTICE_TEXT,
     UNIDEB_PRIVACY_NOTICE_TEXT
   });
