@@ -1510,3 +1510,77 @@ test('33. Helyi hírek görgetés-megőrzés: újrarederelés során a scrollTop
   assert.equal(api.getScrollPosition('unlocated'), 0, 'Területi nézetváltáskor a mentett pozíció törlődik');
 });
 
+test('34. updateMoreIndicator: textContent feltételes beállítása, ugyanazon szöveg nem generál redundáns értékadást vagy mutációt', () => {
+  const { api } = createHarness();
+
+  let textContentSetCount = 0;
+  let currentText = '';
+
+  const mockTextEl = {
+    get textContent() {
+      return currentText;
+    },
+    set textContent(val) {
+      textContentSetCount++;
+      currentText = val;
+    }
+  };
+
+  const mockFadeClasses = new Set();
+  const mockFade = {
+    classList: {
+      add: c => mockFadeClasses.add(c),
+      remove: c => mockFadeClasses.delete(c),
+      contains: c => mockFadeClasses.has(c)
+    }
+  };
+
+  const mockWrapper = {
+    querySelector: sel => {
+      if (sel === '.vp-scroll-fade') return mockFade;
+      if (sel === '.vp-scroll-fade-text') return mockTextEl;
+      return null;
+    }
+  };
+
+  const listEl = {
+    classList: { contains: () => false },
+    closest: sel => sel === '.vp-scroll-wrapper' ? mockWrapper : null,
+    parentElement: mockWrapper,
+    children: [
+      { offsetTop: 0 },
+      { offsetTop: 30 },
+      { offsetTop: 60 },
+      { offsetTop: 90 },
+      { offsetTop: 120 },
+      { offsetTop: 150 },
+      { offsetTop: 180 },
+      { offsetTop: 210 }
+    ],
+    scrollTop: 0,
+    clientHeight: 100,
+    scrollHeight: 240
+  };
+
+  // 1. Első hívás: a szöveg még üres, be kell állítani
+  api.updateMoreIndicator(listEl);
+  assert.equal(textContentSetCount, 1, 'Első alkalommal a textContent beállítása megtörténik');
+  assert.ok(currentText.includes('még'), 'Helyes indikátorszöveg beállítva');
+  assert.ok(mockFadeClasses.has('visible'), 'A fade megkapja a visible osztályt');
+
+  // 2. Második hívás azonos állapot mellett: a textContent nem változott, NEM szabad újra értékadást végezni
+  api.updateMoreIndicator(listEl);
+  assert.equal(textContentSetCount, 1, 'Második alkalommal változatlan szövegnél nincs újabb textContent értékadás (nem generál childList mutációt)');
+
+  // 3. Harmadik hívás: a felhasználó aljára görget, az indikátor eltűnik
+  listEl.scrollTop = 140; // eléri az alját
+  api.updateMoreIndicator(listEl);
+  assert.ok(!mockFadeClasses.has('visible'), 'Aljára görgetve a visible osztály lekerül');
+  assert.equal(currentText, '', 'A szöveg kiürül');
+  assert.equal(textContentSetCount, 2, 'Kiürítéskor pontosan egyszer kap értéket');
+
+  // 4. Negyedik hívás alul maradva: a szöveg már üres, nem kap újabb értékadást
+  api.updateMoreIndicator(listEl);
+  assert.equal(textContentSetCount, 2, 'Már üres szöveg esetén nincs felesleges üres string értékadás');
+});
+

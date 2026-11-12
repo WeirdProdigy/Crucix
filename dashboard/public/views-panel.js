@@ -1528,7 +1528,8 @@
     const children = listEl.children || [];
     const total = children.length;
     if (total <= 1) {
-      if (fade.classList) fade.classList.remove('visible');
+      if (fade.classList && fade.classList.contains('visible')) fade.classList.remove('visible');
+      if (textEl.textContent !== '') textEl.textContent = '';
       return;
     }
 
@@ -1554,10 +1555,20 @@
     }
 
     if (remaining > 0 && (scrollHeight - scrollTop - clientHeight > 4 || (scrollHeight > clientHeight && scrollTop === 0))) {
-      textEl.textContent = `▾ még ${remaining} hír lentebb`;
-      if (fade.classList) fade.classList.add('visible');
+      const newText = `▾ még ${remaining} hír lentebb`;
+      if (textEl.textContent !== newText) {
+        textEl.textContent = newText;
+      }
+      if (fade.classList && !fade.classList.contains('visible')) {
+        fade.classList.add('visible');
+      }
     } else {
-      if (fade.classList) fade.classList.remove('visible');
+      if (fade.classList && fade.classList.contains('visible')) {
+        fade.classList.remove('visible');
+      }
+      if (textEl.textContent !== '') {
+        textEl.textContent = '';
+      }
     }
   }
 
@@ -1583,7 +1594,10 @@
     const target = document.body || document.documentElement;
     if (!target) return;
     let scheduled = false;
-    const mo = new MutationObserver(() => {
+    const mo = new MutationObserver((mutations) => {
+      if (mutations && mutations.every(m => m.target && (m.target.classList?.contains('vp-scroll-fade-text') || m.target.classList?.contains('vp-scroll-fade')))) {
+        return;
+      }
       if (!scheduled) {
         scheduled = true;
         if (typeof requestAnimationFrame === 'function') {
