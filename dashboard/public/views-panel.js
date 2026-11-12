@@ -1158,11 +1158,17 @@
         <div class="tk-tablist" role="tablist" aria-label="Élő hírfolyam szűrőfülek">
           ${tabsMarkup}
         </div>
-        <div class="tk-stream-list vp-scroll-region scroll-region"
-             tabindex="0"
-             role="region"
-             aria-label="Élő hírfolyam (${esc(LIVE_STREAM_TAB_LABELS[currentTab])})">
-          ${cardsMarkup}
+        <div class="vp-scroll-wrapper">
+          <div class="tk-stream-list vp-scroll-region scroll-region"
+               tabindex="0"
+               role="region"
+               aria-label="Élő hírfolyam (${esc(LIVE_STREAM_TAB_LABELS[currentTab])})"
+               onscroll="window.CrucixViewsPanel?.updateMoreIndicator?.(this)">
+            ${cardsMarkup}
+          </div>
+          <div class="vp-scroll-fade" aria-hidden="true" onclick="this.previousElementSibling?.scrollBy({top:140,behavior:'smooth'})">
+            <span class="vp-scroll-fade-text"></span>
+          </div>
         </div>
       </div>
     `;
@@ -1266,25 +1272,34 @@
             <span>Koordináta nélküli hírek (térképi jelölő nélkül)</span>
             <span class="vp-sec-badge">${dedupedUnlocated.length} db</span>
           </div>
-          <div class="vp-unlocated-list vp-scroll-region scroll-region" tabindex="0" role="region" aria-label="Koordináta nélküli hírek">
-            ${dedupedUnlocated.map(n => {
-              let relSuffix = '';
-              if (Array.isArray(n.relatedSources) && n.relatedSources.length > 0) {
-                relSuffix = ` · Kapcsolódó: ${esc(n.relatedSources.join(', '))}`;
-              } else if (Array.isArray(n.relatedCandidateSources) && n.relatedCandidateSources.length > 0) {
-                relSuffix = ` · (Kapcsolódó jelölt: ${esc(n.relatedCandidateSources.join(', '))})`;
-              }
-              return `
-              <div class="vp-unlocated-item"
-                   role="button"
-                   tabindex="0"
-                   onclick="window.CrucixIntelligence?.openEvent?.('${esc(n.id)}')"
-                   onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.CrucixIntelligence?.openEvent?.('${esc(n.id)}');}">
-                <span>${esc(n.title)}</span>
-                <span style="color:#64748b">${esc(getPublisherName(n) || n.source?.name || '')}${relSuffix}</span>
-              </div>
-              `;
-            }).join('')}
+          <div class="vp-scroll-wrapper">
+            <div class="vp-unlocated-list vp-scroll-region scroll-region"
+                 tabindex="0"
+                 role="region"
+                 aria-label="Koordináta nélküli hírek"
+                 onscroll="window.CrucixViewsPanel?.updateMoreIndicator?.(this)">
+              ${dedupedUnlocated.map(n => {
+                let relSuffix = '';
+                if (Array.isArray(n.relatedSources) && n.relatedSources.length > 0) {
+                  relSuffix = ` · Kapcsolódó: ${esc(n.relatedSources.join(', '))}`;
+                } else if (Array.isArray(n.relatedCandidateSources) && n.relatedCandidateSources.length > 0) {
+                  relSuffix = ` · (Kapcsolódó jelölt: ${esc(n.relatedCandidateSources.join(', '))})`;
+                }
+                return `
+                <div class="vp-unlocated-item"
+                     role="button"
+                     tabindex="0"
+                     onclick="window.CrucixIntelligence?.openEvent?.('${esc(n.id)}')"
+                     onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.CrucixIntelligence?.openEvent?.('${esc(n.id)}');}">
+                  <span>${esc(n.title)}</span>
+                  <span style="color:#64748b">${esc(getPublisherName(n) || n.source?.name || '')}${relSuffix}</span>
+                </div>
+                `;
+              }).join('')}
+            </div>
+            <div class="vp-scroll-fade" aria-hidden="true" onclick="this.previousElementSibling?.scrollBy({top:140,behavior:'smooth'})">
+              <span class="vp-scroll-fade-text"></span>
+            </div>
           </div>
         </div>
       `;
@@ -1455,6 +1470,67 @@
     `;
   }
 
+  function updateMoreIndicator(listEl) {
+    if (!listEl) return;
+    const wrapper = listEl.closest ? listEl.closest('.vp-scroll-wrapper') : listEl.parentElement;
+    if (!wrapper) return;
+    const fade = wrapper.querySelector ? wrapper.querySelector('.vp-scroll-fade') : null;
+    const textEl = wrapper.querySelector ? wrapper.querySelector('.vp-scroll-fade-text') : null;
+    if (!fade || !textEl) return;
+
+    const children = listEl.children || [];
+    const total = children.length;
+    if (total <= 1) {
+      if (fade.classList) fade.classList.remove('visible');
+      return;
+    }
+
+    const scrollHeight = listEl.scrollHeight || 0;
+    const scrollTop = listEl.scrollTop || 0;
+    const clientHeight = listEl.clientHeight || 0;
+
+    // Items below current fold
+    const bottomFold = scrollTop + clientHeight - 4;
+    let remaining = 0;
+    for (let i = 0; i < total; i++) {
+      const child = children[i];
+      if ((child.offsetTop || 0) + 6 > bottomFold) {
+        remaining = total - i;
+        break;
+      }
+    }
+
+    // Fallback if offsetTop is unavailable (e.g. in JSDOM / node:test environments)
+    if (remaining === 0 && scrollHeight > clientHeight && (scrollHeight - scrollTop - clientHeight > 4)) {
+      const approxItemHeight = scrollHeight / total;
+      remaining = Math.max(1, Math.round((scrollHeight - scrollTop - clientHeight) / approxItemHeight));
+    }
+
+    if (remaining > 0 && (scrollHeight - scrollTop - clientHeight > 4 || (scrollHeight > clientHeight && scrollTop === 0))) {
+      textEl.textContent = `▾ még ${remaining} hír lentebb`;
+      if (fade.classList) fade.classList.add('visible');
+    } else {
+      if (fade.classList) fade.classList.remove('visible');
+    }
+  }
+
+  function initScrollIndicators(root) {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    const r = root || document;
+    if (!r.querySelectorAll) return;
+    const lists = r.querySelectorAll('.vp-unlocated-list, .tk-stream-list');
+    lists.forEach(list => updateMoreIndicator(list));
+  }
+
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('resize', () => initScrollIndicators());
+    // Auto-update after DOM updates settle
+    if (typeof MutationObserver !== 'undefined' && document && document.body) {
+      const mo = new MutationObserver(() => initScrollIndicators());
+      mo.observe(document.body, { childList: true, subtree: true });
+    }
+  }
+
   window.CrucixViewsPanel = Object.freeze({
     VIEWS,
     VIEW_LABELS,
@@ -1494,7 +1570,9 @@
     getTerritoryMapRegion,
     getTerritoryBounds,
     deduplicateNewsItems,
-    normalizeNewsTitle
+    normalizeNewsTitle,
+    updateMoreIndicator,
+    initScrollIndicators
   });
 
 })(window, document);

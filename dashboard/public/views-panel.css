@@ -341,7 +341,13 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 145px; /* max ~5 rows */
+  max-height: min(40vh, 280px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #38bdf8 rgba(15, 23, 42, 0.75);
+  padding-right: 4px;
 }
 
 .vp-unlocated-item {
@@ -947,7 +953,7 @@
   overflow-x: hidden;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-  scrollbar-color: rgba(56, 189, 248, 0.45) rgba(15, 23, 42, 0.5);
+  scrollbar-color: #38bdf8 rgba(15, 23, 42, 0.75);
   padding-right: 4px;
   position: relative;
 }
@@ -961,24 +967,77 @@
 
 .scroll-region::-webkit-scrollbar,
 .vp-scroll-region::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
 
 .scroll-region::-webkit-scrollbar-track,
 .vp-scroll-region::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.55);
-  border-radius: 3px;
+  background: rgba(15, 23, 42, 0.75);
+  border-radius: 4px;
+  border: 1px solid rgba(56, 189, 248, 0.15);
 }
 
 .scroll-region::-webkit-scrollbar-thumb,
 .vp-scroll-region::-webkit-scrollbar-thumb {
-  background: rgba(56, 189, 248, 0.45);
-  border-radius: 3px;
+  background: rgba(56, 189, 248, 0.65);
+  border-radius: 4px;
+  border: 1px solid rgba(15, 23, 42, 0.5);
 }
 
 .scroll-region::-webkit-scrollbar-thumb:hover,
 .vp-scroll-region::-webkit-scrollbar-thumb:hover {
-  background: rgba(56, 189, 248, 0.75);
+  background: #38bdf8;
+}
+
+/* --- Scroll wrapper and More indicator (bottom fade + counter) --- */
+.vp-scroll-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.vp-scroll-fade {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  background: linear-gradient(to top, rgba(15, 23, 42, 0.95) 0%, rgba(15, 23, 42, 0.7) 60%, transparent 100%);
+  pointer-events: none;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 3px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: 2;
+  border-bottom-left-radius: 4px;
+  border-bottom-right-radius: 4px;
+}
+
+.vp-scroll-fade.visible {
+  opacity: 1;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.vp-scroll-fade-text {
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+  color: #38bdf8;
+  letter-spacing: 0.02em;
+  background: rgba(15, 23, 42, 0.85);
+  padding: 1px 8px;
+  border-radius: 3px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.vp-scroll-fade:hover .vp-scroll-fade-text {
+  color: #7dd3fc;
+  border-color: rgba(56, 189, 248, 0.6);
+  background: rgba(15, 23, 42, 0.95);
 }
 
 .vp-news-items.vp-scroll-region {
@@ -1093,7 +1152,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 290px; /* max 5 live news cards */
+  max-height: min(40vh, 280px); /* responsive max height */
 }
 
 .tk-card-top {
@@ -1131,7 +1190,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: 165px; /* ~5 single-line news rows visible */
+  max-height: min(40vh, 280px); /* ~8-10 single-line news rows visible */
   overflow-y: auto;
   overscroll-behavior: contain;
 }

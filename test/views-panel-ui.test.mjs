@@ -1318,3 +1318,105 @@ test('31. Helyi hírek: folyam-alapú lapozás (Mutass többet), nincs belső 48
   assert.ok(html.includes('id="vp-btn-more-news"'));
 });
 
+test('32. Helyi hírek: görgetési tartomány, min(40vh, 280px), látható görgetősáv és "még N hír" alsó jelzés', () => {
+  const { api } = createHarness();
+
+  // 1. CSS szabályok ellenőrzése
+  const cssPath = join(ROOT, 'dashboard', 'public', 'views-panel.css');
+  const css = readFileSync(cssPath, 'utf8');
+
+  // .vp-unlocated-list és .tk-stream-list magassága min(40vh, 280px)
+  assert.ok(css.includes('max-height: min(40vh, 280px);'), 'min(40vh, 280px) definiálva van');
+  const unlocCssMatch = css.match(/\.vp-unlocated-list\s*\{[^}]*max-height:\s*min\(40vh,\s*280px\);/);
+  assert.ok(unlocCssMatch, '.vp-unlocated-list max-height min(40vh, 280px) szabály létezik');
+
+  const streamCssMatch = css.match(/\.tk-stream-list\s*\{[^}]*max-height:\s*min\(40vh,\s*280px\);/);
+  assert.ok(streamCssMatch, '.tk-stream-list max-height min(40vh, 280px) szabály létezik');
+
+  // Látható görgetősáv szabályok
+  assert.ok(css.includes('scrollbar-color: #38bdf8 rgba(15, 23, 42, 0.75);'), 'Kontrasztos scrollbar-color definiálva');
+  assert.ok(css.includes('width: 8px;'), '8px széles webkit scrollbar');
+  assert.ok(css.includes('.vp-scroll-fade'), '.vp-scroll-fade indikátor stílus definiálva');
+  assert.ok(css.includes('.vp-scroll-fade-text'), '.vp-scroll-fade-text stílus definiálva');
+
+  // 2. HTML struktúra: .vp-scroll-wrapper és .vp-scroll-fade
+  const snapshot = {
+    views: {
+      local: { newsIds: ['u1', 'u2'] },
+      news: [
+        { id: 'u1', title: 'Koordináta nélküli hír 1', isPublisherPromo: false, source: { name: 'HAON' } },
+        { id: 'u2', title: 'Koordináta nélküli hír 2', isPublisherPromo: false, source: { name: 'HAON' } },
+        { id: 's1', title: 'Stream hír 1', territory: 'local', publishedAt: '2026-11-01T12:00:00Z' },
+        { id: 's2', title: 'Stream hír 2', territory: 'local', publishedAt: '2026-11-01T12:05:00Z' }
+      ]
+    }
+  };
+
+  const panelHtml = api.panelHtml(snapshot);
+  assert.ok(panelHtml.includes('class="vp-scroll-wrapper"'), 'Unlocated lista vp-scroll-wrapper-be van ágyazva');
+  assert.ok(panelHtml.includes('class="vp-scroll-fade"'), 'Unlocated lista alsó vp-scroll-fade jelzéssel rendelkezik');
+  assert.ok(panelHtml.includes('class="vp-scroll-fade-text"'), 'vp-scroll-fade-text számláló konténer jelen van');
+  assert.ok(panelHtml.includes('onscroll="window.CrucixViewsPanel?.updateMoreIndicator?.(this)"'), 'Unlocated lista onscroll eseménykezelője be van kötve');
+
+  const streamHtml = api.liveStreamHtml(snapshot);
+  assert.ok(streamHtml.includes('class="vp-scroll-wrapper"'), 'Stream lista vp-scroll-wrapper-be van ágyazva');
+  assert.ok(streamHtml.includes('class="vp-scroll-fade"'), 'Stream lista alsó vp-scroll-fade jelzéssel rendelkezik');
+  assert.ok(streamHtml.includes('class="vp-scroll-fade-text"'), 'Stream lista számláló konténere jelen van');
+  assert.ok(streamHtml.includes('onscroll="window.CrucixViewsPanel?.updateMoreIndicator?.(this)"'), 'Stream lista onscroll eseménykezelője be van kötve');
+
+  // 3. updateMoreIndicator viselkedés tesztelése
+  assert.equal(typeof api.updateMoreIndicator, 'function', 'updateMoreIndicator exportálva van');
+
+  // Szimulált DOM elemek az updateMoreIndicator teszteléséhez
+  const mockFadeClasses = new Set();
+  const mockTextEl = { textContent: '' };
+  const mockFade = {
+    classList: {
+      add: c => mockFadeClasses.add(c),
+      remove: c => mockFadeClasses.delete(c),
+      contains: c => mockFadeClasses.has(c)
+    }
+  };
+  const mockWrapper = {
+    querySelector: sel => {
+      if (sel === '.vp-scroll-fade') return mockFade;
+      if (sel === '.vp-scroll-fade-text') return mockTextEl;
+      return null;
+    }
+  };
+  const mockList = {
+    closest: sel => sel === '.vp-scroll-wrapper' ? mockWrapper : null,
+    parentElement: mockWrapper,
+    children: [
+      { offsetTop: 0 },
+      { offsetTop: 30 },
+      { offsetTop: 60 },
+      { offsetTop: 90 },
+      { offsetTop: 120 },
+      { offsetTop: 150 },
+      { offsetTop: 180 },
+      { offsetTop: 210 }
+    ],
+    scrollTop: 0,
+    clientHeight: 100,
+    scrollHeight: 240
+  };
+
+  // 3a. Kezdeti állapot (scrollTop = 0, clientHeight = 100): az elemek a 100px alatt maradtak -> remaining > 0
+  api.updateMoreIndicator(mockList);
+  assert.ok(mockFadeClasses.has('visible'), 'Indikátor látható ha van lefelé görgethető elem');
+  assert.ok(mockTextEl.textContent.includes('▾ még'), 'Szöveges számláló megjelenik');
+
+  // 3b. Legörgetve az aljára (scrollTop = 140, clientHeight = 100, scrollHeight = 240)
+  mockList.scrollTop = 140;
+  api.updateMoreIndicator(mockList);
+  assert.ok(!mockFadeClasses.has('visible'), 'Aljára érve az indikátor eltűnik');
+
+  // 3c. Kevés elem (összesen 1 elem) -> nincs indikátor
+  mockList.children = [{ offsetTop: 0 }];
+  mockList.scrollTop = 0;
+  mockList.scrollHeight = 30;
+  api.updateMoreIndicator(mockList);
+  assert.ok(!mockFadeClasses.has('visible'), 'Kevés elem esetén nem jelenik meg indikátor');
+});
+
