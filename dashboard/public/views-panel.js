@@ -254,12 +254,45 @@
     } catch {}
   }
 
+  const scrollPositions = new Map();
+
+  function getScrollKey(listEl) {
+    if (!listEl) return null;
+    if (listEl.dataset && listEl.dataset.scrollKey) return listEl.dataset.scrollKey;
+    if (listEl.classList && listEl.classList.contains('vp-unlocated-list')) return 'unlocated';
+    if (listEl.classList && listEl.classList.contains('tk-stream-list')) return 'stream:' + liveStreamTab;
+    return null;
+  }
+
+  function saveScrollPosition(listEl) {
+    const key = getScrollKey(listEl);
+    if (key && listEl && typeof listEl.scrollTop === 'number') {
+      scrollPositions.set(key, listEl.scrollTop);
+    }
+  }
+
+  function saveAllScrollPositions(root) {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    const r = root || document;
+    if (!r.querySelectorAll) return;
+    const lists = r.querySelectorAll('.vp-unlocated-list, .tk-stream-list');
+    lists.forEach(l => saveScrollPosition(l));
+  }
+
+  function resetScrollPositions() {
+    scrollPositions.clear();
+  }
+
   function getLiveStreamTab() {
     return liveStreamTab;
   }
 
   function setLiveStreamTab(tab, notify = true) {
     if (!Object.values(LIVE_STREAM_TABS).includes(tab)) return;
+    if (tab !== liveStreamTab) {
+      scrollPositions.delete('stream:' + tab);
+      scrollPositions.delete('stream:' + liveStreamTab);
+    }
     liveStreamTab = tab;
     saveLiveTab(tab);
     if (notify) {
@@ -387,6 +420,9 @@
 
   function setActiveView(view, notify = true, opts = {}) {
     if (!Object.values(VIEWS).includes(view)) return;
+    if (view !== activeView) {
+      scrollPositions.delete('unlocated');
+    }
     if (contentTab === 'live') {
       try { window.CrucixLiveMedia?.stopAllStreams?.() || window.CrucixLiveMedia?.stopStream?.(); } catch {}
     }
@@ -1086,6 +1122,10 @@
   }
 
   function liveStreamHtml(snapshot, options = {}) {
+    if (typeof document !== 'undefined' && typeof document.querySelector === 'function') {
+      const existing = document.querySelector('.tk-stream-list');
+      if (existing) saveScrollPosition(existing);
+    }
     const snap = snapshot || (typeof window !== 'undefined' ? window.D : null) || {};
     const currentTab = options.tab && Object.values(LIVE_STREAM_TABS).includes(options.tab)
       ? options.tab
@@ -1160,6 +1200,7 @@
         </div>
         <div class="vp-scroll-wrapper">
           <div class="tk-stream-list vp-scroll-region scroll-region"
+               data-scroll-key="stream-${currentTab}"
                tabindex="0"
                role="region"
                aria-label="Élő hírfolyam (${esc(LIVE_STREAM_TAB_LABELS[currentTab])})"
@@ -1190,6 +1231,10 @@
   }
 
   function panelHtml(snapshot) {
+    if (typeof document !== 'undefined' && typeof document.querySelector === 'function') {
+      const existing = document.querySelector('.vp-unlocated-list');
+      if (existing) saveScrollPosition(existing);
+    }
     const events = Array.isArray(snapshot?.events) ? snapshot.events : [];
     const staleEvents = Array.isArray(snapshot?.staleEvents) ? snapshot.staleEvents : [];
     const viewCounters = snapshot?.views?.[activeView] || {};
@@ -1274,6 +1319,7 @@
           </div>
           <div class="vp-scroll-wrapper">
             <div class="vp-unlocated-list vp-scroll-region scroll-region"
+                 data-scroll-key="unlocated"
                  tabindex="0"
                  role="region"
                  aria-label="Koordináta nélküli hírek"
@@ -1472,6 +1518,7 @@
 
   function updateMoreIndicator(listEl) {
     if (!listEl) return;
+    saveScrollPosition(listEl);
     const wrapper = listEl.closest ? listEl.closest('.vp-scroll-wrapper') : listEl.parentElement;
     if (!wrapper) return;
     const fade = wrapper.querySelector ? wrapper.querySelector('.vp-scroll-fade') : null;
@@ -1519,15 +1566,52 @@
     const r = root || document;
     if (!r.querySelectorAll) return;
     const lists = r.querySelectorAll('.vp-unlocated-list, .tk-stream-list');
-    lists.forEach(list => updateMoreIndicator(list));
+    lists.forEach(list => {
+      const key = getScrollKey(list);
+      if (key && scrollPositions.has(key)) {
+        const saved = scrollPositions.get(key);
+        if (typeof saved === 'number' && saved > 0) {
+          list.scrollTop = saved;
+        }
+      }
+      updateMoreIndicator(list);
+    });
   }
 
-  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-    window.addEventListener('resize', () => initScrollIndicators());
-    // Auto-update after DOM updates settle
-    if (typeof MutationObserver !== 'undefined' && document && document.body) {
-      const mo = new MutationObserver(() => initScrollIndicators());
-      mo.observe(document.body, { childList: true, subtree: true });
+  function bindAutoScrollObserver() {
+    if (typeof MutationObserver === 'undefined' || typeof document === 'undefined') return;
+    const target = document.body || document.documentElement;
+    if (!target) return;
+    let scheduled = false;
+    const mo = new MutationObserver(() => {
+      if (!scheduled) {
+        scheduled = true;
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(() => {
+            scheduled = false;
+            initScrollIndicators();
+          });
+        } else {
+          scheduled = false;
+          initScrollIndicators();
+        }
+      }
+    });
+    mo.observe(target, { childList: true, subtree: true });
+  }
+
+  if (typeof window !== 'undefined') {
+    if (typeof window.addEventListener === 'function') {
+      window.addEventListener('resize', () => initScrollIndicators());
+    }
+    if (typeof document !== 'undefined') {
+      if (document.readyState === 'loading') {
+        if (typeof document.addEventListener === 'function') {
+          document.addEventListener('DOMContentLoaded', bindAutoScrollObserver);
+        }
+      } else {
+        bindAutoScrollObserver();
+      }
     }
   }
 
@@ -1572,7 +1656,12 @@
     deduplicateNewsItems,
     normalizeNewsTitle,
     updateMoreIndicator,
-    initScrollIndicators
+    initScrollIndicators,
+    getScrollPosition: (key) => scrollPositions.get(key) || 0,
+    setScrollPosition: (key, pos) => scrollPositions.set(key, pos),
+    saveScrollPositions: saveAllScrollPositions,
+    restoreScrollPositions: initScrollIndicators,
+    resetScrollPositions
   });
 
 })(window, document);

@@ -1044,6 +1044,7 @@ function rerenderDashboard(forceMapRefresh=false){
   renderMapVisibility();
   // The rails are rebuilt with innerHTML: a focused live-panel button gets its focus back on the new node (keepLiveFocus).
   keepLiveFocus(()=>{renderLeftRail();renderLower();renderRight();});
+  window.CrucixViewsPanel?.initScrollIndicators?.();
   if(forceMapRefresh && isFixedModuleVisible('map')) requestAnimationFrame(() => refreshMapViewport(true));
 }
 

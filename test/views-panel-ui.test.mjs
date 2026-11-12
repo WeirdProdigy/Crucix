@@ -1420,3 +1420,93 @@ test('32. Helyi hírek: görgetési tartomány, min(40vh, 280px), látható gör
   assert.ok(!mockFadeClasses.has('visible'), 'Kevés elem esetén nem jelenik meg indikátor');
 });
 
+test('33. Helyi hírek görgetés-megőrzés: újrarederelés során a scrollTop megmarad és az indikátor automatikusan újrakötődik', () => {
+  const { api } = createHarness();
+
+  // 1. Mentés és visszaállítás funkciók exportjának ellenőrzése
+  assert.equal(typeof api.saveScrollPositions, 'function', 'saveScrollPositions exportálva van');
+  assert.equal(typeof api.restoreScrollPositions, 'function', 'restoreScrollPositions exportálva van');
+  assert.equal(typeof api.resetScrollPositions, 'function', 'resetScrollPositions exportálva van');
+
+  api.resetScrollPositions();
+
+  // 2. Mock környezet: lista görgetése
+  const mockFadeClasses = new Set();
+  const mockTextEl = { textContent: '' };
+  const mockFade = {
+    classList: {
+      add: c => mockFadeClasses.add(c),
+      remove: c => mockFadeClasses.delete(c),
+      contains: c => mockFadeClasses.has(c)
+    }
+  };
+  const mockWrapper = {
+    querySelector: sel => {
+      if (sel === '.vp-scroll-fade') return mockFade;
+      if (sel === '.vp-scroll-fade-text') return mockTextEl;
+      return null;
+    }
+  };
+
+  const oldList = {
+    dataset: { scrollKey: 'unlocated' },
+    classList: { contains: c => c === 'vp-unlocated-list' },
+    closest: sel => sel === '.vp-scroll-wrapper' ? mockWrapper : null,
+    parentElement: mockWrapper,
+    children: [
+      { offsetTop: 0 },
+      { offsetTop: 30 },
+      { offsetTop: 60 },
+      { offsetTop: 90 },
+      { offsetTop: 120 },
+      { offsetTop: 150 },
+      { offsetTop: 180 },
+      { offsetTop: 210 }
+    ],
+    scrollTop: 140,
+    clientHeight: 100,
+    scrollHeight: 240
+  };
+
+  // 2a. A felhasználó görgetett (140px) -> updateMoreIndicator elmenti a pozíciót
+  api.updateMoreIndicator(oldList);
+  assert.equal(api.getScrollPosition('unlocated'), 140, 'Görgetési pozíció elmentve a cache-be');
+
+  // 3. Szimulált DOM újragenerálás (az éles innerHTML felülírás új DOM elemet hoz létre scrollTop = 0-val)
+  const newList = {
+    dataset: { scrollKey: 'unlocated' },
+    classList: { contains: c => c === 'vp-unlocated-list' },
+    closest: sel => sel === '.vp-scroll-wrapper' ? mockWrapper : null,
+    parentElement: mockWrapper,
+    children: [
+      { offsetTop: 0 },
+      { offsetTop: 30 },
+      { offsetTop: 60 },
+      { offsetTop: 90 },
+      { offsetTop: 120 },
+      { offsetTop: 150 },
+      { offsetTop: 180 },
+      { offsetTop: 210 }
+    ],
+    scrollTop: 0, // Alapértelmezett 0 az új DOM node-on
+    clientHeight: 100,
+    scrollHeight: 240
+  };
+
+  const mockRoot = {
+    querySelectorAll: sel => {
+      if (sel.includes('vp-unlocated-list')) return [newList];
+      return [];
+    }
+  };
+
+  // 4. Újrarenderelés utáni visszaállítás (initScrollIndicators)
+  api.restoreScrollPositions(mockRoot);
+
+  assert.equal(newList.scrollTop, 140, 'Az új DOM elemen a scrollTop visszaállt 140-re');
+
+  // 5. Területváltáskor (setView) a görgetési pozíció törlődik, hogy tiszta lappal induljon
+  api.setView('county');
+  assert.equal(api.getScrollPosition('unlocated'), 0, 'Területi nézetváltáskor a mentett pozíció törlődik');
+});
+
