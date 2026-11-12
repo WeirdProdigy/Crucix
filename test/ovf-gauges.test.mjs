@@ -52,10 +52,10 @@ test('1. OVF Gauge metadata & constants: official register and ArcGIS query', ()
   assert.equal(SOURCE, 'OVF-Gauges');
   assert.equal(ENDPOINT_URL, 'https://geoportal.vizugy.hu/arcgis/rest/services/VIR/Vizmercek_vizugyhu/MapServer/60/query');
   assert.equal(ATTRIBUTION, 'Forrás: Országos Vízügyi Főigazgatóság (OVF), tájékoztató jellegű adat; nem hivatalos árvízi vagy belvízi előrejelzés.');
-  assert.equal(CACHE_TTL_MS, 30 * 60 * 1000, 'Cache TTL is 30 minutes');
-  assert.equal(HOURLY_FRESH_THRESHOLD_MINUTES, 90, 'Hourly threshold is 90 minutes');
+  assert.equal(CACHE_TTL_MS, 10 * 60 * 1000, 'Cache TTL is 10 minutes');
+  assert.equal(HOURLY_FRESH_THRESHOLD_MINUTES, 120, 'Hourly threshold is 120 minutes');
   assert.equal(DAILY_FRESH_THRESHOLD_MINUTES, 26 * 60, 'Daily threshold is 26 hours (1560 min)');
-  assert.equal(FRESH_THRESHOLD_MINUTES, 90, 'Default freshness threshold is 90 minutes');
+  assert.equal(FRESH_THRESHOLD_MINUTES, 120, 'Default freshness threshold is 120 minutes');
 
   // Monitored gauges
   assert.ok(OVF_BERETTYO_GAUGES['2546'], 'Berettyóújfalu is registered');
@@ -64,14 +64,14 @@ test('1. OVF Gauge metadata & constants: official register and ArcGIS query', ()
   assert.equal(OVF_BERETTYO_GAUGES['2546'].isPrimary, true);
   assert.equal(OVF_BERETTYO_GAUGES['2546'].hasDischarge, true);
   assert.equal(OVF_BERETTYO_GAUGES['2546'].cadence, 'hourly');
-  assert.equal(OVF_BERETTYO_GAUGES['2546'].freshThresholdMinutes, 90);
+  assert.equal(OVF_BERETTYO_GAUGES['2546'].freshThresholdMinutes, 120);
 
   assert.ok(OVF_BERETTYO_GAUGES['2545'], 'Pocsaj is registered');
   assert.equal(OVF_BERETTYO_GAUGES['2545'].name, 'Pocsaj');
   assert.equal(OVF_BERETTYO_GAUGES['2545'].isPrimary, false);
   assert.equal(OVF_BERETTYO_GAUGES['2545'].hasDischarge, true);
   assert.equal(OVF_BERETTYO_GAUGES['2545'].cadence, 'hourly');
-  assert.equal(OVF_BERETTYO_GAUGES['2545'].freshThresholdMinutes, 90);
+  assert.equal(OVF_BERETTYO_GAUGES['2545'].freshThresholdMinutes, 120);
 
   assert.ok(OVF_BERETTYO_GAUGES['2739'], 'Darvas is registered');
   assert.equal(OVF_BERETTYO_GAUGES['2739'].name, 'Darvas');
@@ -115,7 +115,7 @@ test('2. parseOvfArcGisResponse on real fixture: all 4 gauges parsed with exact 
   assert.equal(parsed.primaryGauge.ageMinutes, 90);
   assert.equal(parsed.primaryGauge.fresh, true);
   assert.equal(parsed.primaryGauge.cadence, 'hourly');
-  assert.equal(parsed.primaryGauge.freshThresholdMinutes, 90);
+  assert.equal(parsed.primaryGauge.freshThresholdMinutes, 120);
   assert.equal(parsed.primaryGauge.kf1, 300);
   assert.equal(parsed.primaryGauge.kf2, 400);
   assert.equal(parsed.primaryGauge.kf3, 450);
@@ -230,19 +230,19 @@ test('4. Freshness evaluation: hourly (90m) and daily (26h) thresholds', () => {
     ]
   };
 
-  // 1. Hourly gauge: 85 minutes later -> FRESH (<= 90m)
-  const nowHourlyFresh = hourlyParsed.utcEpoch + 85 * 60 * 1000;
+  // 1. Hourly gauge: 115 minutes later -> FRESH (<= 120m)
+  const nowHourlyFresh = hourlyParsed.utcEpoch + 115 * 60 * 1000;
   const resHourlyFresh = parseOvfArcGisResponse(sampleData, { now: nowHourlyFresh });
   const buFresh = resHourlyFresh.gauges.find(g => g.id === '2546');
   assert.equal(buFresh.fresh, true);
-  assert.equal(buFresh.ageMinutes, 85);
+  assert.equal(buFresh.ageMinutes, 115);
 
-  // 2. Hourly gauge: 95 minutes later -> STALE (> 90m)
-  const nowHourlyStale = hourlyParsed.utcEpoch + 95 * 60 * 1000;
+  // 2. Hourly gauge: 125 minutes later -> STALE (> 120m)
+  const nowHourlyStale = hourlyParsed.utcEpoch + 125 * 60 * 1000;
   const resHourlyStale = parseOvfArcGisResponse(sampleData, { now: nowHourlyStale });
   const buStale = resHourlyStale.gauges.find(g => g.id === '2546');
   assert.equal(buStale.fresh, false);
-  assert.equal(buStale.ageMinutes, 95);
+  assert.equal(buStale.ageMinutes, 125);
 
   // 3. Daily gauge: 25 hours later (1500m) -> FRESH (<= 26h / 1560m)
   const nowDailyFresh = dailyParsed.utcEpoch + 25 * 60 * 60 * 1000;
@@ -548,4 +548,76 @@ test('10. OVF local timestamp DST-correct UTC conversion and futureTimestamp ano
   assert.equal(buFuture.ageMinutes, -30, 'ageMinutes preserves negative -30 rather than clamping to 0');
   assert.equal(buFuture.fresh, false, 'future timestamp is NOT fresh');
   assert.equal(futureRes.allFresh, false, 'allFresh is false when gauge has future timestamp');
+});
+
+test('11. Worst-case timing simulation: publication HH:25, fetch HH:24, CACHE_TTL_MS 10m, 15m sweep cycle', async () => {
+  clearOvfGaugesCache();
+
+  // Timing model (OVF encodes local wall-clock as naive UTC epoch in ArcGIS):
+  // Base observation 1: 11:00 Budapest time (naive 11:00 in ArcGIS)
+  // Base observation 2: 12:00 Budapest time (naive 12:00 in ArcGIS)
+  const epoch11 = new Date('2026-11-02T11:00:00.000Z').getTime(); // naive 11:00 CET -> 10:00 UTC
+  const epoch12 = new Date('2026-11-02T12:00:00.000Z').getTime(); // naive 12:00 CET -> 11:00 UTC
+  const parsed11 = parseOvfLocalTimestamp(epoch11);
+  const parsed12 = parseOvfLocalTimestamp(epoch12);
+
+  // 12:25 Budapest (11:25 UTC) is when observation 2 is published upstream
+  // Fetch 1 occurs at 12:24 Budapest (11:24 UTC, 1 min before publication) -> returns observation 1 (11:00)
+  const tFetch1 = new Date('2026-11-02T11:24:00.000Z').getTime();
+  // Fetch 2 occurs at 12:39 Budapest (11:39 UTC, 15m sweep cycle later) -> returns observation 2 (12:00)
+  const tFetch2 = new Date('2026-11-02T11:39:00.000Z').getTime();
+
+  // Verify CACHE_TTL_MS (10m) <= 15m sweep cycle
+  assert.ok(CACHE_TTL_MS <= 15 * 60 * 1000, 'Cache TTL must be <= 15m sweep cycle');
+  // By 12:39, the 10m cache established at 12:24 is expired:
+  assert.ok(tFetch2 - tFetch1 > CACHE_TTL_MS, '15m sweep cycle guarantees cache expiration for next sweep');
+
+  // Peak apparent age happens just before Fetch 2 completes (at 12:39 Budapest / 11:39 UTC):
+  const peakApparentAgeMinutes = Math.round((tFetch2 - parsed11.utcEpoch) / (60 * 1000));
+  // 12:39 - 11:00 = 99 minutes
+  assert.equal(peakApparentAgeMinutes, 99);
+  assert.ok(peakApparentAgeMinutes < HOURLY_FRESH_THRESHOLD_MINUTES, 'Peak apparent age (99m) is strictly below 120m threshold');
+
+  // Verify parseOvfArcGisResponse confirms fresh: true at peak apparent age:
+  const resPeak = parseOvfArcGisResponse({
+    features: [{
+      attributes: {
+        'vFeAllomas_webmerc.Torzsszam': 2546,
+        'vop.dbo.tAllomasFe.AllomasNev': 'Berettyóújfalu',
+        'vop.dbo.tAllomasFe.Idopont': epoch11,
+        'vop.dbo.tAllomasFe.Vizallas': -131,
+        'vop.dbo.tAllomasFe.Vizhozam': 0.28,
+        'vop.dbo.tAllomasFe.KF1': 300
+      }
+    }]
+  }, { now: tFetch2 });
+  const buPeak = resPeak.gauges.find(g => g.id === '2546');
+  assert.equal(buPeak.fresh, true, 'At peak apparent age of 99m, gauge remains FRESH (no false ELAVULT)');
+  assert.equal(buPeak.ageMinutes, 99);
+
+  // At 12:39, the newly fetched 12:00 observation has age:
+  const freshAgeMinutes = Math.round((tFetch2 - parsed12.utcEpoch) / (60 * 1000));
+  assert.equal(freshAgeMinutes, 39);
+  assert.ok(freshAgeMinutes < HOURLY_FRESH_THRESHOLD_MINUTES);
+
+  // Real outage simulation:
+  // If upstream stops publishing (or measurement fails) and 120 minutes elapse since 11:00:
+  // At 13:01 Budapest (12:01 UTC, 121 minutes after 11:00 Budapest / 10:00 UTC):
+  const tOutage = new Date('2026-11-02T12:01:00.000Z').getTime();
+  const resOutage = parseOvfArcGisResponse({
+    features: [{
+      attributes: {
+        'vFeAllomas_webmerc.Torzsszam': 2546,
+        'vop.dbo.tAllomasFe.AllomasNev': 'Berettyóújfalu',
+        'vop.dbo.tAllomasFe.Idopont': epoch11,
+        'vop.dbo.tAllomasFe.Vizallas': -131,
+        'vop.dbo.tAllomasFe.Vizhozam': 0.28,
+        'vop.dbo.tAllomasFe.KF1': 300
+      }
+    }]
+  }, { now: tOutage });
+
+  const buOutage = resOutage.gauges.find(g => g.id === '2546');
+  assert.equal(buOutage.fresh, false, 'Gauge becomes STALE (ELAVULT) when true outage exceeds 120m threshold');
+  assert.equal(buOutage.ageMinutes, 121);
 });

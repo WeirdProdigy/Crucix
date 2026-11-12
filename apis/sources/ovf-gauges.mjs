@@ -13,12 +13,12 @@ export const SOURCE = 'OVF-Gauges';
 export const ENDPOINT_URL = 'https://geoportal.vizugy.hu/arcgis/rest/services/VIR/Vizmercek_vizugyhu/MapServer/60/query';
 export const ATTRIBUTION = 'Forrás: Országos Vízügyi Főigazgatóság (OVF), tájékoztató jellegű adat; nem hivatalos árvízi vagy belvízi előrejelzés.';
 
-// Cache TTL: 30 minutes
-export const CACHE_TTL_MS = 30 * 60 * 1000;
+// Cache TTL: 10 minutes (<= 15m sweep interval)
+export const CACHE_TTL_MS = 10 * 60 * 1000;
 
 // Freshness thresholds:
-// 1. Órás automata állomások (Berettyóújfalu, Pocsaj): 60 perces mintavétel (HH:00Z) + 30 perc közzétételi ráhagyás = 90 perc.
-export const HOURLY_FRESH_THRESHOLD_MINUTES = 90;
+// 1. Órás automata állomások (Berettyóújfalu, Pocsaj): 60 perces mintavétel (HH:00Z) + közzététel és sweep ablak ráhagyás = 120 perc.
+export const HOURLY_FRESH_THRESHOLD_MINUTES = 120;
 // 2. Napi leolvasású állomások (Darvas, Szeghalom): 24 órás ciklus (06:00Z reggeli leolvasás a mintában) + 2 óra ráhagyás = 26 óra (1560 perc).
 export const DAILY_FRESH_THRESHOLD_MINUTES = 26 * 60;
 // Visszafelé kompatibilis alapértelmezett küszöb
