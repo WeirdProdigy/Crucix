@@ -149,6 +149,7 @@
   let activeStreamIds = [];       // array of active stream IDs (max 1 in single, max 4 in grid)
   let streamAudioState = new Map(); // streamId -> { muted: boolean, volume: number }
   let errorStreams = new Set();
+  let expandedNotesIds = new Set(); // streamId set for expanded card descriptions
   let retryBackoff = new Map();   // streamId -> backoff seconds
   let changeListeners = [];
   let lastSnapshot = null;
@@ -1512,6 +1513,55 @@
   /**
    * Renders an embeddable source selector card/item, or an external-only item card.
    */
+  const REGION_SORT_ORDER = Object.freeze({ local: 0, county: 1, national: 2, global: 3 });
+
+  function getStreamStatusSortOrder(stream) {
+    if (!stream) return 99;
+    if (stream.sourceType === 'hls' && stream.status === 'verified-live') return 0;
+    if (stream.status === 'verified-live') return 1;
+    if (stream.sourceType === 'still-image') return 2;
+    if (stream.status === 'delayed') return 3;
+    if (stream.sourceType === 'link-only' || stream.embedStatus === 'external-only') return 4;
+    return 5;
+  }
+
+  function sortStreamsDefault(streams) {
+    if (!Array.isArray(streams)) return [];
+    return [...streams].sort((a, b) => {
+      const ra = REGION_SORT_ORDER[a?.region] ?? 99;
+      const rb = REGION_SORT_ORDER[b?.region] ?? 99;
+      if (ra !== rb) return ra - rb;
+      const sa = getStreamStatusSortOrder(a);
+      const sb = getStreamStatusSortOrder(b);
+      if (sa !== sb) return sa - sb;
+      return String(a?.name || '').localeCompare(String(b?.name || ''), 'hu');
+    });
+  }
+
+  function toggleNotesExpanded(streamId) {
+    if (!streamId) return;
+    if (expandedNotesIds.has(streamId)) {
+      expandedNotesIds.delete(streamId);
+    } else {
+      expandedNotesIds.add(streamId);
+    }
+    notifyChange();
+  }
+
+  function renderNotesBlock(stream, notesClass) {
+    if (!stream || !stream.notes) return '';
+    const notesText = String(stream.notes);
+    const isExpanded = expandedNotesIds.has(stream.id);
+    const notesId = `lm-notes-${esc(stream.id)}`;
+    const needsToggle = notesText.length > 75;
+    return `
+      <div class="lm-notes-wrap">
+        <span id="${notesId}" class="${notesClass}${isExpanded ? ' is-expanded' : ''}">${esc(notesText)}</span>
+        ${needsToggle ? `<button type="button" class="lm-notes-toggle" aria-expanded="${isExpanded ? 'true' : 'false'}" aria-controls="${notesId}" onclick="window.CrucixLiveMedia?.toggleNotesExpanded('${esc(stream.id)}')">${isExpanded ? 'Kevesebb ▴' : 'Részletek ▾'}</button>` : ''}
+      </div>
+    `;
+  }
+
   function renderStreamCard(stream) {
     if (!stream || !stream.id) return '';
     const isPlaying = activeStreamIds.includes(stream.id);
@@ -1559,12 +1609,12 @@
               <div class="lm-selector-idle-bar">
                 <div class="lm-placeholder-privacy">${esc(UNIDEB_PRIVACY_NOTICE_TEXT)}</div>
                 <button type="button" class="lm-btn lm-btn-play" onclick="window.CrucixLiveMedia?.playStream('${esc(stream.id)}')">
-                  ▶ Élő HLS közvetítés indítása (Full HD)
+                  ▶ Betöltés
                 </button>
               </div>
             `}
           </div>
-          ${stream.notes ? `<div class="lm-card-footer"><span class="lm-card-notes">${esc(stream.notes)}</span></div>` : ''}
+          ${stream.notes ? `<div class="lm-card-footer">${renderNotesBlock(stream, 'lm-card-notes')}</div>` : ''}
         </article>
       `;
     }
@@ -1582,7 +1632,7 @@
             <span class="lm-selector-playing-indicator"><span class="lm-live-dot"></span> Lejátszás folyamatban a rácsban</span>
             <div class="lm-selector-btns">
               <button type="button" class="lm-btn lm-btn-stop" onclick="window.CrucixLiveMedia?.stopStream('${esc(stream.id)}')">■ Leállítás</button>
-              <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">Megnyitás a szolgáltató oldalán ↗</a>
+              <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external" title="Megnyitás a szolgáltató oldalán">Megnyitás ↗</a>
             </div>
           </div>
         `;
@@ -1604,10 +1654,10 @@
           </div>
           <div class="lm-external-actions">
             <button type="button" class="lm-btn lm-btn-play lm-btn-load-grid" onclick="window.CrucixLiveMedia?.playStream('${esc(stream.id)}')">
-              ▶ Betöltés a rácsba
+              ▶ Betöltés
             </button>
-            <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">
-              Megnyitás a szolgáltató oldalán ↗
+            <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external" title="Megnyitás a szolgáltató oldalán">
+              Megnyitás ↗
             </a>
           </div>
         `;
@@ -1619,8 +1669,8 @@
             </div>
           ` : ''}
           <div class="lm-external-actions">
-            <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external">
-              Megnyitás a szolgáltató oldalán ↗
+            <a href="${esc(stream.url)}" target="_blank" rel="noopener noreferrer" class="lm-btn lm-btn-external" title="Megnyitás a szolgáltató oldalán">
+              Megnyitás ↗
             </a>
           </div>
         `;
@@ -1659,7 +1709,7 @@
             </div>
           </div>
           <div class="lm-card-body lm-external-body">
-            ${stream.notes ? `<div class="lm-external-notes">${esc(stream.notes)}</div>` : ''}
+            ${stream.notes ? renderNotesBlock(stream, 'lm-external-notes') : ''}
             ${externalBodyHtml}
           </div>
         </article>
@@ -1707,7 +1757,7 @@
         <div class="lm-selector-idle-bar">
           <div class="lm-placeholder-privacy">${esc(PRIVACY_NOTICE_TEXT)}</div>
           <button type="button" class="lm-btn lm-btn-play" onclick="window.CrucixLiveMedia?.playStream('${esc(stream.id)}')">
-            ▶ Közvetítés indítása
+            ▶ Betöltés
           </button>
         </div>
       `;
@@ -1736,14 +1786,14 @@
         <div class="lm-card-body">
           ${actionAreaHtml}
         </div>
-        ${stream.notes ? `<div class="lm-card-footer"><span class="lm-card-notes">${esc(stream.notes)}</span></div>` : ''}
+        ${stream.notes ? `<div class="lm-card-footer">${renderNotesBlock(stream, 'lm-card-notes')}</div>` : ''}
       </article>
     `;
   }
 
   function renderBrowserSectionHtml(rawStreams) {
     const filtered = rawStreams.filter(matchesFilters);
-    const embeddableFiltered = filtered.filter(s => s.sourceType !== 'link-only' && s.embedStatus !== 'external-only');
+    const embeddableFiltered = sortStreamsDefault(filtered.filter(s => s.sourceType !== 'link-only' && s.embedStatus !== 'external-only'));
     const externalFiltered = filtered.filter(s => s.sourceType === 'link-only' || s.embedStatus === 'external-only');
 
     // Quick-select dropdown options for all embeddable streams
@@ -1787,7 +1837,7 @@
       `;
 
     const isPrivateHost = isPrivateOrLocalHost();
-    const activeExternalFiltered = externalFiltered.filter(s => !isCameraStale(s));
+    const activeExternalFiltered = sortStreamsDefault(externalFiltered.filter(s => !isCameraStale(s)));
     const hiddenStaleSources = externalFiltered.filter(s => isCameraStale(s));
     const externalCams = activeExternalFiltered.filter(s => Boolean(s.imageUrl));
     const anyCamActive = externalCams.some(s => activeCameraIds.has(s.id));
@@ -2183,6 +2233,9 @@
     playStream,
     stopStream,
     stopAllStreams,
+    toggleNotesExpanded,
+    isNotesExpanded: (streamId) => expandedNotesIds.has(streamId),
+    sortStreamsDefault,
     markStreamError,
     retryStream,
     loadCamera,

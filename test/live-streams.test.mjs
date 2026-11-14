@@ -248,7 +248,7 @@ test('5. Frontend LiveMedia component: Click-to-load, single & 2x2 grid concurre
   const initialHtml = LiveMedia.panelHtml(testSnapshot);
   assert.ok(!initialHtml.includes('<iframe'), 'Initially zero iframes must be rendered (Click-to-Load)');
   assert.ok(!initialHtml.includes('<img'), 'Zero external thumbnail/preview images before click');
-  assert.ok(initialHtml.includes('Közvetítés indítása'), 'Play button must be rendered');
+  assert.ok(initialHtml.includes('▶ Betöltés'), 'Play button must be rendered');
   assert.ok(
     initialHtml.includes('A közvetítés indítása kapcsolatot létesít a videószolgáltatóval.'),
     'Exact required privacy text must be displayed before loading'
@@ -262,7 +262,7 @@ test('5. Frontend LiveMedia component: Click-to-load, single & 2x2 grid concurre
   assert.ok(initialHtml.includes('Külső oldalon nézhető'), 'External-only group heading must be rendered');
   assert.ok(initialHtml.includes('Forrásoldalon: Élő adás'), 'Page live status must be shown separately');
   assert.ok(initialHtml.includes('Beágyazhatóság: Csak külső oldalon nézhető'), 'Embeddability status must be shown separately');
-  assert.ok(initialHtml.includes('Megnyitás a szolgáltató oldalán ↗'), 'External link button must be rendered');
+  assert.ok(initialHtml.includes('Megnyitás ↗'), 'External link button must be rendered');
 
   // B. Single player activation (max 1 in single mode)
   LiveMedia.playStream('s-local');
@@ -732,7 +732,7 @@ test('11. Browser-side camera display: schema validation, synthetic click-to-loa
   assert.ok(!initHtml.includes('<img'), 'Before user click: exactly 0 images rendered');
   assert.ok(initHtml.includes('A kép betöltése kapcsolatot létesít az Időképpel; a Crucix nem tárolja.'), 'Must show privacy warning');
   assert.ok(initHtml.includes('külső forrás'), 'Must render shared "külső forrás" badge');
-  assert.ok(initHtml.includes('▶ Betöltés a rácsba'), 'Must render load button');
+  assert.ok(initHtml.includes('▶ Betöltés'), 'Must render load button');
   assert.equal(LiveMedia.isCameraActive('mock-kossuth'), false);
 
   // B. Click to load camera: user triggers camera load
@@ -919,9 +919,9 @@ test('11. Browser-side camera display: schema validation, synthetic click-to-loa
   // I. Guardrail protection: when accessed from public origin, camera buttons are suppressed
   mockWindow.location.hostname = 'crucix.public-domain.com';
   const publicHtml = LiveMedia.panelHtml(syntheticSnapshot);
-  assert.ok(!publicHtml.includes('▶ Betöltés a rácsba'), 'Public origin must NOT render individual camera load button');
+  assert.ok(!publicHtml.includes('▶ Betöltés'), 'Public origin must NOT render individual camera load button');
   assert.ok(!publicHtml.includes('<img'), 'Public origin must NOT render any img tag');
-  assert.ok(publicHtml.includes('Megnyitás a szolgáltató oldalán ↗'), 'Public origin must preserve link-only provider button');
+  assert.ok(publicHtml.includes('Megnyitás ↗'), 'Public origin must preserve link-only provider button');
 
   // Attempt to call loadCamera on public origin: must be rejected as no-op
   LiveMedia.loadCamera('mock-kossuth');
@@ -1068,7 +1068,7 @@ test('12. Windy embed widget: schema, click-to-load lifecycle, private host guar
   assert.equal(lm.isEmbedActive('windy-radar-embed'), false, 'Embed widget must be inactive initially');
   const initialCard = lm.renderStreamCard(windyRadar);
   assert.ok(!initialCard.includes('<iframe'), 'Initial render must contain 0 iframes (Click-to-Load)');
-  assert.ok(initialCard.includes('▶ Betöltés a rácsba'), 'Initial render must display load button');
+  assert.ok(initialCard.includes('▶ Betöltés'), 'Initial render must display load button');
   assert.ok(!initialCard.includes('🗺 Windy radar betöltése'), 'Must not display old radar button text');
   assert.ok(initialCard.includes('A betöltés kapcsolatot létesít a Windy.com szervereivel'), 'Must show privacy notice before load');
 
@@ -1095,7 +1095,7 @@ test('12. Windy embed widget: schema, click-to-load lifecycle, private host guar
   assert.equal(lm.isEmbedActive('windy-radar-embed'), false, 'Widget must be inactive after unloadEmbed');
 
   const unloadedCard = lm.renderStreamCard(windyRadar);
-  assert.ok(unloadedCard.includes('▶ Betöltés a rácsba'), 'Load button must return after close');
+  assert.ok(unloadedCard.includes('▶ Betöltés'), 'Load button must return after close');
 
   // 3. Non-private host guardrail test: button absent and loadEmbed is no-op
   const publicWindow = {
@@ -1107,9 +1107,9 @@ test('12. Windy embed widget: schema, click-to-load lifecycle, private host guar
   const publicLm = publicWindow.CrucixLiveMedia;
 
   const publicCard = publicLm.renderStreamCard(windyRadar);
-  assert.ok(!publicCard.includes('▶ Betöltés a rácsba'), 'Load button must be hidden on non-private hosts');
+  assert.ok(!publicCard.includes('▶ Betöltés'), 'Load button must be hidden on non-private hosts');
   assert.ok(!publicCard.includes('<iframe'), '0 iframes on non-private hosts');
-  assert.ok(publicCard.includes('Megnyitás a szolgáltató oldalán ↗'), 'External link must be available on non-private hosts');
+  assert.ok(publicCard.includes('Megnyitás ↗'), 'External link must be available on non-private hosts');
 
   const publicLoadResult = publicLm.loadEmbed('windy-radar-embed');
   assert.equal(publicLoadResult, false, 'loadEmbed must be a no-op returning false on non-private hosts');
@@ -1160,9 +1160,9 @@ test('12. Windy embed widget: schema, click-to-load lifecycle, private host guar
   assert.ok(readme.includes('promotional text'), 'README must record promotional text rule');
   assert.ok(readme.includes('info@windy.com'), 'README must cite official Windy contact email');
 
-  // Verify responsive full-width 16:9 min. 480px styling in CSS
+  // Verify Windy card is 1 cell in selector grid, while embed frame keeps 16:9 min. 480px
   const liveMediaCss = readFileSync(new URL('../dashboard/public/live-media-panel.css', import.meta.url), 'utf8');
-  assert.ok(liveMediaCss.includes('.lm-card-windy') && liveMediaCss.includes('grid-column: 1 / -1;'), 'Windy card must span full width');
+  assert.ok(liveMediaCss.includes('.lm-selector-grid .lm-card-windy') && liveMediaCss.includes('grid-column: auto;'), 'Windy card must occupy 1 cell in selector grid');
   assert.ok(liveMediaCss.includes('aspect-ratio: 16 / 9;'), 'Windy frame must enforce 16:9 aspect ratio');
   assert.ok(liveMediaCss.includes('min-height: 480px;'), 'Windy frame must have min. 480px height');
 
@@ -1774,7 +1774,7 @@ test('15. HírTV delayed stream: schema, delayed status badge, click-to-load Vid
   assert.ok(html.includes('id="lm-card-hirtv-delayed-stream"'), 'HírTV card must be rendered in embeddable list');
   assert.ok(html.includes('lm-badge-delayed'), 'Card must have lm-badge-delayed class');
   assert.ok(html.includes('Késleltetett (60 perc)'), 'Status badge text must be "Késleltetett (60 perc)"');
-  assert.ok(html.includes('▶ Közvetítés indítása'), 'Card must feature click-to-load play button');
+  assert.ok(html.includes('▶ Betöltés'), 'Card must feature click-to-load play button');
   assert.ok(html.includes('60 perccel késleltetett adás'), 'Card notes must describe 60-minute delay');
 
   // Play stream in stage slot
@@ -2016,4 +2016,44 @@ test('18. Discrete Windy slot sizing and absence of continuous ResizeObserver', 
   // 2. Ensure ResizeObserver is NOT used for continuous resize
   assert.equal(typeof LiveMedia.initWindyResizeObserver, 'undefined', 'Continuous ResizeObserver must not be exported or used');
   assert.ok(!code.includes('windyResizeObserver'), 'live-media-panel.js must not reference continuous windyResizeObserver');
+});
+
+test('19. C5a compact cards: region/status default sort, expandable notes Set state, unified buttons, HírTV merge without alias', () => {
+  const streams = JSON.parse(readFileSync(new URL('../data/live-streams.json', import.meta.url), 'utf8'));
+  assert.equal(streams.some(s => s.id === 'hirtv-elo-stream'), false, 'Duplicate hirtv-elo-stream must be removed');
+  const hirtvDelayed = streams.find(s => s.id === 'hirtv-delayed-stream');
+  assert.ok(hirtvDelayed && hirtvDelayed.name.includes('60 perccel késleltetett'), 'hirtv-delayed-stream must remain with 60-minute delay label');
+
+  const code = readFileSync(new URL('../dashboard/public/live-media-panel.js', import.meta.url), 'utf8');
+  const mockWindow = {
+    innerWidth: 1920,
+    location: { hostname: 'localhost' },
+    __CRUCIX_DATA__: {}
+  };
+  const mockDocument = { hidden: false, addEventListener: () => {} };
+  new Function('window', 'document', code)(mockWindow, mockDocument);
+  const LiveMedia = mockWindow.CrucixLiveMedia;
+
+  const longNote = 'Ez egy hosszú leírás a teszteléshez, amely biztosan meghaladja a hetvenöt karakteres határt a kibontó gombhoz.';
+  const sGlobal = { id: 's-global', name: 'Global Live', type: 'news', region: 'global', provider: 'G', sourceType: 'youtube', videoId: 'LuKwFajn37U', status: 'verified-live', embedStatus: 'embeddable', notes: longNote };
+  const sNatDelayed = { id: 's-nat-del', name: 'Nat Delayed', type: 'news', region: 'national', provider: 'N', sourceType: 'embed', embedUrl: 'https://videa.hu/player?v=abc', status: 'delayed', embedStatus: 'embeddable', notes: longNote };
+  const sLocalStill = { id: 's-loc-still', name: 'Local Still', type: 'webcam', region: 'local', provider: 'L', sourceType: 'still-image', imageUrl: 'https://example.com/a.jpg', status: 'verified-live', embedStatus: 'embeddable' };
+  const sLocalHls = { id: 's-loc-hls', name: 'Local HLS', type: 'webcam', region: 'local', provider: 'L', sourceType: 'hls', streamUrl: 'https://example.com/a.m3u8', status: 'verified-live', embedStatus: 'embeddable', notes: longNote };
+  const sCountyMap = { id: 's-cnt-map', name: 'County Map', type: 'map', region: 'county', provider: 'Windy', sourceType: 'embed', embedKind: 'windy-widget', embedUrl: 'https://embed.windy.com/embed.html', status: 'page-ok', embedStatus: 'embeddable' };
+
+  const sorted = LiveMedia.sortStreamsDefault([sGlobal, sNatDelayed, sLocalStill, sLocalHls, sCountyMap]);
+  assert.deepEqual(sorted.map(s => s.id), ['s-loc-hls', 's-loc-still', 's-cnt-map', 's-nat-del', 's-global']);
+
+  const snap = { liveStreams: [sGlobal, sNatDelayed, sLocalHls] };
+  const htmlBefore = LiveMedia.panelHtml(snap);
+  assert.ok(htmlBefore.includes('aria-expanded="false"'), 'Notes toggle must default to aria-expanded="false"');
+  assert.ok(htmlBefore.includes('aria-controls="lm-notes-s-loc-hls"'), 'Notes toggle must reference notes id via aria-controls');
+  assert.ok(!htmlBefore.includes('<iframe') && !htmlBefore.includes('<video'), 'Collapsed render must not load external media');
+
+  LiveMedia.toggleNotesExpanded('s-loc-hls');
+  assert.equal(LiveMedia.isNotesExpanded('s-loc-hls'), true);
+  const htmlExpanded = LiveMedia.panelHtml(snap);
+  assert.ok(htmlExpanded.includes('id="lm-notes-s-loc-hls" class="lm-card-notes is-expanded"'), 'Expanded class must be applied');
+  assert.ok(htmlExpanded.includes('aria-expanded="true" aria-controls="lm-notes-s-loc-hls"'), 'Expanded button must have aria-expanded="true"');
+  assert.ok(!htmlExpanded.includes('<iframe') && !htmlExpanded.includes('<video'), 'Expanding notes must not load external media');
 });

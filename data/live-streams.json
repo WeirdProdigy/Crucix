@@ -349,21 +349,6 @@
     "notes": "A Hungarospa oldalán 16 másodperces promóciós videóklipekből álló lejátszási lista található, nem élő közvetítés."
   },
   {
-    "id": "hirtv-elo-stream",
-    "name": "HírTV Élő Adás",
-    "type": "news",
-    "region": "national",
-    "provider": "HírTV Zrt. / Origo",
-    "sourceType": "link-only",
-    "url": "https://hirtv.origo.hu/adas",
-    "language": "hu",
-    "status": "delayed",
-    "embedStatus": "external-only",
-    "checkedAt": "2026-11-01",
-    "provenance": "Hivatalos szolgáltatói oldal (hirtv.origo.hu/adas)",
-    "notes": "A HírTV hivatalos lejátszója a szolgáltató weboldalán érhető el (60 perccel késleltetett adás, nem beágyazható)."
-  },
-  {
     "id": "atv-magyarorszag-stream",
     "name": "ATV Magyarország Videótár",
     "type": "news",
