@@ -2044,6 +2044,18 @@ test('19. C5a compact cards: region/status default sort, expandable notes Set st
   const sorted = LiveMedia.sortStreamsDefault([sGlobal, sNatDelayed, sLocalStill, sLocalHls, sCountyMap]);
   assert.deepEqual(sorted.map(s => s.id), ['s-loc-hls', 's-loc-still', 's-cnt-map', 's-nat-del', 's-global']);
 
+  // Regression: verified-live still-image must sort in still-image group (2), after verified-live video (1)
+  const sGlobalStill = { id: 's-global-still', name: 'A Global Still', type: 'directory', region: 'global', provider: 'VLF', sourceType: 'still-image', imageUrl: 'https://example.com/s.jpg', status: 'verified-live', embedStatus: 'embeddable' };
+  const sGlobalDelayed = { id: 's-global-delayed', name: 'B Global Delayed', type: 'news', region: 'global', provider: 'D', sourceType: 'embed', embedUrl: 'https://videa.hu/player?v=xyz', status: 'delayed', embedStatus: 'embeddable' };
+  const sGlobalExt = { id: 's-global-ext', name: 'C Global Ext', type: 'directory', region: 'global', provider: 'E', sourceType: 'link-only', url: 'https://example.com', status: 'page-ok', embedStatus: 'external-only' };
+  const sGlobalVideo = { id: 's-global-video', name: 'Z Global Live Video', type: 'news', region: 'global', provider: 'G', sourceType: 'youtube', videoId: 'LuKwFajn37U', status: 'verified-live', embedStatus: 'embeddable' };
+  const sortedSameRegion = LiveMedia.sortStreamsDefault([sGlobalExt, sGlobalDelayed, sGlobalStill, sGlobalVideo]);
+  assert.deepEqual(
+    sortedSameRegion.map(s => s.id),
+    ['s-global-video', 's-global-still', 's-global-delayed', 's-global-ext'],
+    'verified-live still-image must come after verified-live video and before delayed/external-only'
+  );
+
   const snap = { liveStreams: [sGlobal, sNatDelayed, sLocalHls] };
   const htmlBefore = LiveMedia.panelHtml(snap);
   assert.ok(htmlBefore.includes('aria-expanded="false"'), 'Notes toggle must default to aria-expanded="false"');

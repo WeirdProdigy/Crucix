@@ -1518,8 +1518,8 @@
   function getStreamStatusSortOrder(stream) {
     if (!stream) return 99;
     if (stream.sourceType === 'hls' && stream.status === 'verified-live') return 0;
-    if (stream.status === 'verified-live') return 1;
     if (stream.sourceType === 'still-image') return 2;
+    if (stream.status === 'verified-live') return 1;
     if (stream.status === 'delayed') return 3;
     if (stream.sourceType === 'link-only' || stream.embedStatus === 'external-only') return 4;
     return 5;

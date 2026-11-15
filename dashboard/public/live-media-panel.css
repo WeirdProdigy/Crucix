@@ -461,7 +461,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 8px;
-  max-height: clamp(552px, 58vh, 620px);
+  max-height: clamp(564px, 59vh, 620px);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: 4px;
